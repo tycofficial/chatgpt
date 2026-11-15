@@ -1,0 +1,11 @@
+<!-- The outside of the invitation flap, with the blossom rendered above it. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="180" viewBox="0 0 480 180" preserveAspectRatio="none">
+  <defs>
+    <linearGradient id="paper" x1="0" y1="0" x2=".1" y2="1"><stop stop-color="#fbfaf7"/><stop offset="1" stop-color="#f0eee7"/></linearGradient>
+    <filter id="grain"><feTurbulence type="fractalNoise" baseFrequency=".78" numOctaves="3" seed="8" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter>
+    <clipPath id="shape"><path d="M15 0H465Q477 0 480 12L256 170Q240 182 224 170L0 12Q3 0 15 0Z"/></clipPath>
+  </defs>
+  <path d="M15 .5H465Q477 .5 479.5 12L256 170Q240 182 224 170L.5 12Q3 .5 15 .5Z" fill="url(#paper)" stroke="#e1ddd4"/>
+  <path d="M16 1.5H464" stroke="white" stroke-opacity=".8"/>
+  <rect width="480" height="180" filter="url(#grain)" clip-path="url(#shape)" opacity=".025"/>
+</svg>

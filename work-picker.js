@@ -1,5 +1,5 @@
 import {createPickerMotion} from './power-picker.js';
-import {WORK_MODEL_IDS,WORK_PRESETS} from './model-catalog.js';
+import {WORK_MODEL_IDS,WORK_PRESETS,WORK_MODEL_LABELS,WORK_EFFORT_LABELS,WORK_DEFAULT_OPTION,WORK_CATALOG_PROVENANCE,getWorkSelectionCatalog,normalizeWorkSelection,selectWorkModel,selectWorkDefault,selectWorkTier} from './model-catalog.js';
 /**
  * Work / Codex model power picker adapter.
  * Visual declarations and the shader are derived from the public official assets:
@@ -64,8 +64,8 @@ function startParticles(layer,reducedMotion){
   return()=>{stopped=true;timers.forEach(clearTimeout);layer.replaceChildren();};
 }
 
-const EFFORT_LABELS = Object.freeze({none:'无',minimal:'极低',low:'轻度',medium:'中',high:'高',xhigh:'极高',max:'Max',ultra:'Ultra'});
-const MODEL_LABELS = Object.freeze({'gpt-6-luna':'GPT-6 Luna','gpt-6.1-sol':'GPT-6.1 Sol','gpt-6-astra':'GPT-6 Astra'});
+const EFFORT_LABELS=WORK_EFFORT_LABELS;
+const MODEL_LABELS=WORK_MODEL_LABELS;
 // Each position was separately observed in the signed-in Work UI on 2026-11-15.
 // Unlike Chat's family selector, this slider changes the model and its effort.
 export const OBSERVED_WORK_PRESETS=WORK_PRESETS;
@@ -75,27 +75,24 @@ const modelName=id=>MODEL_LABELS[id]||String(id||'').replace(/-wm$/,'').replace(
 const canonicalModel=value=>String(value||'').replace(/-wm$/,'');
 export const OBSERVED_WORK_MODELS=WORK_MODEL_IDS;
 const cleanModels=values=>{const supplied=(Array.isArray(values)?values:[]).map(v=>canonicalModel(typeof v==='string'?v:v.id));const valid=OBSERVED_WORK_MODELS.filter(id=>supplied.includes(id));return valid.length?valid:[...OBSERVED_WORK_MODELS];};
-const cleanEfforts=values=>(Array.isArray(values)?values:[]).map(value=>{
-  if(typeof value==='string')return{id:value,effort:value,label:EFFORT_LABELS[value]||value};
-  const effort=value.effort||value.reasoningEffort||value.id,model=value.model?canonicalModel(value.model):undefined;
-  return{...value,id:value.id||(model?`${model}:${effort}`:effort),effort,model,label:value.label||value.sliderLabel||EFFORT_LABELS[effort]||effort};
-}).filter(value=>value.id&&value.effort!=='persistent');
 
 /**
  * Uses the separate first-party Work picker structure; the caller supplies the
  * active model's observed/supported catalog. Changing a tier never invents a
  * private model route. onChange returns the actual model/effort/speed settings.
  */
-export function mountWorkPicker({button,menu,getValue,onChange,efforts=[],models=[]}) {
+export function mountWorkPicker({button,menu,getValue,onChange,efforts=WORK_PRESETS,models=WORK_MODEL_IDS,enabledEfforts,modelEfforts}) {
   if(!button||!menu||typeof getValue!=='function')throw new TypeError('Work picker requires button, menu, and getValue.');
-  let catalog=cleanEfforts(efforts),modelCatalog=cleanModels(models),opened=false,view='power',dragging=false,destroyed=false,stopEffects=()=>{},maxEffect=false,wheelDelta=0,wheelTime=0;
-  let state={model:'gpt-6.1-sol',effort:'low',fast:false};
+  let autoPresets=efforts,modelCatalog=cleanModels(models),allowedEfforts=enabledEfforts,capabilityMap=modelEfforts,catalog=[],opened=false,view='power',dragging=false,destroyed=false,stopEffects=()=>{},maxEffect=false,wheelDelta=0,wheelTime=0;
+  let state={model:'gpt-6.1-sol',effort:'low',fast:false,selectionMode:'auto'};
+  const catalogOptions=()=>({autoPresets,models:modelCatalog,enabledEfforts:allowedEfforts,modelEfforts:capabilityMap});
+  const updateCatalog=()=>{catalog=getWorkSelectionCatalog(state,catalogOptions());};
   const id=menu.id||`work-picker-${crypto.randomUUID()}`;menu.id=id;
   const announcements=`${id}-announcement`,instructions=`${id}-instructions`;
   const media=matchMedia('(prefers-reduced-motion: reduce)');const reduced=()=>document.documentElement.hasAttribute('data-reduced-motion')?document.documentElement.dataset.reducedMotion==='true':media.matches;
   const removers=[];
   const listen=(target,type,handler,options)=>{target.addEventListener(type,handler,options);removers.push(()=>target.removeEventListener(type,handler,options));};
-  const read=()=>{const value=getValue()||{};state={...state,...value,model:canonicalModel(value.model||state.model),fast:!!value.fast};if(!OBSERVED_WORK_MODELS.includes(state.model))state.model='gpt-6.1-sol';if(catalog.length&&!catalog.some(p=>p.effort===state.effort&&(!p.model||p.model===state.model))){const fallback=catalog.find(p=>p.model===state.model)||catalog[0];state.model=fallback.model||state.model;state.effort=fallback.effort;}if(value.model&&canonicalModel(value.model)!==state.model||value.effort&&value.effort!==state.effort)onChange?.({...state,serviceTier:state.fast?'priority':null});};
+  const read=()=>{const value=getValue()||{};state=normalizeWorkSelection({...state,...value},catalogOptions());updateCatalog();if(value.model!==state.model||value.effort!==state.effort||value.selectionMode!==state.selectionMode)onChange?.({...state,serviceTier:state.fast?'priority':null});};
   const motion=createPickerMotion(menu,reduced,position);menu.dataset.pickerMotionOwned='';
   const selected=()=>catalog.findIndex(item=>item.effort===state.effort&&(!item.model||item.model===state.model));
   const selectedLabel=()=>catalog[selected()]?.label||EFFORT_LABELS[state.effort]||String(state.effort||'');
@@ -109,10 +106,10 @@ export function mountWorkPicker({button,menu,getValue,onChange,efforts=[],models
   function renderTrigger(){
     const model=escapeHTML(modelName(state.model)),effort=escapeHTML(selectedLabel());
     button.innerHTML=`<span class="ModelPickerTriggerContent-MFmRQj"><span class="ModelPickerTriggerLabel-xR9gDc"><span class="ModelPickerTriggerModelGroup-uBOG5R"><span class="ModelPickerTriggerModelLabel-rz_zsL" data-model-selection-label="${escapeHTML(state.model)}"><span class="ModelPickerTriggerModelText-W2hMlT">${model}</span></span></span><span class="ModelPickerTriggerEffortLabel-xGzgW7">${effort}</span></span></span>`;
-    button.setAttribute('aria-label','选择 ChatGPT 模型');button.setAttribute('aria-haspopup','menu');button.setAttribute('aria-controls',id);button.setAttribute('aria-expanded',String(opened));button.dataset.state=opened?'open':'closed';button.dataset.selectedReasoningEffort=state.effort;button.dataset.workPickerTrigger='';
+    button.setAttribute('aria-label','选择 ChatGPT 模型');button.setAttribute('aria-haspopup','menu');button.setAttribute('aria-controls',id);button.setAttribute('aria-expanded',String(opened));button.dataset.state=opened?'open':'closed';button.dataset.selectedReasoningEffort=state.effort;button.dataset.workPickerTrigger='';button.dataset.selectionMode=state.selectionMode;
   }
   function emit(){
-    const value={...state,serviceTier:state.fast?'priority':null};onChange?.(value);renderTrigger();
+    const value={...state,serviceTier:state.fast?'priority':null,effortSource:state.selectionMode==='pinned'?WORK_CATALOG_PROVENANCE.pinned:WORK_CATALOG_PROVENANCE.auto};onChange?.(value);renderTrigger();
   }
   function syncPower(){
     const current=selected(),percent=catalog.length<2?0:Math.max(0,current)/(catalog.length-1)*100,isMaximum=!!catalog[current]?.isMaximum||state.effort==='ultra';
@@ -127,21 +124,22 @@ export function mountWorkPicker({button,menu,getValue,onChange,efforts=[],models
     if(isMaximum!==maxEffect){resetEffects();maxEffect=isMaximum;const effects=menu.querySelector('.MaxEffects-UlPrfl');motion.maximum(effects,isMaximum);if(isMaximum){const a=startMaxFill(effects.querySelector('canvas'),reduced()),b=startParticles(effects.querySelector('.TrackParticles-_dFYGl'),reduced());stopEffects=()=>{a();b();};}}
   }
   function choose(index){
-    if(!catalog.length)return;const item=catalog[clamp(index,0,catalog.length-1)];if(item.disabled)return;
-    const model=item.model||state.model;if(item.effort===state.effort&&model===state.model)return;
-    state.model=model;state.effort=item.effort;emit();syncPower();
+    if(!catalog.length)return;const next=selectWorkTier(state,index,catalogOptions());if(next.effort===state.effort&&next.model===state.model)return;
+    state=next;emit();syncPower();
   }
   function renderPowerContents(){
     resetEffects();
-    menu.innerHTML=`<div class="Menu-FcZccz" data-transitions-ready="true"><div class="ViewPanel-7FY74b"><div class="ViewControls-Qvy4rg" data-explicit-model="false" data-inline-model="true" data-effort-header="true"><button type="button" role="menuitem" aria-label="选择模型" data-work-models class="ViewToggle-pjFOrG" data-interactive="true" data-model-picker-view-toggle><span class="ViewToggleContent-W0th2p"><span class="ViewToggleModelLabel-Ns2DVV">${escapeHTML(modelName(state.model))}</span><span class="ViewToggleEffortLabel-mpNoee" data-work-effort></span><span class="ViewToggleIcon-QBviAo">${RIGHT_CHEVRON}</span></span></button><div class="HeaderShortcuts-bZb9rG"><button type="button" class="FastModeToggle-qGLhyE" role="menuitemcheckbox" data-work-fast aria-label="启用快速模式" aria-checked="false"><span class="FastModeToggleContent-oM5Eti">${FAST_ICON}</span></button></div></div><div class="SimpleView-ZBgvlc"><span class="KeyboardAnnouncement-cfumvn" role="status" aria-live="polite" id="${announcements}"></span><span class="KeyboardAnnouncement-cfumvn" id="${instructions}">使用左右方向键调整强度</span><div class="SliderKeyboardControl-wao2b_" role="menuitem" tabindex="0" aria-label="强度" aria-keyshortcuts="ArrowLeft ArrowRight" aria-describedby="${announcements} ${instructions}" data-reasoning-slider><div class="Container-qxn8NG" data-model-picker-power-slider><div class="Root-MhaajB" data-work-slider dir="ltr" role="slider" tabindex="-1" aria-label="强度"><div class="Track-eoFI82"><span class="Range-CJS9gM" data-work-range><span class="MaxEffects-UlPrfl" hidden><span class="Fill-nKJTzJ"><span class="Mask-tydFov"><canvas class="Canvas-bwIFs3"></canvas></span></span><span class="TrackParticles-_dFYGl"></span></span></span><div class="TickRail-KLjYfZ">${catalog.map((item,index)=>`<span class="Tick-pg_l_t" data-work-tick="${index}" style="left:${thumbPosition(catalog.length<2?0:index/(catalog.length-1)*100)}" title="${escapeHTML(item.label)}"></span>`).join('')}</div></div><div class="VisualThumbRail-hji66C" aria-hidden="true"><span class="ThumbScale-Hvw8Fr" data-work-thumb><span class="ThumbSpring-tDZ1ke"><span class="Thumb-hwJ5wX"></span></span></span></div></div></div></div></div></div></div>`;
+    menu.innerHTML=`<div class="Menu-FcZccz" data-transitions-ready="true"><div class="ViewPanel-7FY74b"><div class="ViewControls-Qvy4rg" data-explicit-model="${state.selectionMode==='pinned'}" data-inline-model="true" data-effort-header="true"><button type="button" role="menuitem" aria-label="选择模型" data-work-models class="ViewToggle-pjFOrG" data-interactive="true" data-model-picker-view-toggle><span class="ViewToggleContent-W0th2p"><span class="ViewToggleModelLabel-Ns2DVV">${escapeHTML(modelName(state.model))}</span><span class="ViewToggleEffortLabel-mpNoee" data-work-effort></span><span class="ViewToggleIcon-QBviAo">${RIGHT_CHEVRON}</span></span></button><div class="HeaderShortcuts-bZb9rG"><button type="button" class="FastModeToggle-qGLhyE" role="menuitemcheckbox" data-work-fast aria-label="启用快速模式" aria-checked="false"><span class="FastModeToggleContent-oM5Eti">${FAST_ICON}</span></button></div></div><div class="SimpleView-ZBgvlc"><span class="KeyboardAnnouncement-cfumvn" role="status" aria-live="polite" id="${announcements}"></span><span class="KeyboardAnnouncement-cfumvn" id="${instructions}">使用左右方向键调整强度</span><div class="SliderKeyboardControl-wao2b_" role="menuitem" tabindex="0" aria-label="强度" aria-keyshortcuts="ArrowLeft ArrowRight" aria-describedby="${announcements} ${instructions}" data-reasoning-slider><div class="Container-qxn8NG" data-model-picker-power-slider><div class="Root-MhaajB" data-work-slider dir="ltr" role="slider" tabindex="-1" aria-label="强度"><div class="Track-eoFI82"><span class="Range-CJS9gM" data-work-range><span class="MaxEffects-UlPrfl" hidden><span class="Fill-nKJTzJ"><span class="Mask-tydFov"><canvas class="Canvas-bwIFs3"></canvas></span></span><span class="TrackParticles-_dFYGl"></span></span></span><div class="TickRail-KLjYfZ">${catalog.map((item,index)=>`<span class="Tick-pg_l_t" data-work-tick="${index}" style="left:${thumbPosition(catalog.length<2?0:index/(catalog.length-1)*100)}" title="${escapeHTML(item.label)}"></span>`).join('')}</div></div><div class="VisualThumbRail-hji66C" aria-hidden="true"><span class="ThumbScale-Hvw8Fr" data-work-thumb><span class="ThumbSpring-tDZ1ke"><span class="Thumb-hwJ5wX"></span></span></span></div></div></div></div></div></div></div>`;
     menu.querySelector('[data-work-models]').onclick=()=>{view='models';render();};menu.querySelector('[data-work-fast]').onclick=()=>{state.fast=!state.fast;emit();syncPower();};syncPower();position();
   }
   function renderModelsContents(){
     resetEffects();
-    const current=state.model;const list=[...modelCatalog];
-    menu.innerHTML=`<div class="Menu-FcZccz"><div class="ModelList-I4a0SH" role="group" aria-label="模型">${list.map(model=>`<button type="button" role="menuitemradio" aria-checked="${String(model===current)}" class="work-model-row" data-work-model="${escapeHTML(model)}"><span>${escapeHTML(modelName(model))}</span><span class="work-model-check">${model===current?CHECK:''}</span></button>`).join('')}</div></div>`;
-    menu.querySelectorAll('[data-work-model]').forEach(row=>row.onclick=()=>{const model=row.dataset.workModel,choices=catalog.filter(p=>!p.model||p.model===model);const next=choices.find(p=>p.effort===state.effort)||choices[0];if(!next)return;state.model=model;state.effort=next.effort;emit();view='power';render();menu.querySelector('[data-reasoning-slider]')?.focus();});position();
+    const current=state.model,pinned=state.selectionMode==='pinned',list=[...modelCatalog],autoEnabled=getWorkSelectionCatalog({...state,selectionMode:'auto'},catalogOptions()).length>0;
+    menu.innerHTML=`<div class="Menu-FcZccz"><div class="ModelList-I4a0SH" role="group" aria-label="模型"><button type="button" role="menuitemradio" aria-checked="${!pinned}" class="work-model-row" data-work-default ${autoEnabled?'':'disabled'}><span class="work-model-default-copy"><span>${WORK_DEFAULT_OPTION.label}</span><span class="DefaultDescription-MgbNE2">${WORK_DEFAULT_OPTION.description}</span></span><span class="work-model-check">${!pinned?CHECK:''}</span></button>${list.map(model=>{const checked=pinned&&model===current,available=getWorkSelectionCatalog({model,selectionMode:'pinned'},catalogOptions()).length>0;return`<button type="button" role="menuitemradio" aria-checked="${checked}" class="work-model-row" data-work-model="${escapeHTML(model)}" ${available?'':'disabled'}><span>${escapeHTML(modelName(model))}</span><span class="work-model-check">${checked?CHECK:''}</span></button>`;}).join('')}</div></div>`;
+    menu.querySelector('[data-work-default]').onclick=()=>{state=selectWorkDefault(state,catalogOptions());updateCatalog();emit();view='power';render();menu.querySelector('[data-reasoning-slider]')?.focus();};
+    menu.querySelectorAll('[data-work-model]').forEach(row=>row.onclick=()=>{state=selectWorkModel(state,row.dataset.workModel,catalogOptions());updateCatalog();emit();view='power';render();menu.querySelector('[data-reasoning-slider]')?.focus();});position();
   }
+
   function renderPower(){motion.switchView('power',renderPowerContents);}
   function renderModels(){motion.switchView('models',renderModelsContents);}
   function render(){if(view==='models')renderModels();else renderPower();renderTrigger();}
@@ -168,6 +166,6 @@ export function mountWorkPicker({button,menu,getValue,onChange,efforts=[],models
   listen(menu,'wheel',event=>{if(view!=='power'||!event.target.closest('[data-reasoning-slider]')||event.ctrlKey)return;event.preventDefault();let delta=Math.abs(event.deltaX)>Math.abs(event.deltaY)?event.deltaX:-event.deltaY;if(event.deltaMode)delta=30*Math.sign(delta);if(event.timeStamp-wheelTime>160||Math.sign(delta)!==Math.sign(wheelDelta))wheelDelta=0;wheelTime=event.timeStamp;wheelDelta+=delta;if(Math.abs(wheelDelta)>=30){const direction=Math.sign(wheelDelta);wheelDelta-=30*direction;choose(Math.max(0,selected())+direction);}}, {passive:false});
   listen(window,'resize',position);listen(window,'scroll',position,true);listen(media,'change',()=>{if(opened&&view==='power')renderPower();});
   read();menu.hidden=true;renderTrigger();
-  return {open,close,refresh,destroy(){close();motion.destroy();destroyed=true;removers.forEach(remove=>remove());},setEfforts(values){catalog=cleanEfforts(values);refresh();},setModels(values){modelCatalog=cleanModels(values);if(opened&&view==='models')renderModels();}};
+  return {open,close,refresh,destroy(){close();motion.destroy();destroyed=true;removers.forEach(remove=>remove());},setEfforts(values){autoPresets=values;refresh();},setModels(values){modelCatalog=cleanModels(values);refresh();},setEnabledEfforts(values){allowedEfforts=values;refresh();},setModelEfforts(values){capabilityMap=values;refresh();}};
 }
 

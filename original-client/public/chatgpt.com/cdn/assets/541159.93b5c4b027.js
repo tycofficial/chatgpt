@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[541159];export const __webpack_modules__={okWI:(function(e,o,r){r.d(o,{},{a:function(e){let{serverLoader:o}=e;return o()}})})};import{__webpack_require__ as e}from"./633146.6428a93122.js";import*as o from"./541159.93b5c4b027.js";e.C(o);var r=e(e.s="okWI").a;export{r as clientLoader};

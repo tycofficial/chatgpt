@@ -183,7 +183,7 @@ function surfaceProfile(kind){return SOURCE_MOTION[kind==='select'?'select':'men
 /** Explicit generic-menu source variant; dedicated model pickers are excluded. */
 export function openSurface(node,{kind='menu',origin}={}){
   if(!node)return Promise.resolve();
-  if(node.matches?.('[data-runtime-power-menu],.power-menu,.work-menu'))return Promise.resolve();
+  if(node.matches?.('[data-runtime-power-menu],[data-picker-motion-owned],.power-menu,.power-picker,.work-menu,.work-picker'))return Promise.resolve();
   node.hidden=false;node.dataset.sourceMenu='';node.dataset.state='open';
   for(const item of node.querySelectorAll('button,[role="menuitem"],[role="menuitemcheckbox"],[role="menuitemradio"]'))if(!item.matches('.Button-BZrLNX,.MenuItem-xtyGWy,.MenuItem-FhQcPS'))item.dataset.sourceMenuItem='';
   if(origin)node.style.transformOrigin=origin;

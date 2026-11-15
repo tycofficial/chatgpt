@@ -9,7 +9,7 @@ import hljs from './vendor/highlight.js';
 import renderMathInElement from './vendor/auto-render.js';
 import {mountPowerPicker} from './power-picker.js';
 import {mountWorkPicker,OBSERVED_WORK_PRESETS} from './work-picker.js';
-import {WORK_MODEL_IDS} from './model-catalog.js';
+import {WORK_MODEL_IDS,normalizeWorkSelection} from './model-catalog.js';
 import {getPowerRequestSettings,POWER_TIERS} from './power.js';
 import {createSettingsEngine,personalInstructions} from './settings-engine.js';
 import {mountGoogleLogin,getIdentity,signOut} from './google-auth.js';
@@ -26,7 +26,7 @@ const settings={...DEFAULT_SETTINGS,...readJSON('cg-settings',{})};
 let chats=[],active=null,mode='chat',busy=false,controller=null,pendingFiles=[],models=[],temporary=false,projectFilter=null;
 let projects=readJSON('cg-projects',[]),currentView='chat',voiceSession=false,recognition=null,templates,picker,settingsEngine,identity=null;
 let power={family:'gpt6',tier:4,...readJSON('cg-power',{})};
-let workPower={model:'gpt-6.1-sol',effort:'low',fast:false,...readJSON('cg-work-power',{})};
+let workPower={model:'gpt-6.1-sol',effort:'low',fast:false,selectionMode:'auto',...readJSON('cg-work-power',{})};
 const workEfforts=OBSERVED_WORK_PRESETS;
 let pendingGpt=null,companion;
 const enabledEfforts=()=>settings.enabledEfforts||settings.uiPreferences?.enabledEfforts||['none','low','medium','high','xhigh','max'];
@@ -45,7 +45,7 @@ function isolatePreview(html){if(!settingsEngine.getState().enforceCsp&&(mode===
 async function exportMetadata(){return{projects,navigation:await navigationViews?.exportState(),uiPreferences:settingsEngine.getState(),power,workPower};}
 async function importMetadata(data){if(data.navigation)await navigationViews?.importState(data.navigation,{replace:false});if(data.uiPreferences)settingsEngine.save(data.uiPreferences);if(data.power){power={...power,...data.power};localStorage.setItem('cg-power',JSON.stringify(power));}if(data.workPower){workPower={...workPower,...data.workPower};localStorage.setItem('cg-work-power',JSON.stringify(workPower));}if(Array.isArray(data.projects)){for(const p of data.projects){if(!p||typeof p.id!=='string'||typeof p.name!=='string')continue;const clean={id:p.id,name:p.name,instructions:String(p.instructions||'')},i=projects.findIndex(x=>x.id===p.id);if(i<0)projects.push(clean);else projects[i]=clean;}localStorage.setItem('cg-projects',JSON.stringify(projects));}}
 function applyTheme(){settingsEngine?.applyAppearance();}
-function requestSettings(){if(mode!=='chat'){const effort=['low','medium','high','xhigh','max'].includes(workPower.effort)?workPower.effort:'low';return{...settings,model:workPower.model,reasoningEffort:effort,reasoningMode:'standard',apiTransport:'responses',serviceTier:workPower.fast?'priority':null};}return getPowerRequestSettings(settings,power.family==='gpt56'?'gpt-5.6-sol':'gpt-6',POWER_TIERS[power.tier]?.id||'pro');}
+function requestSettings(){if(mode!=='chat'){const effort=['none','low','medium','high','xhigh','max'].includes(workPower.effort)?workPower.effort:'low';return{...settings,model:workPower.model,reasoningEffort:effort,reasoningMode:'standard',apiTransport:'responses',serviceTier:workPower.fast?'priority':null};}return getPowerRequestSettings(settings,power.family==='gpt56'?'gpt-5.6-sol':'gpt-6',POWER_TIERS[power.tier]?.id||'pro');}
 async function persistChat(chat=active){if(!chat||chat.temporary)return;chat.updatedAt=Date.now();try{await db.saveChat(chat);}catch(e){toast(e.message);}renderHistory();}
 function applyAttributes(element,attrs={}){for(const[k,v]of Object.entries(attrs))if(!['style','class'].includes(k)||!element.hasAttribute(k))element.setAttribute(k,v);}
 function renderTemplate(entry){picker?.destroy();picker=null;closeMenus();$$('[data-runtime-power-menu]').forEach(n=>n.remove());$('#app').innerHTML=entry.html;applyAttributes(document.documentElement,entry.htmlAttributes);applyAttributes(document.body,entry.bodyAttributes);document.body.classList.remove('has-messages');document.body.style.pointerEvents='';document.body.removeAttribute('data-scroll-locked');settingsEngine?.applyAppearance();applyPins();updateIdentity();companion?.refresh();}
@@ -72,7 +72,7 @@ function renderHome(){
 function mountComposerPicker(kind='chat'){
   const button=$('#model-button');if(!button)return;picker?.destroy();$$('[data-runtime-power-menu]').forEach(n=>n.remove());const menu=document.createElement('div');menu.hidden=true;menu.id='model-menu';menu.dataset.runtimePowerMenu='';document.body.append(menu);
   if(kind==='chat'){const indices=chatTierIndexes();if(!indices.includes(power.tier))power.tier=indices[0]??0;picker=mountPowerPicker({button,menu,getValue:()=>({...power,tier:Math.max(0,indices.indexOf(power.tier)),mode:'chat'}),onChange:v=>{power={family:v.family,tier:indices[v.tier]??0};localStorage.setItem('cg-power',JSON.stringify(power));if(active){active.power={...power};persistChat();}button.title=getPowerRequestSettings(settings,power.family==='gpt56'?'gpt-5.6-sol':'gpt-6',POWER_TIERS[power.tier].id).powerRoute.notice;}});if(indices.length)picker.setModeTiers('chat',indices.map(i=>POWER_TIERS[i].label));button.title=getPowerRequestSettings(settings,power.family==='gpt56'?'gpt-5.6-sol':'gpt-6',POWER_TIERS[power.tier].id).powerRoute.notice;
-  }else{const presets=allowedWorkPresets();if(!presets.some(p=>p.model===workPower.model&&p.effort===workPower.effort)&&presets[0])workPower={...workPower,model:presets[0].model,effort:presets[0].effort};picker=mountWorkPicker({button,menu,getValue:()=>workPower,efforts:presets,models:WORK_MODEL_IDS,onChange:v=>{workPower={model:v.model,effort:v.effort,fast:v.fast};localStorage.setItem('cg-work-power',JSON.stringify(workPower));if(active){active.workPower={...workPower};persistChat();}}});}
+  }else{const presets=allowedWorkPresets();workPower=normalizeWorkSelection(workPower,{autoPresets:presets,models:WORK_MODEL_IDS,enabledEfforts:enabledEfforts()});picker=mountWorkPicker({button,menu,getValue:()=>workPower,efforts:presets,models:WORK_MODEL_IDS,enabledEfforts:enabledEfforts(),onChange:v=>{workPower={model:v.model,effort:v.effort,fast:v.fast,selectionMode:v.selectionMode};localStorage.setItem('cg-work-power',JSON.stringify(workPower));if(active){active.workPower={...workPower};persistChat();}}});}
 }
 function prepareNavigationComposer(){const p=$('#prompt');if(!p)return;Object.defineProperty(p,'value',{configurable:true,get(){return this.innerText;},set(v){this.textContent=v||'';}});p.dataset.placeholder=p.getAttribute('aria-label')||'';mountComposerPicker('chat');}
 function setMode(next){

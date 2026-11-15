@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[170264];export const __webpack_modules__={OCvz(s,t,e){s.exports=e.p+"assets/dictation-start.f6efcb404f.wav"},DJ2e(s,t,e){s.exports=e.p+"assets/dictation-stop.e3bc7ebc5e.wav"}};

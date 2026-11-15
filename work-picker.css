@@ -48,6 +48,9 @@
 .work-picker .work-model-row{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:36px;width:100%;padding:6px 10px;border:0;border-radius:12px;background:transparent;text-align:start;font:inherit}
 .work-picker .work-model-row:hover,.work-picker .work-model-row:focus-visible{background:var(--color-background-secondary-ghost-hover,var(--hover,#0000000d))}
 .work-picker .work-model-check{display:flex;align-items:center;width:16px;height:16px}
+.work-picker .work-model-default-copy{display:flex;flex-direction:column;min-width:0}
+.work-picker .DefaultDescription-MgbNE2{color:var(--color-text-tertiary,var(--power-muted));font-size:var(--text-xs,12px);line-height:var(--text-xs--line-height,1.33333)}
+.work-picker .work-model-row:disabled{opacity:.5;cursor:default}
 .work-picker .FastModeToggle-qGLhyE[aria-checked=true]{color:var(--color-text-accent,var(--color-accent,#3a83f7))}
 
 /* Public zP3a view morph: 320ms height/translate, 200ms opacity, exact stagger. */

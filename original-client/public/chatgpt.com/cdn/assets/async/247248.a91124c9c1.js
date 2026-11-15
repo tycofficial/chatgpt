@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[247248];export const __webpack_modules__={jPdZ(){"function"!=typeof URL.createObjectURL&&"function"==typeof webkitURL.createObjectURL&&(URL.createObjectURL=webkitURL.createObjectURL.bind(webkitURL)),"function"!=typeof URL.revokeObjectURL&&"function"==typeof webkitURL.revokeObjectURL&&(URL.revokeObjectURL=webkitURL.revokeObjectURL.bind(webkitURL))}};

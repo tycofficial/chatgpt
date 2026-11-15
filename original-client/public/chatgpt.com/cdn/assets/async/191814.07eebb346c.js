@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[191814];export const __webpack_modules__={dMsE(e,a,c){var o=c("SkBa"),s=c("dH0j"),t=c("egOE");c.d(a,{},{prefetchSpaceHome:async function(e){e.get(t.f)||await Promise.all([(0,o.d)(e),(0,s.prefetchHomeRanking)(e)])}})}};
