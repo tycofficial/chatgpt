@@ -1,0 +1,190 @@
+/** Export existing captured source and literally referenced public assets.
+ * Usage: node --use-env-proxy scripts/export-reference.mjs [--offline]
+ * Does not automate a browser, execute source, use cookies, or call private APIs.
+ */
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import {fileURLToPath} from 'node:url';
+
+const workspace = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const source = path.join(workspace, '.test-output');
+const output = path.join(source, 'chatgpt-source-export');
+const args = process.argv.slice(2);
+const offline = args.includes('--offline');
+const option = (name, fallback, max) => {
+  const position = args.indexOf(name), value = position < 0 ? fallback : Number(args[position + 1]);
+  return Number.isInteger(value) && value >= 0 ? Math.min(value, max) : fallback;
+};
+const maxDownloads = option('--max-downloads', 1024, 4096);
+const concurrency = Math.max(1, option('--concurrency', 8, 12));
+const networkBudgetMs = Math.max(1, option('--network-budget-ms', 60000, 60000));
+const within = (root, target) => {const relative=path.relative(root,target);return !relative.startsWith('..'+path.sep)&&relative!=='..'&&!path.isAbsolute(relative);};
+const digest = value => crypto.createHash('sha256').update(value).digest('hex');
+const rel = file => path.relative(output, file).split(path.sep).join('/');
+const read = file => fs.readFile(file, 'utf8');
+const exists = async file => {try {await fs.stat(file);return true;} catch {return false;}};
+const startedAt = new Date().toISOString();
+if (!within(workspace, output)) throw new Error('Export output is outside the workspace');
+for (const target of [source, output]) if (await exists(target)) {
+  if (!within(workspace, await fs.realpath(target))) throw new Error('Export path resolves outside the workspace');
+}
+await fs.mkdir(output, {recursive:true});
+await fs.writeFile(path.join(output, '.gitignore'), '*\n');
+
+const templates = JSON.parse(await read(path.join(workspace, 'ui', 'templates.json')));
+const captures = [...new Map(Object.values(templates.provenance.pages)
+  .filter(page => page.kind === 'captured' && typeof page.file === 'string')
+  .map(page => [page.file, page])).values()];
+const manifest = {
+  format: 'captured-reference-source-export/v1', startedAt, finishedAt:null,
+  sourceWorkspace: workspace, outputDirectory: output,
+  privacy: 'PRIVATE LOCAL EXPORT. Raw signed-in captures can contain original account identities, histories, locations, prompts, and images. This folder is ignored and must not be published as the public clone.',
+  networkPolicy: {allowed:['https://chatgpt.com/cdn/assets/','https://cdn.oaistatic.com/'],credentials:'omit',redirects:'error',browserAutomation:false,privateAPIs:false,maxDownloads,concurrency,networkBudgetMs},
+  limits: ['This is an export of the supplied captured frontend and referenced public static assets, not the entire ChatGPT source code.','Uncaptured routes, server implementation, account services, model services, original credentials, and backend behavior are not reconstructed.','No guessed runtime chunk URLs or private endpoints are requested.','Raw captures are preserved, not rewritten into an offline executable application. Opening a raw capture can execute its original scripts or follow its original network URLs.'],
+  captures:[], files:[], assets:[], dependencyEdges:[], failures:[], deferred:[], skipped:[], summary:{},
+};
+const cache = new Map();
+const discovered = new Map();
+const scanned = new Set();
+const failedURLs = new Set();
+const edgeKeys = new Set();
+const assetExtension = /\.(?:m?js|css|map|svg|woff2?|ttf|otf|eot|png|jpe?g|webp|gif|avif|ico|json|webmanifest|wasm|bin|mp3|mp4|m4a|ogg|wav)$/i;
+const textExtension = /\.(?:html|css|js|mjs|json|map|svg)(?:\.下载)?$/i;
+function recordURL(value, owner, baseURL, relation='literal-url') {
+  const raw = value.replaceAll('&amp;', '&').replace(/[),;]+$/, '');
+  let url;try {url=new URL(raw.startsWith('/cdn/assets/')?'https://chatgpt.com'+raw:raw,baseURL);} catch {return;}
+  if (url.protocol !== 'https:' || url.username || url.password) return;
+  const allowed = url.origin === 'https://chatgpt.com' && url.pathname.startsWith('/cdn/assets/') || url.origin === 'https://cdn.oaistatic.com';
+  if (!allowed || !assetExtension.test(url.pathname)) return;
+  // Static asset cache/version parameters are allowed. Never transmit tokens,
+  // signatures, account identifiers, coordinates, or arbitrary captured queries.
+  if ([...url.searchParams.keys()].some(key => !['v','version','hash','build'].includes(key))) {
+    const key=url.origin+url.pathname;
+    if (!manifest.skipped.some(entry=>entry.url===key)) manifest.skipped.push({url:key,reason:'Query parameters are not on the static cache/version allowlist'});
+    return;
+  }
+  url.hash='';
+  if (!discovered.has(url.href)) discovered.set(url.href,{url:url.href,referencedBy:new Set()});
+  discovered.get(url.href).referencedBy.add(owner);
+  if(baseURL){const key=baseURL+'|'+url.href+'|'+relation;if(!edgeKeys.has(key)){edgeKeys.add(key);manifest.dependencyEdges.push({from:baseURL,to:url.href,relation,referencedBy:owner});}}
+}
+function discoverText(text, owner, baseURL) {
+  const normalized=text.replaceAll('\\/','/').replaceAll('\\u002F','/').replaceAll('\\u002f','/').replaceAll('\\u0026','&');
+  for (const match of normalized.matchAll(/https:\/\/(?:chatgpt\.com\/cdn\/assets\/|cdn\.oaistatic\.com\/)[^\s"'<>`\\)\]}]+/g)) recordURL(match[0],owner,baseURL);
+  for (const match of normalized.matchAll(/(?<![\w:/])\/cdn\/assets\/[^\s"'<>`\\)\]}]+/g)) recordURL(match[0],owner,baseURL);
+  if(!baseURL)return;
+  // Resolve only literal dependency specifiers against their observed original
+  // module/CSS URL. No runtime chunk-name construction or endpoint guessing.
+  for(const match of normalized.matchAll(/\b(?:import|export)\s*(?!\s*\()(?:[^;\n]{0,700}?)\bfrom\s*["']([^"'\s]+)["']/g))if(/^(?:\.{1,2}\/|\/|https:\/\/)/.test(match[1]))recordURL(match[1],owner,baseURL,'esm-from');
+  for(const match of normalized.matchAll(/\bimport\s*(?:\(\s*)?["']([^"'\s]+)["']/g))if(/^(?:\.{1,2}\/|\/|https:\/\/)/.test(match[1]))recordURL(match[1],owner,baseURL,'esm-import');
+  for(const match of normalized.matchAll(/new\s+URL\(\s*["']([^"'\s]+)["']\s*,\s*import\.meta\.url\s*\)/g))recordURL(match[1],owner,baseURL,'import-meta-url');
+  if(new URL(baseURL).pathname.endsWith('.css')){
+    for(const match of normalized.matchAll(/url\(\s*(["']?)([^)"'\s]+)\1\s*\)/g))recordURL(match[2],owner,baseURL,'css-url');
+    for(const match of normalized.matchAll(/@import\s*["']([^"'\s]+)["']/g))recordURL(match[1],owner,baseURL,'css-import');
+  }
+}
+async function scanFile(file, owner) {
+  if(scanned.has(file)||!textExtension.test(file))return;scanned.add(file);
+  const stat=await fs.stat(file);if(stat.size>32*1024*1024)return;
+  discoverText(await read(file),owner);
+}
+async function copyFile(input, relativePath, kind) {
+  const target=path.join(output,relativePath);
+  if(!within(output,target))throw new Error('Unsafe export target');
+  await fs.mkdir(path.dirname(target),{recursive:true});
+  const stat=await fs.stat(input);
+  let alreadyCurrent=false;try{const previous=await fs.stat(target);alreadyCurrent=previous.size===stat.size&&previous.mtimeMs>=stat.mtimeMs;}catch{}
+  if(!alreadyCurrent)await fs.copyFile(input,target);
+  manifest.files.push({path:rel(target),bytes:stat.size,kind,originalLocalPath:path.relative(workspace,input).split(path.sep).join('/')});
+  const name=path.basename(input);if(!cache.has(name))cache.set(name,input);
+  await scanFile(input,rel(target));
+}
+async function walk(directory) {
+  const result=[];
+  for(const entry of await fs.readdir(directory,{withFileTypes:true})){
+    const file=path.join(directory,entry.name);
+    if(entry.isSymbolicLink())continue;
+    if(entry.isDirectory())result.push(...await walk(file));else if(entry.isFile())result.push(file);
+  }
+  return result;
+}
+async function batches(items, action, size=concurrency) {
+  for(let offset=0;offset<items.length;offset+=size){
+    const batch=items.slice(offset,offset+size),results=await Promise.allSettled(batch.map(action));
+    for(let i=0;i<results.length;i++)if(results[i].status==='rejected')throw new Error(`Local export failed for ${String(batch[i])}: ${results[i].reason?.message||results[i].reason}`);
+  }
+}
+
+// Preserve verified raw HTML, including the original saved-from-URL header.
+for(const capture of captures){
+  const input=path.join(source,capture.file),raw=await read(input);
+  if(!/<!--\s*saved from url=/i.test(raw))throw new Error(`Capture lost its verified full-save marker: ${capture.file}`);
+  manifest.captures.push({file:capture.file,path:'raw/'+capture.file,sourceSha256:digest(raw),sourceURL:raw.match(/saved from url=\(\d+\)([^\s>]+)/i)?.[1]||null});
+}
+await batches(captures,capture=>copyFile(path.join(source,capture.file),path.join('raw',capture.file),'verified-raw-html'));
+const sourceEntries=await fs.readdir(source,{withFileTypes:true});
+const directories=sourceEntries.filter(entry=>entry.isDirectory()&&(entry.name.endsWith('_files')||['reference-assets','reference-js'].includes(entry.name)));
+const localWork=[];
+// Prefer explicit public caches over repeated browser resources for URL reuse.
+directories.sort((a,b)=>(a.name==='reference-assets'?-2:a.name==='reference-js'?-1:0)-(b.name==='reference-assets'?-2:b.name==='reference-js'?-1:0));
+for(const dir of directories)for(const input of await walk(path.join(source,dir.name)))localWork.push({input,destination:path.join('raw',dir.name,path.relative(path.join(source,dir.name),input))});
+await batches(localWork,item=>copyFile(item.input,item.destination,'saved-reference-resource'),12);
+const evidenceFiles=sourceEntries.filter(entry=>entry.isFile()&&/^(?:capture-.*\.json|reference-.*\.(?:json|svg|css|vert|frag)|signed-ui-specs\.json|chatgpt-public\.(?:html|css))$/.test(entry.name));
+await batches(evidenceFiles,entry=>copyFile(path.join(source,entry.name),path.join('evidence',entry.name),'capture-evidence'),12);
+for(const directory of ['ui/assets','companion-assets'])if(await exists(path.join(workspace,directory))){
+  await batches(await walk(path.join(workspace,directory)),input=>copyFile(input,path.join('public-cache',directory,path.relative(path.join(workspace,directory),input)),'existing-public-cache'),12);
+}
+const iconSprite=path.join(source,'reference-icons.svg');
+for(const [url]of discovered)if(/\/icons-[\da-f]+\.svg$/.test(new URL(url).pathname)&&await exists(iconSprite))cache.set(path.posix.basename(new URL(url).pathname),iconSprite);
+console.log(JSON.stringify({stage:'copied-local-source',captures:captures.length,files:manifest.files.length,knownPublicURLs:discovered.size}));
+
+function publicTarget(urlString){
+  const url=new URL(urlString),parts=url.pathname.split('/').filter(Boolean);
+  if(parts.some(part=>part==='.'||part==='..'||/[<>:"|?*\\]/.test(part)))throw new Error('Unsupported public asset filename');
+  if(url.search){const last=parts.pop(),ext=path.posix.extname(last);parts.push(last.slice(0,-ext.length)+'.query-'+digest(url.search).slice(0,12)+ext);}
+  const target=path.join(output,'public',url.hostname,...parts);if(!within(output,target))throw new Error('Unsafe public asset target');return target;
+}
+const complete = new Set();let requests=0;const networkStartedAt=Date.now(),networkDeadline=networkStartedAt+networkBudgetMs;
+async function materialize(entry){
+  const target=publicTarget(entry.url),url=new URL(entry.url),name=decodeURIComponent(path.posix.basename(url.pathname));
+  await fs.mkdir(path.dirname(target),{recursive:true});
+  let origin,bytes;
+  if(await exists(target)){origin='previous-export';bytes=await fs.readFile(target);}
+  else if(cache.has(name)){origin='existing-local-source';bytes=await fs.readFile(cache.get(name));await fs.writeFile(target,bytes);}
+  else{
+    if(offline||requests>=maxDownloads||Date.now()>=networkDeadline)return false;
+    requests++;
+    try{
+      const response=await fetch(entry.url,{credentials:'omit',redirect:'error',signal:AbortSignal.timeout(Math.max(1,Math.min(15000,networkDeadline-Date.now())))});
+      if(!response.ok)throw new Error(`HTTP ${response.status}`);
+      const declared=Number(response.headers.get('content-length')||0);if(declared>32*1024*1024)throw new Error('Asset exceeds 32 MiB bound');
+      bytes=Buffer.from(await response.arrayBuffer());if(bytes.length>32*1024*1024)throw new Error('Asset exceeds 32 MiB bound');
+      await fs.writeFile(target,bytes);cache.set(name,target);origin='downloaded-public-static';
+    }catch(error){failedURLs.add(entry.url);manifest.failures.push({url:entry.url,reason:String(error.message||error),referencedBy:[...entry.referencedBy]});return true;}
+  }
+  complete.add(entry.url);
+  manifest.assets.push({url:entry.url,path:rel(target),bytes:bytes.length,sha256:digest(bytes),origin,referencedBy:[...entry.referencedBy]});
+  // One bounded follow-up pass can resolve literally linked CSS/JS resources.
+  if(textExtension.test(url.pathname))discoverText(bytes.toString('utf8'),rel(target),entry.url);
+  return true;
+}
+for(let pass=0;pass<64;pass++){
+  const pending=[...discovered.values()].filter(entry=>!complete.has(entry.url)&&!failedURLs.has(entry.url));
+  if(!pending.length)break;
+  const beforeComplete=complete.size,beforeFailed=failedURLs.size,beforeKnown=discovered.size;
+  for(let offset=0;offset<pending.length;offset+=concurrency){
+    const batch=pending.slice(offset,offset+concurrency),results=await Promise.allSettled(batch.map(materialize));
+    for(let i=0;i<results.length;i++)if(results[i].status==='rejected'){
+      failedURLs.add(batch[i].url);manifest.failures.push({url:batch[i].url,reason:String(results[i].reason?.message||results[i].reason),referencedBy:[...batch[i].referencedBy]});
+    }
+  }
+  console.log(JSON.stringify({stage:'public-assets',pass:pass+1,available:manifest.assets.length,downloadRequests:requests,failed:manifest.failures.length,knownPublicURLs:discovered.size}));
+  if(complete.size===beforeComplete&&failedURLs.size===beforeFailed&&discovered.size===beforeKnown)break;
+}
+manifest.deferred=[...discovered.values()].filter(entry=>!complete.has(entry.url)&&!failedURLs.has(entry.url)).map(entry=>({url:entry.url,referencedBy:[...entry.referencedBy],reason:offline?'offline export':Date.now()>=networkDeadline?'60-second public network budget reached':requests>=maxDownloads?'public download bound reached':'bounded discovery passes completed'}));
+manifest.finishedAt=new Date().toISOString();
+manifest.summary={verifiedCaptures:captures.length,copiedLocalFiles:manifest.files.length,copiedLocalBytes:manifest.files.reduce((sum,f)=>sum+f.bytes,0),knownPublicURLs:discovered.size,availablePublicAssets:manifest.assets.length,reusedPublicAssets:manifest.assets.filter(a=>a.origin!=='downloaded-public-static').length,downloadedPublicAssets:manifest.assets.filter(a=>a.origin==='downloaded-public-static').length,downloadRequests:requests,publicAssetBytes:manifest.assets.reduce((sum,a)=>sum+a.bytes,0),dependencyEdges:manifest.dependencyEdges.length,failedAssets:manifest.failures.length,deferredAssets:manifest.deferred.length,skippedQueries:manifest.skipped.length,publicAssetPhaseMs:Date.now()-networkStartedAt};
+await fs.writeFile(path.join(output,'manifest.json'),JSON.stringify(manifest,null,2)+'\n');
+await fs.writeFile(path.join(output,'README.txt'),`PRIVATE LOCAL CAPTURED SOURCE EXPORT\n\nGenerated by: node --use-env-proxy scripts/export-reference.mjs\n\nraw/ preserves the verified original HTML and browser-saved resource folders.\nevidence/ contains supplied public-source capture metadata.\npublic/ mirrors exact referenced public static asset URLs.\npublic-cache/ preserves existing downloaded public assets, fonts, icons, and companion atlases.\nmanifest.json maps original asset URLs to local paths and records failures and bounds.\n\nThis is ${captures.length} supplied frontend captures, not the entire ChatGPT source code.\nNo browser automation, cookies, authentication, private API requests, or original script execution was used to build it.\nRaw signed-in captures may contain original account data, histories, locations, prompts, and images. Keep this ignored folder private; do not publish it with the clone.\nRaw HTML was not rewritten into an offline application; opening it can execute its original scripts and contact its original hosts.\n\nRerun command: node --use-env-proxy scripts/export-reference.mjs\nOffline reuse only: node scripts/export-reference.mjs --offline\nOptional bounded completion: --max-downloads 512 --concurrency 8\n\nSummary:\n${JSON.stringify(manifest.summary,null,2)}\n`);
+console.log(JSON.stringify({stage:'complete',output,manifest:path.join(output,'manifest.json'),...manifest.summary}));
