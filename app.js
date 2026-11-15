@@ -9,10 +9,14 @@ import hljs from './vendor/highlight.js';
 import renderMathInElement from './vendor/auto-render.js';
 import {mountPowerPicker} from './power-picker.js';
 import {mountWorkPicker,OBSERVED_WORK_PRESETS} from './work-picker.js';
+import {WORK_MODEL_IDS} from './model-catalog.js';
 import {getPowerRequestSettings,POWER_TIERS} from './power.js';
 import {createSettingsEngine,personalInstructions} from './settings-engine.js';
 import {mountGoogleLogin,getIdentity,signOut} from './google-auth.js';
 import {mountCompanion} from './companion.js';
+import {applyLocale} from './i18n.js';
+import {installKeyboardShortcuts} from './keyboard-shortcuts.js';
+import {mountSourceMotion} from './source-motion.js';
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const icon=(n,cls='')=>`<svg class="feature-icon icon ${cls}" aria-hidden="true" viewBox="0 0 24 24"><use href="#i-${n}"></use></svg>`;
@@ -29,12 +33,15 @@ const enabledEfforts=()=>settings.enabledEfforts||settings.uiPreferences?.enable
 const chatTierIndexes=()=>POWER_TIERS.map((p,i)=>i).filter(i=>enabledEfforts().includes(['none','medium','high','xhigh','max'][i]));
 const allowedWorkPresets=()=>workEfforts.filter(p=>enabledEfforts().includes(p.effort));
 const python=new PythonRuntime();
+const motion=mountSourceMotion();
 const modelLabel=id=>String(id||'').replace(/^gpt-/,'GPT-');
 const modes={chat:{product:'ChatGPT'},work:{product:'ChatGPT'},codex:{product:'Codex'}};
 function toast(message){let r=$('#toast-root');if(!r)return;const t=document.createElement('div');t.className='toast';t.role='status';t.textContent=message;r.replaceChildren(t);setTimeout(()=>t.remove(),4500);}
-function closeMenus(){picker?.close();$$('.context-menu,.floating-menu').forEach(x=>x.remove());}
+function closeMenus(){picker?.close();for(const node of $('.context-menu,.floating-menu')){if(node.dataset.motionSurface==='menu'){if(node.dataset.sourceLeaving==='true')continue;node.dataset.sourceLeaving='true';void motion.closeSurface(node);}else node.remove();}}
 function persistSettings(){localStorage.setItem('cg-settings',JSON.stringify(settings));document.cookie='cg_preferences=1; Max-Age=31536000; Path=/; SameSite=Lax';settingsEngine?.applyAppearance();}
-function toggleSidebar(){const collapsed=document.body.classList.toggle('sidebar-collapsed');const root=$('#app [style*="--app-shell-left-panel-width"]');if(root)root.style.setProperty('--app-shell-left-panel-width',collapsed?'52px':'340px');}
+function toggleSidebar(){const collapsed=!document.body.classList.contains('sidebar-collapsed');const shell=$('[data-app-shell-frame]')||$('#app [style*="--app-shell-left-panel-width"]');motion.sidebar({collapsed,shell,commit:()=>document.body.classList.toggle('sidebar-collapsed',collapsed)});}
+async function authorizeTool(name,args){const permission=settingsEngine.getState().toolPermissionMode||'review_important_actions';const writes=['python','python_execute','create_file'].includes(name);if(permission!=='always_ask'&&!(permission==='ask_before_writes'&&writes))return true;return new Promise(resolve=>{const dialog=document.createElement('dialog');dialog.className='settings-dialog';dialog.innerHTML=`<h2>请求批准</h2><p>${escape(name)}</p><pre style="max-height:240px;overflow:auto;white-space:pre-wrap">${escape(args.code||args.name||args.query||'')}</pre><footer><button data-permit="no">拒绝</button><button class="primary-button" data-permit="yes">允许本次操作</button></footer>`;let settled=false;const signal=controller?.signal;const finish=value=>{if(settled)return;settled=true;signal?.removeEventListener('abort',abort);dialog.close();dialog.remove();resolve(value);};const abort=()=>finish(false);dialog.addEventListener('click',e=>{const b=e.target.closest('[data-permit]');if(b){e.stopPropagation();finish(b.dataset.permit==='yes');}});dialog.addEventListener('cancel',e=>{e.preventDefault();finish(false);});signal?.addEventListener('abort',abort,{once:true});document.body.append(dialog);dialog.showModal();if(signal?.aborted)finish(false);});}
+function isolatePreview(html){if(!settingsEngine.getState().enforceCsp&&(mode==='chat'||settings.workInternetAccess!==false))return html;const meta='<meta http-equiv="Content-Security-Policy" content="default-src '+"'none'"+'; script-src '+"'unsafe-inline' 'unsafe-eval'"+'; style-src '+"'unsafe-inline'"+'; img-src data: blob:; font-src data:; connect-src '+"'none'"+'; form-action '+"'none'"+'; base-uri '+"'none'"+'">';return /<head(?:\s[^>]*)?>/i.test(html)?html.replace(/<head(?:\s[^>]*)?>/i,match=>match+meta):'<!doctype html><head>'+meta+'</head>'+html;}
 async function exportMetadata(){return{projects,navigation:await navigationViews?.exportState(),uiPreferences:settingsEngine.getState(),power,workPower};}
 async function importMetadata(data){if(data.navigation)await navigationViews?.importState(data.navigation,{replace:false});if(data.uiPreferences)settingsEngine.save(data.uiPreferences);if(data.power){power={...power,...data.power};localStorage.setItem('cg-power',JSON.stringify(power));}if(data.workPower){workPower={...workPower,...data.workPower};localStorage.setItem('cg-work-power',JSON.stringify(workPower));}if(Array.isArray(data.projects)){for(const p of data.projects){if(!p||typeof p.id!=='string'||typeof p.name!=='string')continue;const clean={id:p.id,name:p.name,instructions:String(p.instructions||'')},i=projects.findIndex(x=>x.id===p.id);if(i<0)projects.push(clean);else projects[i]=clean;}localStorage.setItem('cg-projects',JSON.stringify(projects));}}
 function applyTheme(){settingsEngine?.applyAppearance();}
@@ -60,12 +67,12 @@ function renderHome(){
   const main=$('[data-ui-main]');const messages=document.createElement('div');messages.id='messages';messages.className='messages';messages.setAttribute('role','log');messages.setAttribute('aria-live','polite');main?.append(messages);
   const hidden=document.createElement('div');hidden.hidden=true;hidden.innerHTML='<span id="status"></span><span id="chat-title"></span>';main?.append(hidden);
   mountComposerPicker(mode);
-  setMode(mode);renderHistory();autoGrow();
+  setMode(mode);renderHistory();autoGrow();localize();
 }
 function mountComposerPicker(kind='chat'){
   const button=$('#model-button');if(!button)return;picker?.destroy();$$('[data-runtime-power-menu]').forEach(n=>n.remove());const menu=document.createElement('div');menu.hidden=true;menu.id='model-menu';menu.dataset.runtimePowerMenu='';document.body.append(menu);
   if(kind==='chat'){const indices=chatTierIndexes();if(!indices.includes(power.tier))power.tier=indices[0]??0;picker=mountPowerPicker({button,menu,getValue:()=>({...power,tier:Math.max(0,indices.indexOf(power.tier)),mode:'chat'}),onChange:v=>{power={family:v.family,tier:indices[v.tier]??0};localStorage.setItem('cg-power',JSON.stringify(power));if(active){active.power={...power};persistChat();}button.title=getPowerRequestSettings(settings,power.family==='gpt56'?'gpt-5.6-sol':'gpt-6',POWER_TIERS[power.tier].id).powerRoute.notice;}});if(indices.length)picker.setModeTiers('chat',indices.map(i=>POWER_TIERS[i].label));button.title=getPowerRequestSettings(settings,power.family==='gpt56'?'gpt-5.6-sol':'gpt-6',POWER_TIERS[power.tier].id).powerRoute.notice;
-  }else{const presets=allowedWorkPresets();if(!presets.some(p=>p.model===workPower.model&&p.effort===workPower.effort)&&presets[0])workPower={...workPower,model:presets[0].model,effort:presets[0].effort};picker=mountWorkPicker({button,menu,getValue:()=>workPower,efforts:presets,models:models.length?models.filter(m=>/^gpt-/.test(m)):undefined,onChange:v=>{workPower={model:v.model,effort:v.effort,fast:v.fast};localStorage.setItem('cg-work-power',JSON.stringify(workPower));if(active){active.workPower={...workPower};persistChat();}}});}
+  }else{const presets=allowedWorkPresets();if(!presets.some(p=>p.model===workPower.model&&p.effort===workPower.effort)&&presets[0])workPower={...workPower,model:presets[0].model,effort:presets[0].effort};picker=mountWorkPicker({button,menu,getValue:()=>workPower,efforts:presets,models:WORK_MODEL_IDS,onChange:v=>{workPower={model:v.model,effort:v.effort,fast:v.fast};localStorage.setItem('cg-work-power',JSON.stringify(workPower));if(active){active.workPower={...workPower};persistChat();}}});}
 }
 function prepareNavigationComposer(){const p=$('#prompt');if(!p)return;Object.defineProperty(p,'value',{configurable:true,get(){return this.innerText;},set(v){this.textContent=v||'';}});p.dataset.placeholder=p.getAttribute('aria-label')||'';mountComposerPicker('chat');}
 function setMode(next){
@@ -76,13 +83,14 @@ function setMode(next){
   if($('#prompt'))$('#prompt').dataset.placeholder=mode==='chat'?'询问 ChatGPT':mode==='codex'?'随心输入':'使用 ChatGPT Work';
   picker?.refresh();
 }
+function localize(){if(settingsEngine&&$('#app'))applyLocale($('#app'),{locale:settingsEngine.getState().language,getSettings:()=>settings,templates,toast}).catch(e=>toast(e.message));}
 function renderSuggestions(){} // Original source template owns the suggested actions.
 function renderHistory(){
   const list=$('#history-list');if(list){list.innerHTML=chats.filter(c=>!c.locked&&!c.archived&&(!projectFilter||c.projectId===projectFilter)).sort((a,b)=>(b.pinned||0)-(a.pinned||0)||b.updatedAt-a.updatedAt).map(c=>`<li class="local-chat-row"><button data-chat="${c.id}" class="local-chat-link">${escape(c.title)}</button><button data-chat-menu="${c.id}" aria-label="聊天操作">${icon('more')}</button></li>`).join('');}
   renderProjects();
 }
 function renderProjects(){const target=$('#project-list');if(target)target.innerHTML=projects.map(p=>`<li><button data-project="${p.id}" class="local-project-link">${icon('folder')}<span>${escape(p.name)}</span></button></li>`).join('');}
-function newChat(nextMode=mode){if(busy)return toast('请先停止当前回复');active=null;pendingGpt=null;localStorage.removeItem('cg-active-gpt');pendingFiles=[];temporary=false;currentView='chat';mode=nextMode;python.reset();renderHome();setMode(nextMode);$('#artifact-panel').hidden=true;renderAttachments();localStorage.removeItem('cg-active');setHash('');$('#prompt').focus();}
+function newChat(nextMode=mode){if(busy)return toast('请先停止当前回复');active=null;pendingGpt=null;localStorage.removeItem('cg-active-gpt');pendingFiles=[];temporary=false;currentView='chat';mode=nextMode;python.reset();renderHome();setMode(nextMode);motion.enterHeadline($('#welcome'));$('#artifact-panel').hidden=true;renderAttachments();localStorage.removeItem('cg-active');setHash('');$('#prompt').focus();}
 async function openChat(id){if(busy)return toast('请先停止当前回复');const c=chats.find(c=>c.id===id);if(!c)return;if(c.locked&&!await settingsEngine.requestPin())return;active=c;temporary=!!c.temporary;pendingFiles=[];mode=c.mode;if(c.power)power={...c.power};if(c.workPower)workPower={...c.workPower};python.reset();renderHome();setMode(c.mode);picker?.refresh();renderMessages();renderHistory();localStorage.setItem('cg-active',id);setHash('c='+id);}
 function autoGrow(){const p=$('#prompt');if(!p)return;const has=!!p.value.trim()||pendingFiles.length>0;$('#send-button')?.toggleAttribute('hidden',busy||!has);$('#voice-button')?.toggleAttribute('hidden',busy||has);$('#stop-button')?.toggleAttribute('hidden',!busy);const layout=p.closest('[data-composer-input-layout]');if(layout){layout.style.height='auto';layout.style.maxHeight='240px';}p.closest('[data-composer-body]')?.classList.toggle('local-composer-expanded',p.scrollHeight>45);}
 function prepareConversation(){if($('.conversation-surface'))return;const main=$('[data-ui-main]'),form=$('#composer-form'),area=$('#messages');if(!main||!form||!area)return;const surface=document.createElement('div');surface.className='conversation-surface';for(const child of[...main.children]){if(child.tagName!=='HEADER'&&child!==area){child.dataset.uiHomeContent='';child.hidden=true;}}surface.append(area,form);main.append(surface);form.hidden=false;}
@@ -90,16 +98,33 @@ function renderMessages(scroll=true){const has=!!active?.messages.length;documen
 async function send(){if(busy)return;const p=$('#prompt');if(!p)return;const text=p.value.trim();if(!text&&!pendingFiles.length)return;if(currentView!=='chat'){const files=[...pendingFiles];renderHome();pendingFiles=files;currentView='chat';}if(!active){active={id:uid(),title:text.slice(0,40)||pendingFiles[0]?.name||'新聊天',mode,messages:[],power:{...power},createdAt:Date.now(),updatedAt:Date.now(),temporary,gpt:readJSON("cg-active-gpt",pendingGpt),workPower:{...workPower},projectId:projectFilter};if(!temporary)chats.unshift(active);localStorage.setItem('cg-active',active.id);setHash('c='+active.id);}active.messages.push({id:uid(),role:'user',content:text,attachments:[...pendingFiles],createdAt:Date.now()});$('#prompt').value='';pendingFiles=[];renderAttachments();renderMessages();busy=true;await persistChat();await generate();}
 function setHash(hash){history.replaceState(null,'',location.pathname+(hash?'#'+hash:''));}
 function settingsModal(slug='general-settings'){const aliases={general:'general-settings',personal:'personalization',data:'data-controls',about:'account',connection:'general-settings'};navigateSettings(aliases[slug]||slug);}
-function navigateSettings(slug){if(busy)return toast('请先停止当前回复');const template=templates.settings[slug];if(!template)return toast('此设置页面尚未载入');closeModal();renderTemplate(template);currentView='settings';document.body.dataset.view='settings';ensureInfrastructure();settingsEngine.hydrate($('#app'),slug);setHash('settings='+slug);}
+function navigateSettings(slug){if(busy)return toast('请先停止当前回复');const template=templates.settings[slug];if(!template)return toast('此设置页面尚未载入');closeModal();renderTemplate(template);currentView='settings';document.body.dataset.view='settings';ensureInfrastructure();settingsEngine.hydrate($('#app'),slug);localize();setHash('settings='+slug);}
 function renderModelButton(){picker?.refresh();}
 async function renderModels(){}
-async function fetchModels(){try{models=await getModels(settings);picker?.setModels?.(models.filter(m=>/^gpt-/.test(m)));}catch(e){console.warn(e.message);}}
+async function fetchModels(){try{models=(await getModels(settings)).filter(m=>['gpt-6','gpt-5.6-sol',...WORK_MODEL_IDS].includes(m));}catch(e){console.warn(e.message);}}
 function updateIdentity(){if(identity){const b=$('#profile-button');if(b){b.title=identity.name||identity.email; if(identity.picture){const img=document.createElement('img');img.src=identity.picture;img.alt='';img.width=28;img.height=28;b.replaceChildren(img);}}}}
 async function loginModal(){modal('登录',`<div id="google-login-container"></div>`);await mountGoogleLogin($('#google-login-container'),{onLogin:profile=>{identity=profile;updateIdentity();closeModal();toast('已登录');},onError:e=>toast(e.message)});}
-function menuAt(anchor,items){closeMenus();const m=document.createElement('div');m.className='menu context-menu';m.setAttribute('role','menu');m.innerHTML=items;document.body.append(m);const r=anchor.getBoundingClientRect();m.style.position='fixed';m.style.left=Math.max(8,Math.min(r.right,innerWidth-m.offsetWidth-8))+'px';m.style.top=Math.max(8,Math.min(r.bottom+6,innerHeight-m.offsetHeight-8))+'px';return m;}
+function menuAt(anchor,items){closeMenus();const m=document.createElement('div');m.className='menu context-menu';m.setAttribute('role','menu');m.innerHTML=items;document.body.append(m);const r=anchor.getBoundingClientRect();m.style.position='fixed';m.style.left=Math.max(8,Math.min(r.right,innerWidth-m.offsetWidth-8))+'px';m.style.top=Math.max(8,Math.min(r.bottom+6,innerHeight-m.offsetHeight-8))+'px';m.dataset.motionSurface='menu';motion.openSurface(m,{origin:parseFloat(m.style.top)<r.top?'bottom left':'top left'});return m;}
 function profileMenu(anchor){menuAt(anchor,`<button class="menu-item" data-action="login">${escape(identity?.name||'登录')}</button><div class="menu-separator"></div><button class="menu-item" data-settings-panel-slug="billing">${icon('bolt')}升级订阅套餐</button><button class="menu-item" data-settings-panel-slug="personalization">${icon('settings')}个性化</button><button class="menu-item" data-settings-panel-slug="account">${icon('user')}个人资料</button><button class="menu-item" data-action="settings">${icon('settings')}设置</button><div class="menu-separator"></div><a class="menu-item" href="https://help.openai.com/" target="_blank" rel="noopener">${icon('help')}帮助</a><button class="menu-item" data-action="logout">${icon('logout')}退出登录</button>`);}
 function applyPins(){const pins=readJSON('cg-navigation-pins',{});for(const b of $$('[data-app-navigation-rail] [data-nav]'))if(['项目','图像','站点','地图','GPT','Codex'].includes(b.dataset.nav))b.hidden=pins[b.dataset.nav]===false;}
 function exploreMenu(anchor){closeMenus();const t=document.createElement('template');t.innerHTML=templates.views?.explore?.html||'';const source=t.content.querySelector('[role="dialog"][aria-label="探索"]')||[...t.content.querySelectorAll('[role="dialog"]')].find(d=>d.textContent.includes('GPT')&&d.textContent.includes('Codex'));let popup;if(source){popup=source.cloneNode(true);for(const b of popup.querySelectorAll('button')){const label=b.textContent.trim();if(['项目','图像','站点','地图','GPT','Codex'].includes(label))b.dataset.nav=label;else if((b.getAttribute('aria-label')||'').includes('侧边栏')){const group=b.parentElement;const dest=group.querySelector('button')?.textContent.trim();if(dest)b.dataset.togglePin=dest;}}}else{popup=document.createElement('div');popup.className='menu';popup.innerHTML=['项目','图像','站点','地图','GPT','Codex'].map(n=>`<div class="explore-local-row"><button class="menu-item" data-nav="${n}">${n}</button><button data-toggle-pin="${n}" aria-label="从侧边栏取消置顶">⌖</button></div>`).join('');}popup.classList.add('floating-menu');popup.style.position='fixed';popup.style.zIndex='1000';popup.style.width='228px';popup.style.height='auto';popup.style.transform='none';document.body.append(popup);const r=anchor.getBoundingClientRect();popup.style.left=(r.right+8)+'px';popup.style.top=Math.min(r.top,innerHeight-popup.offsetHeight-8)+'px';}
+
+function revealComposer(focus=false){requestAnimationFrame(()=>{const prompt=$('#prompt');if(!prompt)return;if(focus)prompt.focus({preventScroll:true});const box=$('[data-ui-composer]')||$('#composer-form')||prompt;const bounds=box.getBoundingClientRect(),height=window.visualViewport?.height||innerHeight;if(bounds.bottom>height||bounds.top<52)box.scrollIntoView({block:'nearest',inline:'nearest',behavior:document.documentElement.dataset.reducedMotion==='true'?'instant':'smooth'});});}
+function handleShortcut(id,event){
+  if(id==='focusMainChat'){revealComposer(true);return !!$('#prompt');}
+  if(id==='composer.submit'||id==='composer.submitInBackground'){if(busy)return false;send();return true;}
+  if(id==='composer.openModelPicker'){if(!picker)return false;picker.open();return true;}
+  if(id==='composer.toggleDictation'){if(recognition)recognition.abort();else startListening();return true;}
+  if(id==='composer.startVoiceMode'){voiceModal();return true;}
+  if(id==='composer.addFiles'){$('#file-input')?.click();return true;}
+  if(id==='deleteChat'){if(!active||busy)return false;chatAction('delete',active.id);return true;}
+  if(id==='newTask'){if(busy)return false;newChat();return true;}
+  if(id==='showKeyboardShortcuts'){if(busy)return false;navigateSettings('keyboard-shortcuts');return true;}
+  if(id==='searchChats'){searchModal();return true;}
+  if(id==='toggleSidebar'){toggleSidebar();return true;}
+  if(id==='artifact.sendAnnotations'){const send=$('[data-send-annotations]');if(!send)return false;send.click();return true;}
+  return false;
+}
 
 function download(name, data, type = "text/plain") {
   const url = typeof data === "string" && data.startsWith("data:") ? data : URL.createObjectURL(new Blob([data], { type }));
@@ -248,6 +273,7 @@ async function executeTool(call, message) {
     return JSON.stringify({ error: "工具参数不是有效 JSON，请修正参数后重试。" });
   }
   const name = call.function.name;
+  if(!await authorizeTool(name,args))return JSON.stringify({error:"用户拒绝了本次工具操作。"});
   const execution = { name: name === "python" || name === "python_execute" ? "python" : name, label: name === "python" || name === "python_execute" ? "正在运行 Python…" : name === "create_file" ? "正在创建文件…" : "正在读取文件…", running: true, code: args.code || "" };
   message.executions ??= [];
   message.executions.push(execution);
@@ -447,7 +473,7 @@ function searchModal() {
   const input = $("#chat-search-input");
   const update = () => {
     const q = input.value.toLowerCase();
-    $("#search-results").innerHTML = chats.filter((c) => !c.archived && (c.title + " " + c.messages.map((m) => m.content || "").join(" ")).toLowerCase().includes(q)).sort((a, b) => b.updatedAt - a.updatedAt).map((c) => `<button class="search-result" data-chat="${c.id}">${icon(c.mode === "codex" ? "code" : "edit")}<span>${escape(c.title)}<small>${new Date(c.updatedAt).toLocaleDateString()}</small></span></button>`).join("") || '<p class="empty-state">没有找到相关聊天</p>';
+    $("#search-results").innerHTML = chats.filter((c) => !c.archived && !c.locked && (c.title + " " + c.messages.map((m) => m.content || "").join(" ")).toLowerCase().includes(q)).sort((a, b) => b.updatedAt - a.updatedAt).map((c) => `<button class="search-result" data-chat="${c.id}">${icon(c.mode === "codex" ? "code" : "edit")}<span>${escape(c.title)}<small>${new Date(c.updatedAt).toLocaleDateString()}</small></span></button>`).join("") || '<p class="empty-state">没有找到相关聊天</p>';
   };
   input.addEventListener("input", update);
   update();
@@ -557,7 +583,8 @@ function previewFile(f) {
     const frame = document.createElement("iframe");
     frame.title = f.name;
     frame.sandbox = "allow-scripts allow-forms allow-modals";
-    if (f.content) frame.srcdoc = f.content;
+    if (f.content) frame.srcdoc = isolatePreview(f.content);
+    else if(settingsEngine.getState().enforceCsp||(mode!=="chat"&&settings.workInternetAccess===false))fetch(f.dataUrl).then(r=>r.text()).then(html=>frame.srcdoc=isolatePreview(html));
     else frame.src = f.dataUrl;
     view.append(frame);
   } else if (type === "application/pdf") {
@@ -912,7 +939,7 @@ async function navigateApp(label){
   const slug=navSlugs[label]||label;const entry=templates.views?.[slug];
   if(entry)renderTemplate(entry);else{renderTemplate(templates.home);const main=$('[data-ui-main]');if(main)main.replaceChildren();}
   ensureInfrastructure();currentView=slug;document.body.dataset.view=slug;setHash('view='+slug);
-  await navigationViews.show(slug,$('[data-ui-main]'),{captured:!!entry});prepareNavigationComposer();renderHistory();
+  await navigationViews.show(slug,$('[data-ui-main]'),{captured:!!entry});prepareNavigationComposer();renderHistory();localize();
 }
 async function handleButton(t,e){
   if(currentView==='settings'&&await settingsEngine.handleClick(e,t))return;
@@ -927,16 +954,16 @@ async function handleButton(t,e){
   if(t.dataset.chat){closeModal();return openChat(t.dataset.chat);}
   if(t.dataset.chatMenu)return chatMenu(t.dataset.chatMenu,t);
   if(t.dataset.chatAction)return chatAction(t.dataset.chatAction,t.dataset.cid);
-  if(t.dataset.project){projectFilter=t.dataset.project;newChat('work');return;}
+  if(t.dataset.project){closeModal();projectFilter=t.dataset.project;newChat('work');return;}
   if('moveProject'in t.dataset){const c=chats.find(c=>c.id===t.dataset.cid);if(c){c.projectId=t.dataset.moveProject||null;await persistChat(c);}closeModal();return;}
   if('removeFile'in t.dataset){pendingFiles.splice(Number(t.dataset.removeFile),1);renderAttachments();return;}
   if(t.dataset.artifact)return openArtifact(t.dataset.artifact);
   if(t.dataset.prompt){$('#prompt').value=t.dataset.prompt;autoGrow();$('#prompt').focus();return;}
   if(t.dataset.codeAction){const block=t.closest('.code-block'),code=block.querySelector('code').textContent,lang=block.querySelector('.code-header>span').textContent;const a=t.dataset.codeAction;if(a==='copy')copyText(code);if(a==='download')download('code.'+({python:'py',javascript:'js',typescript:'ts',html:'html'}[lang]||lang||'txt'),code);if(a==='preview')previewFile({name:'preview.html',content:code,mime:'text/html'});if(a==='run'){pythonConsole();$('#python-code').value=code;$('#run-python').click();}return;}
   if(t.dataset.msgAction){const m=active?.messages.find(m=>m.id===t.dataset.mid);if(!m)return;const a=t.dataset.msgAction;if(a==='copy')copyText(m.content);if(a==='speak')speak(m.content);if(a==='like'||a==='dislike'){m.feedback=m.feedback===a?null:a;await persistChat();renderMessages(false);}if(a==='retry'&&!busy){const idx=active.messages.indexOf(m);active.messages=active.messages.slice(0,m.role==='user'?idx+1:idx);while(active.messages.length&&active.messages.at(-1).role!=='user')active.messages.pop();await generate();}if(a==='edit'&&!busy){modal('编辑消息',`<textarea id="edit-message" rows="6">${escape(m.content)}</textarea>`,'<button class="primary-button" id="save-edit">发送</button>');$('#save-edit').onclick=async()=>{m.content=$('#edit-message').value;active.messages=active.messages.slice(0,active.messages.indexOf(m)+1);closeModal();renderMessages();await generate();};}return;}
-  const id=t.id, label=t.getAttribute('aria-label')||t.textContent.trim();
+  const id=t.id, label=t.dataset.runtimeLabel||t.getAttribute('aria-label')||t.textContent.trim();
   if(id==='model-button')return; // Original power picker owns this event.
-  if(id==='sidebar-toggle'||label==='显示/隐藏侧边栏'){document.body.classList.toggle('sidebar-collapsed');return;}
+  if(id==='sidebar-toggle'||label==='显示/隐藏侧边栏'){toggleSidebar();return;}
   if(id==='new-chat'||label==='新聊天')return newChat();
   if(id==='search-chats'||label==='搜索')return searchModal();
   if(id==='mode-chat'||id==='mode-work'){if(busy)return toast('请先停止当前回复');const next=id==='mode-work'?'work':'chat';if(active?.messages.length)return newChat(next);return switchEmptyMode(next);}
@@ -947,7 +974,8 @@ async function handleButton(t,e){
   if(id==='voice-button'){if(settingsEngine.getState().voiceEnabled)return voiceModal();return toast('语音已在个性化设置中关闭');}
   if(id==='artifact-close'){$('#artifact-panel').hidden=true;return;}
   if(label==='临时聊天')return action('temporary');
-  if(label==='添加新项目'||label==='选择项目')return projectModal();
+  if(label==='添加新项目')return projectModal();
+  if(label==='选择项目'){modal('选择项目',projects.map(p=>`<button class="search-result" data-project="${escape(p.id)}">${escape(p.name)}</button>`).join('')+'<button class="secondary-button" data-action="new-project">创建项目</button>');return;}
   if(label==='选择要添加的文件'||label==='文件')return action('attach');
   if(label==='插件')return navigateApp('插件');
   if(label==='创建图像或贴纸')return imageModal();
@@ -961,18 +989,12 @@ async function handleButton(t,e){
   if(label==='打开桌面应用'){location.href='https://chatgpt.com/download/';return;}
   if(label==='项目侧边栏选项'||label==='聊天侧边栏选项')return menuAt(t,'<button class="menu-item" data-action="new-project">新建项目</button><button class="menu-item" data-action="export">导出数据</button><button class="menu-item" data-action="settings">设置</button>');
 }
-function switchEmptyMode(next){const previous=mode;const text=$('#prompt')?.value||'';const indicator=$('.indicator-zrk55u');if(indicator)indicator.style.transform=`translateX(calc((${next==='chat'?'0% - 0px':'100% - 17px'}) * var(--mode-toggle-direction)))`;mode=next;setTimeout(()=>{const entry=templates.views?.[next];renderHome();if(entry){}$('#prompt').value=text;autoGrow();},matchMedia('(prefers-reduced-motion: reduce)').matches?0:300);}
+async function switchEmptyMode(next){if(next===mode)return;const text=$('#prompt')?.value||'';await motion.swapHome(()=>{mode=next;renderHome();$('#prompt').value=text;autoGrow();},{focus:true});revealComposer(true);}
 function environmentDialog(label){modal(label,`<div class="settings-row"><span>默认环境</span><span>Python · WebAssembly</span></div><p>此网站的执行环境位于当前浏览器。上传的文件可由 AI 读取，Python 可实际运行并生成文件。</p><button class="secondary-button" data-action="python">打开 Python 工作区</button>`);}
 document.addEventListener('click',async e=>{try{if(e.target.closest('[data-close-modal]')||e.target.classList.contains('modal-backdrop')){voiceSession=false;recognition?.abort();speechSynthesis?.cancel();closeModal();return;}if(currentView!=='settings'&&await navigationViews?.handleClick(e,e.target))return;const t=e.target.closest('button,[data-action],[data-chat],[data-artifact],[data-settings-panel-slug],[data-nav],[data-nav-action],[role=button],a');if(!t){if(!e.target.closest('.menu,[data-power-picker]'))closeMenus();return;}if(t.tagName==='A'){const href=t.getAttribute('href')||'';if(href==='/'||href==='https://chatgpt.com/'){e.preventDefault();newChat();return;}if(href.startsWith('/settings/')){e.preventDefault();navigateSettings(href.split('/')[2]);return;}if(href.startsWith('/')&&!href.startsWith('//')){e.preventDefault();return;}}await handleButton(t,e);}catch(error){console.error(error);toast(error.message);}});
 document.addEventListener('input',e=>{if(e.target.id==='prompt'&&currentView==='chat')autoGrow();else if(currentView==='settings')settingsEngine.handleChange(e);else navigationViews?.handleChange(e);});
 document.addEventListener('change',async e=>{if(e.target.id==='file-input')return addFiles(e.target.files);if(currentView==='settings'&&await settingsEngine.handleChange(e))return;await navigationViews?.handleChange(e);});
-document.addEventListener('keydown',e=>{
-  if(e.target.closest('.settings-dialog,.nav-local-dialog'))return;
-  if(e.key==='Escape'){closeMenus();closeModal();$('#artifact-panel').hidden=true;return;}
-  if(e.target.id==='prompt'&&e.key==='Enter'&&!e.isComposing){if(currentView!=='chat')return;const behavior=settingsEngine.getState().enterBehavior;const multiline=e.target.value.includes('\n');const sendNow=behavior==='cmdAlways'?(e.ctrlKey||e.metaKey):behavior==='cmdIfMultiline'?(multiline?(e.ctrlKey||e.metaKey):!e.shiftKey):!e.shiftKey;if(sendNow){e.preventDefault();send();}return;}
-  const parts=[e.ctrlKey?'Ctrl':'',e.metaKey?'Meta':'',e.altKey?'Alt':'',e.shiftKey?'Shift':'',e.key.length===1?e.key.toUpperCase():e.key].filter(Boolean).join('+');const shortcuts=settingsEngine?.getState().shortcuts||{};const custom=Object.entries(shortcuts).find(([k,v])=>v&&v.toLowerCase()===parts.toLowerCase());if(custom){const k=custom[0];if(/newTask|newChat|newThread/.test(k)){e.preventDefault();newChat();return;}if(/search/.test(k)){e.preventDefault();searchModal();return;}if(/submit/.test(k)){e.preventDefault();send();return;}if(/sidebar/.test(k)){e.preventDefault();document.body.classList.toggle('sidebar-collapsed');return;}}
-  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){e.preventDefault();searchModal();}if((e.ctrlKey||e.metaKey)&&e.shiftKey&&e.key.toLowerCase()==='o'){e.preventDefault();newChat();}
-});
+document.addEventListener('keydown',e=>{if(e.defaultPrevented||e.target.closest('.settings-dialog,.nav-local-dialog'))return;if(e.key==='Escape'){closeMenus();closeModal();if($('#artifact-panel'))$('#artifact-panel').hidden=true;}});
 document.addEventListener('paste',e=>{if(e.target.id==='prompt'&&e.clipboardData.files.length){e.preventDefault();addFiles(e.clipboardData.files);}});
 document.addEventListener('dragover',e=>{if(e.dataTransfer.types.includes('Files'))e.preventDefault();});
 document.addEventListener('drop',e=>{if(e.dataTransfer.files.length){e.preventDefault();if(!$('#prompt'))renderHome();addFiles(e.dataTransfer.files);}});
@@ -981,13 +1003,14 @@ window.addEventListener('unhandledrejection',e=>toast(e.reason?.message||'操作
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change',applyTheme);
 function routeFromHash(){const p=new URLSearchParams(location.hash.slice(1));if(p.has('settings'))navigateSettings(p.get('settings'));else if(p.has('view'))navigateApp(p.get('view'));else if(p.has('c'))openChat(p.get('c'));}
 async function init(){
-  const r=await fetch('./ui/templates.json');if(!r.ok)throw new Error('页面模板加载失败');templates=await r.json();
+  const r=await fetch('./ui/templates.json?v='+(document.documentElement.dataset.appBuild||'current'));if(!r.ok)throw new Error('页面模板加载失败');templates=await r.json();
   const icons=await(await fetch('./feature-icons.svg')).text();const defs=document.createElement('div');defs.hidden=true;defs.innerHTML=icons;document.body.append(defs);
-  ensureInfrastructure();settingsEngine=createSettingsEngine({getSettings:()=>settings,onSettingsChange:patch=>{Object.assign(settings,patch);settings.webEnabled=patch.webSearch;localStorage.setItem('cg-settings',JSON.stringify(settings));if(picker&&$('#model-button'))mountComposerPicker(currentView==='chat'?mode:'chat');companion?.refresh();},toast,download,db,getChats:()=>chats,onChatsChanged:async()=>{chats=await db.loadChats();if(active)active=chats.find(c=>c.id===active.id)||null;renderHistory();},onNavigate:navigateSettings,onLogin:loginModal,onLogout:async()=>{await signOut();identity=null;},getIdentity:()=>identity});
+  ensureInfrastructure();settingsEngine=createSettingsEngine({getSettings:()=>settings,onSettingsChange:patch=>{Object.assign(settings,patch);if(patch.webSearch!==undefined)settings.webEnabled=patch.webSearch;localStorage.setItem('cg-settings',JSON.stringify(settings));if(picker&&$('#model-button'))mountComposerPicker(currentView==='chat'?mode:'chat');companion?.refresh();localize();},toast,download,db,getChats:()=>chats,onChatsChanged:async()=>{chats=await db.loadChats();if(active)active=chats.find(c=>c.id===active.id)||null;renderHistory();},onNavigate:navigateSettings,onLogin:loginModal,onLogout:async()=>{await signOut();identity=null;},getIdentity:()=>identity,onOpenChat:openChat,getExportMetadata:exportMetadata,onImportMetadata:importMetadata,onResetWork:()=>{python.reset();pendingFiles=[];},onClearData:async()=>{await navigationViews?.clearState();projects=[];projectFilter=null;active=null;pendingFiles=[];localStorage.setItem('cg-projects','[]');localStorage.removeItem('cg-active');}});
   companion=mountCompanion({getPreferences:()=>settingsEngine.getState(),getMode:()=>currentView==='chat'?mode:'chat',onOpenSettings:navigateSettings});
-  const{createNavigationViews}=await import('./navigation-views.js');navigationViews=createNavigationViews({getChats:()=>chats,getProjects:()=>projects,onOpenChat:openChat,onNewChat:nextMode=>{const g=readJSON('cg-active-gpt',null);newChat(nextMode);pendingGpt=g;},onCreateProject:projectModal,onSettings:navigateSettings,onAction:action,toast,dialog:modal,download,db});
+  const{createNavigationViews}=await import('./navigation-views.js');navigationViews=createNavigationViews({getChats:()=>chats,getProjects:()=>projects,onOpenChat:openChat,onNewChat:nextMode=>{const g=readJSON('cg-active-gpt',null);newChat(nextMode);pendingGpt=g;},onCreateProject:projectModal,onSettings:navigateSettings,onAction:action,toast,dialog:modal,openMenu:menuAt,download,db});
   chats=await db.loadChats();for(const c of chats){c.messages=completeToolResponses(c.messages);c.messages.forEach(m=>delete m.streaming);}
   try{identity=await getIdentity();}catch{identity=null;}
-  renderHome();const hash=location.hash;if(hash)routeFromHash();else{const id=localStorage.getItem('cg-active');if(chats.some(c=>c.id===id))openChat(id);}fetchModels();
+  installKeyboardShortcuts({getPreferences:()=>settingsEngine.getState(),onCommand:handleShortcut,getContext:()=>({view:currentView,busy,hasActiveChat:!!active,canSubmit:!busy,artifactOpen:!!$('#artifact-panel')&&!$('#artifact-panel').hidden})});
+  renderHome();motion.enterHeadline($('#welcome'));const hash=location.hash;if(hash)routeFromHash();else{const id=localStorage.getItem('cg-active');if(chats.some(c=>c.id===id))openChat(id);}fetchModels();
 }
 init().catch(e=>{console.error(e);ensureInfrastructure();toast(e.message);});

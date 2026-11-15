@@ -1,3 +1,5 @@
+import {createPickerMotion} from './power-picker.js';
+import {WORK_MODEL_IDS,WORK_PRESETS} from './model-catalog.js';
 /**
  * Work / Codex model power picker adapter.
  * Visual declarations and the shader are derived from the public official assets:
@@ -63,21 +65,16 @@ function startParticles(layer,reducedMotion){
 }
 
 const EFFORT_LABELS = Object.freeze({none:'无',minimal:'极低',low:'轻度',medium:'中',high:'高',xhigh:'极高',max:'Max',ultra:'Ultra'});
-const MODEL_LABELS = Object.freeze({'gpt-6-luna':'GPT-6 Luna','gpt-6.1-sol':'GPT-6.1 Sol','gpt-6-astra':'GPT-6 Astra','gpt-6-sol':'GPT-6 Sol'});
+const MODEL_LABELS = Object.freeze({'gpt-6-luna':'GPT-6 Luna','gpt-6.1-sol':'GPT-6.1 Sol','gpt-6-astra':'GPT-6 Astra'});
 // Each position was separately observed in the signed-in Work UI on 2026-11-15.
 // Unlike Chat's family selector, this slider changes the model and its effort.
-export const OBSERVED_WORK_PRESETS=Object.freeze([
-  Object.freeze({id:'gpt-6-luna:high',model:'gpt-6-luna',effort:'high',label:'高',displayLabel:'GPT-6 Luna 高'}),
-  Object.freeze({id:'gpt-6.1-sol:low',model:'gpt-6.1-sol',effort:'low',label:'轻度',displayLabel:'GPT-6.1 Sol 轻度'}),
-  Object.freeze({id:'gpt-6.1-sol:medium',model:'gpt-6.1-sol',effort:'medium',label:'中',displayLabel:'GPT-6.1 Sol 中'}),
-  Object.freeze({id:'gpt-6-astra:low',model:'gpt-6-astra',effort:'low',label:'轻度',displayLabel:'GPT-6 Astra 轻度'}),
-  Object.freeze({id:'gpt-6-astra:medium',model:'gpt-6-astra',effort:'medium',label:'中',displayLabel:'GPT-6 Astra 中'}),
-  Object.freeze({id:'gpt-6-astra:xhigh',model:'gpt-6-astra',effort:'xhigh',label:'极高',displayLabel:'GPT-6 Astra 极高'}),
-]);
+export const OBSERVED_WORK_PRESETS=WORK_PRESETS;
 const FAST_ICON = '<svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><use href="./ui/assets/icons.svg#codex-icon-bolt-light-20" fill="currentColor" /></svg>';
 const escapeHTML=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const modelName=id=>MODEL_LABELS[id]||String(id||'').replace(/-wm$/,'').replace(/^gpt-/,'GPT-');
 const canonicalModel=value=>String(value||'').replace(/-wm$/,'');
+export const OBSERVED_WORK_MODELS=WORK_MODEL_IDS;
+const cleanModels=values=>{const supplied=(Array.isArray(values)?values:[]).map(v=>canonicalModel(typeof v==='string'?v:v.id));const valid=OBSERVED_WORK_MODELS.filter(id=>supplied.includes(id));return valid.length?valid:[...OBSERVED_WORK_MODELS];};
 const cleanEfforts=values=>(Array.isArray(values)?values:[]).map(value=>{
   if(typeof value==='string')return{id:value,effort:value,label:EFFORT_LABELS[value]||value};
   const effort=value.effort||value.reasoningEffort||value.id,model=value.model?canonicalModel(value.model):undefined;
@@ -91,22 +88,23 @@ const cleanEfforts=values=>(Array.isArray(values)?values:[]).map(value=>{
  */
 export function mountWorkPicker({button,menu,getValue,onChange,efforts=[],models=[]}) {
   if(!button||!menu||typeof getValue!=='function')throw new TypeError('Work picker requires button, menu, and getValue.');
-  let catalog=cleanEfforts(efforts),modelCatalog=models.length?[...models]:Object.keys(MODEL_LABELS),opened=false,view='power',dragging=false,destroyed=false,stopEffects=()=>{},maxEffect=false,wheelDelta=0,wheelTime=0;
+  let catalog=cleanEfforts(efforts),modelCatalog=cleanModels(models),opened=false,view='power',dragging=false,destroyed=false,stopEffects=()=>{},maxEffect=false,wheelDelta=0,wheelTime=0;
   let state={model:'gpt-6.1-sol',effort:'low',fast:false};
   const id=menu.id||`work-picker-${crypto.randomUUID()}`;menu.id=id;
   const announcements=`${id}-announcement`,instructions=`${id}-instructions`;
-  const media=matchMedia('(prefers-reduced-motion: reduce)');
+  const media=matchMedia('(prefers-reduced-motion: reduce)');const reduced=()=>document.documentElement.hasAttribute('data-reduced-motion')?document.documentElement.dataset.reducedMotion==='true':media.matches;
   const removers=[];
   const listen=(target,type,handler,options)=>{target.addEventListener(type,handler,options);removers.push(()=>target.removeEventListener(type,handler,options));};
-  const read=()=>{const value=getValue()||{};state={...state,...value,model:canonicalModel(value.model||state.model),fast:!!value.fast};};
+  const read=()=>{const value=getValue()||{};state={...state,...value,model:canonicalModel(value.model||state.model),fast:!!value.fast};if(!OBSERVED_WORK_MODELS.includes(state.model))state.model='gpt-6.1-sol';if(catalog.length&&!catalog.some(p=>p.effort===state.effort&&(!p.model||p.model===state.model))){const fallback=catalog.find(p=>p.model===state.model)||catalog[0];state.model=fallback.model||state.model;state.effort=fallback.effort;}if(value.model&&canonicalModel(value.model)!==state.model||value.effort&&value.effort!==state.effort)onChange?.({...state,serviceTier:state.fast?'priority':null});};
+  const motion=createPickerMotion(menu,reduced,position);menu.dataset.pickerMotionOwned='';
   const selected=()=>catalog.findIndex(item=>item.effort===state.effort&&(!item.model||item.model===state.model));
   const selectedLabel=()=>catalog[selected()]?.label||EFFORT_LABELS[state.effort]||String(state.effort||'');
   const resetEffects=()=>{stopEffects();stopEffects=()=>{};maxEffect=false;};
   function position(){
     if(!opened)return;
     const bounds=button.getBoundingClientRect(),width=menu.offsetWidth,height=menu.offsetHeight;
-    menu.style.left=`${clamp(bounds.left,8,Math.max(8,innerWidth-width-8))}px`;
-    const above=bounds.top-height-8>=8;menu.style.top=`${above?bounds.top-height-8:Math.min(bounds.bottom+8,Math.max(8,innerHeight-height-8))}px`;menu.dataset.side=above?'top':'bottom';
+    menu.style.left=`${clamp(bounds.right-width,8,Math.max(8,innerWidth-width-8))}px`;
+    const above=bounds.top-height-8>=8;menu.style.top=`${above?bounds.top-height-8:Math.min(bounds.bottom+8,Math.max(8,innerHeight-height-8))}px`;menu.dataset.side=above?'top':'bottom';menu.style.transformOrigin=`right ${above?'bottom':'top'}`;
   }
   function renderTrigger(){
     const model=escapeHTML(modelName(state.model)),effort=escapeHTML(selectedLabel());
@@ -122,31 +120,33 @@ export function mountWorkPicker({button,menu,getValue,onChange,efforts=[],models
     slider.setAttribute('aria-disabled',String(!catalog.length));slider.setAttribute('aria-valuemin','0');slider.setAttribute('aria-valuemax',String(Math.max(0,catalog.length-1)));slider.setAttribute('aria-valuenow',String(Math.max(0,current)));slider.setAttribute('aria-valuetext',selectedLabel());slider.dataset.highlighted=String(isMaximum);slider.dataset.fastMode=String(state.fast);slider.dataset.dragging=String(dragging);slider.dataset.pointerDown=String(dragging);
     const label=menu.querySelector('[data-work-effort]');label.textContent=selectedLabel();label.dataset.maximum=String(isMaximum);
     const modelLabel=menu.querySelector('.ViewToggleModelLabel-Ns2DVV');modelLabel.textContent=modelName(state.model);modelLabel.dataset.modelSelectionLabel=state.model;
-    menu.querySelector('[data-work-thumb]').style.left=thumbPosition(percent);menu.querySelector('[data-work-range]').style.transform=rangeTransform(percent);
+    motion.progress(percent,dragging);motion.thumb(dragging);
     menu.querySelectorAll('[data-work-tick]').forEach((tick,index)=>tick.dataset.selected=String(index<=current));
     menu.querySelector(`#${announcements}`).textContent=`${selectedLabel()}，第 ${Math.max(0,current)+1} 项，共 ${catalog.length} 项。`;
     const fast=menu.querySelector('[data-work-fast]');fast.setAttribute('aria-checked',String(state.fast));fast.setAttribute('aria-label',state.fast?'启用标准模式':'启用快速模式');fast.dataset.fastModeEnabled=String(state.fast);
-    if(isMaximum!==maxEffect){resetEffects();maxEffect=isMaximum;const effects=menu.querySelector('.MaxEffects-UlPrfl');effects.hidden=!isMaximum;if(isMaximum){const a=startMaxFill(effects.querySelector('canvas'),media.matches),b=startParticles(effects.querySelector('.TrackParticles-_dFYGl'),media.matches);stopEffects=()=>{a();b();};}}
+    if(isMaximum!==maxEffect){resetEffects();maxEffect=isMaximum;const effects=menu.querySelector('.MaxEffects-UlPrfl');motion.maximum(effects,isMaximum);if(isMaximum){const a=startMaxFill(effects.querySelector('canvas'),reduced()),b=startParticles(effects.querySelector('.TrackParticles-_dFYGl'),reduced());stopEffects=()=>{a();b();};}}
   }
   function choose(index){
     if(!catalog.length)return;const item=catalog[clamp(index,0,catalog.length-1)];if(item.disabled)return;
     const model=item.model||state.model;if(item.effort===state.effort&&model===state.model)return;
     state.model=model;state.effort=item.effort;emit();syncPower();
   }
-  function renderPower(){
+  function renderPowerContents(){
     resetEffects();
     menu.innerHTML=`<div class="Menu-FcZccz" data-transitions-ready="true"><div class="ViewPanel-7FY74b"><div class="ViewControls-Qvy4rg" data-explicit-model="false" data-inline-model="true" data-effort-header="true"><button type="button" role="menuitem" aria-label="选择模型" data-work-models class="ViewToggle-pjFOrG" data-interactive="true" data-model-picker-view-toggle><span class="ViewToggleContent-W0th2p"><span class="ViewToggleModelLabel-Ns2DVV">${escapeHTML(modelName(state.model))}</span><span class="ViewToggleEffortLabel-mpNoee" data-work-effort></span><span class="ViewToggleIcon-QBviAo">${RIGHT_CHEVRON}</span></span></button><div class="HeaderShortcuts-bZb9rG"><button type="button" class="FastModeToggle-qGLhyE" role="menuitemcheckbox" data-work-fast aria-label="启用快速模式" aria-checked="false"><span class="FastModeToggleContent-oM5Eti">${FAST_ICON}</span></button></div></div><div class="SimpleView-ZBgvlc"><span class="KeyboardAnnouncement-cfumvn" role="status" aria-live="polite" id="${announcements}"></span><span class="KeyboardAnnouncement-cfumvn" id="${instructions}">使用左右方向键调整强度</span><div class="SliderKeyboardControl-wao2b_" role="menuitem" tabindex="0" aria-label="强度" aria-keyshortcuts="ArrowLeft ArrowRight" aria-describedby="${announcements} ${instructions}" data-reasoning-slider><div class="Container-qxn8NG" data-model-picker-power-slider><div class="Root-MhaajB" data-work-slider dir="ltr" role="slider" tabindex="-1" aria-label="强度"><div class="Track-eoFI82"><span class="Range-CJS9gM" data-work-range><span class="MaxEffects-UlPrfl" hidden><span class="Fill-nKJTzJ"><span class="Mask-tydFov"><canvas class="Canvas-bwIFs3"></canvas></span></span><span class="TrackParticles-_dFYGl"></span></span></span><div class="TickRail-KLjYfZ">${catalog.map((item,index)=>`<span class="Tick-pg_l_t" data-work-tick="${index}" style="left:${thumbPosition(catalog.length<2?0:index/(catalog.length-1)*100)}" title="${escapeHTML(item.label)}"></span>`).join('')}</div></div><div class="VisualThumbRail-hji66C" aria-hidden="true"><span class="ThumbScale-Hvw8Fr" data-work-thumb><span class="ThumbSpring-tDZ1ke"><span class="Thumb-hwJ5wX"></span></span></span></div></div></div></div></div></div></div>`;
     menu.querySelector('[data-work-models]').onclick=()=>{view='models';render();};menu.querySelector('[data-work-fast]').onclick=()=>{state.fast=!state.fast;emit();syncPower();};syncPower();position();
   }
-  function renderModels(){
+  function renderModelsContents(){
     resetEffects();
-    const current=state.model;const list=[...new Set([current,...modelCatalog.map(item=>typeof item==='string'?item:item.id)])];
+    const current=state.model;const list=[...modelCatalog];
     menu.innerHTML=`<div class="Menu-FcZccz"><div class="ModelList-I4a0SH" role="group" aria-label="模型">${list.map(model=>`<button type="button" role="menuitemradio" aria-checked="${String(model===current)}" class="work-model-row" data-work-model="${escapeHTML(model)}"><span>${escapeHTML(modelName(model))}</span><span class="work-model-check">${model===current?CHECK:''}</span></button>`).join('')}</div></div>`;
-    menu.querySelectorAll('[data-work-model]').forEach(row=>row.onclick=()=>{state.model=row.dataset.workModel;emit();view='power';render();menu.querySelector('[data-reasoning-slider]')?.focus();});position();
+    menu.querySelectorAll('[data-work-model]').forEach(row=>row.onclick=()=>{const model=row.dataset.workModel,choices=catalog.filter(p=>!p.model||p.model===model);const next=choices.find(p=>p.effort===state.effort)||choices[0];if(!next)return;state.model=model;state.effort=next.effort;emit();view='power';render();menu.querySelector('[data-reasoning-slider]')?.focus();});position();
   }
+  function renderPower(){motion.switchView('power',renderPowerContents);}
+  function renderModels(){motion.switchView('models',renderModelsContents);}
   function render(){if(view==='models')renderModels();else renderPower();renderTrigger();}
-  function open(){if(destroyed||opened)return;read();opened=true;view='power';menu.hidden=false;menu.classList.add('work-picker');menu.setAttribute('role','menu');menu.setAttribute('aria-label','选择 ChatGPT 模型');render();menu.querySelector('[data-reasoning-slider]')?.focus();}
-  function close({focus=false}={}){if(!opened)return;opened=false;dragging=false;menu.hidden=true;resetEffects();renderTrigger();if(focus)button.focus();}
+  function open(){if(destroyed||opened)return;read();motion.resetView();opened=true;view='power';menu.hidden=false;menu.dataset.state='open';menu.classList.add('work-picker');menu.setAttribute('role','menu');menu.setAttribute('aria-label','选择 ChatGPT 模型');render();menu.querySelector('[data-reasoning-slider]')?.focus();}
+  function close({focus=false}={}){if(!opened)return;opened=false;dragging=false;motion.resetView();menu.dataset.state='closed';menu.hidden=true;resetEffects();renderTrigger();if(focus)button.focus();}
   function refresh(){read();if(opened)render();else renderTrigger();}
   listen(button,'click',event=>{event.preventDefault();event.stopPropagation();opened?close():open();});
   listen(document,'pointerdown',event=>{if(opened&&!menu.contains(event.target)&&!button.contains(event.target))close();});
@@ -158,15 +158,16 @@ export function mountWorkPicker({button,menu,getValue,onChange,efforts=[],models
     if(isSlider&&event.key==='Enter'){event.preventDefault();close({focus:true});return;}
     if(['ArrowDown','ArrowUp','Home','End'].includes(event.key)){event.preventDefault();const items=[...menu.querySelectorAll('button:not(:disabled),[data-reasoning-slider]')],index=items.indexOf(document.activeElement);items[event.key==='Home'?0:event.key==='End'?items.length-1:(index+(event.key==='ArrowUp'?-1:1)+items.length)%items.length]?.focus();}
   });
-  const chooseAt=event=>{const slider=menu.querySelector('[data-work-slider]');if(!slider||catalog.length<2)return;const bounds=slider.getBoundingClientRect(),inset=13,span=Math.max(1,bounds.width-2*inset);choose(Math.round(clamp((event.clientX-bounds.left-inset)/span,0,1)*(catalog.length-1)));};
+  const chooseAt=event=>{const slider=menu.querySelector('[data-work-slider]');if(!slider||catalog.length<2)return;const bounds=slider.getBoundingClientRect(),inset=13,span=Math.max(1,bounds.width-2*inset);const ratio=clamp((event.clientX-bounds.left-inset)/span,0,1);choose(Math.round(ratio*(catalog.length-1)));if(dragging)motion.progress(ratio*100,true);};
   listen(menu,'pointerdown',event=>{const slider=event.target.closest('[data-work-slider]');if(!slider||event.button!==0)return;event.preventDefault();dragging=true;slider.setPointerCapture(event.pointerId);menu.querySelector('[data-reasoning-slider]')?.focus();chooseAt(event);syncPower();});
-  listen(menu,'pointermove',event=>{if(dragging){event.preventDefault();chooseAt(event);}});
+  listen(menu,'pointermove',event=>{if(dragging){event.preventDefault();chooseAt(event);}else{const thumb=menu.querySelector('[data-work-thumb]')?.getBoundingClientRect();if(thumb)motion.thumb(event.clientX>=thumb.left&&event.clientX<=thumb.right&&event.clientY>=thumb.top&&event.clientY<=thumb.bottom);}});
   listen(menu,'pointerup',event=>{if(!dragging)return;chooseAt(event);dragging=false;syncPower();});
+  listen(menu,'pointerleave',()=>{if(!dragging)motion.thumb(false);});
   listen(menu,'pointercancel',()=>{dragging=false;syncPower();});
   listen(menu,'lostpointercapture',()=>{if(dragging){dragging=false;syncPower();}});
   listen(menu,'wheel',event=>{if(view!=='power'||!event.target.closest('[data-reasoning-slider]')||event.ctrlKey)return;event.preventDefault();let delta=Math.abs(event.deltaX)>Math.abs(event.deltaY)?event.deltaX:-event.deltaY;if(event.deltaMode)delta=30*Math.sign(delta);if(event.timeStamp-wheelTime>160||Math.sign(delta)!==Math.sign(wheelDelta))wheelDelta=0;wheelTime=event.timeStamp;wheelDelta+=delta;if(Math.abs(wheelDelta)>=30){const direction=Math.sign(wheelDelta);wheelDelta-=30*direction;choose(Math.max(0,selected())+direction);}}, {passive:false});
   listen(window,'resize',position);listen(window,'scroll',position,true);listen(media,'change',()=>{if(opened&&view==='power')renderPower();});
   read();menu.hidden=true;renderTrigger();
-  return {open,close,refresh,destroy(){close();destroyed=true;removers.forEach(remove=>remove());},setEfforts(values){catalog=cleanEfforts(values);refresh();},setModels(values){modelCatalog=Array.isArray(values)?[...values]:[];if(opened&&view==='models')renderModels();}};
+  return {open,close,refresh,destroy(){close();motion.destroy();destroyed=true;removers.forEach(remove=>remove());},setEfforts(values){catalog=cleanEfforts(values);refresh();},setModels(values){modelCatalog=cleanModels(values);if(opened&&view==='models')renderModels();}};
 }
 

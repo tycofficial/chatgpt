@@ -1,0 +1,13 @@
+/* Motion state adapters only. Original captured CSS continues to own layout.
+   Exact menu rules: 2239c557318a.css / Menu-rMiuRe + MenuItem-xtyGWy.
+   Height rules: 23dc69af331f.css / heightAnimated-LhPH1S. */
+:root[data-source-motion] #welcome{animation:none!important}
+[data-source-menu]{transform-origin:var(--radix-dropdown-menu-content-transform-origin,center);will-change:opacity,scale}
+[data-source-menu-item]{position:relative;isolation:isolate}
+[data-source-menu-item]:is(:hover,:focus-visible){background:transparent!important}
+[data-source-menu-item]::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;background:var(--menu-item-background-color,var(--color-background-secondary-ghost-hover));opacity:0;transform:scale(.98);transition:transform var(--transition-duration-basic,.15s) var(--cubic-enter,cubic-bezier(.19,1,.22,1));pointer-events:none}
+@media(hover:hover){[data-source-menu-item]:hover::before{opacity:1;transform:scale(1)}}
+[data-source-menu-item]:is(:focus-visible,[data-highlighted],[data-state=open])::before{opacity:1;transform:scale(1)}
+[data-source-dialog-height][data-dialog-height-ready=true]{transition:height var(--transition-duration-relaxed,.3s) var(--ease-enter-snappy,cubic-bezier(.23,1,.32,1))}
+@media(prefers-reduced-motion:reduce){[data-source-menu],[data-source-menu-item]::before,[data-source-dialog-height]{animation:none!important;transition:none!important}}
+:root[data-reduced-motion=true] :is([data-source-menu],[data-source-menu-item]::before,[data-source-dialog-height]){animation:none!important;transition:none!important}

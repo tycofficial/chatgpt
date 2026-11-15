@@ -361,7 +361,9 @@ function sanitizeDocument(document, slug) {
       if (/^on/i.test(a.name) || /(?:theme-account-id|theme-user-id|page-load-id|liner|extension|data-react|data-liner|latitude|longitude|geolocation|coordinates|map-center)/i.test(a.name) || /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/i.test(a.value) || /(?:usercontent|blob:|chrome-extension:|builtin:orbit:|mapbox[^\s]*[/?].*(?:access_token|tiles)|[?&](?:lat|lng|lon)=)/i.test(a.value)) {
         e.removeAttribute(a.name); continue;
       }
-      let v = neutralize(a.value);
+      // Resource filenames such as image-square@3x.png are not email addresses.
+      // Private media is excluded above; leave eligible local asset names intact.
+      let v = ['src','srcset','style'].includes(a.name) ? a.value : neutralize(a.value);
       if (a.name === 'data-icon-sprite-url') v = './ui/assets/icons.svg';
       if ((a.name === 'href' || a.name === 'xlink:href') && e.tagName.toLowerCase() === 'use') v = `./ui/assets/icons.svg#${v.split('#').pop()}`;
       else if (a.name === 'href') {
@@ -548,7 +550,8 @@ for (const {slug,label} of navigation) {
 const home = sanitized.get('home');
 const attrHTML = o=>Object.entries(o).map(([k,v])=>` ${k}="${escaped(v)}"`).join('');
 const links = [...stylesheets].map(n=>`<link rel="stylesheet" href="./ui/assets/${n}">`).join('\n');
-const index = `<!doctype html>\n<html${attrHTML(home.htmlAttributes)}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>ChatGPT</title>\n<link rel="stylesheet" href="./ui/assets/source-layers.css">\n${links}\n<link rel="stylesheet" href="./ui/assets/source-inline.css"><link rel="stylesheet" href="./bridge.css"><link rel="stylesheet" href="./power-picker.css"></head>\n<body${attrHTML(home.bodyAttributes)}><div id="app" style="display:contents"></div><div id="overlay-root"></div><script type="module" src="./app.js"></script></body></html>\n`;
+const sourceTitle = rawDocs.get('home').document.querySelector('title')?.textContent.trim() || 'ChatGPT';
+const index = `<!doctype html>\n<html${attrHTML(home.htmlAttributes)}><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>${escaped(sourceTitle)}</title>\n<link rel="stylesheet" href="./ui/assets/source-layers.css">\n${links}\n<link rel="stylesheet" href="./ui/assets/source-inline.css"><link rel="stylesheet" href="./bridge.css"><link rel="stylesheet" href="./power-picker.css"></head>\n<body${attrHTML(home.bodyAttributes)}><div id="app" style="display:contents">${templates.home.html}</div><div id="overlay-root"></div><script type="module" src="./app.js"></script></body></html>\n`;
 await fs.writeFile(path.join(base,'index.html'),index);
 await fs.writeFile(path.join(outDir,'templates.json'),JSON.stringify(templates,null,2)+'\n');
 console.log(JSON.stringify({assembled:true,captured:rawDocs.size,pendingCaptures:pendingCaptures.length,settings:Object.keys(templates.settings).length,stylesheets:stylesheets.size,copiedPublicAssets:copiedAssets.size,output:'ui/templates.json',unavailableCSSAssetCount:missingAssets.size}));

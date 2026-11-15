@@ -24,6 +24,38 @@ const correction=percent=>13-percent/50*13;
 const thumbPosition=percent=>`calc(${percent}% + ${correction(percent)}px)`;
 const rangeTransform=percent=>`translateX(calc(${percent-100}% + ${correction(percent)}px))`;
 
+// Exact dU23 / V8uZ spring constants and zP3a view transitions. Both adapters
+// share this DOM implementation rather than replacing the original motions.
+export function createPickerMotion(menu,isReduced,position){
+  let progress=null,velocity=0,target=0,progressFrame=0,progressTime=0,scale=1,scaleVelocity=0,scaleTarget=1,scaleFrame=0,scaleTime=0,view=null,stage=null,oldPanel=null,cleanupTimer=0,viewFrame=0;
+  const effects=new Map();
+  const physics=(x,v,to,dt,k,d)=>{const a=d/2,w=Math.sqrt(k-a*a),y=x-to,e=Math.exp(-a*dt),c=Math.cos(w*dt),s=Math.sin(w*dt),b=(v+a*y)/w;return[to+e*(y*c+b*s),e*((-a*y+b*w)*c+(-a*b-y*w)*s)];};
+  const paint=p=>{const n=Math.max(0,Math.min(100,p*100)),thumb=menu.querySelector('[data-power-thumb],[data-work-thumb]'),range=menu.querySelector('[data-power-range],[data-work-range]'),max=menu.querySelector('[data-power-max-effects],.MaxEffects-UlPrfl');if(thumb)thumb.style.left=thumbPosition(n);if(range)range.style.transform=rangeTransform(n);if(max)max.style.transform=`translateX(calc(${(n-100)*-.9}% + ${correction(n)*-.9}px))`;};
+  function progressTick(now){const dt=Math.min(.064,(now-progressTime)/1000||1/60);progressTime=now;[progress,velocity]=physics(progress,velocity,target,dt,300,27);paint(progress);if(Math.abs(progress-target)<.0001&&Math.abs(velocity)<.001){progress=target;velocity=0;paint(progress);progressFrame=0;}else progressFrame=requestAnimationFrame(progressTick);}
+  function setProgress(percent,dragging=false){target=percent/100;if(progress===null||dragging||isReduced()){cancelAnimationFrame(progressFrame);progressFrame=0;progress=target;velocity=0;paint(progress);return;}paint(progress);if(!progressFrame){progressTime=performance.now();progressFrame=requestAnimationFrame(progressTick);}}
+  function scaleTick(now){const dt=Math.min(.064,(now-scaleTime)/1000||1/60);scaleTime=now;const active=scaleTarget>1;[scale,scaleVelocity]=physics(scale,scaleVelocity,scaleTarget,dt,active?420:220,active?38:26);const thumb=menu.querySelector('.ThumbSpring-tDZ1ke');if(thumb)thumb.style.transform=`scale(${scale})`;if(Math.abs(scale-scaleTarget)<.0001&&Math.abs(scaleVelocity)<.001){scale=scaleTarget;scaleVelocity=0;scaleFrame=0;if(thumb)thumb.style.transform=`scale(${scale})`;}else scaleFrame=requestAnimationFrame(scaleTick);}
+  function thumb(active){scaleTarget=active&&!isReduced()?32/28:1;if(isReduced()){cancelAnimationFrame(scaleFrame);scaleFrame=0;scale=1;menu.querySelector('.ThumbSpring-tDZ1ke')?.style.setProperty('transform','scale(1)');}else if(!scaleFrame){scaleTime=performance.now();scaleFrame=requestAnimationFrame(scaleTick);}}
+  function maximum(layer,active){
+    if(!layer)return;let value=effects.get(layer);if(value?.active===active)return;const from=!value||layer.hidden?0:Number(getComputedStyle(layer).opacity)||0;value?.animation?.cancel();layer.hidden=false;layer.style.opacity=String(active?1:0);
+    const animation=from!==(active?1:0)&&!isReduced()&&typeof layer.animate==='function'?layer.animate([{opacity:from},{opacity:active?1:0}],{duration:300,easing:'cubic-bezier(.23,1,.32,1)'}):null;
+    value={active,animation};effects.set(layer,value);if(!active){if(animation)animation.finished.then(()=>{if(effects.get(layer)===value)layer.hidden=true;}).catch(()=>{});else layer.hidden=true;}
+  }
+  function settleView(){cancelAnimationFrame(viewFrame);clearTimeout(cleanupTimer);if(stage){const current=stage.firstElementChild,tails=[...menu.childNodes].filter(n=>n!==stage);if(current)menu.replaceChildren(current,...tails);stage=null;oldPanel=null;}for(const[layer,value]of effects)if(!layer.isConnected){value.animation?.cancel();effects.delete(layer);}}
+  function targets(panel,kind,active){const header=panel.querySelector('.ViewControls-Qvy4rg'),slider=panel.querySelector('.SliderMotion-wqghZU')||panel.querySelector('.SimpleView-ZBgvlc'),models=panel.matches('.ModelList-I4a0SH')?panel:panel.querySelector('.ModelList-I4a0SH');panel.matches('.Menu-FcZccz')&&(panel.dataset.transitionsReady='true');if(kind==='power'){if(header){header.classList.add('SliderTopRowMotion-Mid9sy');header.dataset.active=String(active);}if(slider){slider.classList.add('SliderMotion-wqghZU');slider.dataset.active=String(active);}}else if(models){models.classList.add('ModelListMotion-iyH7rX');models.dataset.active=String(active);}}
+  function switchView(next,build){
+    settleView();const previous=menu.firstElementChild,prior=view,height=menu.getBoundingClientRect().height;view=next;build();const current=menu.firstElementChild;
+    if(!previous||!current||prior===null||prior===next||isReduced()||menu.hidden){if(current)targets(current,next,true);return;}
+    const newHeight=menu.getBoundingClientRect().height;stage=document.createElement('div');stage.className='picker-motion-stage';stage.style.height=height+'px';
+    oldPanel=document.createElement('div');oldPanel.className='picker-motion-outgoing';oldPanel.inert=true;oldPanel.setAttribute('aria-hidden','true');oldPanel.append(previous);const tails=[...menu.childNodes].filter(n=>n!==current);
+    for(const element of[previous,...previous.querySelectorAll('*')]){element.removeAttribute('id');for(const attr of[...element.attributes])if(/^data-(?:power-|work-|reasoning-slider)/.test(attr.name))element.removeAttribute(attr.name);if(element.tagName==='BUTTON')element.disabled=true;}
+    targets(previous,prior,true);targets(current,next,false);stage.append(current,oldPanel);menu.replaceChildren(stage,...tails);stage.getBoundingClientRect();
+    viewFrame=requestAnimationFrame(()=>{if(!stage)return;targets(previous,prior,false);targets(current,next,true);stage.style.height=newHeight+'px';position();});
+    cleanupTimer=setTimeout(()=>{settleView();position();},400);
+  }
+  const observer=typeof ResizeObserver==='undefined'?null:new ResizeObserver(position);observer?.observe(menu);
+  return{progress:setProgress,thumb,maximum,switchView,resetView(){settleView();view=null;progress=null;velocity=0;scale=1;scaleVelocity=0;scaleTarget=1;cancelAnimationFrame(progressFrame);cancelAnimationFrame(scaleFrame);progressFrame=0;scaleFrame=0;},destroy(){cancelAnimationFrame(progressFrame);cancelAnimationFrame(scaleFrame);settleView();observer?.disconnect();for(const value of effects.values())value.animation?.cancel();effects.clear();}};
+}
+
 function startMaxFill(canvas,reducedMotion){
   if(!canvas||typeof WebGLRenderingContext==='undefined'||typeof ResizeObserver==='undefined')return()=>{};
   const gl=canvas.getContext('webgl',{alpha:true,antialias:false,depth:false,powerPreference:'high-performance',stencil:false});
@@ -72,7 +104,7 @@ function startParticles(layer,reducedMotion){
 export function mountPowerPicker({button,menu,getValue,onChange}){
   if(!button||!menu||typeof getValue!=='function')throw new TypeError('Power picker requires a button, a menu, and getValue().');
   const modeTiers=new Map([['chat',[...CHAT_TIERS]]]);
-  const media=matchMedia('(prefers-reduced-motion: reduce)');
+  const media=matchMedia('(prefers-reduced-motion: reduce)');const reduced=()=>document.documentElement.hasAttribute('data-reduced-motion')?document.documentElement.dataset.reducedMotion==='true':media.matches;
   const id=menu.id||`power-picker-${crypto.randomUUID()}`;menu.id=id;
   const originalButton={html:button.innerHTML,ariaLabel:button.getAttribute('aria-label'),haspopup:button.getAttribute('aria-haspopup'),controls:button.getAttribute('aria-controls')};
   let open=false,view='power',value=null,tierLabels=CHAT_TIERS,dragging=false,dragPointer=null,effectsCleanup=()=>{},mounted=true,lastTier=null,externalCloseObserver;
@@ -80,31 +112,30 @@ export function mountPowerPicker({button,menu,getValue,onChange}){
   const listen=(target,type,handler,options)=>{target.addEventListener(type,handler,options);removers.push(()=>target.removeEventListener(type,handler,options));};
   const read=()=>{const state=getValue()||{};const mode=['chat','work','codex'].includes(state.mode)?state.mode:'chat';const labels=modeTiers.get(mode);return{family:FAMILIES.some(f=>f.id===state.family)?state.family:'gpt6',tier:clamp(Math.round(Number(state.tier)||0),0,(labels?.length||CHAT_TIERS.length)-1),mode};};
   const announce=()=>{const status=menu.querySelector('[data-power-announcement]');if(status)status.textContent=`${tierLabels[value.tier]}，第 ${value.tier+1} 项，共 ${tierLabels.length} 项。`;};
-  const renderButton=()=>{const labels=modeTiers.get(value.mode);const label=open?'思考强度':labels?.[value.tier]||'思考强度';button.innerHTML=`<span class="power-trigger-label"></span>${DOWN_CHEVRON}`;button.querySelector('.power-trigger-label').textContent=label;button.setAttribute('aria-label',label);button.setAttribute('aria-haspopup','menu');button.setAttribute('aria-controls',id);button.setAttribute('aria-expanded',String(open));button.dataset.powerPickerTrigger='';button.dataset.powerMaximum=String(!!labels&&value.tier===labels.length-1);button.setAttribute('aria-disabled',String(!labels));};
+  const renderButton=()=>{const labels=modeTiers.get(value.mode);const label=open?'思考强度':labels?.[value.tier]||'思考强度';button.innerHTML=`<span class="power-trigger-label"></span>${DOWN_CHEVRON}`;button.querySelector('.power-trigger-label').textContent=label;button.setAttribute('aria-label',label);button.setAttribute('aria-haspopup','menu');button.setAttribute('aria-controls',id);button.setAttribute('aria-expanded',String(open));button.dataset.powerPickerTrigger='';button.dataset.powerMaximum=String(!!labels&&labels[value.tier]==='Pro');button.setAttribute('aria-disabled',String(!labels));};
   const position=()=>{
     if(!open)return;
     const bounds=button.getBoundingClientRect(),viewportWidth=document.documentElement.clientWidth,viewportHeight=document.documentElement.clientHeight;
     const height=menu.getBoundingClientRect().height,width=menu.getBoundingClientRect().width;
     const gap=parseFloat(getComputedStyle(menu).getPropertyValue('--power-picker-side-offset'))||8;
     const above=bounds.top-height-gap>=8;
-    menu.style.left=`${clamp(bounds.left,8,Math.max(8,viewportWidth-width-8))}px`;
+    menu.style.left=`${clamp(bounds.right-width,8,Math.max(8,viewportWidth-width-8))}px`;menu.style.transformOrigin=`right ${above?'bottom':'top'}`;
     menu.style.top=`${above?bounds.top-height-gap:Math.min(bounds.bottom+gap,Math.max(8,viewportHeight-height-8))}px`;
     menu.dataset.side=above?'top':'bottom';
   };
+  const motion=createPickerMotion(menu,reduced,position);menu.dataset.pickerMotionOwned='';
   const stopEffects=()=>{effectsCleanup();effectsCleanup=()=>{};lastTier=null;};
   const applyTier=()=>{
     const slider=menu.querySelector('[data-power-slider]');if(!slider)return;
-    const percent=tierLabels.length<=1?0:value.tier/(tierLabels.length-1)*100,isMaximum=value.tier===tierLabels.length-1;
+    const percent=tierLabels.length<=1?0:value.tier/(tierLabels.length-1)*100,isMaximum=tierLabels[value.tier]==='Pro';
     const label=menu.querySelector('[data-power-tier-label]');label.textContent=tierLabels[value.tier];label.dataset.maximum=String(isMaximum);
     slider.dataset.value=String(value.tier);slider.dataset.valueText=`${tierLabels[value.tier]}，第 ${value.tier+1} 项，共 ${tierLabels.length} 项。`;
     slider.dataset.highlighted=String(isMaximum);slider.dataset.dragging=String(dragging);slider.dataset.pointerDown=String(dragging);
-    menu.querySelector('[data-power-thumb]').style.left=thumbPosition(percent);
-    menu.querySelector('[data-power-range]').style.transform=rangeTransform(percent);
-    menu.querySelector('[data-power-max-effects]').style.transform=`translateX(calc(${(percent-100)*-.9}% + ${correction(percent)*-.9}px))`;
+    motion.progress(percent,dragging);motion.thumb(dragging);
     menu.querySelectorAll('[data-power-tick]').forEach((tick,index)=>tick.dataset.selected=String(index<=value.tier));
-    const maxLayer=menu.querySelector('[data-power-max-effects]');maxLayer.hidden=!isMaximum;
+    const maxLayer=menu.querySelector('[data-power-max-effects]');motion.maximum(maxLayer,isMaximum);
     if(lastTier!==isMaximum){effectsCleanup();effectsCleanup=()=>{};lastTier=isMaximum;
-      if(isMaximum){const cancelFill=startMaxFill(menu.querySelector('canvas'),media.matches),cancelParticles=startParticles(menu.querySelector('[data-power-particles]'),media.matches);effectsCleanup=()=>{cancelFill();cancelParticles();};}
+      if(isMaximum){const cancelFill=startMaxFill(menu.querySelector('canvas'),reduced()),cancelParticles=startParticles(menu.querySelector('[data-power-particles]'),reduced());effectsCleanup=()=>{cancelFill();cancelParticles();};}
     }
     announce();renderButton();
   };
@@ -113,22 +144,22 @@ export function mountPowerPicker({button,menu,getValue,onChange}){
     value={...read(),tier:next};onChange?.({...value});applyTier();
   };
   const pointerTier=event=>{const bounds=menu.querySelector('[data-power-slider]').getBoundingClientRect();const ratio=clamp((event.clientX-bounds.left-13)/Math.max(1,bounds.width-26),0,1);return Math.round(ratio*(tierLabels.length-1));};
-  const buildPower=()=>{
+  const buildPowerContents=()=>{
     stopEffects();view='power';menu.dataset.powerView='power';
     const tickMarkup=tierLabels.map((_,index)=>`<span class="Tick-pg_l_t" data-power-tick style="left:${thumbPosition(tierLabels.length<=1?0:index/(tierLabels.length-1)*100)}"></span>`).join('');
-    menu.innerHTML=`<div class="Menu-FcZccz" data-reduced-motion="${media.matches}"><div class="ViewPanel-7FY74b"><div class="SimpleView-ZBgvlc"><div class="ViewControls-Qvy4rg"><button class="ViewToggle-pjFOrG" type="button" role="menuitem" aria-label="选择模型" data-power-families><span class="ViewToggleContent-W0th2p"><span class="ViewToggleEffortLabel-mpNoee" data-effort-only="true" data-power-tier-label></span><span class="ViewToggleIcon-QBviAo">${RIGHT_CHEVRON}</span></span></button></div></div><div class="SliderMotion-wqghZU"><div class="Container-qxn8NG" data-model-picker-power-slider=""><div class="Root-MhaajB" data-power-slider data-fast-mode="false" data-pointer-down="false" data-reduced-motion="${media.matches}" role="menuitem" aria-label="强度" aria-describedby="${id}-announcement ${id}-instructions" tabindex="0"><div class="Track-eoFI82"><span class="Range-CJS9gM" data-power-range><span class="MaxEffects-UlPrfl" data-power-max-effects><span class="Fill-nKJTzJ"><span class="Mask-tydFov"><canvas class="Canvas-bwIFs3" aria-hidden="true"></canvas></span></span><span class="TrackParticles-_dFYGl" data-power-particles aria-hidden="true"></span></span></span><div class="TickRail-KLjYfZ" aria-hidden="true">${tickMarkup}</div></div><div class="VisualThumbRail-hji66C" aria-hidden="true"><span class="ThumbScale-Hvw8Fr" data-power-thumb><span class="ThumbSpring-tDZ1ke"><span class="Thumb-hwJ5wX"></span></span></span></div></div></div></div></div></div><span class="power-sr-only" id="${id}-instructions">使用左右方向键调整强度</span><span class="power-sr-only" id="${id}-announcement" data-power-announcement role="status" aria-live="polite" aria-atomic="true"></span>`;
+    menu.innerHTML=`<div class="Menu-FcZccz" data-reduced-motion="${reduced()}"><div class="ViewPanel-7FY74b"><div class="SimpleView-ZBgvlc"><div class="ViewControls-Qvy4rg"><button class="ViewToggle-pjFOrG" type="button" role="menuitem" aria-label="选择模型" data-power-families><span class="ViewToggleContent-W0th2p"><span class="ViewToggleEffortLabel-mpNoee" data-effort-only="true" data-power-tier-label></span><span class="ViewToggleIcon-QBviAo">${RIGHT_CHEVRON}</span></span></button></div></div><div class="SliderMotion-wqghZU"><div class="Container-qxn8NG" data-model-picker-power-slider=""><div class="Root-MhaajB" data-power-slider data-fast-mode="false" data-pointer-down="false" data-reduced-motion="${reduced()}" role="menuitem" aria-label="强度" aria-describedby="${id}-announcement ${id}-instructions" tabindex="0"><div class="Track-eoFI82"><span class="Range-CJS9gM" data-power-range><span class="MaxEffects-UlPrfl" data-power-max-effects><span class="Fill-nKJTzJ"><span class="Mask-tydFov"><canvas class="Canvas-bwIFs3" aria-hidden="true"></canvas></span></span><span class="TrackParticles-_dFYGl" data-power-particles aria-hidden="true"></span></span></span><div class="TickRail-KLjYfZ" aria-hidden="true">${tickMarkup}</div></div><div class="VisualThumbRail-hji66C" aria-hidden="true"><span class="ThumbScale-Hvw8Fr" data-power-thumb><span class="ThumbSpring-tDZ1ke"><span class="Thumb-hwJ5wX"></span></span></span></div></div></div></div></div></div><span class="power-sr-only" id="${id}-instructions">使用左右方向键调整强度</span><span class="power-sr-only" id="${id}-announcement" data-power-announcement role="status" aria-live="polite" aria-atomic="true"></span>`;
     const slider=menu.querySelector('[data-power-slider]');
     slider.addEventListener('keydown',event=>{const keys={ArrowLeft:-1,ArrowDown:-1,ArrowRight:1,ArrowUp:1,PageDown:-1,PageUp:1};if(event.key in keys){event.preventDefault();event.stopPropagation();chooseTier(value.tier+keys[event.key]);}else if(event.key==='Home'||event.key==='End'){event.preventDefault();event.stopPropagation();chooseTier(event.key==='Home'?0:tierLabels.length-1);}});
     slider.addEventListener('focus',()=>slider.parentElement.dataset.keyboardFocused='true');
     slider.addEventListener('blur',()=>slider.parentElement.dataset.keyboardFocused='false');
     slider.addEventListener('pointerdown',event=>{if(event.button!==0)return;event.preventDefault();event.stopPropagation();dragging=true;dragPointer=event.pointerId;slider.setPointerCapture?.(event.pointerId);slider.focus({preventScroll:true});chooseTier(pointerTier(event));applyTier();});
-    slider.addEventListener('pointermove',event=>{if(dragging&&event.pointerId===dragPointer)chooseTier(pointerTier(event));});
+    slider.addEventListener('pointermove',event=>{if(dragging&&event.pointerId===dragPointer){chooseTier(pointerTier(event));motion.progress(clamp((event.clientX-slider.getBoundingClientRect().left-13)/Math.max(1,slider.getBoundingClientRect().width-26),0,1)*100,true);}else{const thumb=menu.querySelector('[data-power-thumb]')?.getBoundingClientRect();if(thumb)motion.thumb(event.clientX>=thumb.left&&event.clientX<=thumb.right&&event.clientY>=thumb.top&&event.clientY<=thumb.bottom);}});slider.addEventListener('pointerleave',()=>{if(!dragging)motion.thumb(false);});
     const release=event=>{if(!dragging||event.pointerId!==dragPointer)return;dragging=false;dragPointer=null;if(slider.hasPointerCapture?.(event.pointerId))slider.releasePointerCapture(event.pointerId);applyTier();};
     slider.addEventListener('pointerup',release);slider.addEventListener('pointercancel',release);slider.addEventListener('lostpointercapture',()=>{if(dragging){dragging=false;dragPointer=null;applyTier();}});
     menu.querySelector('[data-power-families]').addEventListener('click',event=>{event.stopPropagation();buildFamilies();position();menu.querySelector('[aria-checked="true"]')?.focus();});
     applyTier();
   };
-  const buildFamilies=()=>{
+  const buildFamiliesContents=()=>{
     stopEffects();view='families';menu.dataset.powerView='families';
     menu.innerHTML=`<div class="ModelList-I4a0SH" role="group" aria-label="选择模型">${FAMILIES.map(family=>`<button class="power-family-row" type="button" role="menuitemradio" aria-checked="${family.id===value.family}" data-power-family="${family.id}"><span>${family.label}</span><span class="power-family-check">${family.id===value.family?CHECK:''}</span></button>`).join('')}</div>`;
     menu.querySelectorAll('[data-power-family]').forEach((row,index)=>{
@@ -136,10 +167,12 @@ export function mountPowerPicker({button,menu,getValue,onChange}){
       row.addEventListener('keydown',event=>{if(['ArrowDown','ArrowUp','Home','End'].includes(event.key)){event.preventDefault();const rows=[...menu.querySelectorAll('[data-power-family]')];const target=event.key==='Home'?0:event.key==='End'?rows.length-1:(index+(event.key==='ArrowDown'?1:-1)+rows.length)%rows.length;rows[target].focus();}else if(event.key==='ArrowLeft'){event.preventDefault();buildPower();position();menu.querySelector('[data-power-families]')?.focus();}});
     });
   };
-  const close=(restoreFocus=false)=>{if(!mounted)return;open=false;dragging=false;dragPointer=null;stopEffects();menu.hidden=true;renderButton();if(restoreFocus)button.focus({preventScroll:true});};
+  const buildPower=()=>motion.switchView('power',buildPowerContents);
+  const buildFamilies=()=>motion.switchView('models',buildFamiliesContents);
+  const close=(restoreFocus=false)=>{if(!mounted)return;open=false;dragging=false;dragPointer=null;stopEffects();motion.resetView();menu.dataset.state='closed';menu.hidden=true;renderButton();if(restoreFocus)button.focus({preventScroll:true});};
   const show=()=>{
     value=read();const labels=modeTiers.get(value.mode);if(!labels)return;
-    tierLabels=labels;open=true;view='power';menu.hidden=false;renderButton();buildPower();position();
+    tierLabels=labels;motion.resetView();open=true;view='power';menu.hidden=false;menu.dataset.state='open';renderButton();buildPower();position();
   };
   const refresh=()=>{value=read();const labels=modeTiers.get(value.mode);if(!labels){close();renderButton();return;}tierLabels=labels;if(open){view==='power'?buildPower():buildFamilies();position();}renderButton();};
   menu.classList.add('power-picker','ModelPickerDropdownContent-BBm8p1');menu.setAttribute('role','menu');menu.setAttribute('aria-label','思考强度');menu.hidden=true;
@@ -155,6 +188,6 @@ export function mountPowerPicker({button,menu,getValue,onChange}){
   return{
     open:show,close,refresh,
     setModeTiers(mode,labels){if(!Array.isArray(labels)||labels.length<1||labels.some(label=>typeof label!=='string'||!label.trim()))throw new TypeError('Observed mode tiers must be a nonempty string array.');modeTiers.set(mode,[...labels]);refresh();},
-    destroy(){close();mounted=false;removers.forEach(remove=>remove());externalCloseObserver.disconnect();menu.replaceChildren();menu.classList.remove('power-picker','ModelPickerDropdownContent-BBm8p1');button.innerHTML=originalButton.html;for(const [attribute,value]of [['aria-label',originalButton.ariaLabel],['aria-haspopup',originalButton.haspopup],['aria-controls',originalButton.controls]])value==null?button.removeAttribute(attribute):button.setAttribute(attribute,value);button.removeAttribute('aria-expanded');button.removeAttribute('aria-disabled');delete button.dataset.powerPickerTrigger;delete button.dataset.powerMaximum;}
+    destroy(){close();motion.destroy();mounted=false;removers.forEach(remove=>remove());externalCloseObserver.disconnect();menu.replaceChildren();menu.classList.remove('power-picker','ModelPickerDropdownContent-BBm8p1');button.innerHTML=originalButton.html;for(const [attribute,value]of [['aria-label',originalButton.ariaLabel],['aria-haspopup',originalButton.haspopup],['aria-controls',originalButton.controls]])value==null?button.removeAttribute(attribute):button.setAttribute(attribute,value);button.removeAttribute('aria-expanded');button.removeAttribute('aria-disabled');delete button.dataset.powerPickerTrigger;delete button.dataset.powerMaximum;}
   };
 }

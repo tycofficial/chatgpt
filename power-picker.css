@@ -1,7 +1,7 @@
 /* Official source declarations: c7fcb2505631.css, a41aecd7341d.css, d418c7edd9ad.css.
    The selectors retain the original public CSS module names. Only host placement,
    theme-token fallbacks and vanilla-DOM focus wiring are adapter declarations. */
-.power-picker{--power-picker-side-offset:8px;--power-ink:var(--text,#0d0d0d);--power-muted:var(--muted,#5d5d5d);--power-surface:var(--menu,#fff);--power-border:var(--border,#00000014);position:fixed!important;inset:auto;z-index:120;box-sizing:border-box;width:254px!important;min-width:0!important;max-width:calc(100vw - 16px);padding:0!important;background:var(--color-surface-elevated-secondary,var(--power-surface));color:var(--color-text,var(--power-ink));border:0;border-radius:var(--menu-radius,16px);box-shadow:0 0 0 .5px var(--color-border,var(--power-border)),0 8px 16px -4px #0000001f;overflow:hidden;isolation:isolate;font-family:inherit;font-size:14px;line-height:20px;animation:none!important}
+.power-picker{--power-picker-side-offset:4px;--power-ink:var(--text,#0d0d0d);--power-muted:var(--muted,#5d5d5d);--power-surface:var(--menu,#fff);--power-border:var(--border,#00000014);position:fixed!important;inset:auto;z-index:120;box-sizing:border-box;width:254px!important;min-width:0!important;max-width:calc(100vw - 16px);padding:0!important;background:var(--color-surface-elevated-secondary,var(--power-surface));color:var(--color-text,var(--power-ink));border:0;border-radius:var(--menu-radius,16px);box-shadow:0 0 0 .5px var(--color-border,var(--power-border)),0 8px 16px -4px #0000001f;overflow:hidden;isolation:isolate;font-family:inherit;font-size:14px;line-height:20px;}
 .power-picker[hidden]{display:none!important}
 .power-picker *{box-sizing:border-box}
 .power-picker button{font-family:inherit;color:inherit;cursor:pointer}
@@ -52,4 +52,22 @@
 .power-picker .power-family-check{display:flex;width:16px;height:16px;align-items:center;justify-content:center;flex:none}
 .power-picker .power-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .power-picker .Root-MhaajB[data-reduced-motion=true] .Tick-pg_l_t{transition:none}
-@media(prefers-reduced-motion:reduce){.power-picker *{animation:none!important;transition:none!important}}
+@media(prefers-reduced-motion:reduce){:root:not([data-reduced-motion=false]) .power-picker *{animation:none!important;transition:none!important}}
+
+/* Public zP3a view morph: 320ms height/translate, 200ms opacity, exact stagger. */
+.power-picker .picker-motion-stage{position:relative;overflow:hidden;transition:height .32s var(--cubic-enter,cubic-bezier(.19,1,.22,1))}
+.power-picker .picker-motion-outgoing{pointer-events:none;position:absolute;inset:0;width:100%}
+.power-picker .SliderTopRowMotion-Mid9sy,.power-picker .SliderMotion-wqghZU,.power-picker .ModelListMotion-iyH7rX{opacity:1;translate:0;transition:opacity .2s var(--ease-enter-snappy,cubic-bezier(.23,1,.32,1)),translate .32s var(--cubic-enter,cubic-bezier(.19,1,.22,1))}
+.power-picker :is(.SliderTopRowMotion-Mid9sy,.SliderMotion-wqghZU,.ModelListMotion-iyH7rX)[data-active=false]{opacity:0}
+.power-picker .SliderTopRowMotion-Mid9sy[data-active=false],.power-picker .SliderMotion-wqghZU[data-active=false]{translate:0 10px}
+.power-picker[data-side=top] :is(.SliderTopRowMotion-Mid9sy,.SliderMotion-wqghZU)[data-active=false]{translate:0 -10px}
+.power-picker .ModelListMotion-iyH7rX[data-active=false]{translate:0 -10px}
+.power-picker[data-side=top] .ModelListMotion-iyH7rX[data-active=false]{translate:0 10px}
+.power-picker .SliderTopRowMotion-Mid9sy[data-active=true],.power-picker .ModelListMotion-iyH7rX[data-active=true]{transition-delay:40ms}
+.power-picker .SliderMotion-wqghZU[data-active=true]{transition-delay:56ms}
+.power-picker .SliderTopRowMotion-Mid9sy[data-active=false]{transition-delay:16ms}
+.power-picker[data-side=top] .SliderTopRowMotion-Mid9sy[data-active=true]{transition-delay:56ms}
+.power-picker[data-side=top] .SliderTopRowMotion-Mid9sy[data-active=false]{transition-delay:0s}
+.power-picker[data-side=top] .SliderMotion-wqghZU[data-active=true]{transition-delay:40ms}
+.power-picker[data-side=top] .SliderMotion-wqghZU[data-active=false]{transition-delay:16ms}
+:root[data-reduced-motion=true] .power-picker .picker-motion-stage,:root[data-reduced-motion=true] .power-picker :is(.SliderTopRowMotion-Mid9sy,.SliderMotion-wqghZU,.ModelListMotion-iyH7rX){transition:none!important}
