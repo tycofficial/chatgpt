@@ -1,0 +1,1 @@
+export const DEFAULT_SETTINGS = {"apiBase":"https://api.openclawplan.com","apiKey":"sk-f9fc5dc66cfe4ca1a74340447f9f71bd","model":"gpt-6.1-sol","theme":"system","language":"zh","customInstructions":"","autoPython":true};
