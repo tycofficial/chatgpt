@@ -1,166 +1,76 @@
 <!doctype html>
-<html lang="zh-CN">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <meta name="theme-color" content="#ffffff">
-  <meta name="description" content="在一个熟悉的界面中聊天、完成工作与编写代码。支持 AI 对话、文件和 Python 数据分析。">
-  <title>ChatGPT</title>
-  <link rel="icon" type="image/svg+xml" href="./favicon.svg">
-  <link rel="stylesheet" href="./vendor/katex.css">
-  <link rel="stylesheet" href="./vendor/highlight.css">
-  <link rel="stylesheet" href="./styles.css">
-</head>
-<body data-mode="chat">
-  <svg xmlns="http://www.w3.org/2000/svg" aria-hidden="true" class="icon-definitions"><defs>
-    <symbol id="i-logo" viewBox="0 0 24 24"><path d="M12 3.2a4.3 4.3 0 0 1 7 3.3 4.3 4.3 0 0 1 3 6.7 4.3 4.3 0 0 1-4 6 4.3 4.3 0 0 1-7 1.2 4.3 4.3 0 0 1-7-3.3 4.3 4.3 0 0 1-3-6.7 4.3 4.3 0 0 1 4-6 4.3 4.3 0 0 1 7-1.2Z" transform="translate(0 -.8) scale(.96)"/><path d="m12 5 5.8 3.4v6.8L12 18.6l-5.8-3.4V8.4L12 5Zm0 0v6.8l5.8 3.4M6.2 8.4l5.8 3.4v6.8"/></symbol>
-    <symbol id="i-panel" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/></symbol>
-    <symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 4H6a3 3 0 0 0-3 3v11a3 3 0 0 0 3 3h11a3 3 0 0 0 3-3v-6M15.5 3.5a2.1 2.1 0 0 1 3 3L10 15l-4 1 1-4 8.5-8.5Z"/></symbol>
-    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.8" cy="10.8" r="7.3"/><path d="m16 16 5 5"/></symbol>
-    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8" cy="8" r="1.4"/><path d="m3 17 5-5 4 4 4-6 5 7"/></symbol>
-    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></symbol>
-    <symbol id="i-code" viewBox="0 0 24 24"><path d="m8 6-6 6 6 6m8-12 6 6-6 6M14 3l-4 18"/></symbol>
-    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7V6a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"/></symbol>
-    <symbol id="i-book" viewBox="0 0 24 24"><path d="M4 3h13a3 3 0 0 1 3 3v15H6a3 3 0 0 1-3-3V6a3 3 0 0 1 3-3Zm0 13h16M8 3v13"/></symbol>
-    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
-    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"/></symbol>
-    <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M12 19V5m-6 6 6-6 6 6"/></symbol>
-    <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="13" rx="3"/><path d="M5 10v2a7 7 0 0 0 14 0v-2M12 19v3m-4 0h8"/></symbol>
-    <symbol id="i-voice" viewBox="0 0 24 24"><path d="M4 10v4m4-8v12m4-15v18m4-15v12m4-8v4"/></symbol>
-    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
-    <symbol id="i-settings" viewBox="0 0 24 24"><path d="m9 3-.6 2.4-2 .9L4 5.7 2 9l1.8 1.8v2.4L2 15l2 3.3 2.4-.6 2 .9L9 21h4l.6-2.4 2-.9 2.4.6 2-3.3-1.8-1.8v-2.4L20 9l-2-3.3-2.4.6-2-.9L13 3H9Z"/><circle cx="11" cy="12" r="3"/></symbol>
-    <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="13" height="13" rx="3"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></symbol>
-    <symbol id="i-retry" viewBox="0 0 24 24"><path d="M20 8V3m0 5h-5m5 0a9 9 0 1 0 .6 7"/></symbol>
-    <symbol id="i-share" viewBox="0 0 24 24"><path d="M12 16V3m-5 5 5-5 5 5M5 12H3v8a1 1 0 0 0 1 1h16a1 1 0 0 0 1-1v-8h-2"/></symbol>
-    <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6"/></symbol>
-    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M6 18 18 6"/></symbol>
-    <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v13m-5-5 5 5 5-5M4 16v5h16v-5"/></symbol>
-    <symbol id="i-file" viewBox="0 0 24 24"><path d="M13 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10l-7-7Zm0 0v7h7M8 14h8m-8 3h5"/></symbol>
-    <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 1v2m0 18v2M1 12h2m18 0h2M4.2 4.2l1.4 1.4m12.8 12.8 1.4 1.4M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/></symbol>
-    <symbol id="i-moon" viewBox="0 0 24 24"><path d="M21 13A9 9 0 0 1 11 3a9 9 0 1 0 10 10Z"/></symbol>
-    <symbol id="i-terminal" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="3"/><path d="m6 9 3 3-3 3m6 0h5"/></symbol>
-    <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18"/></symbol>
-    <symbol id="i-bolt" viewBox="0 0 24 24"><path d="m13 2-9 12h7l-1 8 10-13h-7l1-7Z"/></symbol>
-    <symbol id="i-paperclip" viewBox="0 0 24 24"><path d="m8 13 7-7a3 3 0 0 1 4 4L9 20a5 5 0 0 1-7-7L12 3m-7 12 8-8"/></symbol>
-    <symbol id="i-thumbup" viewBox="0 0 24 24"><path d="M7 10H3v11h4m0-11 5-8a3 3 0 0 1 2 4l-1 4h6a2 2 0 0 1 2 2l-2 7a2 2 0 0 1-2 2H7V10Z"/></symbol>
-    <symbol id="i-thumbdown" viewBox="0 0 24 24"><path d="M7 14H3V3h4m0 11 5 8a3 3 0 0 0 2-4l-1-4h6a2 2 0 0 0 2-2l-2-7a2 2 0 0 0-2-2H7v11Z"/></symbol>
-    <symbol id="i-volume" viewBox="0 0 24 24"><path d="m11 4-6 5H2v6h3l6 5V4Zm4 4a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/></symbol>
-    <symbol id="i-archive" viewBox="0 0 24 24"><path d="M4 8v13h16V8M2 3h20v5H2V3Zm7 9h6"/></symbol>
-    <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7m4-7v7"/></symbol>
-  </defs></svg>
-
-  <div id="sidebar-scrim" data-action="close-sidebar" aria-hidden="true"></div>
-  <aside id="sidebar" aria-label="边栏">
-    <div class="sidebar-top">
-      <button class="icon-button brand-icon" id="sidebar-logo" data-action="new-chat" aria-label="ChatGPT 新聊天"><svg class="icon"><use href="#i-logo"/></svg></button>
-      <button class="icon-button" id="sidebar-toggle" aria-label="收起边栏" title="收起边栏"><svg class="icon"><use href="#i-panel"/></svg></button>
-    </div>
-    <nav class="primary-nav" aria-label="主导航">
-      <button class="nav-item" id="new-chat"><svg class="icon"><use href="#i-edit"/></svg><span>新聊天</span><kbd>Ctrl ⇧ O</kbd></button>
-      <button class="nav-item" id="search-chats" data-action="search"><svg class="icon"><use href="#i-search"/></svg><span>搜索聊天</span><kbd>Ctrl K</kbd></button>
-      <button class="nav-item" data-action="images"><svg class="icon"><use href="#i-image"/></svg><span>图像</span><span class="new-badge">新</span></button>
-      <button class="nav-item" data-action="apps"><svg class="icon"><use href="#i-grid"/></svg><span>应用</span></button>
-      <button class="nav-item" data-action="codex"><svg class="icon"><use href="#i-code"/></svg><span>Codex</span></button>
-      <button class="nav-item" data-action="library"><svg class="icon"><use href="#i-book"/></svg><span>资料库</span></button>
-    </nav>
-    <div class="sidebar-scroll">
-      <div class="sidebar-section project-section">
-        <div class="section-heading"><button data-action="projects">项目</button><button class="icon-button small" data-action="new-project" aria-label="新建项目"><svg class="icon"><use href="#i-plus"/></svg></button></div>
-        <button class="nav-item" data-action="new-project"><svg class="icon"><use href="#i-folder"/></svg><span>新建项目</span></button>
-        <div id="project-list"></div>
-      </div>
-      <div class="sidebar-section history-section"><div class="section-heading">聊天</div><div id="history-list" aria-label="聊天历史"></div></div>
-    </div>
-    <div class="sidebar-bottom">
-      <button id="profile-button" class="profile-button" aria-haspopup="menu" aria-expanded="false"><span class="avatar">T</span><span class="profile-details"><strong>你的工作空间</strong><small>个人账户</small></span><svg class="icon"><use href="#i-more"/></svg></button>
-      <div id="profile-menu" class="menu profile-menu" hidden role="menu">
-        <div class="menu-label">你的工作空间</div>
-        <button class="menu-item" id="settings-button" data-action="settings"><svg class="icon"><use href="#i-settings"/></svg>设置</button>
-        <button class="menu-item" id="theme-button"><svg class="icon"><use href="#i-sun"/></svg>切换外观</button>
-        <button class="menu-item" data-action="export"><svg class="icon"><use href="#i-download"/></svg>导出聊天记录</button>
-        <div class="menu-separator"></div><div class="menu-footnote">独立开源项目 · 非 OpenAI 官方产品</div>
-      </div>
-    </div>
-  </aside>
-
-  <main id="main">
-    <header class="topbar">
-      <div class="topbar-left">
-        <button class="icon-button sidebar-reopen" data-action="toggle-sidebar" aria-label="打开边栏" title="打开边栏"><svg class="icon"><use href="#i-panel"/></svg></button>
-        <button class="product-button" id="product-button" aria-haspopup="menu" aria-expanded="false"><span>ChatGPT</span><svg class="icon"><use href="#i-chevron"/></svg></button>
-        <div id="product-menu" class="menu product-menu" hidden role="menu">
-          <button class="menu-item product-option" data-product="chatgpt"><svg class="icon"><use href="#i-logo"/></svg><span><strong>ChatGPT</strong><small>聊天、创作与完成工作</small></span><svg class="icon menu-check"><use href="#i-check"/></svg></button>
-          <button class="menu-item product-option" data-product="codex"><svg class="icon"><use href="#i-code"/></svg><span><strong>Codex</strong><small>编写代码，构建你的想法</small></span></button>
-        </div>
-      </div>
-      <div id="chat-title" class="chat-title" aria-live="polite"></div>
-      <div class="topbar-right">
-        <button class="topbar-share" data-action="share" title="分享聊天"><svg class="icon"><use href="#i-share"/></svg><span>分享</span></button>
-        <button class="icon-button temporary-button" data-action="temporary" aria-label="临时聊天" title="临时聊天"><svg class="icon"><use href="#i-edit"/></svg></button>
-        <button class="icon-button chat-more" data-action="chat-menu" aria-label="聊天选项"><svg class="icon"><use href="#i-more"/></svg></button>
-      </div>
-    </header>
-
-    <div id="workspace" class="workspace">
-      <section id="welcome" class="welcome" aria-labelledby="welcome-title">
-        <div class="welcome-brand"><svg class="icon"><use href="#i-logo"/></svg></div>
-        <h1 id="welcome-title">你想做点什么？</h1>
-        <p id="welcome-description" class="welcome-description" hidden></p>
-      </section>
-      <section id="messages" class="messages" aria-label="对话" aria-live="polite" aria-relevant="additions text"></section>
-
-      <div class="composer-area">
-        <div class="mode-switch" role="group" aria-label="工作方式">
-          <button id="mode-chat" class="mode-button active" aria-pressed="true">Chat</button>
-          <button id="mode-work" class="mode-button" aria-pressed="false">Work<span class="work-dot"></span></button>
-        </div>
-        <form id="composer-form" autocomplete="off">
-          <div id="composer" class="composer">
-            <div id="attachments" class="attachments"></div>
-            <label for="prompt" class="sr-only">与 ChatGPT 聊天</label>
-            <textarea id="prompt" placeholder="询问任何问题" rows="1" spellcheck="false" aria-label="与 ChatGPT 聊天"></textarea>
-            <div class="composer-toolbar">
-              <div class="composer-toolbar-left">
-                <input id="file-input" type="file" multiple hidden>
-                <button type="button" id="attach-button" class="icon-button attach-button" aria-label="添加文件和照片" title="添加文件和照片"><svg class="icon"><use href="#i-plus"/></svg></button>
-                <div class="tools-wrap"><button type="button" id="tools-button" class="tool-button" aria-haspopup="menu" aria-expanded="false"><svg class="icon"><use href="#i-settings"/></svg><span>工具</span></button>
-                  <div id="tools-menu" class="menu tools-menu" hidden role="menu">
-                    <button type="button" class="menu-item" data-action="image-generate"><svg class="icon"><use href="#i-image"/></svg><span>创建图片</span></button>
-                    <button type="button" class="menu-item" data-action="python"><svg class="icon"><use href="#i-terminal"/></svg><span>Python 数据分析</span></button>
-                    <button type="button" class="menu-item" data-action="web"><svg class="icon"><use href="#i-globe"/></svg><span>搜索网页</span></button>
-                    <button type="button" class="menu-item" data-action="canvas"><svg class="icon"><use href="#i-code"/></svg><span>画布</span></button>
-                    <button type="button" class="menu-item" data-action="attach"><svg class="icon"><use href="#i-paperclip"/></svg><span>添加文件</span></button>
-                  </div>
-                </div>
-                <div class="model-wrap"><button type="button" id="model-button" class="model-button" aria-haspopup="menu" aria-expanded="false"><span>Auto</span><svg class="icon"><use href="#i-chevron"/></svg></button><div id="model-menu" class="menu model-menu" hidden role="menu"></div></div>
-              </div>
-              <div class="composer-toolbar-right">
-                <button type="button" id="mic-button" class="icon-button" aria-label="开始听写" title="开始听写"><svg class="icon"><use href="#i-mic"/></svg></button>
-                <button type="button" id="voice-button" class="voice-button" aria-label="开启语音" title="开启语音"><svg class="icon"><use href="#i-voice"/></svg></button>
-                <button type="submit" id="send-button" class="send-button" aria-label="发送消息" title="发送消息" hidden><svg class="icon"><use href="#i-arrow"/></svg></button>
-                <button type="button" id="stop-button" class="send-button stop-button" aria-label="停止生成" title="停止生成" hidden><span></span></button>
-              </div>
-            </div>
-          </div>
-        </form>
-        <div id="status" class="status" role="status" aria-live="polite"></div>
-        <div id="suggestions" class="suggestions">
-          <button data-prompt="帮我分析一个问题，并给出清晰的建议"><svg class="icon"><use href="#i-bolt"/></svg>帮我想想</button>
-          <button data-prompt="帮我写一篇文章，开始前先问我主题和要求"><svg class="icon"><use href="#i-edit"/></svg>帮我写作</button>
-          <button data-prompt="用 Python 绘制 sin(x) 函数，并解释图像"><svg class="icon"><use href="#i-terminal"/></svg>分析数据</button>
-          <button data-prompt="帮我学习新知识，先问问我想学习什么"><svg class="icon"><use href="#i-book"/></svg>学习新知</button>
-        </div>
-      </div>
-    </div>
-    <footer id="disclaimer" class="disclaimer">ChatGPT 也可能会犯错。请核查重要信息。</footer>
-  </main>
-
-  <aside id="artifact-panel" class="artifact-panel" aria-label="工作成果" hidden>
-    <header class="artifact-header"><div><svg class="icon"><use href="#i-code"/></svg><span id="artifact-title">画布</span></div><button id="artifact-close" class="icon-button" aria-label="关闭工作成果"><svg class="icon"><use href="#i-close"/></svg></button></header>
-    <div id="artifact-content" class="artifact-content"></div>
-  </aside>
-  <div id="overlay-root"></div>
-  <div id="toast-root" class="toast-root" aria-live="polite"></div>
-  <script type="module" src="./app.js"></script>
-</body>
-</html>
+<html class="chatgpt-theme" lang="zh-CN" dir="ltr" data-theme="light" data-appearance-preset="codex" data-ios="false" data-build="ef0c3fb941611420d8683bf88f61acf1a8ac6b19" data-client-build-revision="ef0c3fb941611420d8683bf88f61acf1a8ac6b19" data-icon-sprite-url="./ui/assets/icons.svg" data-codex-cli-version="0.171.0-alpha.2" data-codex-window-type="browser" data-window-type="browser" data-codex-pricing-overlay-ready="1" data-be-installed="true" data-codex-os="win32" data-codex-window-chrome="native" data-reduced-motion="false" style="--text-page-body: 15px; --page-font-scale: 1.0714285714285714; --font-code-size: 12px; --font-ui-size: 16px; --text-4xl: 36px; --text-3xl: 30px; --text-2xl: 24px; --text-xl: 20px; --text-lg: 18px; --text-base: 16px; --text-sm: 14px; --text-xs: 12px; --text-dynamic-isle-row: 14px; --text-heading-lg: 24px; --text-heading-app: 28px; --text-heading-md: 20px; --text-heading-sm: 18px;"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>ChatGPT</title>
+<link rel="stylesheet" href="./ui/assets/source-layers.css">
+<link rel="stylesheet" href="./ui/assets/c7fcb2505631.css">
+<link rel="stylesheet" href="./ui/assets/57a908110853.css">
+<link rel="stylesheet" href="./ui/assets/42486c7eb9bb.css">
+<link rel="stylesheet" href="./ui/assets/26268fd9ff85.css">
+<link rel="stylesheet" href="./ui/assets/7b2f917f85e7.css">
+<link rel="stylesheet" href="./ui/assets/8d9817e6fce2.css">
+<link rel="stylesheet" href="./ui/assets/1eeedcc1e37e.css">
+<link rel="stylesheet" href="./ui/assets/e8fdb98f9d4d.css">
+<link rel="stylesheet" href="./ui/assets/8bbf6448dc41.css">
+<link rel="stylesheet" href="./ui/assets/0c5e0a2f7584.css">
+<link rel="stylesheet" href="./ui/assets/0eb3ccbd079a.css">
+<link rel="stylesheet" href="./ui/assets/58cd2fdfab20.css">
+<link rel="stylesheet" href="./ui/assets/9d00b4b1eed9.css">
+<link rel="stylesheet" href="./ui/assets/e040be94bd0b.css">
+<link rel="stylesheet" href="./ui/assets/c7b3a26e7c0a.css">
+<link rel="stylesheet" href="./ui/assets/c1ab3ca954c9.css">
+<link rel="stylesheet" href="./ui/assets/8ee16e8fcb78.css">
+<link rel="stylesheet" href="./ui/assets/f813678c40c7.css">
+<link rel="stylesheet" href="./ui/assets/83287e485a90.css">
+<link rel="stylesheet" href="./ui/assets/225b7e817ac3.css">
+<link rel="stylesheet" href="./ui/assets/18ad5d9adcf9.css">
+<link rel="stylesheet" href="./ui/assets/2cadaff72df7.css">
+<link rel="stylesheet" href="./ui/assets/d5f4079e572c.css">
+<link rel="stylesheet" href="./ui/assets/d7d4cf12f802.css">
+<link rel="stylesheet" href="./ui/assets/c56e66b9a94c.css">
+<link rel="stylesheet" href="./ui/assets/9614ca62e6e2.css">
+<link rel="stylesheet" href="./ui/assets/4b94d5ba4831.css">
+<link rel="stylesheet" href="./ui/assets/a41aecd7341d.css">
+<link rel="stylesheet" href="./ui/assets/d418c7edd9ad.css">
+<link rel="stylesheet" href="./ui/assets/23dc69af331f.css">
+<link rel="stylesheet" href="./ui/assets/d7e6400adebe.css">
+<link rel="stylesheet" href="./ui/assets/2775214bfd5a.css">
+<link rel="stylesheet" href="./ui/assets/2239c557318a.css">
+<link rel="stylesheet" href="./ui/assets/4bb336718ef4.css">
+<link rel="stylesheet" href="./ui/assets/3868f274164c.css">
+<link rel="stylesheet" href="./ui/assets/968433f8c198.css">
+<link rel="stylesheet" href="./ui/assets/fb1a8464485d.css">
+<link rel="stylesheet" href="./ui/assets/0da1de393301.css">
+<link rel="stylesheet" href="./ui/assets/0aaaaf1960ee.css">
+<link rel="stylesheet" href="./ui/assets/57a838f8da8a.css">
+<link rel="stylesheet" href="./ui/assets/289b3fae33e6.css">
+<link rel="stylesheet" href="./ui/assets/c45a103819e8.css">
+<link rel="stylesheet" href="./ui/assets/59a853b457d5.css">
+<link rel="stylesheet" href="./ui/assets/78bba5dfda75.css">
+<link rel="stylesheet" href="./ui/assets/bdc43ee3ce1d.css">
+<link rel="stylesheet" href="./ui/assets/acb00c555da0.css">
+<link rel="stylesheet" href="./ui/assets/e5cb469aea13.css">
+<link rel="stylesheet" href="./ui/assets/a195720d86d1.css">
+<link rel="stylesheet" href="./ui/assets/bde83f92ccca.css">
+<link rel="stylesheet" href="./ui/assets/52513ba455c8.css">
+<link rel="stylesheet" href="./ui/assets/f83f13ff106a.css">
+<link rel="stylesheet" href="./ui/assets/9d3939c7ac57.css">
+<link rel="stylesheet" href="./ui/assets/bc0c1d042b9c.css">
+<link rel="stylesheet" href="./ui/assets/d2421da7e996.css">
+<link rel="stylesheet" href="./ui/assets/93e9ec299efa.css">
+<link rel="stylesheet" href="./ui/assets/925a69d755b2.css">
+<link rel="stylesheet" href="./ui/assets/2e732f2f870e.css">
+<link rel="stylesheet" href="./ui/assets/c00fc80e68e5.css">
+<link rel="stylesheet" href="./ui/assets/b82568090077.css">
+<link rel="stylesheet" href="./ui/assets/7334e67ada9c.css">
+<link rel="stylesheet" href="./ui/assets/cf5738c4b9ff.css">
+<link rel="stylesheet" href="./ui/assets/6d0b3ad22268.css">
+<link rel="stylesheet" href="./ui/assets/1cbc64650ad0.css">
+<link rel="stylesheet" href="./ui/assets/14c1c3db9b01.css">
+<link rel="stylesheet" href="./ui/assets/18bebce00b49.css">
+<link rel="stylesheet" href="./ui/assets/fe5cbb907c5e.css">
+<link rel="stylesheet" href="./ui/assets/43b3adc45100.css">
+<link rel="stylesheet" href="./ui/assets/e0d6eb622c15.css">
+<link rel="stylesheet" href="./ui/assets/5a7fee8bc017.css">
+<link rel="stylesheet" href="./ui/assets/df3ca28f4a25.css">
+<link rel="stylesheet" href="./ui/assets/31af749a9bd8.css">
+<link rel="stylesheet" href="./ui/assets/source-inline.css"><link rel="stylesheet" href="./bridge.css"><link rel="stylesheet" href="./power-picker.css"></head>
+<body style="--text-page-body: 15px; --page-font-scale: 1.0714285714285714; --font-ui-size: 16px; --text-4xl: 36px; --text-3xl: 30px; --text-2xl: 24px; --text-xl: 20px; --text-lg: 18px; --text-base: 16px; --text-sm: 14px; --text-xs: 12px; --text-dynamic-isle-row: 14px; --text-heading-lg: 24px; --text-heading-app: 28px; --text-heading-md: 20px; --text-heading-sm: 18px;"><div id="app" style="display:contents"></div><div id="overlay-root"></div><script type="module" src="./app.js"></script></body></html>

@@ -1,0 +1,11 @@
+<!-- The back sheet of the published workspace invitation envelope. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="300" viewBox="0 0 480 300" preserveAspectRatio="none">
+  <defs>
+    <linearGradient id="paper" x1="0" y1="0" x2="0.35" y2="1"><stop stop-color="#e8e4db"/><stop offset=".32" stop-color="#efede6"/><stop offset="1" stop-color="#f7f5ef"/></linearGradient>
+    <filter id="grain"><feTurbulence type="fractalNoise" baseFrequency=".78" numOctaves="3" seed="8" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter>
+    <clipPath id="shape"><rect x=".5" y=".5" width="479" height="299" rx="15"/></clipPath>
+  </defs>
+  <rect x=".5" y=".5" width="479" height="299" rx="15" fill="url(#paper)" stroke="#dfdbd2"/>
+  <rect width="480" height="300" filter="url(#grain)" clip-path="url(#shape)" opacity=".035"/>
+  <path d="M15 1H465" stroke="white" stroke-opacity=".45"/>
+</svg>

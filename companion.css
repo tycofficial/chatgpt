@@ -1,0 +1,5 @@
+/* Sprite geometry copied from the original public Root-acw8Rg rule. */
+.companion-sprite{--codex-pet-frame-height:calc(var(--codex-pet-width,7.04rem)*208/192);display:block;width:var(--codex-pet-width,7.04rem);aspect-ratio:192/208;image-rendering:pixelated;background-repeat:no-repeat;background-size:800% 1100%;pointer-events:none}
+.companion-control{position:fixed;inset-inline-end:24px;inset-block-end:16px;z-index:40;display:block;width:var(--codex-pet-width,7.04rem);padding:0;margin:0;border:0;background:none;color:inherit;cursor:pointer;outline-offset:3px;touch-action:manipulation}
+.companion-control[hidden]{display:none!important}.companion-control:focus-visible{outline:2px solid var(--app-color-border-focus,#3a83f7);border-radius:12px}
+@media(max-width:640px){.companion-control{inset-inline-end:8px;inset-block-end:88px;--codex-pet-width:5rem}}

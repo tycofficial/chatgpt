@@ -8,6 +8,56 @@ function requestHeaders(settings) {
   return { 'Content-Type': 'application/json', ...(settings.apiKey ? { Authorization: `Bearer ${settings.apiKey}` } : {}) };
 }
 
+// Verified against the exact model's official capability documentation.
+// Do not guess effort support for provider aliases or other model families.
+const VERIFIED_REASONING_EFFORTS = Object.freeze({
+  'gpt-6.1-sol': Object.freeze(['low', 'medium', 'high', 'xhigh', 'max']),
+  'gpt-6-astra': Object.freeze(['low', 'medium', 'high', 'xhigh', 'max']),
+  'gpt-6-sol': Object.freeze(['none', 'low', 'medium', 'high', 'xhigh', 'max']),
+  'gpt-6-luna': Object.freeze(['none', 'low', 'medium', 'high', 'xhigh', 'max']),
+  'gpt-5.6-sol': Object.freeze(['none', 'low', 'medium', 'high', 'xhigh', 'max']),
+});
+
+export function allowedReasoningEfforts(model) {
+  return typeof model === 'string' && Object.hasOwn(VERIFIED_REASONING_EFFORTS, model)
+    ? [...VERIFIED_REASONING_EFFORTS[model]] : [];
+}
+
+export function validatedReasoningEffort(settings) {
+  const supported = allowedReasoningEfforts(settings.model);
+  const effort = settings.reasoningEffort;
+  if (!supported.length || effort === undefined || effort === null || effort === '') return undefined;
+  if (!supported.includes(effort)) {
+    throw new Error(`模型 ${settings.model} 不支持思考等级 ${String(effort)}。可选值：${supported.join('、')}。`);
+  }
+  return effort;
+}
+
+export function responsesReasoning(settings) {
+  const effort = validatedReasoningEffort(settings);
+  const mode = settings.reasoningMode;
+  if (mode !== undefined && mode !== null && mode !== '' && !['standard', 'pro'].includes(mode)) {
+    throw new Error(`无效的推理模式：${String(mode)}。`);
+  }
+  const knownModel = allowedReasoningEfforts(settings.model).length > 0;
+  if (!knownModel && mode === 'pro') throw new Error(`尚未核实模型 ${settings.model} 支持原生 Pro 模式。`);
+  const reasoning = {};
+  if (effort !== undefined) reasoning.effort = effort;
+  if (knownModel && (mode === 'standard' || mode === 'pro')) reasoning.mode = mode;
+  return Object.keys(reasoning).length ? reasoning : undefined;
+}
+
+export function verifyResponseReasoning(settings, response) {
+  const requested = responsesReasoning(settings);
+  const actual = response.reasoning;
+  if (requested?.mode === 'pro' && actual?.mode !== 'pro') {
+    throw new Error('服务商未启用请求的原生 Pro 模式。请使用已明确标注的替代路由，或切换支持该模式的服务。');
+  }
+  if (requested?.effort !== undefined && actual?.effort !== undefined && actual.effort !== requested.effort) {
+    throw new Error(`服务商未采用请求的思考等级 ${requested.effort}，实际返回 ${actual.effort}。`);
+  }
+}
+
 async function responseError(response) {
   let detail;
   try {
@@ -47,8 +97,13 @@ export class SSEDecoder {
 }
 
 export async function streamCompletion({ settings, messages, tools, signal, onDelta = () => {} }) {
-  const payload = { model: settings.model, messages, stream: true };
-  if (settings.temperature !== undefined && settings.temperature !== '' && settings.temperature !== null) payload.temperature = Number(settings.temperature);
+  if (settings.apiTransport === 'responses' || settings.reasoningMode === 'pro') {
+    return streamResponses({ settings, messages, tools, signal, onDelta });
+  }
+  const payload = { model: settings.model, messages: messages.map(({ response_items, ...message }) => message), stream: true };
+  const effort = validatedReasoningEffort(settings);
+  if (effort !== undefined) payload.reasoning_effort = effort;
+  if ((!allowedReasoningEfforts(settings.model).length || effort === 'none') && settings.temperature !== undefined && settings.temperature !== '' && settings.temperature !== null) payload.temperature = Number(settings.temperature);
   if (tools?.length) { payload.tools = tools; payload.tool_choice = 'auto'; }
   const response = await fetch(apiURL(settings.apiBase, 'chat/completions'), {
     method: 'POST', headers: requestHeaders(settings), body: JSON.stringify(payload), signal,
@@ -59,6 +114,7 @@ export async function streamCompletion({ settings, messages, tools, signal, onDe
   let finished = false;
   const consume = (body) => {
     if (body.error) throw new Error(body.error.message || String(body.error));
+    if (body.usage) assembled.usage = body.usage;
     const choice = body.choices?.[0];
     if (!choice) return;
     const delta = choice.delta || choice.message || {};
@@ -101,6 +157,150 @@ export async function streamCompletion({ settings, messages, tools, signal, onDe
     }
     events.push(decoder.decode(), true);
   } finally { reader.releaseLock(); }
+  if (!assembled.content && !assembled.tool_calls?.length) throw new Error('模型没有返回内容。请检查模型可用性或重新生成。');
+  return assembled;
+}
+
+/** Convert the app's existing Chat history, including function results and images. */
+export function toResponsesInput(messages) {
+  const input = [];
+  for (const message of messages) {
+    if (message.role === 'tool') {
+      input.push({ type: 'function_call_output', call_id: message.tool_call_id, output: String(message.content ?? '') });
+      continue;
+    }
+    // Reuse complete Responses items so stateless tool turns retain encrypted reasoning.
+    if (message.role === 'assistant' && Array.isArray(message.response_items) && message.response_items.length) {
+      input.push(...structuredClone(message.response_items));
+      continue;
+    }
+    let content = message.content;
+    if (Array.isArray(content)) {
+      content = content.map(part => {
+        if (part.type === 'text') return { type: 'input_text', text: part.text };
+        if (part.type === 'image_url') return { type: 'input_image', image_url: part.image_url.url, detail: part.image_url.detail || 'auto' };
+        return structuredClone(part);
+      });
+    }
+    if (content !== undefined && content !== null && content !== '') input.push({ role: message.role, content });
+    for (const call of message.tool_calls || []) {
+      input.push({ type: 'function_call', call_id: call.id, name: call.function.name, arguments: call.function.arguments || '{}' });
+    }
+  }
+  return input;
+}
+
+export function toResponsesTools(tools = []) {
+  return tools.map(tool => tool.type === 'function' && tool.function
+    ? { type: 'function', ...structuredClone(tool.function) } : structuredClone(tool));
+}
+
+/** Responses transport preserves the same app-facing assistant/tool-call contract. */
+async function streamResponses({ settings, messages, tools, signal, onDelta }) {
+  const payload = { model: settings.model, input: toResponsesInput(messages), stream: true, store: false, include: ['reasoning.encrypted_content'] };
+  if (settings.serviceTier) payload.service_tier = settings.serviceTier;
+  const reasoning = responsesReasoning(settings);
+  if (reasoning) payload.reasoning = reasoning;
+  if ((!allowedReasoningEfforts(settings.model).length || reasoning?.effort === 'none') && settings.temperature !== undefined && settings.temperature !== null && settings.temperature !== '') payload.temperature = Number(settings.temperature);
+  if (tools?.length) { payload.tools = toResponsesTools(tools); payload.tool_choice = 'auto'; }
+  const response = await fetch(apiURL(settings.apiBase, 'responses'), { method: 'POST', headers: requestHeaders(settings), body: JSON.stringify(payload), signal });
+  if (!response.ok) throw await responseError(response);
+
+  const assembled = { role: 'assistant', content: '' };
+  const texts = new Map(), calls = new Map(), items = new Map(), itemIndexes = new Map();
+  let finished = false;
+  const outputIndex = event => event.output_index ?? itemIndexes.get(event.item_id) ?? 0;
+  const refreshCalls = () => {
+    if (!calls.size) return;
+    assembled.tool_calls = [...calls.entries()].sort((a,b) => a[0]-b[0]).map(([,call]) => ({ id: call.call_id || '', type: 'function', function: { name: call.name || '', arguments: call.arguments || '' } }));
+  };
+  const textPart = (index, contentIndex, text, append = false) => {
+    const key = `${index}:${contentIndex}`, previous = texts.get(key)?.text || '';
+    const next = append ? previous + text : text;
+    if (next === previous) return;
+    texts.set(key, { index, contentIndex, text: next });
+    assembled.content = [...texts.values()].sort((a,b) => a.index-b.index || a.contentIndex-b.contentIndex).map(part => part.text).join('');
+    onDelta(next.startsWith(previous) ? next.slice(previous.length) : '', assembled);
+  };
+  const ensureCall = (index, item = {}) => {
+    const call = calls.get(index) || { type: 'function_call', arguments: '' };
+    for (const key of ['id','call_id','name','arguments','status']) if (item[key] !== undefined) call[key] = item[key];
+    calls.set(index, call);
+    if (item.id) itemIndexes.set(item.id, index);
+    refreshCalls();
+    return call;
+  };
+  const ingestItem = (item, index, complete = false) => {
+    if (!item) return;
+    if (item.id) itemIndexes.set(item.id, index);
+    if (complete) items.set(index, structuredClone(item));
+    if (item.type === 'function_call') ensureCall(index, item);
+    if (item.type === 'message') (item.content || []).forEach((part, contentIndex) => {
+      if (part.type === 'output_text') textPart(index, contentIndex, part.text || '');
+      if (part.type === 'refusal') textPart(index, contentIndex, part.refusal || '');
+    });
+  };
+  const ingestResponse = body => {
+    if (body.error) throw new Error(body.error.message || String(body.error));
+    if (body.usage) assembled.usage = body.usage;
+    if (body.status === 'failed') throw new Error(body.error?.message || '模型响应失败。');
+    verifyResponseReasoning(settings, body);
+    (body.output || []).forEach((item,index) => ingestItem(item,index,true));
+    if (!body.output?.length && typeof body.output_text === 'string') textPart(0,0,body.output_text);
+    if (body.reasoning) assembled.actual_reasoning = body.reasoning;
+    if (body.model) assembled.model = body.model;
+    assembled.finish_reason = body.status === 'incomplete' ? 'length' : calls.size ? 'tool_calls' : 'stop';
+  };
+  const consume = body => {
+    if (body.error) throw new Error(body.error.message || String(body.error));
+    if (body.type === 'error') throw new Error(body.message || body.code || 'Responses API 返回错误。');
+    const index = outputIndex(body);
+    switch (body.type) {
+      case 'response.output_item.added': ingestItem(body.item,index); break;
+      case 'response.output_item.done': ingestItem(body.item,index,true); break;
+      case 'response.output_text.delta': textPart(index,body.content_index || 0,body.delta || '',true); break;
+      case 'response.output_text.done': textPart(index,body.content_index || 0,body.text || ''); break;
+      case 'response.refusal.delta': textPart(index,body.content_index || 0,body.delta || '',true); break;
+      case 'response.refusal.done': textPart(index,body.content_index || 0,body.refusal || ''); break;
+      case 'response.function_call_arguments.delta': {
+        const call = ensureCall(index,{ id: body.item_id, ...(body.call_id ? {call_id:body.call_id} : {}), ...(body.name ? {name:body.name} : {}) });
+        call.arguments += body.delta || ''; refreshCalls(); break;
+      }
+      case 'response.function_call_arguments.done': ensureCall(index,{ id: body.item_id, arguments: body.arguments || '', ...(body.name ? {name:body.name} : {}) }); break;
+      case 'response.reasoning_summary_text.delta':
+        assembled.reasoning = (assembled.reasoning || '') + (body.delta || ''); onDelta('',assembled); break;
+      case 'response.completed':
+      case 'response.incomplete': ingestResponse(body.response || {}); finished = true; break;
+      case 'response.failed': throw new Error(body.response?.error?.message || '模型响应失败。');
+      default: if (Array.isArray(body.output) || typeof body.output_text === 'string') ingestResponse(body);
+    }
+  };
+
+  if (/application\/json/i.test(response.headers.get('content-type') || '')) consume(await response.json());
+  else {
+    if (!response.body) throw new Error('API 未返回响应内容。');
+    const decoder = new TextDecoder();
+    const parser = new SSEDecoder(data => {
+      if (data.trim() === '[DONE]') { finished = true; return; }
+      if (finished) return;
+      let event;
+      try { event = JSON.parse(data); } catch { throw new Error('API 返回了无效的流式数据。'); }
+      consume(event);
+    });
+    const reader = response.body.getReader();
+    try {
+      while (true) {
+        const { value, done } = await reader.read(); if (done) break;
+        parser.push(decoder.decode(value,{stream:true}));
+        if (finished) { await reader.cancel(); break; }
+      }
+      parser.push(decoder.decode(),true);
+    } finally { reader.releaseLock(); }
+  }
+  refreshCalls();
+  if (assembled.tool_calls?.some(call => !call.id || !call.function.name)) throw new Error('服务商返回的工具调用缺少 call_id 或名称。');
+  for (const [index,call] of calls) if (items.has(index)) items.set(index,{...items.get(index),...call});
+  if (items.size) assembled.response_items = [...items.entries()].sort((a,b)=>a[0]-b[0]).map(([,item])=>item);
   if (!assembled.content && !assembled.tool_calls?.length) throw new Error('模型没有返回内容。请检查模型可用性或重新生成。');
   return assembled;
 }

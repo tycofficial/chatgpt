@@ -1,0 +1,14 @@
+<!-- The folded paper pocket that passes in front of the invitation card. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="300" viewBox="0 0 480 300" preserveAspectRatio="none">
+  <defs>
+    <linearGradient id="front" x1="0" y1="0" x2=".25" y2="1"><stop stop-color="#faf9f5"/><stop offset="1" stop-color="#efede6"/></linearGradient>
+    <linearGradient id="fold" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#fbfaf7"/><stop offset="1" stop-color="#f4f2ec"/></linearGradient>
+    <filter id="grain"><feTurbulence type="fractalNoise" baseFrequency=".78" numOctaves="3" seed="8" stitchTiles="stitch"/><feColorMatrix type="saturate" values="0"/></filter>
+    <clipPath id="shape"><path d="M0 15Q0 7 5 3L225 146Q240 156 255 146L475 3Q480 7 480 15V285Q480 300 465 300H15Q0 300 0 285Z"/></clipPath>
+  </defs>
+  <path d="M0 15Q0 7 5 3L225 146Q240 156 255 146L475 3Q480 7 480 15V285Q480 300 465 300H15Q0 300 0 285Z" fill="url(#front)" stroke="#e2ded6" stroke-width="1"/>
+  <path d="M5 294L221 148Q240 136 259 148L475 294Q470 300 461 300H19Q10 300 5 294Z" fill="url(#fold)"/>
+  <path d="M8 294L220 151M472 294L260 151" fill="none" stroke="#dedad1" stroke-opacity=".7"/>
+  <path d="M10 295L221 153M470 295L260 153" fill="none" stroke="white" stroke-opacity=".7"/>
+  <rect width="480" height="300" filter="url(#grain)" clip-path="url(#shape)" opacity=".025"/>
+</svg>

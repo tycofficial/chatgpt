@@ -1,0 +1,51 @@
+/* Official source declarations: c7fcb2505631.css, a41aecd7341d.css, d418c7edd9ad.css.
+   The selectors retain the original public CSS module names. Only host placement,
+   theme-token fallbacks and vanilla-DOM focus wiring are adapter declarations. */
+.work-picker{--power-picker-side-offset:8px;--power-ink:var(--text,#0d0d0d);--power-muted:var(--muted,#5d5d5d);--power-surface:var(--menu,#fff);--power-border:var(--border,#00000014);position:fixed!important;inset:auto;z-index:120;box-sizing:border-box;width:280px!important;min-width:0!important;max-width:calc(100vw - 16px);padding:0!important;background:var(--color-surface-elevated-secondary,var(--power-surface));color:var(--color-text,var(--power-ink));border:0;border-radius:var(--menu-radius,16px);box-shadow:0 0 0 .5px var(--color-border,var(--power-border)),0 8px 16px -4px #0000001f;overflow:hidden;isolation:isolate;font-family:inherit;font-size:14px;line-height:20px;animation:none!important}
+.work-picker[hidden]{display:none!important}
+.work-picker *{box-sizing:border-box}
+.work-picker button{font-family:inherit;color:inherit;cursor:pointer}
+.work-picker button:focus-visible{outline:0}
+[data-power-picker-trigger]{display:inline-flex;align-items:center;gap:4px}
+[data-power-picker-trigger]>.power-chevron{flex:none;width:12px;height:12px}
+.work-picker .Menu-FcZccz{flex-shrink:0;position:relative}
+.work-picker .power-chevron{display:block}
+.work-picker .Container-qxn8NG{flex-direction:column;justify-content:center;height:32px;margin-inline:2px;padding-block:2px;padding-inline:6px;display:flex;position:relative}
+.work-picker .Root-MhaajB{touch-action:none;align-items:center;width:100%;height:28px;display:flex;position:relative;outline:none}
+.work-picker .Root-MhaajB[data-dragging=true]{cursor:grabbing}
+.work-picker .Root-MhaajB[data-dragging=true] .Tick-pg_l_t{cursor:grabbing}
+.work-picker .Track-eoFI82{background:color-mix(in srgb,var(--color-text,var(--power-ink)) 10%,transparent);height:24px;box-shadow:inset 0 0 0 .5px var(--color-border,var(--power-border));border-radius:12px;flex-grow:1;position:relative;overflow:hidden}
+.work-picker .Range-CJS9gM{background-color:var(--color-accent,#3a83f7);border-radius:12px 0 0 12px;width:100%;height:100%;position:absolute;inset-inline-start:0;overflow:hidden}
+.work-picker .MaxEffects-UlPrfl{pointer-events:none;position:absolute;inset:0}
+.work-picker .MaxEffects-UlPrfl[hidden]{display:none}
+.work-picker .TickRail-KLjYfZ{opacity:1;pointer-events:none;position:absolute;inset:0}
+.work-picker .Tick-pg_l_t{width:4px;height:4px;cursor:pointer;pointer-events:auto;will-change:transform,translate,opacity;background-color:currentColor;border-radius:50%;position:absolute;top:50%;transform:translate(-50%,-50%)translate(0,0);transition:background-color .2s cubic-bezier(.2,.8,.2,1),opacity .2s ease-in-out,filter .12s ease,transform .12s ease,translate .12s linear}
+.work-picker .Tick-pg_l_t:before{content:"";position:absolute;inset:-6px}
+.work-picker .Tick-pg_l_t[data-selected=true]{color:#ffffff4d}
+.work-picker .Tick-pg_l_t[data-selected=false]{color:color-mix(in srgb,var(--color-codex-description,var(--power-muted)) 50%,transparent)}
+.work-picker .Root-MhaajB[data-pointer-down=false] .Tick-pg_l_t:hover{filter:brightness(.85);transform:translate(-50%,-50%)scale(2)}
+.work-picker .Root-MhaajB[data-highlighted=true] .Tick-pg_l_t{opacity:0;transform:translate(-50%,-50%)scale(.75)}
+.work-picker .VisualThumbRail-hji66C{z-index:4;pointer-events:none;width:100%;position:absolute;inset-block:0;inset-inline-start:0}
+.work-picker .ThumbScale-Hvw8Fr{will-change:left;width:28px;height:28px;position:absolute;top:50%;transform:translate(-50%,-50%)}
+.work-picker .ThumbSpring-tDZ1ke{z-index:3;transform-origin:50%;position:absolute;inset:0}
+.work-picker .Thumb-hwJ5wX{border:.5px solid var(--color-border-strong,#00000026);color:var(--color-control-thumb-foreground,var(--power-ink));background:#fff;border-radius:50%;display:block;position:absolute;inset:0;box-shadow:0 0 2px #0000001a}
+.work-picker .Container-qxn8NG[data-keyboard-focused=true] .Thumb-hwJ5wX{outline:2px solid var(--color-ring,#3a83f7);outline-offset:0}
+.work-picker .Fill-nKJTzJ{z-index:2;pointer-events:none;position:absolute;inset:-1px}
+.work-picker .Mask-tydFov{contain:paint;isolation:isolate;background:linear-gradient(90deg,color-mix(in srgb,var(--color-chart-blue,var(--blue-400,#3a83f7)) 60%,var(--color-chart-purple,var(--purple-400,#924ff7))),var(--color-chart-purple,var(--purple-400,#924ff7)) 55%,color-mix(in srgb,var(--color-chart-purple,var(--purple-400,#924ff7)) 72%,var(--color-chart-blue,var(--blue-400,#3a83f7))));position:absolute;inset:0}
+.work-picker .Canvas-bwIFs3{mix-blend-mode:luminosity;width:100%;height:100%;display:block}
+.work-picker .TrackParticles-_dFYGl{pointer-events:none;inset-inline:0;height:24px;position:absolute;top:50%;overflow:hidden;transform:translateY(-50%)}
+.work-picker .TrackParticle-S3uVaU{will-change:opacity;transition-property:translate;transition-timing-function:cubic-bezier(.45,0,.55,1);top:0;background:#ffffffb8;border-radius:999px;width:3px;height:3px;position:absolute;box-shadow:0 0 5px #ffffff57}
+.work-picker .power-family-row{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:36px;margin:0;padding:6px 10px;border:0;border-radius:12px;text-align:left;background:transparent;font-size:14px;font-weight:400;line-height:20px}
+.work-picker .power-family-row:hover,.work-picker .power-family-row:focus-visible{background:var(--color-background-secondary-ghost-hover,var(--hover,#0000000d))}
+.work-picker .power-family-check{display:flex;width:16px;height:16px;align-items:center;justify-content:center;flex:none}
+.work-picker .power-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.work-picker .Root-MhaajB[data-reduced-motion=true] .Tick-pg_l_t{transition:none}
+@media(prefers-reduced-motion:reduce){.work-picker *{animation:none!important;transition:none!important}}
+
+/* Header and trigger module classes use the original c7fcb2505631.css. */
+.work-picker .ViewPanel-7FY74b{padding:4px;width:100%;display:flex;flex-direction:column}
+.work-picker .SimpleView-ZBgvlc{display:grid;align-items:center;min-height:40px;padding-block:4px}
+.work-picker .work-model-row{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:36px;width:100%;padding:6px 10px;border:0;border-radius:12px;background:transparent;text-align:start;font:inherit}
+.work-picker .work-model-row:hover,.work-picker .work-model-row:focus-visible{background:var(--color-background-secondary-ghost-hover,var(--hover,#0000000d))}
+.work-picker .work-model-check{display:flex;align-items:center;width:16px;height:16px}
+.work-picker .FastModeToggle-qGLhyE[aria-checked=true]{color:var(--color-text-accent,var(--color-accent,#3a83f7))}

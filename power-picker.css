@@ -1,0 +1,55 @@
+/* Official source declarations: c7fcb2505631.css, a41aecd7341d.css, d418c7edd9ad.css.
+   The selectors retain the original public CSS module names. Only host placement,
+   theme-token fallbacks and vanilla-DOM focus wiring are adapter declarations. */
+.power-picker{--power-picker-side-offset:8px;--power-ink:var(--text,#0d0d0d);--power-muted:var(--muted,#5d5d5d);--power-surface:var(--menu,#fff);--power-border:var(--border,#00000014);position:fixed!important;inset:auto;z-index:120;box-sizing:border-box;width:254px!important;min-width:0!important;max-width:calc(100vw - 16px);padding:0!important;background:var(--color-surface-elevated-secondary,var(--power-surface));color:var(--color-text,var(--power-ink));border:0;border-radius:var(--menu-radius,16px);box-shadow:0 0 0 .5px var(--color-border,var(--power-border)),0 8px 16px -4px #0000001f;overflow:hidden;isolation:isolate;font-family:inherit;font-size:14px;line-height:20px;animation:none!important}
+.power-picker[hidden]{display:none!important}
+.power-picker *{box-sizing:border-box}
+.power-picker button{font-family:inherit;color:inherit;cursor:pointer}
+.power-picker button:focus-visible{outline:0}
+[data-power-picker-trigger]{display:inline-flex;align-items:center;gap:4px}
+[data-power-picker-trigger]>.power-chevron{flex:none;width:12px;height:12px}
+.power-picker .Menu-FcZccz{flex-shrink:0;position:relative}
+.power-picker .ViewPanel-7FY74b{width:100%;padding:4px;flex-direction:column;display:flex}
+.power-picker .SimpleView-ZBgvlc{align-items:center;min-height:40px;padding-block:4px;display:grid}
+.power-picker .ViewControls-Qvy4rg{justify-content:center;align-items:center;min-height:36px;padding-inline:8px;display:flex;position:relative}
+.power-picker .ViewControls-Qvy4rg:before{width:16px;content:"";flex-shrink:0}
+.power-picker .ViewToggle-pjFOrG{min-width:0;min-height:32px;color:var(--color-text,var(--power-ink));font-size:16px;line-height:24px;border-radius:8px;flex-direction:column;margin:0;padding:4px;font-weight:500;display:flex;background:transparent;border:0;outline:2px solid transparent;outline-offset:2px}
+.power-picker .ViewToggleContent-W0th2p{align-items:center;gap:2px;border-radius:6px;min-width:0;max-width:100%;padding:2px 4px;display:flex}
+.power-picker .ViewToggle-pjFOrG:hover .ViewToggleContent-W0th2p,.power-picker .ViewToggle-pjFOrG:focus-visible .ViewToggleContent-W0th2p{background:var(--color-background-secondary-ghost-hover,var(--hover,#0000000d))}
+.power-picker .ViewToggleEffortLabel-mpNoee{color:var(--color-text-tertiary,var(--power-muted));white-space:nowrap;flex-shrink:0}
+.power-picker .ViewToggleEffortLabel-mpNoee[data-effort-only=true]{color:var(--color-text,var(--power-ink))}
+.power-picker .ViewToggleEffortLabel-mpNoee[data-maximum=true]{color:var(--color-chart-purple,var(--purple-400,#924ff7))}
+.power-picker .ViewToggleIcon-QBviAo{color:var(--color-text-tertiary,var(--power-muted));display:inline-flex;align-items:center;justify-content:center;width:12px;height:12px}
+.power-picker .power-chevron{display:block}
+.power-picker .Container-qxn8NG{flex-direction:column;justify-content:center;height:32px;margin-inline:2px;padding-block:2px;padding-inline:6px;display:flex;position:relative}
+.power-picker .Root-MhaajB{touch-action:none;align-items:center;width:100%;height:28px;display:flex;position:relative;outline:none}
+.power-picker .Root-MhaajB[data-dragging=true]{cursor:grabbing}
+.power-picker .Root-MhaajB[data-dragging=true] .Tick-pg_l_t{cursor:grabbing}
+.power-picker .Track-eoFI82{background:color-mix(in srgb,var(--color-text,var(--power-ink)) 10%,transparent);height:24px;box-shadow:inset 0 0 0 .5px var(--color-border,var(--power-border));border-radius:12px;flex-grow:1;position:relative;overflow:hidden}
+.power-picker .Range-CJS9gM{background-color:var(--color-accent,#3a83f7);border-radius:12px 0 0 12px;width:100%;height:100%;position:absolute;inset-inline-start:0;overflow:hidden}
+.power-picker .MaxEffects-UlPrfl{pointer-events:none;position:absolute;inset:0}
+.power-picker .MaxEffects-UlPrfl[hidden]{display:none}
+.power-picker .TickRail-KLjYfZ{opacity:1;pointer-events:none;position:absolute;inset:0}
+.power-picker .Tick-pg_l_t{width:4px;height:4px;cursor:pointer;pointer-events:auto;will-change:transform,translate,opacity;background-color:currentColor;border-radius:50%;position:absolute;top:50%;transform:translate(-50%,-50%)translate(0,0);transition:background-color .2s cubic-bezier(.2,.8,.2,1),opacity .2s ease-in-out,filter .12s ease,transform .12s ease,translate .12s linear}
+.power-picker .Tick-pg_l_t:before{content:"";position:absolute;inset:-6px}
+.power-picker .Tick-pg_l_t[data-selected=true]{color:#ffffff4d}
+.power-picker .Tick-pg_l_t[data-selected=false]{color:color-mix(in srgb,var(--color-codex-description,var(--power-muted)) 50%,transparent)}
+.power-picker .Root-MhaajB[data-pointer-down=false] .Tick-pg_l_t:hover{filter:brightness(.85);transform:translate(-50%,-50%)scale(2)}
+.power-picker .Root-MhaajB[data-highlighted=true] .Tick-pg_l_t{opacity:0;transform:translate(-50%,-50%)scale(.75)}
+.power-picker .VisualThumbRail-hji66C{z-index:4;pointer-events:none;width:100%;position:absolute;inset-block:0;inset-inline-start:0}
+.power-picker .ThumbScale-Hvw8Fr{will-change:left;width:28px;height:28px;position:absolute;top:50%;transform:translate(-50%,-50%)}
+.power-picker .ThumbSpring-tDZ1ke{z-index:3;transform-origin:50%;position:absolute;inset:0}
+.power-picker .Thumb-hwJ5wX{border:.5px solid var(--color-border-strong,#00000026);color:var(--color-control-thumb-foreground,var(--power-ink));background:#fff;border-radius:50%;display:block;position:absolute;inset:0;box-shadow:0 0 2px #0000001a}
+.power-picker .Container-qxn8NG[data-keyboard-focused=true] .Thumb-hwJ5wX{outline:2px solid var(--color-ring,#3a83f7);outline-offset:0}
+.power-picker .Fill-nKJTzJ{z-index:2;pointer-events:none;position:absolute;inset:-1px}
+.power-picker .Mask-tydFov{contain:paint;isolation:isolate;background:linear-gradient(90deg,color-mix(in srgb,var(--color-chart-blue,var(--blue-400,#3a83f7)) 60%,var(--color-chart-purple,var(--purple-400,#924ff7))),var(--color-chart-purple,var(--purple-400,#924ff7)) 55%,color-mix(in srgb,var(--color-chart-purple,var(--purple-400,#924ff7)) 72%,var(--color-chart-blue,var(--blue-400,#3a83f7))));position:absolute;inset:0}
+.power-picker .Canvas-bwIFs3{mix-blend-mode:luminosity;width:100%;height:100%;display:block}
+.power-picker .TrackParticles-_dFYGl{pointer-events:none;inset-inline:0;height:24px;position:absolute;top:50%;overflow:hidden;transform:translateY(-50%)}
+.power-picker .TrackParticle-S3uVaU{will-change:opacity;transition-property:translate;transition-timing-function:cubic-bezier(.45,0,.55,1);top:0;background:#ffffffb8;border-radius:999px;width:3px;height:3px;position:absolute;box-shadow:0 0 5px #ffffff57}
+.power-picker .ModelList-I4a0SH{max-height:316px;padding:4px;overflow-y:auto}
+.power-picker .power-family-row{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:36px;margin:0;padding:6px 10px;border:0;border-radius:12px;text-align:left;background:transparent;font-size:14px;font-weight:400;line-height:20px}
+.power-picker .power-family-row:hover,.power-picker .power-family-row:focus-visible{background:var(--color-background-secondary-ghost-hover,var(--hover,#0000000d))}
+.power-picker .power-family-check{display:flex;width:16px;height:16px;align-items:center;justify-content:center;flex:none}
+.power-picker .power-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.power-picker .Root-MhaajB[data-reduced-motion=true] .Tick-pg_l_t{transition:none}
+@media(prefers-reduced-motion:reduce){.power-picker *{animation:none!important;transition:none!important}}

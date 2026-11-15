@@ -1,0 +1,6 @@
+<!-- The inside of the flap, visible as the envelope opens. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="180" viewBox="0 0 480 180" preserveAspectRatio="none">
+  <defs><linearGradient id="paper" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#e8e4db"/><stop offset="1" stop-color="#f4f1e9"/></linearGradient></defs>
+  <path d="M15 .5H465Q477 .5 479.5 12L256 170Q240 182 224 170L.5 12Q3 .5 15 .5Z" fill="url(#paper)" stroke="#ddd8ce"/>
+  <path d="M15 2H465" stroke="#d2cdc1" stroke-opacity=".5"/>
+</svg>
