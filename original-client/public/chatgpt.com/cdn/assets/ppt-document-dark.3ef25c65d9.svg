@@ -1,0 +1,76 @@
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  width="24"
+  height="24"
+  fill="none"
+  viewBox="0 0 24 24"
+>
+  <path
+    fill="url(#ppt-document-dark-a)"
+    d="M13.004 2.594c.266 0 .537.074.812.224.275.15.583.393.925.726l4.95 4.9c.542.541.813 1.091.813 1.65v7.45c0 .725-.18 1.396-.538 2.013a4 4 0 0 1-1.463 1.449 3.87 3.87 0 0 1-2 .538h-9c-.724 0-1.395-.18-2.012-.538a4.031 4.031 0 0 1-1.45-1.45 3.937 3.937 0 0 1-.537-2.012V6.594c0-.725.178-1.392.537-2A4.002 4.002 0 0 1 5.49 3.13a3.936 3.936 0 0 1 2.013-.537h5.5Z"
+  />
+  <path
+    fill="url(#ppt-document-dark-b)"
+    d="M14.675 8.594H9.332c-1.01 0-1.828.818-1.828 1.828v5.344c0 1.01.818 1.828 1.828 1.828h5.343c1.01 0 1.828-.819 1.828-1.828v-5.344c0-1.01-.818-1.828-1.828-1.828Z"
+  />
+  <path
+    fill="url(#ppt-document-dark-c)"
+    fill-opacity=".3"
+    d="M14.675 8.594H9.332c-1.01 0-1.828.818-1.828 1.828v5.344c0 1.01.818 1.828 1.828 1.828h5.343c1.01 0 1.828-.819 1.828-1.828v-5.344c0-1.01-.818-1.828-1.828-1.828Z"
+  />
+  <path
+    fill="#fff"
+    d="M11.565 13.99v1.675h-1.158v-5.143h1.789c.64 0 1.128.14 1.462.42.337.28.506.694.506 1.244 0 .567-.189 1.01-.567 1.327-.375.318-.88.477-1.512.477h-.52Zm0-2.578V13.1h.484c.287 0 .508-.075.663-.226.155-.15.233-.367.233-.65 0-.26-.077-.46-.23-.602-.15-.14-.366-.211-.648-.211h-.502Z"
+  />
+  <path
+    fill="url(#ppt-document-dark-d)"
+    d="M13.004 2.594c.266 0 .537.075.812.225.275.15.583.391.925.725l4.95 4.9c.542.541.813 1.091.813 1.65h-4.788c-.833 0-1.496-.242-1.987-.725-.484-.492-.725-1.154-.725-1.988V2.594Z"
+  />
+  <defs>
+    <radialGradient
+      id="ppt-document-dark-b"
+      cx="0"
+      cy="0"
+      r="1"
+      gradientTransform="rotate(45 -6.622 13.353) scale(12.7279)"
+      gradientUnits="userSpaceOnUse"
+    >
+      <stop stop-color="#F8193E" />
+      <stop offset=".939" stop-color="#920616" />
+    </radialGradient>
+    <radialGradient
+      id="ppt-document-dark-c"
+      cx="0"
+      cy="0"
+      r="1"
+      gradientTransform="matrix(0 6.3 -7.17187 0 12.002 13.994)"
+      gradientUnits="userSpaceOnUse"
+    >
+      <stop offset=".576" stop-color="#FFB055" stop-opacity="0" />
+      <stop offset=".974" stop-color="#FFF2BE" />
+    </radialGradient>
+    <linearGradient
+      id="ppt-document-dark-a"
+      x1="4.504"
+      x2="16.003"
+      y1="20.594"
+      y2="7.094"
+      gradientUnits="userSpaceOnUse"
+    >
+      <stop offset=".024" stop-color="#F35AAA" />
+      <stop offset=".529" stop-color="#E1473D" />
+      <stop offset="1" stop-color="#B0212C" />
+    </linearGradient>
+    <linearGradient
+      id="ppt-document-dark-d"
+      x1="16.503"
+      x2="13.504"
+      y1="6.094"
+      y2="9.594"
+      gradientUnits="userSpaceOnUse"
+    >
+      <stop stop-color="#FF8F29" />
+      <stop offset=".851" stop-color="#FE80AD" />
+    </linearGradient>
+  </defs>
+</svg>

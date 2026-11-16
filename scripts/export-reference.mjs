@@ -33,12 +33,25 @@ const option = (name, fallback, max) => {
 const maxDownloads = args.includes('--max-downloads')?option('--max-downloads',1024,4096):dependencyPlanPaths.length?Infinity:1024;
 const concurrency = Math.max(1, option('--concurrency', dependencyPlanPaths.length?12:8, 12));
 const networkBudgetMs = option('--network-budget-ms',dependencyPlanPaths.length?0:60000,60000);
+const minFreeDiskBytes=Math.max(128,option('--min-free-mb',128,8192))*1024*1024;
+const metadataReserveBytes=32*1024*1024;
 const within = (root, target) => {const relative=path.relative(root,target);return !relative.startsWith('..'+path.sep)&&relative!=='..'&&!path.isAbsolute(relative);};
 const digest = value => crypto.createHash('sha256').update(value).digest('hex');
 const rel = file => path.relative(output, file).split(path.sep).join('/');
 const read = file => fs.readFile(file, 'utf8');
 const exists = async file => {try {await fs.stat(file);return true;} catch {return false;}};
-const atomicWrite=async(file,data)=>{const temp=file+'.tmp-'+process.pid;await fs.writeFile(temp,data);await fs.rename(temp,file);};
+const freeDiskBytes=async()=>{const stat=await fs.statfs(output);return Number(stat.bavail)*Number(stat.bsize);};
+let diskWrite=Promise.resolve();
+const atomicWrite=(file,data)=>{
+  const write=diskWrite.then(async()=>{
+    const size=typeof data==='string'?Buffer.byteLength(data):data.byteLength;
+    const reserve=minFreeDiskBytes+(within(path.join(output,'public'),file)?metadataReserveBytes:0);
+    const free=await freeDiskBytes();
+    if(free<size+reserve){const error=new Error(`Disk reserve: ${free} bytes free; preserving ${reserve} bytes before a ${size}-byte atomic write`);error.code='EXPORT_DISK_RESERVE';error.requiredBytes=size;throw error;}
+    const temp=file+'.tmp-'+process.pid;await fs.writeFile(temp,data);await fs.rename(temp,file);
+  });
+  diskWrite=write.catch(()=>{});return write;
+};
 const startedAt = new Date().toISOString();
 if (!within(workspace, output)) throw new Error('Export output is outside the workspace');
 for (const target of [source, output]) if (await exists(target)) {
@@ -55,7 +68,7 @@ const manifest = {
   format: 'captured-reference-source-export/v1', startedAt, finishedAt:null,
   sourceWorkspace: workspace, outputDirectory: output,
   privacy: 'PRIVATE LOCAL EXPORT. Raw signed-in captures can contain original account identities, histories, locations, prompts, and images. This folder is ignored and must not be published as the public clone.',
-  networkPolicy: {allowed:['https://chatgpt.com/cdn/assets/','https://cdn.oaistatic.com/'],credentials:'omit',redirects:'error',browserAutomation:false,privateAPIs:false,maxDownloads:Number.isFinite(maxDownloads)?maxDownloads:'all-known-plan-assets',concurrency,networkBudgetMs,requestTimeoutMs:15000,maxAttempts:3},
+  networkPolicy: {allowed:['https://chatgpt.com/cdn/assets/','https://cdn.oaistatic.com/'],credentials:'omit',redirects:'error',browserAutomation:false,privateAPIs:false,maxDownloads:Number.isFinite(maxDownloads)?maxDownloads:'all-known-plan-assets',concurrency,networkBudgetMs,requestTimeoutMs:15000,maxAttempts:3,minFreeDiskBytes,metadataReserveBytes},
   limits: ['This is an export of the supplied captured frontend and referenced public static assets, not the entire ChatGPT source code.','Uncaptured routes, server implementation, account services, model services, original credentials, and backend behavior are not reconstructed.','No guessed runtime chunk URLs or private endpoints are requested.','Raw captures are preserved, not rewritten into an offline executable application. Opening a raw capture can execute its original scripts or follow its original network URLs.'],
   captures:[], builds:[], entrypoints:[], files:[], assets:[], dependencyEdges:[], failures:[], deferred:[], skipped:[], summary:{},
 };
@@ -159,7 +172,7 @@ async function copyFile(input, relativePath, kind) {
   await fs.mkdir(path.dirname(target),{recursive:true});
   const stat=await fs.stat(input);
   let alreadyCurrent=false;try{const previous=await fs.stat(target);alreadyCurrent=previous.size===stat.size&&previous.mtimeMs>=stat.mtimeMs;}catch{}
-  if(!alreadyCurrent)await fs.copyFile(input,target);
+  if(!alreadyCurrent)await atomicWrite(target,await fs.readFile(input));
   manifest.files.push({path:rel(target),bytes:stat.size,kind,originalLocalPath:path.relative(workspace,input).split(path.sep).join('/')});
   const name=path.basename(input);if(!cache.has(name))cache.set(name,input);
   await scanFile(input,rel(target));
@@ -249,6 +262,7 @@ async function materialize(entry){
   if(!bytes&&cache.has(name)&&path.resolve(cache.get(name))!==path.resolve(target)){origin='existing-local-source';bytes=await fs.readFile(cache.get(name));await atomicWrite(target,bytes);}
   if(!bytes){
     if(offline||requests>=maxDownloads||Date.now()>=networkDeadline)return false;
+    if(await freeDiskBytes()<minFreeDiskBytes+metadataReserveBytes+(entry.requiredDiskBytes||65536)){entry.deferReason='128 MiB minimum free disk reserve (plus metadata headroom)';return false;}
     let lastError,attempts=0;
     for(let attempt=0;attempt<3;attempt++){
       if(Date.now()>=networkDeadline||requests>=maxDownloads)return false;
@@ -259,7 +273,10 @@ async function materialize(entry){
         const declared=Number(response.headers.get('content-length')||0);if(declared>128*1024*1024)throw new Error('Asset exceeds 128 MiB bound');
         bytes=Buffer.from(await response.arrayBuffer());if(bytes.length>128*1024*1024)throw new Error('Asset exceeds 128 MiB bound');
         await atomicWrite(target,bytes);cache.set(name,target);origin='downloaded-public-static';lastError=null;break;
-      }catch(error){lastError=error;if(error.status===404||error.status===410||/exceeds .*bound/.test(error.message))break;if(attempt<2)await new Promise(resolve=>setTimeout(resolve,100*(attempt+1)));}
+      }catch(error){
+        if(error.code==='EXPORT_DISK_RESERVE'){entry.requiredDiskBytes=error.requiredBytes;entry.deferReason=error.message;return false;}
+        lastError=error;if(error.status===404||error.status===410||/exceeds .*bound/.test(error.message))break;if(attempt<2)await new Promise(resolve=>setTimeout(resolve,100*(attempt+1)));
+      }
     }
     networkCompleted++;
     if(lastError){failedURLs.add(entry.url);manifest.failures.push({url:entry.url,reason:String(lastError.message||lastError),attempts,referencedBy:[...entry.referencedBy]});reportProgress();return true;}
@@ -276,19 +293,22 @@ async function materialize(entry){
 queueCoverage(true);
 for(let pass=0;;pass++){
   const ordered=[...new Set([...priorityURLs,...discovered.keys()])];
+  const priority=new Set(priorityURLs),rank=url=>priority.has(url)?0:trustedAssets.has(url)?1:/\.(?:svg|json|css|m?js|woff2?|ttf|otf|eot|map)$/i.test(new URL(url).pathname)?2:/\.(?:png|jpe?g|webp|gif|avif|ico)$/i.test(new URL(url).pathname)?3:4;
+  ordered.sort((a,b)=>rank(a)-rank(b));
   const pending=ordered.map(url=>discovered.get(url)).filter(entry=>!complete.has(entry.url)&&!failedURLs.has(entry.url));
   if(!pending.length)break;
   const beforeComplete=complete.size,beforeFailed=failedURLs.size,beforeKnown=discovered.size;
   for(let offset=0;offset<pending.length;offset+=concurrency){
     const batch=pending.slice(offset,offset+concurrency),results=await Promise.allSettled(batch.map(materialize));
     for(let i=0;i<results.length;i++)if(results[i].status==='rejected'){
+      if(results[i].reason?.code==='EXPORT_DISK_RESERVE'){batch[i].requiredDiskBytes=results[i].reason.requiredBytes;batch[i].deferReason=results[i].reason.message;continue;}
       failedURLs.add(batch[i].url);manifest.failures.push({url:batch[i].url,reason:String(results[i].reason?.message||results[i].reason),referencedBy:[...batch[i].referencedBy]});
     }
   }
   console.log(JSON.stringify({stage:'public-assets',pass:pass+1,available:manifest.assets.length,downloadRequests:requests,failed:manifest.failures.length,knownPublicURLs:discovered.size}));
   if(complete.size===beforeComplete&&failedURLs.size===beforeFailed&&discovered.size===beforeKnown)break;
 }
-manifest.deferred=[...discovered.values()].filter(entry=>!complete.has(entry.url)&&!failedURLs.has(entry.url)).map(entry=>({url:entry.url,referencedBy:[...entry.referencedBy],reason:offline?'offline export':Date.now()>=networkDeadline?'60-second public network budget reached':requests>=maxDownloads?'public download bound reached':'bounded discovery passes completed'}));
+manifest.deferred=[...discovered.values()].filter(entry=>!complete.has(entry.url)&&!failedURLs.has(entry.url)).map(entry=>({url:entry.url,referencedBy:[...entry.referencedBy],reason:entry.deferReason||(offline?'offline export':Date.now()>=networkDeadline?'60-second public network budget reached':requests>=maxDownloads?'public download bound reached':'bounded discovery passes completed')}));
 for(const asset of manifest.assets.filter(a=>/\/manifest-[\w-]+\.js$/.test(new URL(a.url).pathname))){
   const text=await read(path.join(output,asset.path));
   const version=text.match(/["']version["']\s*:\s*["']([^"']+)["']/)?.[1]||null;
@@ -298,6 +318,7 @@ for(const asset of manifest.assets.filter(a=>/\/manifest-[\w-]+\.js$/.test(new U
 }
 manifest.finishedAt=new Date().toISOString();
 manifest.summary={verifiedCaptures:captures.length,copiedLocalFiles:manifest.files.length,copiedLocalBytes:manifest.files.reduce((sum,f)=>sum+f.bytes,0),knownPublicURLs:discovered.size,availablePublicAssets:manifest.assets.length,reusedPublicAssets:manifest.assets.filter(a=>a.origin!=='downloaded-public-static').length,downloadedPublicAssets:manifest.assets.filter(a=>a.origin==='downloaded-public-static').length,downloadRequests:requests,publicAssetBytes:manifest.assets.reduce((sum,a)=>sum+a.bytes,0),dependencyEdges:manifest.dependencyEdges.length,failedAssets:manifest.failures.length,deferredAssets:manifest.deferred.length,skippedQueries:manifest.skipped.length,publicAssetPhaseMs:Date.now()-networkStartedAt};
+manifest.summary.freeDiskBytes=await freeDiskBytes();
 await journalWrite;
 await atomicWrite(path.join(output,'manifest.json'),JSON.stringify(manifest,null,2)+'\n');
 queueCoverage(true);await coverageWrite;
