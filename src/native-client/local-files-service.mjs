@@ -4,6 +4,7 @@
  * POST /files -> upload URL -> actual bytes -> process NDJSON/uploaded.
  */
 import { workspacePath } from './browser-tool-executor.mjs';
+import { createLocalDocumentExtractor } from './local-document-extraction.mjs';
 export const LOCAL_FILES_SOURCE = 'browser-origin-file-storage';
 export const LOCAL_FILE_PREFIX = 'file_local_';
 /** Pure transport classification: no current-account or metadata dependency. */
@@ -45,9 +46,17 @@ function nameOf(value) {
   if (typeof value !== 'string' || !value.trim() || value.length > 255 || /[\u0000-\u001f\u007f/\\]/.test(value) || value === '.' || value === '..') throw issue('Invalid upload filename', 400, 'file_rejected');
   return value;
 }
+function documentFormatOf(name, mime = '') {
+  const extension = name.split('.').at(-1).toLowerCase(), type = mime.split(';')[0].trim().toLowerCase();
+  if (extension === 'pdf' || type === 'application/pdf' || type === 'application/x-pdf') return 'pdf';
+  if (extension === 'docx' || type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return 'docx';
+  return null;
+}
 function kindOf(name, mime = '') {
   const extension = name.split('.').at(-1).toLowerCase(), type = mime.split(';')[0].trim().toLowerCase();
-  if (['pdf', 'doc', 'docx', 'ppt', 'pptx', 'xls', 'xlsx', 'odt', 'ods', 'odp'].includes(extension) || /(?:pdf|officedocument|msword|ms-excel|ms-powerpoint)/.test(type)) throw issue('PDF and Office parsing are not connected to this local file provider', 415, 'unhandled_mime_type');
+  if (['doc', 'docm', 'ppt', 'pptx', 'pptm', 'xls', 'xlsx', 'xlsm', 'odt', 'ods', 'odp'].includes(extension)) throw issue('Excel, PowerPoint and legacy Office text extraction are not connected', 415, 'unhandled_mime_type');
+  if (documentFormatOf(name, mime)) return 'document';
+  if (/(?:officedocument|msword|ms-excel|ms-powerpoint)/.test(type)) throw issue('Only PDF and DOCX document text extraction is connected; Excel, PowerPoint and legacy Office are unsupported', 415, 'unhandled_mime_type');
   if (type.startsWith('image/') || ['png', 'jpg', 'jpeg', 'webp', 'gif', 'avif', 'heic', 'heif'].includes(extension)) return 'image';
   if (type.startsWith('text/') || ['txt', 'md', 'markdown', 'csv', 'tsv', 'json', 'jsonl', 'log', 'yaml', 'yml', 'xml', 'html', 'css', 'js', 'mjs', 'cjs', 'ts', 'tsx', 'jsx', 'py', 'sql', 'sh', 'bat', 'ps1', 'ini', 'toml', 'rst', 'tex'].includes(extension)) return 'text';
   return 'unknown';
@@ -138,10 +147,12 @@ export function createLocalFilesService({
   storage, metadataStorage = globalThis.localStorage, getAccountId = () => null,
   getWorkspacePrefix, diagnostics = [], now = Date.now, uuid = () => crypto.randomUUID(),
   maxFileBytes = MAX_DEFAULT, maxTotalBytes = 256 * 1024 * 1024,
-  readStorageEstimate, ticketLifetimeMs = 60 * 60 * 1000,
+  readStorageEstimate, ticketLifetimeMs = 60 * 60 * 1000, documentExtractor,
 } = {}) {
   if (typeof storage?.write !== 'function' || typeof storage?.read !== 'function' || typeof storage?.remove !== 'function' || typeof getWorkspacePrefix !== 'function') throw new TypeError('Real workspace read/write/remove storage and its namespace callback are required');
   const active = new Map(), locks = new Map();
+  let extractor = documentExtractor;
+  const getDocumentExtractor = () => extractor ??= createLocalDocumentExtractor();
   function owner() {
     const id = getAccountId();
     if (typeof id !== 'string' || !id) throw issue('Sign in to this site before uploading files', 401, 'permission_error');
@@ -155,7 +166,13 @@ export function createLocalFilesService({
     if (raw == null) return { version: 1, files: {} };
     let result;
     try { result = JSON.parse(raw); } catch { throw issue('Local file metadata is damaged; existing bytes were preserved', 500, 'file_corrupted'); }
-    if (!object(result) || result.version !== 1 || !object(result.files) || Object.entries(result.files).some(([key, row]) => !FILE_ID.test(key) || row?.fileId !== key || row.owner !== id || !TICKET.test(row.ticket) || !Number.isSafeInteger(row.size) || row.size < 1 || typeof row.namespace !== 'string' || !row.namespace || row.namespace === '.' || row.namespace === '..' || /[/\\\u0000-\u001f]/.test(row.namespace) || !['payload.txt','image.png','image.jpg','image.webp','image.bin'].includes(row.storageName) || !['pending','stored','ready','error','cancelled'].includes(row.status))) throw issue('Local file metadata has an invalid format; existing bytes were preserved', 500, 'file_corrupted');
+    if (!object(result) || result.version !== 1 || !object(result.files) || Object.entries(result.files).some(([key, row]) => !FILE_ID.test(key) || row?.fileId !== key || row.owner !== id || !TICKET.test(row.ticket) || !Number.isSafeInteger(row.size) || row.size < 1 || typeof row.namespace !== 'string' || !row.namespace || row.namespace === '.' || row.namespace === '..' || /[/\\\u0000-\u001f]/.test(row.namespace) || !['payload.txt','image.png','image.jpg','image.webp','image.bin','document.pdf','document.docx'].includes(row.storageName) || !['pending','stored','ready','error','cancelled'].includes(row.status))) throw issue('Local file metadata has an invalid format; existing bytes were preserved', 500, 'file_corrupted');
+    for (const row of Object.values(result.files)) {
+      if (row.kind === 'document' && !['pdf','docx'].includes(row.documentFormat)) throw issue('The document format metadata is damaged', 500, 'file_corrupted');
+      const text = row.extraction;
+      if (text && (text.textStorageName !== 'extracted.txt' || !Number.isSafeInteger(text.textSize) || text.textSize < 1 || !/^[0-9a-f]{64}$/.test(text.textSHA256 ?? '') || text.sourceSHA256 !== row.sha256 || typeof text.partial !== 'boolean' || typeof text.truncated !== 'boolean')) throw issue('The document text sidecar metadata is damaged', 500, 'file_corrupted');
+      if (row.kind === 'document' && row.status === 'ready' && !text) throw issue('Ready document text metadata is missing', 500, 'file_corrupted');
+    }
     return result;
   }
   function save(id, value) {
@@ -204,8 +221,8 @@ export function createLocalFilesService({
     if (!Number.isSafeInteger(size) || size < 1) throw issue('The selected file is empty', 400, 'file_zero_bytes');
     if (size > maxFileBytes) throw issue('The file exceeds this local provider upload limit', 413, 'file_too_large');
     const mime = typeof body.mime_type === 'string' ? body.mime_type : typeof body.client_resolved_mime_type === 'string' ? body.client_resolved_mime_type : '';
-    const kind = kindOf(name, mime);
-    const current = state(id), reserved = Object.values(current.files).filter(row => row.status !== 'cancelled' && (row.status !== 'pending' || row.expiresAt > now())).reduce((sum, row) => sum + row.size, 0);
+    const kind = kindOf(name, mime), documentFormat = kind === 'document' ? documentFormatOf(name, mime) : null;
+    const current = state(id), reserved = Object.values(current.files).filter(row => row.status !== 'cancelled' && (row.status !== 'pending' || row.expiresAt > now())).reduce((sum, row) => sum + row.size + (row.extraction?.textSize ?? 0), 0);
     if (reserved + size > maxTotalBytes) throw issue('The configured local account file-storage quota is full', 507, 'over_user_quota');
     if (typeof readStorageEstimate === 'function') {
       const estimate = await readStorageEstimate();
@@ -220,10 +237,10 @@ export function createLocalFilesService({
     const uploadURL = new URL(urlPrefix + '/estuary/upload_content_bytes', incoming.origin);
     uploadURL.searchParams.set('upload_url', byteTarget);
     const imageExtension = /image\/png/i.test(mime) || /\.png$/i.test(name) ? 'png' : /image\/jpeg/i.test(mime) || /\.jpe?g$/i.test(name) ? 'jpg' : /image\/webp/i.test(mime) || /\.webp$/i.test(name) ? 'webp' : 'bin';
-    const row = { fileId, owner: id, ticket: token, namespace, storageName: kind === 'image' ? 'image.' + imageExtension : 'payload.txt', fileName: name, mimeType: mime || (kind === 'text' ? 'text/plain' : 'application/octet-stream'), kind, size, status: 'pending', createdAt: now(), expiresAt: now() + ticketLifetimeMs, byteTarget, uploadURL: uploadURL.href, requestOrigin: incoming.origin, pathPrefix: urlPrefix };
+    const row = { fileId, owner: id, ticket: token, namespace, storageName: kind === 'document' ? 'document.' + documentFormat : kind === 'image' ? 'image.' + imageExtension : 'payload.txt', fileName: name, mimeType: mime || (kind === 'text' ? 'text/plain' : 'application/octet-stream'), kind, ...(documentFormat ? { documentFormat } : {}), size, status: 'pending', createdAt: now(), expiresAt: now() + ticketLifetimeMs, byteTarget, uploadURL: uploadURL.href, requestOrigin: incoming.origin, pathPrefix: urlPrefix };
     // Re-read after the optional real quota estimate; do not lose concurrent admissions.
     const next = state(id);
-    const freshReserved = Object.values(next.files).filter(entry => entry.status !== 'cancelled' && (entry.status !== 'pending' || entry.expiresAt > now())).reduce((total, entry) => total + entry.size, 0);
+    const freshReserved = Object.values(next.files).filter(entry => entry.status !== 'cancelled' && (entry.status !== 'pending' || entry.expiresAt > now())).reduce((total, entry) => total + entry.size + (entry.extraction?.textSize ?? 0), 0);
     if (freshReserved + size > maxTotalBytes) throw issue('The configured local account file-storage quota is full', 507, 'over_user_quota');
     if (next.files[fileId]) throw issue('Duplicate local upload ID', 409);
     next.files[fileId] = row; save(id, next);
@@ -329,20 +346,85 @@ export function createLocalFilesService({
     await storeUpload(row, file, request.signal);
     return row;
   }
+  async function readDocumentText(id, row, signal) {
+    cancellation(signal); assertOwner(id);
+    const info = row.extraction;
+    if (!info || info.sourceSHA256 !== row.sha256 || info.textStorageName !== 'extracted.txt') throw issue('The extracted document text is not ready', 409, 'file_content_not_found');
+    let bytes;
+    try { bytes = bytesOf(await storage.read(row.namespace + '/' + info.textStorageName)); }
+    catch (cause) { if (notFound(cause)) throw issue('The saved document text sidecar is missing', 404, 'file_content_not_found'); throw issue('The saved document text sidecar could not be read', 503, 'local_storage_unavailable'); }
+    cancellation(signal); assertOwner(id);
+    if (!bytes || bytes.length !== info.textSize || await hash(bytes) !== info.textSHA256) throw issue('The saved document text sidecar failed SHA-256 verification', 409, 'file_corrupted');
+    cancellation(signal); assertOwner(id);
+    return bytes;
+  }
+  function sidecarText(result) {
+    const summary = { format: result.format, parser: result.parser, scope: result.format === 'pdf' ? 'PDF text layer only' : 'DOCX body text only', ocr: false, partial: result.partial, truncated: result.truncated, reasons: result.reasons, totalPages: result.totalPages, processedPages: result.processedPages, pagesWithoutText: result.pagesWithoutText, warnings: result.warnings };
+    return '[Local document text extraction]\n' + JSON.stringify(summary) + '\n' +
+      (result.partial || result.truncated ? 'This extraction is partial. Unprocessed pages, omitted content or text beyond the extraction limit were not examined.\n' : '') +
+      'Images and scanned text were not transcribed. The original document bytes are retained separately.\n\n' + result.text;
+  }
   async function processFile(fileId, signal) {
     const id = owner();
     return serialize(fileId, async () => {
       const row = find(id, fileId), bytes = await readBytes(id, row, signal);
-      let details;
-      if (row.kind === 'image') details = { kind: 'image', ...imageInfo(bytes) };
-      else {
-        const decoded = decodeText(bytes);
-        details = { kind: 'text', encoding: decoded.encoding, textCharacters: decoded.text.length, mimeType: row.mimeType === 'application/octet-stream' ? 'text/plain' : row.mimeType };
-      }
-      cancellation(signal); assertOwner(id);
-      const ready = update(id, fileId, prior => ({ ...prior, ...details, status: 'ready', processedAt: now() }));
-      note('processing-completed', { fileId, fileKind: ready.kind, bytes: ready.size });
-      return ready;
+      if (row.kind === 'document' && row.status === 'ready') { await readDocumentText(id, row, signal); return row; }
+      const controller = new AbortController(), abort = () => controller.abort(signal?.reason);
+      signal?.addEventListener('abort', abort, { once: true });
+      active.set(fileId, controller);
+      const stop = () => { cancellation(signal); controller.signal.throwIfAborted(); assertOwner(id); };
+      let wroteSidecar = false, committed = false;
+      try {
+        stop();
+        let details;
+        if (row.kind === 'image') details = { kind: 'image', ...imageInfo(bytes) };
+        else if (row.kind === 'document') {
+          const parsed = await getDocumentExtractor().extract(bytes, { format: row.documentFormat, signal: controller.signal });
+          stop();
+          const content = sidecarText(parsed), textBytes = new TextEncoder().encode(content), textSHA256 = await hash(textBytes);
+          stop();
+          const occupied = Object.values(state(id).files).filter(file => file.status !== 'cancelled' && (file.status !== 'pending' || file.expiresAt > now())).reduce((total, file) => total + file.size + (file.fileId === fileId ? 0 : file.extraction?.textSize ?? 0), 0);
+          if (occupied + textBytes.length > maxTotalBytes) throw issue('The configured local document text-storage quota is full', 507, 'over_user_quota');
+          try { wroteSidecar = true; await storage.write(row.namespace + '/extracted.txt', textBytes); }
+          catch { throw issue('The real extracted document text could not be persisted', 507, 'local_storage_write_failed'); }
+          stop();
+          let verified;
+          try { verified = bytesOf(await storage.read(row.namespace + '/extracted.txt')); }
+          catch { throw issue('The extracted text could not be read back', 503, 'local_storage_unavailable'); }
+          if (!verified || verified.length !== textBytes.length || await hash(verified) !== textSHA256) throw issue('The stored document text failed SHA-256 verification', 409, 'file_corrupted');
+          stop();
+          // Detect deleted/changed source bytes while the isolated CPU task ran.
+          await readBytes(id, row, controller.signal);
+          details = {
+            kind: 'document', mimeType: row.documentFormat === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            extraction: { format: parsed.format, parser: parsed.parser, textStorageName: 'extracted.txt', textSize: textBytes.length, textSHA256, sourceSHA256: row.sha256, extractedCharacters: parsed.text.length, textCharacters: content.length, partial: parsed.partial, truncated: parsed.truncated, reasons: parsed.reasons, ocr: false, totalPages: parsed.totalPages, processedPages: parsed.processedPages, pagesWithoutText: parsed.pagesWithoutText, warnings: parsed.warnings },
+          };
+        } else {
+          const decoded = decodeText(bytes);
+          details = { kind: 'text', encoding: decoded.encoding, textCharacters: decoded.text.length, mimeType: row.mimeType === 'application/octet-stream' ? 'text/plain' : row.mimeType };
+        }
+        stop();
+        // Re-read persisted occupancy and commit without an intervening await.
+        // Another document parse or raw-file admission may have completed while
+        // this worker/sidecar write was pending. Never publish two ready records
+        // whose combined real bytes exceed the configured account quota.
+        const ready = update(id, fileId, prior => {
+          if (details.extraction) {
+            const fresh = state(id);
+            const occupied = Object.values(fresh.files).filter(file => file.status !== 'cancelled' && (file.status !== 'pending' || file.expiresAt > now())).reduce((total, file) => total + file.size + (file.fileId === fileId ? 0 : file.extraction?.textSize ?? 0), 0);
+            if (occupied + details.extraction.textSize > maxTotalBytes) throw issue('Concurrent file admissions filled the configured local document quota', 507, 'over_user_quota');
+          }
+          return { ...prior, ...details, status: 'ready', processedAt: now(), processingError: undefined };
+        });
+        committed = true;
+        note('processing-completed', { fileId, fileKind: ready.kind, bytes: ready.size });
+        return ready;
+      } catch (cause) {
+        if (wroteSidecar && !committed) try { await storage.remove(row.namespace + '/extracted.txt'); } catch { note('sidecar-cleanup-error', { fileId }); }
+        if (getAccountId() === id) try { update(id, fileId, prior => ({ ...prior, processingError: { code: cause?.name === 'AbortError' ? 'upload_cancelled' : cause?.code ?? 'document_parser_error', at: now() } })); } catch {}
+        note('processing-error', { fileId, code: cause?.name === 'AbortError' ? 'upload_cancelled' : cause?.code ?? 'document_parser_error' });
+        throw cause;
+      } finally { active.delete(fileId); signal?.removeEventListener('abort', abort); }
     });
   }
   function downloadURL(row) {
@@ -357,7 +439,9 @@ export function createLocalFilesService({
     const id = owner(), row = find(id, fileId);
     update(id, fileId, prior => ({ ...prior, status: 'cancelled' }));
     active.get(fileId)?.abort(new DOMException('Upload cancelled', 'AbortError'));
-    try { await storage.remove(storageKey(row)); } catch (cause) { if (!notFound(cause)) throw issue('The upload was cancelled but its bytes could not be removed', 503, 'local_storage_unavailable'); }
+    for (const key of [storageKey(row), ...(row.kind === 'document' ? [row.namespace + '/extracted.txt'] : [])]) {
+      try { await storage.remove(key); } catch (cause) { if (!notFound(cause)) throw issue('The upload was cancelled but its bytes or extracted text could not be removed', 503, 'local_storage_unavailable'); }
+    }
     return { cancelled: true, fileId };
   }
   async function handle(request, canonicalPath) {
@@ -419,20 +503,41 @@ export function createLocalFilesService({
   }
   async function materializeForThread(fileIds, { threadId, signal } = {}) {
     if (typeof threadId !== 'string' || !threadId) throw issue('A real thread workspace is required', 400);
-    const id = owner(), targetPrefix = prefix(threadId), result = [];
-    for (const fileId of [...new Set(fileIds)]) {
-      const { record, bytes } = await readFile(fileId, { signal });
-      if (record.status !== 'ready') throw issue('The attachment has not completed processing', 409, 'file_content_not_found');
-      const relative = workspacePath('attachments/' + fileId + '/' + record.fileName), path = '/mnt/data/' + relative;
-      const destination = targetPrefix + '/' + relative;
+    const id = owner(), targetPrefix = prefix(threadId), result = [], created = [];
+    async function place(relative, bytes, digest) {
+      const destination = targetPrefix + '/' + workspacePath(relative);
       let previous;
       try { previous = bytesOf(await storage.read(destination)); } catch (cause) { if (!notFound(cause)) throw issue('The thread attachment destination could not be read', 503, 'local_storage_unavailable'); }
-      if (previous && await hash(previous) !== record.sha256) throw issue('A different file already exists at the requested thread attachment path', 409, 'file_rejected');
-      if (!previous) try { await storage.write(destination, bytes); } catch { throw issue('The attachment could not be persisted in this thread workspace', 507, 'local_storage_write_failed'); }
+      if (previous && await hash(previous) !== digest) throw issue('A different file already exists at the requested thread attachment path', 409, 'file_rejected');
+      if (!previous) {
+        created.push(destination);
+        try { await storage.write(destination, bytes); } catch { throw issue('The attachment could not be persisted in this thread workspace', 507, 'local_storage_write_failed'); }
+      }
       cancellation(signal); assertOwner(id);
-      result.push({ id: fileId, name: record.fileName, mimeType: record.mimeType, size: record.size, sha256: record.sha256, path, storageKey: destination, kind: record.kind });
+      let verified;
+      try { verified = bytesOf(await storage.read(destination)); } catch { throw issue('The materialized attachment could not be read back', 503, 'local_storage_unavailable'); }
+      if (!verified || verified.length !== bytes.length || await hash(verified) !== digest) throw issue('The materialized attachment failed SHA-256 verification', 409, 'file_corrupted');
+      return { path: '/mnt/data/' + relative, storageKey: destination };
     }
-    return result;
+    try {
+      for (const fileId of [...new Set(fileIds)]) {
+        const { record, bytes } = await readFile(fileId, { signal });
+        if (record.status !== 'ready') throw issue('The attachment has not completed processing', 409, 'file_content_not_found');
+        const relative = workspacePath('attachments/' + fileId + '/' + (record.kind === 'document' ? 'raw/' : '') + record.fileName);
+        const original = await place(relative, bytes, record.sha256);
+        const file = { id: fileId, name: record.fileName, mimeType: record.mimeType, size: record.size, sha256: record.sha256, ...original, kind: record.kind };
+        if (record.kind === 'document') {
+          const textBytes = await readDocumentText(id, record, signal);
+          const text = await place('attachments/' + fileId + '/text/extracted.txt', textBytes, record.extraction.textSHA256);
+          Object.assign(file, { rawPath: original.path, textPath: text.path, textStorageKey: text.storageKey, extraction: copy(record.extraction), documentFormat: record.documentFormat });
+        }
+        result.push(file);
+      }
+      return result;
+    } catch (cause) {
+      for (const destination of created.reverse()) try { await storage.remove(destination); } catch { note('materialization-cleanup-error'); }
+      throw cause;
+    }
   }
   async function resolveUserInputImage(item, { threadId, signal } = {}) {
     const id = owner(); cancellation(signal);
@@ -474,12 +579,18 @@ export function createLocalFilesService({
       }
     }
     const files = ids.size ? await materializeForThread([...ids], { threadId, signal }) : [], textFiles = [];
-    for (const file of files) if (file.kind === 'text') {
-      const { bytes } = await readFile(file.id, { signal });
-      const decoded = decodeText(bytes);
-      textFiles.push({ id: file.id, name: file.name, path: file.path, text: decoded.text, encoding: decoded.encoding, truncated: false });
+    for (const file of files) {
+      if (file.kind === 'text') {
+        const { bytes } = await readFile(file.id, { signal });
+        const decoded = decodeText(bytes);
+        textFiles.push({ id: file.id, name: file.name, path: file.path, text: decoded.text, encoding: decoded.encoding, truncated: false });
+      } else if (file.kind === 'document') {
+        const { record } = await readFile(file.id, { signal });
+        const textBytes = await readDocumentText(owner(), record, signal), decoded = decodeText(textBytes);
+        textFiles.push({ id: file.id, name: file.name, path: file.textPath, rawPath: file.rawPath, text: decoded.text, encoding: 'utf-8', truncated: record.extraction.truncated, partial: record.extraction.partial, extraction: copy(record.extraction) });
+      }
     }
     return { input: inputs, files, textFiles, attachments, adapter_source: LOCAL_FILES_SOURCE };
   }
-  return Object.freeze({ handle, upload, isLocalUploadURL, ownsUploadURL, readFile, cancelUpload, materializeForThread, resolveUserInputImage, resolveChatAttachments, source: Object.freeze({ provider: LOCAL_FILES_SOURCE, capturedAccountFiles: false, pdfOrOfficeParsing: false, maxFileBytes, maxTotalBytes }) });
+  return Object.freeze({ handle, upload, isLocalUploadURL, ownsUploadURL, readFile, cancelUpload, materializeForThread, resolveUserInputImage, resolveChatAttachments, source: Object.freeze({ provider: LOCAL_FILES_SOURCE, capturedAccountFiles: false, pdfParsing: true, docxParsing: true, legacyOfficeParsing: false, documentScope: 'PDF text layer / DOCX body; no OCR', maxFileBytes, maxTotalBytes }) });
 }

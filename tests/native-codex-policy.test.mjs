@@ -74,7 +74,7 @@ test('the native project catalog exposes only the actual scoped browser mount af
  const projects=await service.readLocalProjects(),values=Object.values(projects);assert.equal(values.length,1);
  const project=values[0];assert.equal(project.id,'site-browser-workspace:'+identity.accountId);assert.equal(project.name,'浏览器工作区');assert.deepEqual([...project.rootPaths],['/mnt/data']);assert.equal(project.filesystem_scope,'browser-origin-workspace');assert.ok(Number.isFinite(project.createdAt));assert.equal(project.git,undefined);
  assert.equal(reads[0],'fixture-account--codex-browser-workspace');
- const selection=await service.readSelection();assert.equal(selection.type,'local');assert.equal(selection.projectId,project.id);assert.equal(project.adapter_provider_default,true);
+ assert.equal(await service.readSelection(),undefined);assert.equal(project.adapter_provider_default,true);
 });
 test('native existing projects and an explicit selection or clearing are preserved',async()=>{
  const {adapter}=workspaceFixture(),existing={fixture:{id:'fixture',name:'Existing',rootPaths:['/existing'],createdAt:1,updatedAt:1}};
@@ -98,7 +98,7 @@ test('the original execution-host service keeps its class contract and truthfull
 
 function selectedWorkspace() {
  const id='site-browser-workspace:'+identity.accountId;
- return {inputs,routeKind:'home',selection:{type:'local',projectId:id},projects:{[id]:{id,name:'浏览器工作区',rootPaths:['/mnt/data'],createdAt:1,updatedAt:1}}};
+ return {inputs,routeKind:'home',productMode:'codex',selection:{type:'local',projectId:id},projects:{[id]:{id,name:'浏览器工作区',rootPaths:['/mnt/data'],createdAt:1,updatedAt:1}}};
 }
 test('only an explicitly selected exact local mount fills the settled native null route context',()=>{
  const {adapter}=workspaceFixture(),value=selectedWorkspace();assert.equal(adapter.resolveBrowserWorkspaceSelection(null,value),value.selection);
@@ -115,17 +115,17 @@ test('Free, logout and absent real filesystem never fill a native project contex
  const {adapter,appServer}=workspaceFixture();appServer.toolExecutor.storage=null;assert.equal(adapter.resolveBrowserWorkspaceSelection(null,selectedWorkspace()),null);
 });
 test('the native project-context atom retains the original RouteScope and one-object BolX ABI',()=>{
- const {adapter}=workspaceFixture(),originalAtom={},routeScope={},inputsAtom={},query={},keys={SELECTED_PROJECT:'selected',LOCAL_PROJECTS:'projects'},value=selectedWorkspace();let callback;
- const requireOriginal=id=>({'BolX':{c:(scope,fn)=>{assert.equal(scope,routeScope);callback=fn;return fn;}},'tSEg':{a:routeScope},'PFP1':{c:(_get,key)=>key==='selected'?value.selection:value.projects,d:query},'I07G':{kc:keys},'Cslg':{m:inputsAtom}}[id]);
+ const {adapter}=workspaceFixture(),originalAtom={},routeScope={},inputsAtom={},productModeAtom={},query={},keys={SELECTED_PROJECT:'selected',LOCAL_PROJECTS:'projects'},value=selectedWorkspace();let callback;
+ const requireOriginal=id=>({'BolX':{c:(scope,fn)=>{assert.equal(scope,routeScope);callback=fn;return fn;}},'tSEg':{a:routeScope},'PFP1':{c:(_get,key)=>key==='selected'?value.selection:value.projects,d:query},'I07G':{kc:keys},'Cslg':{m:inputsAtom},'pasN':{a:productModeAtom}}[id]);
  const atom=adapter.adaptBrowserWorkspaceSelectionAtom(originalAtom,requireOriginal);assert.equal(atom,callback);
- assert.equal(callback({scope:{value:{routeKind:'home'}},get:(input,key)=>input===originalAtom?null:input===inputsAtom?inputs:input===query?{isPending:false}:assert.fail('Unknown atom')}),value.selection);
+ assert.equal(callback({scope:{value:{routeKind:'home'}},get:(input,key)=>input===originalAtom?null:input===inputsAtom?inputs:input===productModeAtom?'codex':input===query?{isPending:false,isError:false,data:{value:key==='selected'?value.selection:value.projects}}:assert.fail('Unknown atom')}),value.selection);
 });
 
 test('the source HSUP parameterized resolver receives a real selected mount without changing explicit caller inputs',()=>{
- const {adapter,state}=workspaceFixture(),originalAtom={},composerScope={},routeScope={},inputsAtom={},query={},keys={SELECTED_PROJECT:'selected',LOCAL_PROJECTS:'projects'},value=selectedWorkspace();let resolveRoute,resolveWorkspace;
- const routeKind={};const requireOriginal=id=>({'BolX':{c:(scope,fn)=>{assert.equal(scope,routeScope);resolveRoute=fn;return routeKind;},d:(scope,fn)=>{assert.equal(scope,composerScope);resolveWorkspace=fn;return fn;}},'tSEg':{a:routeScope},'Sd8U':{a:composerScope},'PFP1':{c:(_get,key)=>key==='selected'?value.selection:value.projects,d:query},'I07G':{kc:keys},'Cslg':{m:inputsAtom}}[id]);
+ const {adapter,state}=workspaceFixture(),originalAtom={},composerScope={},routeScope={},inputsAtom={},productModeAtom={},query={},keys={SELECTED_PROJECT:'selected',LOCAL_PROJECTS:'projects'},value=selectedWorkspace();let resolveRoute,resolveWorkspace;
+ const routeKind={};const requireOriginal=id=>({'BolX':{c:(scope,fn)=>{assert.equal(scope,routeScope);resolveRoute=fn;return routeKind;},d:(scope,fn)=>{assert.equal(scope,composerScope);resolveWorkspace=fn;return fn;}},'tSEg':{a:routeScope},'Sd8U':{a:composerScope},'PFP1':{c:(_get,key)=>key==='selected'?value.selection:value.projects,d:query},'I07G':{kc:keys},'Cslg':{m:inputsAtom},'pasN':{a:productModeAtom}}[id]);
  adapter.adaptBrowserWorkspaceResolverAtom(originalAtom,requireOriginal);assert.equal(resolveRoute({scope:{value:{routeKind:'home'}}}),'home');
- const forwarded=[],get=(atom,param)=>{if(atom===inputsAtom)return inputs;if(atom===query)return{isPending:false};if(atom===routeKind)return'home';if(atom===originalAtom){forwarded.push(param);return param;}throw Error('Unknown atom');};
+ const forwarded=[],get=(atom,param)=>{if(atom===inputsAtom)return inputs;if(atom===productModeAtom)return'codex';if(atom===query)return{isPending:false,isError:false,data:{value:param==='selected'?value.selection:value.projects}};if(atom===routeKind)return'home';if(atom===originalAtom){forwarded.push(param);return param;}throw Error('Unknown atom');};
  const request={selectedProject:undefined,useScopedProject:false,defaultCwd:undefined,existingWorkspaceRoot:null},scope={value:{kind:'new'}};
  const result=resolveWorkspace(request,{get,scope});assert.notEqual(result,request);assert.equal(result.selectedProject,value.selection);assert.equal(result.useScopedProject,true);assert.equal(request.useScopedProject,false);assert.equal(resolveWorkspace(request,{get,scope}),result);
  for(const request of [{selectedProject:{type:'local',projectId:'other'}},{defaultCwd:'/other'},{existingWorkspaceRoot:'/other'},{homeRemoteProject:{id:'remote'}},{useScopedProject:true}])assert.equal(resolveWorkspace(request,{get,scope}),request);
@@ -163,9 +163,34 @@ test('the provider default preserves explicit clearing without opening storage, 
  }
  appServer.toolExecutor.storage.list=async()=>{throw Error('fixture real storage failure');};
  class Empty {async readLocalProjects(){return{};}async readSelection(){return undefined;}}
- await assert.rejects(new (adapter.createBrowserProjectCatalog(Empty))().readSelection(),/fixture real storage failure/);
+ assert.equal(await new (adapter.createBrowserProjectCatalog(Empty))().readSelection(),undefined);
+ await assert.rejects(adapter.getBrowserOriginWorkspaceProject(),/fixture real storage failure/);
 });
 test('Free, guests and expired local identities never receive an initial provider default selection',async()=>{
  class Empty {async readLocalProjects(){return{};}async readSelection(){return undefined;}}
  for(const patch of [{modelSelection:false},{local:false},{identity:null}]){const {adapter,reads}=workspaceFixture(patch);assert.equal(await new (adapter.createBrowserProjectCatalog(Empty))().readSelection(),undefined);assert.equal(reads.length,0);}
+});
+
+
+test('the implicit provider default is scoped to Codex and never selects a global Work project',()=>{
+ const {adapter}=workspaceFixture(),value={...selectedWorkspace(),selection:undefined};
+ const selected=adapter.resolveBrowserWorkspaceSelection(null,value);
+ assert.equal(selected.type,'local');assert.equal(selected.projectId,Object.keys(value.projects)[0]);
+ for(const productMode of ['chatgpt','work','chat',undefined,null])assert.equal(adapter.resolveBrowserWorkspaceSelection(null,{...value,productMode}),null);
+ for(const patch of [{selection:null},{selectionPending:true},{projectsPending:true},{selectionError:true},{projectsError:true}])assert.equal(adapter.resolveBrowserWorkspaceSelection(null,{...value,...patch}),null);
+ const id=Object.keys(value.projects)[0];
+ assert.equal(adapter.resolveBrowserWorkspaceSelection(null,{...value,projects:{...value.projects,other:{id:'other',rootPaths:['/elsewhere']}}}),null);
+ assert.equal(adapter.resolveBrowserWorkspaceSelection(null,{...value,projects:{[id]:{...value.projects[id],rootPaths:['/elsewhere']}}}),null);
+});
+test('native project wrappers read raw query values so an explicit null never becomes a default',()=>{
+ const {adapter}=workspaceFixture(),original={},routeScope={},inputsAtom={},modeAtom={},query={},keys={SELECTED_PROJECT:'selected',LOCAL_PROJECTS:'projects'},value=selectedWorkspace();
+ let callback,productMode='codex',rawSelection=null;
+ const requireOriginal=id=>({'BolX':{c:(scope,fn)=>{assert.equal(scope,routeScope);callback=fn;return fn;}},'tSEg':{a:routeScope},'PFP1':{c:(_get,key)=>key==='selected'?(rawSelection??undefined):value.projects,d:query},'I07G':{kc:keys},'Cslg':{m:inputsAtom},'pasN':{a:modeAtom}}[id]);
+ adapter.adaptBrowserWorkspaceSelectionAtom(original,requireOriginal);
+ const get=(atom,key)=>atom===original?null:atom===inputsAtom?inputs:atom===modeAtom?productMode:atom===query?{isPending:false,isError:false,data:{value:key==='selected'?rawSelection:value.projects}}:assert.fail('Unexpected atom');
+ const scope={value:{routeKind:'home'}};
+ assert.equal(callback({get,scope}),null);
+ rawSelection=undefined;assert.equal(callback({get,scope}).projectId,Object.keys(value.projects)[0]);
+ productMode='chatgpt';assert.equal(callback({get,scope}),null);
+ productMode='codex';rawSelection={type:'local',projectId:'user-chosen'};assert.equal(callback({get,scope}),null);
 });

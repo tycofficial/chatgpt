@@ -56,7 +56,7 @@ export class ClassicChatAdapter {
     };
   }
   list(url) {
-    let threads = [...this.server.threads.values()].filter(thread => !thread.ephemeral && !!thread.archived === (url.searchParams.get('is_archived') === 'true'));
+    let threads = [...this.server.threads.values()].filter(thread => !thread.ephemeral && !['dot', 'codex'].includes(thread.adapterMetadata.conversationOrigin) && !!thread.archived === (url.searchParams.get('is_archived') === 'true'));
     const origin = url.searchParams.get('conversation_origin'), excluded = url.searchParams.get('exclude_conversation_origin');
     if (origin) threads = threads.filter(thread => thread.adapterMetadata.conversationOrigin === origin);
     if (excluded) threads = threads.filter(thread => thread.adapterMetadata.conversationOrigin !== excluded);

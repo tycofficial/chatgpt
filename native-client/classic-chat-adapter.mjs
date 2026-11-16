@@ -1,6 +1,6 @@
 /** Original classic Chat REST/SSE shapes over the same real local thread engine. */
-import { FRONTEND_TO_RAW_EFFORT } from './model-catalog-adapter.mjs?v=5bac67b918069c58';
-import { turnHostCheckpoints } from './preferred-host-transport.mjs?v=5bac67b918069c58';
+import { FRONTEND_TO_RAW_EFFORT } from './model-catalog-adapter.mjs?v=b88858afb5156217';
+import { turnHostCheckpoints } from './preferred-host-transport.mjs?v=b88858afb5156217';
 export class ClassicChatAdapter {
   constructor({ appServer, models, now = Date.now, uuid = () => crypto.randomUUID(), onConversationChange = () => {}, heartbeatMs = 10000 }) { this.server = appServer; this.models = models; this.now = now; this.uuid = uuid; this.onConversationChange = onConversationChange; this.heartbeatMs = heartbeatMs; this.mutationQueue = Promise.resolve(); }
   json(body, status = 200) { return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }); }
@@ -56,7 +56,7 @@ export class ClassicChatAdapter {
     };
   }
   list(url) {
-    let threads = [...this.server.threads.values()].filter(thread => !thread.ephemeral && !!thread.archived === (url.searchParams.get('is_archived') === 'true'));
+    let threads = [...this.server.threads.values()].filter(thread => !thread.ephemeral && !['dot', 'codex'].includes(thread.adapterMetadata.conversationOrigin) && !!thread.archived === (url.searchParams.get('is_archived') === 'true'));
     const origin = url.searchParams.get('conversation_origin'), excluded = url.searchParams.get('exclude_conversation_origin');
     if (origin) threads = threads.filter(thread => thread.adapterMetadata.conversationOrigin === origin);
     if (excluded) threads = threads.filter(thread => thread.adapterMetadata.conversationOrigin !== excluded);

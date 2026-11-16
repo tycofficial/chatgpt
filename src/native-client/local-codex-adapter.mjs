@@ -239,29 +239,20 @@ export function createLocalCodexAdapter({
         const project = await getBrowserOriginWorkspaceProject();
         return project ? { [project.id]: project } : originalProjects;
       }
-      async readSelection(...args) {
-        const originalSelection = await super.readSelection(...args);
-        // YAwS.e preserves missing(undefined) versus an explicit user clear(null).
-        // A real provider can choose its default working directory on first use.
-        if (originalSelection !== undefined) return originalSelection;
-        const projects = await this.readLocalProjects(), expected = await getBrowserOriginWorkspaceProject();
-        const project = expected && object(projects) ? projects[expected.id] : null;
-        return expected && object(projects) && Object.keys(projects).length === 1 && object(project) && project.id === expected.id &&
-          Array.isArray(project.rootPaths) && project.rootPaths.length === 1 && project.rootPaths[0] === '/mnt/data'
-          ? { type: 'local', projectId: expected.id } : originalSelection;
-      }
     };
   }
-  /** Supply the selected local provider directory to the native route context.
-   * The browser coding Home intentionally suppresses its legacy global project
-   * selection. This adapter restores only the host-selected site-local mount;
-   * it never supplies a directory before selection or changes submit policy.
+  /** Supply the real provider default only to native Codex workspace context.
+   * Keep the global project selection unchanged so Chat and Work can retain
+   * their native run location. Missing raw selection may use the sole ready
+   * provider mount; explicit null, query errors and user choices are preserved.
    */
   const projectContextDiagnostics = new Set();
-  function resolveBrowserWorkspaceSelection(originalSelection, { inputs, routeKind, selection, projects, selectionPending = false, projectsPending = false } = {}) {
+  function resolveBrowserWorkspaceSelection(originalSelection, { inputs, routeKind, productMode, selection, projects, selectionPending = false, projectsPending = false, selectionError = false, projectsError = false } = {}) {
     const current = state();
     const expectedId = current.identity?.accountId ? 'site-browser-workspace:' + current.identity.accountId : null, candidate = expectedId ? projects?.[expectedId] : null;
-    const diagnostic = { type: 'local-codex-project-context', original: originalSelection === null ? 'null' : typeof originalSelection,
+    const providerDefault = selection === undefined && productMode === 'codex' && object(projects) && Object.keys(projects).length === 1 && !!candidate && candidate.id === expectedId;
+    const effectiveSelection = providerDefault ? { type: 'local', projectId: expectedId } : selection;
+    const diagnostic = { type: 'local-codex-project-context', productMode, providerDefault, original: originalSelection === null ? 'null' : typeof originalSelection,
       routeKind: ['home','local-thread','client-local-thread','other'].includes(routeKind) ? routeKind : 'unknown',
       executionReady: supportsBrowserOriginExecution(), identityMatches: !!current.identity && !!inputs && inputs.accountId === current.identity.accountId && inputs.authenticatedAccountId === current.identity.accountId && inputs.userId === current.identity.userId,
       identityPending: !!(inputs?.authLoading || inputs?.accountLoading), selectionPending: !!selectionPending, projectsPending: !!projectsPending,
@@ -270,24 +261,25 @@ export function createLocalCodexAdapter({
       exactDirectory: !!candidate && candidate.id === expectedId && Array.isArray(candidate.rootPaths) && candidate.rootPaths.length === 1 && candidate.rootPaths[0] === '/mnt/data' };
     const diagnosticKey = JSON.stringify(diagnostic);
     if (projectContextDiagnostics.size < 40 && !projectContextDiagnostics.has(diagnosticKey)) { projectContextDiagnostics.add(diagnosticKey); diagnostics.push(diagnostic); }
-    if (originalSelection !== null) return originalSelection;
-    if (!supportsBrowserOriginExecution() || routeKind !== 'home' || selectionPending || projectsPending ||
+    if (originalSelection !== null || productMode !== 'codex') return originalSelection;
+    if (!supportsBrowserOriginExecution() || routeKind !== 'home' || selectionPending || projectsPending || selectionError || projectsError ||
         !object(inputs) || inputs.authLoading || inputs.accountLoading ||
         inputs.accountId !== current.identity.accountId || inputs.authenticatedAccountId !== current.identity.accountId ||
-        inputs.userId !== current.identity.userId || selection?.type !== 'local') return originalSelection;
+        inputs.userId !== current.identity.userId || effectiveSelection?.type !== 'local') return originalSelection;
     const id = 'site-browser-workspace:' + current.identity.accountId, project = projects?.[id];
-    if (selection.projectId !== id || !object(project) || project.id !== id ||
+    if (effectiveSelection.projectId !== id || !object(project) || project.id !== id ||
         !Array.isArray(project.rootPaths) || project.rootPaths.length !== 1 || project.rootPaths[0] !== '/mnt/data') return originalSelection;
-    return selection;
+    return effectiveSelection;
   }
   function adaptBrowserWorkspaceSelectionAtom(originalAtom, requireOriginal) {
     if (!originalAtom || typeof requireOriginal !== 'function') throw new TypeError('The original route project atom and module require are required');
     const { c: derive } = requireOriginal('BolX'), scope = requireOriginal('tSEg').a;
     const { c: read, d: query } = requireOriginal('PFP1'), keys = requireOriginal('I07G').kc, inputsAtom = requireOriginal('Cslg').m;
     return derive(scope, ({ get, scope: route }) => resolveBrowserWorkspaceSelection(get(originalAtom), {
-      routeKind: route.value.routeKind, inputs: get(inputsAtom),
-      selection: read(get, keys.SELECTED_PROJECT), projects: read(get, keys.LOCAL_PROJECTS),
+      routeKind: route.value.routeKind, productMode: get(requireOriginal('pasN').a), inputs: get(inputsAtom),
+      selection: get(query, keys.SELECTED_PROJECT).data?.value, projects: read(get, keys.LOCAL_PROJECTS),
       selectionPending: get(query, keys.SELECTED_PROJECT).isPending, projectsPending: get(query, keys.LOCAL_PROJECTS).isPending,
+      selectionError: get(query, keys.SELECTED_PROJECT).isError, projectsError: get(query, keys.LOCAL_PROJECTS).isError,
     }));
   }
   /** HSUP.a/b are the native host workspace resolvers, not submit policy.
@@ -310,9 +302,10 @@ export function createLocalCodexAdapter({
       if (scope.value.kind !== 'new' || !object(request) || request.useScopedProject === true ||
           request.defaultCwd != null || request.existingWorkspaceRoot != null || request.homeRemoteProject != null) return get(originalAtom, request);
       const selection = resolveBrowserWorkspaceSelection(null, {
-        inputs: get(inputsAtom), routeKind: get(routeKindAtom),
-        selection: read(get, keys.SELECTED_PROJECT), projects: read(get, keys.LOCAL_PROJECTS),
+        inputs: get(inputsAtom), routeKind: get(routeKindAtom), productMode: get(requireOriginal('pasN').a),
+        selection: get(query, keys.SELECTED_PROJECT).data?.value, projects: read(get, keys.LOCAL_PROJECTS),
         selectionPending: get(query, keys.SELECTED_PROJECT).isPending, projectsPending: get(query, keys.LOCAL_PROJECTS).isPending,
+        selectionError: get(query, keys.SELECTED_PROJECT).isError, projectsError: get(query, keys.LOCAL_PROJECTS).isError,
       });
       if (!selection || request.selectedProject != null && (request.selectedProject.type !== 'local' || request.selectedProject.projectId !== selection.projectId)) return get(originalAtom, request);
       let cached = requests.get(request);

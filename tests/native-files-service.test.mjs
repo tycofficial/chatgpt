@@ -201,13 +201,14 @@ test('corrupt metadata and changed actual bytes are surfaced without silently re
   assert.equal(env.metadataStorage.values.get(key), '{damaged');
 });
 
-test('unknown PDF/Office and binary pretending to be text never claim successful parsing', async () => {
+test('unsupported Office and binary pretending to be text never claim successful parsing', async () => {
   const env = fixture();
-  for (const name of ['neutral.pdf', 'neutral.docx', 'neutral.xlsx', 'neutral.pptx']) {
+  for (const name of ['neutral.doc', 'neutral.xlsx', 'neutral.pptx', 'neutral.xls', 'neutral.ppt']) {
     const result = await api(env.adapter, '/files', 'POST', { file_name: name, file_size: 10 });
     assert.equal(result.response.status, 415);
     assert.equal(result.data.error_code, 'unhandled_mime_type');
   }
+  assert.equal((await api(env.adapter, '/files', 'POST', { file_name: 'neutral.xlsx', file_size: 10, mime_type: 'application/pdf' })).response.status, 415);
   assert.equal(env.storage.files.size, 0);
   const pdf = new TextEncoder().encode('%PDF-1.7\nNot a text document.');
   const renamed = await allocate(env.adapter, pdf, 'renamed.txt', 'text/plain');
