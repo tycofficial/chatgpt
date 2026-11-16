@@ -1,0 +1,2 @@
+/*! LICENSE: 718655.08565a1d59.js.LICENSE.txt */
+export const __rspack_esm_ids=[718655];export const __webpack_modules__={WNUs(e,t,a){a.r(t);let _=(0,a("jTyp").c)("FileVideo",[["path",{d:"M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z",key:"1rqfz7"}],["path",{d:"M14 2v4a2 2 0 0 0 2 2h4",key:"tnqrlb"}],["path",{d:"m10 11 5 3-5 3v-6Z",key:"7ntvm4"}]]);a.d(t,{},{default:_})}};

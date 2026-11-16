@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[318325];export const __webpack_modules__={QSke(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"initial_prey_abundance":0.65,"initial_predator_abundance":0.65}},{"name":"Maximum supported values","initialValues":{"initial_prey_abundance":1.4,"initial_predator_abundance":1.4}}]')}};

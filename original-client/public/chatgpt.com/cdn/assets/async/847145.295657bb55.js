@@ -1,0 +1,2 @@
+/*! LICENSE: 847145.295657bb55.js.LICENSE.txt */
+export const __rspack_esm_ids=[847145];export const __webpack_modules__={MvS8(e,t,d){d.r(t);let p=(0,d("jTyp").c)("Calendar1",[["path",{d:"M11 14h1v4",key:"fy54vd"}],["path",{d:"M16 2v4",key:"4m81vk"}],["path",{d:"M3 10h18",key:"8toen8"}],["path",{d:"M8 2v4",key:"1cmpym"}],["rect",{x:"3",y:"4",width:"18",height:"18",rx:"2",key:"12vinp"}]]);d.d(t,{},{default:p})}};

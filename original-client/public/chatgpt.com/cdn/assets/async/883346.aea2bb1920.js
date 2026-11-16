@@ -1,0 +1,2 @@
+/*! LICENSE: 883346.aea2bb1920.js.LICENSE.txt */
+export const __rspack_esm_ids=[883346];export const __webpack_modules__={geFS(e,c,r){r.r(c);let s=(0,r("jTyp").c)("Torus",[["ellipse",{cx:"12",cy:"11",rx:"3",ry:"2",key:"1b2qxu"}],["ellipse",{cx:"12",cy:"12.5",rx:"10",ry:"8.5",key:"h8emeu"}]]);r.d(c,{},{default:s})}};

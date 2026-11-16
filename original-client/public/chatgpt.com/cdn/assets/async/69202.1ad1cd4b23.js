@@ -1,0 +1,2 @@
+/*! LICENSE: 69202.1ad1cd4b23.js.LICENSE.txt */
+export const __rspack_esm_ids=[69202];export const __webpack_modules__={niQL(e,t,_){_.r(t);let a=(0,_("jTyp").c)("PanelsLeftBottom",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M9 3v18",key:"fh3hqa"}],["path",{d:"M9 15h12",key:"5ijen5"}]]);_.d(t,{},{default:a})}};

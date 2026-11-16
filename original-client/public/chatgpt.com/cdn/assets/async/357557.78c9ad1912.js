@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[357557];export const __webpack_modules__={dY0q(e){e.exports=JSON.parse('[{"name":"example: carbohydrate","initialValues":{"example":"carbohydrate"}},{"name":"example: protein","initialValues":{"example":"protein"}}]')}};

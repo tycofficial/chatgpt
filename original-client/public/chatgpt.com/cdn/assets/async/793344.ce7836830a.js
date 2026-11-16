@@ -1,0 +1,2 @@
+/*! LICENSE: 793344.ce7836830a.js.LICENSE.txt */
+export const __rspack_esm_ids=[793344];export const __webpack_modules__={BfEL(a,e,t){t.r(e);let d=(0,t("jTyp").c)("CandyCane",[["path",{d:"M5.7 21a2 2 0 0 1-3.5-2l8.6-14a6 6 0 0 1 10.4 6 2 2 0 1 1-3.464-2 2 2 0 1 0-3.464-2Z",key:"isaq8g"}],["path",{d:"M17.75 7 15 2.1",key:"12x7e8"}],["path",{d:"M10.9 4.8 13 9",key:"100a87"}],["path",{d:"m7.9 9.7 2 4.4",key:"ntfhaj"}],["path",{d:"M4.9 14.7 7 18.9",key:"1x43jy"}]]);t.d(e,{},{default:d})}};

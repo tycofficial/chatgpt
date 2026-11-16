@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[770621];export const __webpack_modules__={G8NF(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"heartRateBeatsPerMinute":40,"strokeVolumeMilliliters":30}},{"name":"Maximum supported values","initialValues":{"heartRateBeatsPerMinute":180,"strokeVolumeMilliliters":120}}]')}};

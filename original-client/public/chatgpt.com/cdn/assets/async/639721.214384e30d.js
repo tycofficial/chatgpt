@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[639721];export const __webpack_modules__={yOMU(s){s.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"voltageVolts":1,"resistanceOhms":1}},{"name":"Maximum supported values","initialValues":{"voltageVolts":24,"resistanceOhms":24}}]')}};

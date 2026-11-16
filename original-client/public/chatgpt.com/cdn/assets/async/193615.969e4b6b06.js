@@ -1,0 +1,2 @@
+/*! LICENSE: 193615.969e4b6b06.js.LICENSE.txt */
+export const __rspack_esm_ids=[193615];export const __webpack_modules__={UsKi(e,c,r){r.r(c);let _=(0,r("jTyp").c)("CircleChevronRight",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["path",{d:"m10 8 4 4-4 4",key:"1wy4r4"}]]);r.d(c,{},{default:_})}};

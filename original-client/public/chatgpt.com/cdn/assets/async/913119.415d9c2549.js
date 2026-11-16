@@ -1,0 +1,2 @@
+/*! LICENSE: 913119.415d9c2549.js.LICENSE.txt */
+export const __rspack_esm_ids=[913119];export const __webpack_modules__={QEQl(a,e,p){p.r(e);let t=(0,p("jTyp").c)("BookOpenCheck",[["path",{d:"M12 21V7",key:"gj6g52"}],["path",{d:"m16 12 2 2 4-4",key:"mdajum"}],["path",{d:"M22 6V4a1 1 0 0 0-1-1h-5a4 4 0 0 0-4 4 4 4 0 0 0-4-4H3a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1h6a3 3 0 0 1 3 3 3 3 0 0 1 3-3h6a1 1 0 0 0 1-1v-1.3",key:"8arnkb"}]]);p.d(e,{},{default:t})}};

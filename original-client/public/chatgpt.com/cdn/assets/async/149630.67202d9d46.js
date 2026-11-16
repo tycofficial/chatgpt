@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[149630];export const __webpack_modules__={TIN5(a){a.exports=JSON.parse('[{"name":"cargo_destination: plasma membrane","initialValues":{"cargo_destination":"plasma membrane"}},{"name":"cargo_destination: lysosome","initialValues":{"cargo_destination":"lysosome"}}]')}};

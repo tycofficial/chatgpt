@@ -1,0 +1,2 @@
+/*! LICENSE: 827583.5c1b961e68.js.LICENSE.txt */
+export const __rspack_esm_ids=[827583];export const __webpack_modules__={tyTk(e,c,t){t.r(c);let l=(0,t("jTyp").c)("CirclePlay",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["polygon",{points:"10 8 16 12 10 16 10 8",key:"1cimsy"}]]);t.d(c,{},{default:l})},GvzZ(e,c,t){t.r(c);var l=t("tyTk");t.d(c,{default:()=>l.default})}};

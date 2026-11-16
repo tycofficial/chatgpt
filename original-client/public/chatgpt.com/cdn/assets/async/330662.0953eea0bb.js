@@ -1,0 +1,2 @@
+/*! LICENSE: 330662.0953eea0bb.js.LICENSE.txt */
+export const __rspack_esm_ids=[330662];export const __webpack_modules__={L3jS(e,c,p){p.r(c);let t=(0,p("jTyp").c)("Superscript",[["path",{d:"m4 19 8-8",key:"hr47gm"}],["path",{d:"m12 19-8-8",key:"1dhhmo"}],["path",{d:"M20 12h-4c0-1.5.442-2 1.5-2.5S20 8.334 20 7.002c0-.472-.17-.93-.484-1.29a2.105 2.105 0 0 0-2.617-.436c-.42.239-.738.614-.899 1.06",key:"1dfcux"}]]);p.d(c,{},{default:t})}};

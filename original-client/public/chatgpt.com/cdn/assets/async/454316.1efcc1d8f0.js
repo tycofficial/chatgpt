@@ -1,0 +1,2 @@
+/*! LICENSE: 454316.1efcc1d8f0.js.LICENSE.txt */
+export const __rspack_esm_ids=[454316];export const __webpack_modules__={ZjFP(e,p,t){t.r(p);let _=(0,t("jTyp").c)("Option",[["path",{d:"M3 3h6l6 18h6",key:"ph9rgk"}],["path",{d:"M14 3h7",key:"16f0ms"}]]);t.d(p,{},{default:_})}};

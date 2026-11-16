@@ -1,0 +1,2 @@
+/*! LICENSE: 875617.bad7b7c724.js.LICENSE.txt */
+export const __rspack_esm_ids=[875617];export const __webpack_modules__={CWAK(e,c,a){a.r(c);let o=(0,a("jTyp").c)("FolderClock",[["circle",{cx:"16",cy:"16",r:"6",key:"qoo3c4"}],["path",{d:"M7 20H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2",key:"1urifu"}],["path",{d:"M16 14v2l1 1",key:"xth2jh"}]]);a.d(c,{},{default:o})}};

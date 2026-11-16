@@ -1,0 +1,2 @@
+/*! LICENSE: 758506.8347a97644.js.LICENSE.txt */
+export const __rspack_esm_ids=[758506];export const __webpack_modules__={Xxlv(c,e,r){r.r(e);let l=(0,r("jTyp").c)("Target",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["circle",{cx:"12",cy:"12",r:"6",key:"1vlfrh"}],["circle",{cx:"12",cy:"12",r:"2",key:"1c9p78"}]]);r.d(e,{},{default:l})}};

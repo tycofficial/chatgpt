@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[373803];export const __webpack_modules__={qXi5(a){a.exports=JSON.parse('[{"name":"regulation: marginal_cost","initialValues":{"regulation":"marginal_cost"}}]')}};

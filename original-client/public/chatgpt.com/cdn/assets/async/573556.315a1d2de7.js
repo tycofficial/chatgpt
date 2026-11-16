@@ -1,0 +1,2 @@
+/*! LICENSE: 573556.315a1d2de7.js.LICENSE.txt */
+export const __rspack_esm_ids=[573556];export const __webpack_modules__={Pnjc(e,d,t){t.r(d);let a=(0,t("jTyp").c)("IndentIncrease",[["path",{d:"M21 12H11",key:"wd7e0v"}],["path",{d:"M21 18H11",key:"4wu86t"}],["path",{d:"M21 6H11",key:"6dy1d6"}],["path",{d:"m3 8 4 4-4 4",key:"1a3j6y"}]]);t.d(d,{},{default:a})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 51800.13d69d8993.js.LICENSE.txt */
+export const __rspack_esm_ids=[51800];export const __webpack_modules__={ePbr(e,a,t){t.r(a);let p=(0,t("jTyp").c)("Milestone",[["path",{d:"M12 13v8",key:"1l5pq0"}],["path",{d:"M12 3v3",key:"1n5kay"}],["path",{d:"M4 6a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h13a2 2 0 0 0 1.152-.365l3.424-2.317a1 1 0 0 0 0-1.635l-3.424-2.318A2 2 0 0 0 17 6z",key:"1btarq"}]]);t.d(a,{},{default:p})}};

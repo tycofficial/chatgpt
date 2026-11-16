@@ -1,0 +1,2 @@
+/*! LICENSE: 510259.21d9fcb56c.js.LICENSE.txt */
+export const __rspack_esm_ids=[510259];export const __webpack_modules__={naXf(e,c,o){o.r(c);let r=(0,o("jTyp").c)("ArrowUpFromDot",[["path",{d:"m5 9 7-7 7 7",key:"1hw5ic"}],["path",{d:"M12 16V2",key:"ywoabb"}],["circle",{cx:"12",cy:"21",r:"1",key:"o0uj5v"}]]);o.d(c,{},{default:r})}};

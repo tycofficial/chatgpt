@@ -1,0 +1,2 @@
+/*! LICENSE: 818714.eec1d857e1.js.LICENSE.txt */
+export const __rspack_esm_ids=[818714];export const __webpack_modules__={OtmR(e,t,p){p.r(t);let _=(0,p("jTyp").c)("SwissFranc",[["path",{d:"M10 21V3h8",key:"br2l0g"}],["path",{d:"M6 16h9",key:"2py0wn"}],["path",{d:"M10 9.5h7",key:"13dmhz"}]]);p.d(t,{},{default:_})}};

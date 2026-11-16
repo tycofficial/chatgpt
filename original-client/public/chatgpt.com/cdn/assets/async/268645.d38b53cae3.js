@@ -1,0 +1,2 @@
+/*! LICENSE: 268645.d38b53cae3.js.LICENSE.txt */
+export const __rspack_esm_ids=[268645];export const __webpack_modules__={p8R8(e,t,_){_.r(t);let h=(0,_("jTyp").c)("SquareRadical",[["path",{d:"M7 12h2l2 5 2-10h4",key:"1fxv6h"}],["rect",{x:"3",y:"3",width:"18",height:"18",rx:"2",key:"h1oib"}]]);_.d(t,{},{default:h})}};

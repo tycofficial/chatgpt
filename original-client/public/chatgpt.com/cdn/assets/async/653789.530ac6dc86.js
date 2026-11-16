@@ -1,0 +1,2 @@
+/*! LICENSE: 653789.530ac6dc86.js.LICENSE.txt */
+export const __rspack_esm_ids=[653789];export const __webpack_modules__={bGds(e,t,_){_.r(t);let a=(0,_("jTyp").c)("PanelLeft",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M9 3v18",key:"fh3hqa"}]]);_.d(t,{},{default:a})}};

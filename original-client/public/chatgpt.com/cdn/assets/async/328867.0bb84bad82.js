@@ -1,0 +1,2 @@
+/*! LICENSE: 328867.0bb84bad82.js.LICENSE.txt */
+export const __rspack_esm_ids=[328867];export const __webpack_modules__={iS6b(t,e,r){r.r(e);let _=(0,r("jTyp").c)("Ungroup",[["rect",{width:"8",height:"6",x:"5",y:"4",rx:"1",key:"nzclkv"}],["rect",{width:"8",height:"6",x:"11",y:"14",rx:"1",key:"4tytwb"}]]);r.d(e,{},{default:_})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 252559.5b63c354bd.js.LICENSE.txt */
+export const __rspack_esm_ids=[252559];export const __webpack_modules__={y1S6(e,t,_){_.r(t);let r=(0,_("jTyp").c)("Smartphone",[["rect",{width:"14",height:"20",x:"5",y:"2",rx:"2",ry:"2",key:"1yt0o3"}],["path",{d:"M12 18h.01",key:"mhygvu"}]]);_.d(t,{},{default:r})}};

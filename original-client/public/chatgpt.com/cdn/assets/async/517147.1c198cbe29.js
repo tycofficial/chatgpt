@@ -1,0 +1,2 @@
+/*! LICENSE: 517147.1c198cbe29.js.LICENSE.txt */
+export const __rspack_esm_ids=[517147];export const __webpack_modules__={TU9y(e,c,_){_.r(c);let a=(0,_("jTyp").c)("Compass",[["path",{d:"m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z",key:"9ktpf1"}],["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}]]);_.d(c,{},{default:a})}};

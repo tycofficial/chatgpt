@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[838689];export const __webpack_modules__={vlLF(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"externalBenefit":1.2}},{"name":"Maximum supported values","initialValues":{"externalBenefit":4.4}}]')}};

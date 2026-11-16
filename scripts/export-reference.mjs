@@ -38,6 +38,7 @@ const digest = value => crypto.createHash('sha256').update(value).digest('hex');
 const rel = file => path.relative(output, file).split(path.sep).join('/');
 const read = file => fs.readFile(file, 'utf8');
 const exists = async file => {try {await fs.stat(file);return true;} catch {return false;}};
+const atomicWrite=async(file,data)=>{const temp=file+'.tmp-'+process.pid;await fs.writeFile(temp,data);await fs.rename(temp,file);};
 const startedAt = new Date().toISOString();
 if (!within(workspace, output)) throw new Error('Export output is outside the workspace');
 for (const target of [source, output]) if (await exists(target)) {
@@ -67,15 +68,22 @@ const priorityURLs = [];
 const planCategories = new Map();
 let routeCoverage = [], planRouteCount = null;
 let previousAvailable = new Set();
-try{const previous=JSON.parse(await read(path.join(output,'manifest.json')));previousAvailable=new Set(previous.assets.filter(a=>existsSync(path.join(output,a.path))).map(a=>a.url));}catch{}
-const assetExtension = /\.(?:m?js|css|map|svg|woff2?|ttf|otf|eot|png|jpe?g|webp|gif|avif|ico|json|webmanifest|wasm|bin|mp3|mp4|m4a|ogg|wav)$/i;
+const trustedAssets=new Map(),journalPath=path.join(output,'asset-journal.jsonl');
+try{const previous=JSON.parse(await read(path.join(output,'manifest.json')));for(const asset of previous.assets||[])if(typeof asset.url==='string'&&typeof asset.path==='string'&&within(output,path.join(output,asset.path))&&existsSync(path.join(output,asset.path))){trustedAssets.set(asset.url,asset);previousAvailable.add(asset.url);}}catch{}
+try{for(const line of (await read(journalPath)).split('\n'))if(line){try{const asset=JSON.parse(line);if(typeof asset.url==='string'&&typeof asset.path==='string'&&typeof asset.sha256==='string'&&within(output,path.join(output,asset.path))&&existsSync(path.join(output,asset.path))){trustedAssets.set(asset.url,asset);previousAvailable.add(asset.url);}}catch{}}}catch{}
+let journalWrite=Promise.resolve();
+function rememberAsset(asset){const record={url:asset.url,path:asset.path,bytes:asset.bytes,sha256:asset.sha256};journalWrite=journalWrite.then(()=>fs.appendFile(journalPath,JSON.stringify(record)+'\n'));return journalWrite;}
+const assetExtension = /\.(?:m?js|css|map|svg|woff2?|ttf|otf|eot|png|jpe?g|webp|gif|avif|ico|json|webmanifest|wasm|bin|mp3|mp4|m4a|ogg|wav|webm|xlsx|pptx|docx|task|icc)$/i;
 const textExtension = /\.(?:html|css|js|mjs|json|map|svg)(?:\.下载)?$/i;
 function recordURL(value, owner, baseURL, relation='literal-url') {
   const raw = value.replaceAll('&amp;', '&').replace(/[),;]+$/, '');
   let url;try {url=new URL(raw.startsWith('/cdn/assets/')?'https://chatgpt.com'+raw:raw,baseURL);} catch {return;}
   if (url.protocol !== 'https:' || url.username || url.password) return;
   const allowed = url.origin === 'https://chatgpt.com' && url.pathname.startsWith('/cdn/assets/') || url.origin === 'https://cdn.oaistatic.com';
-  if (!allowed || !assetExtension.test(url.pathname)) return;
+  // A hash-locked AST plan already identifies a public static file. Preserve
+  // uncommon original formats as well as the common extensions found in text.
+  const lockedStatic=relation.startsWith('locked-')&&!url.pathname.endsWith('/');
+  if (!allowed || !assetExtension.test(url.pathname)&&!lockedStatic) return;
   // Static asset cache/version parameters are allowed. Never transmit tokens,
   // signatures, account identifiers, coordinates, or arbitrary captured queries.
   if ([...url.searchParams.keys()].some(key => !['v','version','hash','build'].includes(key))) {
@@ -217,7 +225,9 @@ function coverage(){
   categories.allKnownStatic=counts(known);
   categories.iconSprites=counts(new Set([...known].filter(url=>/\/(?:[^/]*icons?[-.]|[^/]*sprite)[^/]*\.(?:svg|png|webp)$/i.test(new URL(url).pathname))));
   categories.sourceMaps=counts(new Set([...known].filter(url=>new URL(url).pathname.endsWith('.map'))));
-  categories.literalDotResources={...counts(new Set([...known].filter(url=>/(?:^|[-_/])(?:dot|orbit|beacon)(?:[-_/.]|$)/i.test(new URL(url).pathname)))),classification:'Literal static pathname matches only; does not establish all DOT features or native integration.'};
+  const dotResources=new Set(planCategories.get('literalDotResources')||[]);
+  for(const url of known)if(/(?:^|[-_/])(?:dot|orbit|beacon)(?:[-_/.]|$)/i.test(new URL(url).pathname))dotResources.add(url);
+  categories.literalDotResources={...counts(dotResources),classification:'Exact literal module or pathname references only; does not establish all DOT features or native integration.'};
   return{schemaVersion:1,generatedAt:new Date().toISOString(),sourceBuild:manifest.builds.map(b=>b.revision),runtimeLock:manifest.dependencyPlan?.runtimeSha256||null,manifestVersion:manifest.dependencyPlan?.manifestVersion||manifest.entrypoints[0]?.version||null,manifestRouteCount:planRouteCount,routeRecords:routeCoverage.length,categories,routes:routeCoverage.map(route=>({...route,staticFiles:counts(new Set(route.urls))})),unverifiedRuntime:{clicksAndStateBranches:'not exercised by this static exporter',settingsSuboptions:'files may be present; option branches and service results remain unverified',DOT:'native host integration and product-specific runtime behavior remain unverified',authenticatedAccountServices:'not copied or requested',modelsAndToolExecution:'remote/backend services are not included',sourceAvailabilityBoundary:'Queue completion proves only the known static asset set, not complete website behavior or backend implementation.'},manifest:'manifest.json'};
 }
 function queueCoverage(force=false){if(!force&&networkCompleted-lastCoverage<100)return;lastCoverage=networkCompleted;coverageWrite=coverageWrite.then(async()=>{const target=path.join(output,'coverage.json'),temp=target+'.tmp';await fs.writeFile(temp,JSON.stringify(coverage(),null,2)+'\n');await fs.rename(temp,target);});}
@@ -230,9 +240,14 @@ async function materialize(entry){
   const target=publicTarget(entry.url),url=new URL(entry.url),name=decodeURIComponent(path.posix.basename(url.pathname));
   await fs.mkdir(path.dirname(target),{recursive:true});
   let origin,bytes;
-  if(await exists(target)){origin='previous-export';bytes=await fs.readFile(target);}
-  else if(cache.has(name)){origin='existing-local-source';bytes=await fs.readFile(cache.get(name));await fs.writeFile(target,bytes);}
-  else{
+  const previous=trustedAssets.get(entry.url);
+  if(previous&&await exists(target)){
+    const existing=await fs.readFile(target);
+    if(existing.length===previous.bytes&&digest(existing)===previous.sha256){origin='previous-export';bytes=existing;}
+    else previousAvailable.delete(entry.url);
+  }
+  if(!bytes&&cache.has(name)&&path.resolve(cache.get(name))!==path.resolve(target)){origin='existing-local-source';bytes=await fs.readFile(cache.get(name));await atomicWrite(target,bytes);}
+  if(!bytes){
     if(offline||requests>=maxDownloads||Date.now()>=networkDeadline)return false;
     let lastError,attempts=0;
     for(let attempt=0;attempt<3;attempt++){
@@ -243,14 +258,16 @@ async function materialize(entry){
         if(!response.ok){const error=new Error(`HTTP ${response.status}`);error.status=response.status;throw error;}
         const declared=Number(response.headers.get('content-length')||0);if(declared>128*1024*1024)throw new Error('Asset exceeds 128 MiB bound');
         bytes=Buffer.from(await response.arrayBuffer());if(bytes.length>128*1024*1024)throw new Error('Asset exceeds 128 MiB bound');
-        await fs.writeFile(target,bytes);cache.set(name,target);origin='downloaded-public-static';lastError=null;break;
+        await atomicWrite(target,bytes);cache.set(name,target);origin='downloaded-public-static';lastError=null;break;
       }catch(error){lastError=error;if(error.status===404||error.status===410||/exceeds .*bound/.test(error.message))break;if(attempt<2)await new Promise(resolve=>setTimeout(resolve,100*(attempt+1)));}
     }
     networkCompleted++;
     if(lastError){failedURLs.add(entry.url);manifest.failures.push({url:entry.url,reason:String(lastError.message||lastError),attempts,referencedBy:[...entry.referencedBy]});reportProgress();return true;}
   }
+  const asset={url:entry.url,path:rel(target),bytes:bytes.length,sha256:digest(bytes),origin,referencedBy:[...entry.referencedBy]};
+  if(origin!=='previous-export')await rememberAsset(asset);
   complete.add(entry.url);
-  manifest.assets.push({url:entry.url,path:rel(target),bytes:bytes.length,sha256:digest(bytes),origin,referencedBy:[...entry.referencedBy]});
+  manifest.assets.push(asset);
   // Follow literal imports/URLs; every original module remains a separate file.
   if(textExtension.test(url.pathname))discoverText(bytes.toString('utf8'),rel(target),entry.url);
   reportProgress();
@@ -281,7 +298,8 @@ for(const asset of manifest.assets.filter(a=>/\/manifest-[\w-]+\.js$/.test(new U
 }
 manifest.finishedAt=new Date().toISOString();
 manifest.summary={verifiedCaptures:captures.length,copiedLocalFiles:manifest.files.length,copiedLocalBytes:manifest.files.reduce((sum,f)=>sum+f.bytes,0),knownPublicURLs:discovered.size,availablePublicAssets:manifest.assets.length,reusedPublicAssets:manifest.assets.filter(a=>a.origin!=='downloaded-public-static').length,downloadedPublicAssets:manifest.assets.filter(a=>a.origin==='downloaded-public-static').length,downloadRequests:requests,publicAssetBytes:manifest.assets.reduce((sum,a)=>sum+a.bytes,0),dependencyEdges:manifest.dependencyEdges.length,failedAssets:manifest.failures.length,deferredAssets:manifest.deferred.length,skippedQueries:manifest.skipped.length,publicAssetPhaseMs:Date.now()-networkStartedAt};
-await fs.writeFile(path.join(output,'manifest.json'),JSON.stringify(manifest,null,2)+'\n');
+await journalWrite;
+await atomicWrite(path.join(output,'manifest.json'),JSON.stringify(manifest,null,2)+'\n');
 queueCoverage(true);await coverageWrite;
 await fs.writeFile(path.join(output,'README.txt'),`PRIVATE LOCAL CAPTURED SOURCE EXPORT\n\nGenerated by: node --use-env-proxy scripts/export-reference.mjs\n\nraw/ preserves the verified original HTML and browser-saved resource folders.\nevidence/ contains supplied public-source capture metadata and the selected dependency plan.\npublic/ mirrors exact referenced public static asset URLs.\npublic-cache/ preserves existing downloaded public assets, fonts, icons, and companion atlases.\nmanifest.json maps original asset URLs to local paths and records failures and bounds.\ncoverage.json records static resource categories, every manifest route, and unverified runtime behavior.\n\nThis is ${captures.length} supplied frontend captures and the known static dependency graph, not the entire ChatGPT source code.\nNo browser automation, cookies, authentication, private API requests, or original script execution was used to build it.\nRaw signed-in captures may contain original account data, histories, locations, prompts, and images. Keep this ignored folder private; do not publish it with the clone.\nRaw HTML was not rewritten into an offline application; opening it can execute its original scripts and contact its original hosts.\n\nRerun command: node --use-env-proxy scripts/export-reference.mjs\nThe existing all-static-coverage-plan.json is selected automatically.\nExplicit plan: --dependency-plan .test-output/original-client-prototype/all-static-coverage-plan.json\nOffline reuse only: node scripts/export-reference.mjs --offline\nOptional bounded completion: --max-downloads 512 --concurrency 8\n\nSummary:\n${JSON.stringify(manifest.summary,null,2)}\n`);
 console.log(JSON.stringify({stage:'complete',output,manifest:path.join(output,'manifest.json'),...manifest.summary}));

@@ -1,0 +1,2 @@
+/*! LICENSE: 163601.0feef202a1.js.LICENSE.txt */
+export const __rspack_esm_ids=[163601];export const __webpack_modules__={vPH8(e,s,t){t.r(s);let _=(0,t("jTyp").c)("Database",[["ellipse",{cx:"12",cy:"5",rx:"9",ry:"3",key:"msslwz"}],["path",{d:"M3 5V19A9 3 0 0 0 21 19V5",key:"1wlel7"}],["path",{d:"M3 12A9 3 0 0 0 21 12",key:"mv7ke4"}]]);t.d(s,{},{default:_})}};

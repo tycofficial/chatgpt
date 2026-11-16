@@ -1,0 +1,2 @@
+/*! LICENSE: 977788.54289fd1f9.js.LICENSE.txt */
+export const __rspack_esm_ids=[977788];export const __webpack_modules__={fZg8(c,e,_){_.r(e);let r=(0,_("jTyp").c)("MapPin",[["path",{d:"M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0",key:"1r0f0z"}],["circle",{cx:"12",cy:"10",r:"3",key:"ilqhr7"}]]);_.d(e,{},{default:r})}};

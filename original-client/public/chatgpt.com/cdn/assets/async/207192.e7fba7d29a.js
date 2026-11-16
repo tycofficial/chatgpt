@@ -1,0 +1,2 @@
+/*! LICENSE: 207192.e7fba7d29a.js.LICENSE.txt */
+export const __rspack_esm_ids=[207192];export const __webpack_modules__={MwYp(e,a,t){t.r(a);let h=(0,t("jTyp").c)("Fullscreen",[["path",{d:"M3 7V5a2 2 0 0 1 2-2h2",key:"aa7l1z"}],["path",{d:"M17 3h2a2 2 0 0 1 2 2v2",key:"4qcy5o"}],["path",{d:"M21 17v2a2 2 0 0 1-2 2h-2",key:"6vwrx8"}],["path",{d:"M7 21H5a2 2 0 0 1-2-2v-2",key:"ioqczr"}],["rect",{width:"10",height:"8",x:"7",y:"8",rx:"1",key:"vys8me"}]]);t.d(a,{},{default:h})}};

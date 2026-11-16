@@ -1,0 +1,2 @@
+/*! LICENSE: 28576.bcfe2b9967.js.LICENSE.txt */
+export const __rspack_esm_ids=[28576];export const __webpack_modules__={gf23(e,t,d){d.r(t);let h=(0,d("jTyp").c)("TableCellsMerge",[["path",{d:"M12 21v-6",key:"lihzve"}],["path",{d:"M12 9V3",key:"da5inc"}],["path",{d:"M3 15h18",key:"5xshup"}],["path",{d:"M3 9h18",key:"1pudct"}],["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}]]);d.d(t,{},{default:h})}};

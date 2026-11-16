@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[517876];export const __webpack_modules__={BWK8(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"z":0}},{"name":"Maximum supported values","initialValues":{"z":4}}]')}};

@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[867834];export const __webpack_modules__={c5rS(a){a.exports=JSON.parse('[{"name":"reactantPair: barium nitrate + sodium sulfate","initialValues":{"reactantPair":"barium nitrate + sodium sulfate"}},{"name":"reactantPair: sodium nitrate + potassium chloride","initialValues":{"reactantPair":"sodium nitrate + potassium chloride"}}]')}};

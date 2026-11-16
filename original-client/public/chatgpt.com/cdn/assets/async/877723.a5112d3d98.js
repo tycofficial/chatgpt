@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[877723];export const __webpack_modules__={RFuh(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"red":0,"green":0,"blue":0}},{"name":"Maximum supported values","initialValues":{"red":255,"green":255,"blue":255}}]')}};

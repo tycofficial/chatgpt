@@ -1,0 +1,2 @@
+/*! LICENSE: 923392.07d0f95764.js.LICENSE.txt */
+export const __rspack_esm_ids=[923392];export const __webpack_modules__={RYGS(t,e,r){r.r(e);let a=(0,r("jTyp").c)("AlignVerticalDistributeStart",[["rect",{width:"14",height:"6",x:"5",y:"14",rx:"2",key:"jmoj9s"}],["rect",{width:"10",height:"6",x:"7",y:"4",rx:"2",key:"aza5on"}],["path",{d:"M2 14h20",key:"myj16y"}],["path",{d:"M2 4h20",key:"mda7wb"}]]);r.d(e,{},{default:a})}};

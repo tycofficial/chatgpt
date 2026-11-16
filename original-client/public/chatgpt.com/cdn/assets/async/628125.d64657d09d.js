@@ -1,0 +1,2 @@
+/*! LICENSE: 628125.d64657d09d.js.LICENSE.txt */
+export const __rspack_esm_ids=[628125];export const __webpack_modules__={apop(e,p,t){t.r(p);let _=(0,t("jTyp").c)("ArrowUpFromLine",[["path",{d:"m18 9-6-6-6 6",key:"kcunyi"}],["path",{d:"M12 3v14",key:"7cf3v8"}],["path",{d:"M5 21h14",key:"11awu3"}]]);t.d(p,{},{default:_})}};

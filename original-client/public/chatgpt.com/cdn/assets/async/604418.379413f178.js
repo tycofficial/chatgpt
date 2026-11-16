@@ -1,0 +1,2 @@
+/*! LICENSE: 604418.379413f178.js.LICENSE.txt */
+export const __rspack_esm_ids=[604418];export const __webpack_modules__={lMal(e,t,_){_.r(t);let p=(0,_("jTyp").c)("MoveUpLeft",[["path",{d:"M5 11V5H11",key:"3q78g9"}],["path",{d:"M5 5L19 19",key:"5zm2fv"}]]);_.d(t,{},{default:p})}};

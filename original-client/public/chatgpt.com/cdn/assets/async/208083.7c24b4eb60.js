@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[208083];export const __webpack_modules__={fMql(s){s.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"supply_shift":-28}},{"name":"Maximum supported values","initialValues":{"supply_shift":28}}]')}};

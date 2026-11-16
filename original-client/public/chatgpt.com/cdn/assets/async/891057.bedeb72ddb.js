@@ -1,0 +1,2 @@
+/*! LICENSE: 891057.bedeb72ddb.js.LICENSE.txt */
+export const __rspack_esm_ids=[891057];export const __webpack_modules__={u4Br(e,t,r){r.r(t);let h=(0,r("jTyp").c)("SquarePercent",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"m15 9-6 6",key:"1uzhvr"}],["path",{d:"M9 9h.01",key:"1q5me6"}],["path",{d:"M15 15h.01",key:"lqbp3k"}]]);r.d(t,{},{default:h})}};

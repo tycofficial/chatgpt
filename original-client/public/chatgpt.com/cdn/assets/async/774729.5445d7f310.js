@@ -1,0 +1,2 @@
+/*! LICENSE: 774729.5445d7f310.js.LICENSE.txt */
+export const __rspack_esm_ids=[774729];export const __webpack_modules__={Il6J(t,e,d){d.r(e);var a=d("nRvk");d.d(e,{default:()=>a.default})},nRvk(t,e,d){d.r(e);let a=(0,d("jTyp").c)("Grid3x3",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M3 9h18",key:"1pudct"}],["path",{d:"M3 15h18",key:"5xshup"}],["path",{d:"M9 3v18",key:"fh3hqa"}],["path",{d:"M15 3v18",key:"14nvp0"}]]);d.d(e,{},{default:a})}};

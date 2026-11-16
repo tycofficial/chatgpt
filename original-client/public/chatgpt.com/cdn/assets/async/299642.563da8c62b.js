@@ -1,0 +1,2 @@
+/*! LICENSE: 299642.563da8c62b.js.LICENSE.txt */
+export const __rspack_esm_ids=[299642];export const __webpack_modules__={XE3z(a,e,p){p.r(e);let t=(0,p("jTyp").c)("SwatchBook",[["path",{d:"M11 17a4 4 0 0 1-8 0V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2Z",key:"1ldrpk"}],["path",{d:"M16.7 13H19a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H7",key:"11i5po"}],["path",{d:"M 7 17h.01",key:"1euzgo"}],["path",{d:"m11 8 2.3-2.3a2.4 2.4 0 0 1 3.404.004L18.6 7.6a2.4 2.4 0 0 1 .026 3.434L9.9 19.8",key:"o2gii7"}]]);p.d(e,{},{default:t})}};

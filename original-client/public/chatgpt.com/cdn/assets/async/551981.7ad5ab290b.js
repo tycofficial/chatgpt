@@ -1,0 +1,2 @@
+/*! LICENSE: 551981.7ad5ab290b.js.LICENSE.txt */
+export const __rspack_esm_ids=[551981];export const __webpack_modules__={Cvgf(e,c,_){_.r(c);let l=(0,_("jTyp").c)("Clock4",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["polyline",{points:"12 6 12 12 16 14",key:"68esgv"}]]);_.d(c,{},{default:l})}};

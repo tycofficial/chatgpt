@@ -1,0 +1,2 @@
+/*! LICENSE: 85889.3c9a734e5a.js.LICENSE.txt */
+export const __rspack_esm_ids=[85889];export const __webpack_modules__={Ei15(e,t,c){c.r(t);let r=(0,c("jTyp").c)("SquareDot",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["circle",{cx:"12",cy:"12",r:"1",key:"41hilf"}]]);c.d(t,{},{default:r})}};

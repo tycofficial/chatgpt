@@ -1,0 +1,2 @@
+/*! LICENSE: 260216.a72b3f8585.js.LICENSE.txt */
+export const __rspack_esm_ids=[260216];export const __webpack_modules__={RpVO(e,t,y){y.r(t);let c=(0,y("jTyp").c)("GitCommitHorizontal",[["circle",{cx:"12",cy:"12",r:"3",key:"1v7zrd"}],["line",{x1:"3",x2:"9",y1:"12",y2:"12",key:"1dyftd"}],["line",{x1:"15",x2:"21",y1:"12",y2:"12",key:"oup4p8"}]]);y.d(t,{},{default:c})}};

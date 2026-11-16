@@ -1,0 +1,2 @@
+/*! LICENSE: 845450.69d1fcb7a5.js.LICENSE.txt */
+export const __rspack_esm_ids=[845450];export const __webpack_modules__={l403(t,e,a){a.r(e);let d=(0,a("jTyp").c)("ListStart",[["path",{d:"M16 12H3",key:"1a2rj7"}],["path",{d:"M16 18H3",key:"12xzn7"}],["path",{d:"M10 6H3",key:"lf8lx7"}],["path",{d:"M21 18V8a2 2 0 0 0-2-2h-5",key:"1hghli"}],["path",{d:"m16 8-2-2 2-2",key:"160uvd"}]]);a.d(e,{},{default:d})}};

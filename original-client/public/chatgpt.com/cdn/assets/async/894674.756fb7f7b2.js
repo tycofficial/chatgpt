@@ -1,0 +1,2 @@
+/*! LICENSE: 894674.756fb7f7b2.js.LICENSE.txt */
+export const __rspack_esm_ids=[894674];export const __webpack_modules__={Vhw4(t,e,a){a.r(e);var d=a("NT5u");a.d(e,{default:()=>d.default})},NT5u(t,e,a){a.r(e);let d=(0,a("jTyp").c)("TramFront",[["rect",{width:"16",height:"16",x:"4",y:"3",rx:"2",key:"1wxw4b"}],["path",{d:"M4 11h16",key:"mpoxn0"}],["path",{d:"M12 3v8",key:"1h2ygw"}],["path",{d:"m8 19-2 3",key:"13i0xs"}],["path",{d:"m18 22-2-3",key:"1p0ohu"}],["path",{d:"M8 15h.01",key:"a7atzg"}],["path",{d:"M16 15h.01",key:"rnfrdf"}]]);a.d(e,{},{default:d})}};

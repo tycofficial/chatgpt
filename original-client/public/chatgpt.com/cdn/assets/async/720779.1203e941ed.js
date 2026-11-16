@@ -1,0 +1,2 @@
+/*! LICENSE: 720779.1203e941ed.js.LICENSE.txt */
+export const __rspack_esm_ids=[720779];export const __webpack_modules__={vY0b(e,t,_){_.r(t);let d=(0,_("jTyp").c)("AlignJustify",[["path",{d:"M3 12h18",key:"1i2n21"}],["path",{d:"M3 18h18",key:"1h113x"}],["path",{d:"M3 6h18",key:"d0wm0j"}]]);_.d(t,{},{default:d})}};

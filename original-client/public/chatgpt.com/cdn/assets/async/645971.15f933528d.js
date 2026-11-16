@@ -1,0 +1,2 @@
+/*! LICENSE: 645971.15f933528d.js.LICENSE.txt */
+export const __rspack_esm_ids=[645971];export const __webpack_modules__={KH6n(e,c,r){r.r(c);var t=r("CM4q");r.d(c,{default:()=>t.default})},CM4q(e,c,r){r.r(c);let t=(0,r("jTyp").c)("CircleArrowRight",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["path",{d:"M8 12h8",key:"1wcyev"}],["path",{d:"m12 16 4-4-4-4",key:"1i9zcv"}]]);r.d(c,{},{default:t})}};

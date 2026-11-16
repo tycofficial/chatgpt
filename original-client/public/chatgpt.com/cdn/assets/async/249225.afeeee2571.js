@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[249225];export const __webpack_modules__={ml8p(c,e,t){var o=t("TjnS"),n=t("TYK1");function r(c,e){let t=c.query.getData(n.a,e.dotId);return null!=t&&t.service_account_account_user_id===e.serviceAccountId&&(0,o.a)(t)}t.d(e,{},{a:function(c,e){if(!r(c,e))throw new DOMException("Dot access changed","AbortError")},b:r})}};

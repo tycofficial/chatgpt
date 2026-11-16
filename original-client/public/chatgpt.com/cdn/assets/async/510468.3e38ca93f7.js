@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[510468];export const __webpack_modules__={k8kz(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"focus_year":1961}},{"name":"Maximum supported values","initialValues":{"focus_year":2014}}]')}};

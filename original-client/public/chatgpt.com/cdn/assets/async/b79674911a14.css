@@ -1,0 +1,1 @@
+@layer components{.narrowPlot-Jr34OL{width:100%;display:block}.widePlot-d0FFnE{width:100%;display:none}.pairGrid-BYsUuA{grid-template-columns:minmax(0,1fr);align-items:center;column-gap:.5rem;min-width:0;display:grid}@container (width>=28rem){.narrowPlot-Jr34OL{display:none}.widePlot-d0FFnE{display:block}.pairGrid-BYsUuA{grid-template-columns:auto minmax(0,1fr)}}}

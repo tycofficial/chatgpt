@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[372408];export const __webpack_modules__={Ebsf(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"slope":-10000,"intercept":-10000,"perpendicularIntercept":-10000}},{"name":"Maximum supported values","initialValues":{"slope":10000,"intercept":10000,"perpendicularIntercept":10000}}]')}};

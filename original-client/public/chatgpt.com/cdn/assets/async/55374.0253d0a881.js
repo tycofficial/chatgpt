@@ -1,0 +1,2 @@
+/*! LICENSE: 55374.0253d0a881.js.LICENSE.txt */
+export const __rspack_esm_ids=[55374];export const __webpack_modules__={VLSz(e,t,h){h.r(t);let a=(0,h("jTyp").c)("PanelBottomDashed",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M14 15h1",key:"171nev"}],["path",{d:"M19 15h2",key:"1vnucp"}],["path",{d:"M3 15h2",key:"8bym0q"}],["path",{d:"M9 15h1",key:"1tg3ks"}]]);h.d(t,{},{default:a})}};

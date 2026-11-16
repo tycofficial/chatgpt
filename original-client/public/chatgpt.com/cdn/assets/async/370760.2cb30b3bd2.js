@@ -1,0 +1,2 @@
+/*! LICENSE: 370760.2cb30b3bd2.js.LICENSE.txt */
+export const __rspack_esm_ids=[370760];export const __webpack_modules__={U2T8(e,t,a){a.r(t);let h=(0,a("jTyp").c)("TabletSmartphone",[["rect",{width:"10",height:"14",x:"3",y:"8",rx:"2",key:"1vrsiq"}],["path",{d:"M5 4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2h-2.4",key:"1j4zmg"}],["path",{d:"M8 18h.01",key:"lrp35t"}]]);a.d(t,{},{default:h})}};

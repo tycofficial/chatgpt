@@ -1,0 +1,2 @@
+/*! LICENSE: 832625.cb14e57329.js.LICENSE.txt */
+export const __rspack_esm_ids=[832625];export const __webpack_modules__={biX7(e,c,r){r.r(c);let _=(0,r("jTyp").c)("CircleUser",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["circle",{cx:"12",cy:"10",r:"3",key:"ilqhr7"}],["path",{d:"M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662",key:"154egf"}]]);r.d(c,{},{default:_})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 976287.cd2e82d8cd.js.LICENSE.txt */
+export const __rspack_esm_ids=[976287];export const __webpack_modules__={tLem(e,t,_){_.r(t);let c=(0,_("jTyp").c)("RectangleHorizontal",[["rect",{width:"20",height:"12",x:"2",y:"6",rx:"2",key:"9lu3g6"}]]);_.d(t,{},{default:c})}};

@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[328828];export const __webpack_modules__={APtT(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"objectDistanceMeters":0.25}},{"name":"Maximum supported values","initialValues":{"objectDistanceMeters":6}}]')}};

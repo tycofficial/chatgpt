@@ -1,0 +1,2 @@
+/*! LICENSE: 329912.49b967cef3.js.LICENSE.txt */
+export const __rspack_esm_ids=[329912];export const __webpack_modules__={alJq(_,e,t){t.r(e);let c=(0,t("jTyp").c)("Twitch",[["path",{d:"M21 2H3v16h5v4l4-4h5l4-4V2zm-10 9V7m5 4V7",key:"c0yzno"}]]);t.d(e,{},{default:c})}};

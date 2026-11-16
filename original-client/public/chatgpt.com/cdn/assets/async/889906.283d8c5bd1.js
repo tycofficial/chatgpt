@@ -1,0 +1,2 @@
+/*! LICENSE: 889906.283d8c5bd1.js.LICENSE.txt */
+export const __rspack_esm_ids=[889906];export const __webpack_modules__={Nz7c(c,e,t){t.r(e);let _=(0,t("jTyp").c)("DiscAlbum",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["circle",{cx:"12",cy:"12",r:"5",key:"nd82uf"}],["path",{d:"M12 12h.01",key:"1mp3jc"}]]);t.d(e,{},{default:_})}};

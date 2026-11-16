@@ -1,0 +1,2 @@
+/*! LICENSE: 79057.328a675b5b.js.LICENSE.txt */
+export const __rspack_esm_ids=[79057];export const __webpack_modules__={UCVQ(e,t,_){_.r(t);let p=(0,_("jTyp").c)("Baseline",[["path",{d:"M4 20h16",key:"14thso"}],["path",{d:"m6 16 6-12 6 12",key:"1b4byz"}],["path",{d:"M8 12h8",key:"1wcyev"}]]);_.d(t,{},{default:p})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 58020.282a148840.js.LICENSE.txt */
+export const __rspack_esm_ids=[58020];export const __webpack_modules__={OVRc(e,_,t){t.r(_);let a=(0,t("jTyp").c)("FlagTriangleRight",[["path",{d:"M7 22V2l10 5-10 5",key:"17n18y"}]]);t.d(_,{},{default:a})}};

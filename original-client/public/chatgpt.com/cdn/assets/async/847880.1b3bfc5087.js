@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[847880];export const __webpack_modules__={iPKN(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"side_length":1}},{"name":"Maximum supported values","initialValues":{"side_length":6}}]')}};

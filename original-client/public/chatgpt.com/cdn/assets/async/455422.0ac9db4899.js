@@ -1,0 +1,2 @@
+/*! LICENSE: 455422.0ac9db4899.js.LICENSE.txt */
+export const __rspack_esm_ids=[455422];export const __webpack_modules__={ktvp(e,c,t){t.r(c);let p=(0,t("jTyp").c)("BellElectric",[["path",{d:"M18.8 4A6.3 8.7 0 0 1 20 9",key:"xve1fh"}],["path",{d:"M9 9h.01",key:"1q5me6"}],["circle",{cx:"9",cy:"9",r:"7",key:"p2h5vp"}],["rect",{width:"10",height:"6",x:"4",y:"16",rx:"2",key:"17f3te"}],["path",{d:"M14 19c3 0 4.6-1.6 4.6-1.6",key:"n7odp6"}],["circle",{cx:"20",cy:"16",r:"2",key:"1v9bxh"}]]);t.d(c,{},{default:p})}};

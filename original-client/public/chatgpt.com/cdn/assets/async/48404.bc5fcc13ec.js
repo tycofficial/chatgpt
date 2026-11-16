@@ -1,0 +1,2 @@
+/*! LICENSE: 48404.bc5fcc13ec.js.LICENSE.txt */
+export const __rspack_esm_ids=[48404];export const __webpack_modules__={GCOO(e,o,p){p.r(o);let t=(0,p("jTyp").c)("CornerLeftUp",[["polyline",{points:"14 9 9 4 4 9",key:"m9oyvo"}],["path",{d:"M20 20h-7a4 4 0 0 1-4-4V4",key:"1blwi3"}]]);p.d(o,{},{default:t})}};

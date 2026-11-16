@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[402720];export const __webpack_modules__={Zbot(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"wage":25,"outputPrice":1.8}},{"name":"Maximum supported values","initialValues":{"wage":60,"outputPrice":2.5}}]')}};

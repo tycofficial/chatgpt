@@ -1,0 +1,2 @@
+/*! LICENSE: 306890.ac8a5eb909.js.LICENSE.txt */
+export const __rspack_esm_ids=[306890];export const __webpack_modules__={sbHO(t,e,_){_.r(e);let p=(0,_("jTyp").c)("PanelsRightBottom",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M3 15h12",key:"1wkqb3"}],["path",{d:"M15 3v18",key:"14nvp0"}]]);_.d(e,{},{default:p})}};

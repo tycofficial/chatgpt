@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[372241];export const __webpack_modules__={ytg6(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"initial_mean_difference":-4,"pooled_standard_deviation":0.75}},{"name":"Maximum supported values","initialValues":{"initial_mean_difference":4,"pooled_standard_deviation":2}}]')}};

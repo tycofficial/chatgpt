@@ -1,0 +1,2 @@
+/*! LICENSE: 770995.7e742946d7.js.LICENSE.txt */
+export const __rspack_esm_ids=[770995];export const __webpack_modules__={BloN(e,t,p){p.r(t);let c=(0,p("jTyp").c)("AlarmClockMinus",[["circle",{cx:"12",cy:"13",r:"8",key:"3y4lt7"}],["path",{d:"M5 3 2 6",key:"18tl5t"}],["path",{d:"m22 6-3-3",key:"1opdir"}],["path",{d:"M6.38 18.7 4 21",key:"17xu3x"}],["path",{d:"M17.64 18.67 20 21",key:"kv2oe2"}],["path",{d:"M9 13h6",key:"1uhe8q"}]]);p.d(t,{},{default:c})}};

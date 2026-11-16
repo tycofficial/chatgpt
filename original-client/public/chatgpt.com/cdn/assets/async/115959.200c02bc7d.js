@@ -1,0 +1,2 @@
+/*! LICENSE: 115959.200c02bc7d.js.LICENSE.txt */
+export const __rspack_esm_ids=[115959];export const __webpack_modules__={A7YB(e,p,a){a.r(p);let t=(0,a("jTyp").c)("FileWarning",[["path",{d:"M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z",key:"1rqfz7"}],["path",{d:"M12 9v4",key:"juzpu7"}],["path",{d:"M12 17h.01",key:"p32p05"}]]);a.d(p,{},{default:t})}};

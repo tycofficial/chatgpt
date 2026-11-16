@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[344865];export const __webpack_modules__={E5ou(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"quantum":1}},{"name":"Maximum supported values","initialValues":{"quantum":8}},{"name":"workload: cpu-bound","initialValues":{"workload":"cpu-bound"}}]')}};

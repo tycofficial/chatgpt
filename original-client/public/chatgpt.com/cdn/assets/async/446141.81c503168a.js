@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[446141];export const __webpack_modules__={zpC0(t){t.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"molarAbsorptivity":0.01,"concentration":0.01,"pathLength":0.01}},{"name":"Maximum supported values","initialValues":{"molarAbsorptivity":100000,"concentration":10,"pathLength":100}}]')}};

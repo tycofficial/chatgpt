@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[882992];export const __webpack_modules__={pWbN(t){t.exports=JSON.parse('[{"content":"Y = C + I + G"},{"content":"Y = C + I + G + (X - M)"},{"content":"Y = C + I + G + X - M"},{"content":"Y = C + I + G + (Ex - Im)"},{"content":"GDP = C + I + G + (X - M)"},{"content":"GDP = C + I + G + NX"}]')}};

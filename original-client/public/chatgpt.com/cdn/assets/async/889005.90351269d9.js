@@ -1,0 +1,2 @@
+/*! LICENSE: 889005.90351269d9.js.LICENSE.txt */
+export const __rspack_esm_ids=[889005];export const __webpack_modules__={EpEn(e,t,o){o.r(t);let _=(0,o("jTyp").c)("ArrowDownLeft",[["path",{d:"M17 7 7 17",key:"15tmo1"}],["path",{d:"M17 17H7V7",key:"1org7z"}]]);o.d(t,{},{default:_})}};

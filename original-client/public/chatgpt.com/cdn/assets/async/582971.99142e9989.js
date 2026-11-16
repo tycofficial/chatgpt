@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[582971];export const __webpack_modules__={FdeG(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"initial_length":1}},{"name":"Maximum supported values","initialValues":{"initial_length":8}}]')}};

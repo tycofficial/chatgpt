@@ -1,0 +1,2 @@
+/*! LICENSE: 117728.a266182011.js.LICENSE.txt */
+export const __rspack_esm_ids=[117728];export const __webpack_modules__={TXFF(e,c,_){_.r(c);let l=(0,_("jTyp").c)("Clock1",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["polyline",{points:"12 6 12 12 14.5 8",key:"12zbmj"}]]);_.d(c,{},{default:l})}};

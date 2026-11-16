@@ -1,0 +1,2 @@
+/*! LICENSE: 670067.3e0eefd438.js.LICENSE.txt */
+export const __rspack_esm_ids=[670067];export const __webpack_modules__={DtvO(e,t,a){a.r(t);let _=(0,a("jTyp").c)("Highlighter",[["path",{d:"m9 11-6 6v3h9l3-3",key:"1a3l36"}],["path",{d:"m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4",key:"14a9rk"}]]);a.d(t,{},{default:_})}};

@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[684369];export const __webpack_modules__={hwbz(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"angle":0,"pointX":-2.2,"pointY":-1.6}},{"name":"Maximum supported values","initialValues":{"angle":360,"pointX":2.2,"pointY":1.6}}]')}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 128211.2de274bb7c.js.LICENSE.txt */
+export const __rspack_esm_ids=[128211];export const __webpack_modules__={N2Si(e,t,c){c.r(t);let _=(0,c("jTyp").c)("Mails",[["rect",{width:"16",height:"13",x:"6",y:"4",rx:"2",key:"1drq3f"}],["path",{d:"m22 7-7.1 3.78c-.57.3-1.23.3-1.8 0L6 7",key:"xn252p"}],["path",{d:"M2 8v11c0 1.1.9 2 2 2h14",key:"n13cji"}]]);c.d(t,{},{default:_})}};

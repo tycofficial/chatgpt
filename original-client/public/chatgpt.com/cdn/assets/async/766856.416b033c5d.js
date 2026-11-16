@@ -1,0 +1,2 @@
+/*! LICENSE: 766856.416b033c5d.js.LICENSE.txt */
+export const __rspack_esm_ids=[766856];export const __webpack_modules__={YXVB(e,o,_){_.r(o);let p=(0,_("jTyp").c)("Download",[["path",{d:"M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4",key:"ih7n3h"}],["polyline",{points:"7 10 12 15 17 10",key:"2ggqvy"}],["line",{x1:"12",x2:"12",y1:"15",y2:"3",key:"1vk2je"}]]);_.d(o,{},{default:p})}};

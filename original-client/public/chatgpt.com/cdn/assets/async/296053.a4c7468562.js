@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[296053];export const __webpack_modules__={dIdY(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"required_wedges":3,"horizon_years":20}},{"name":"Maximum supported values","initialValues":{"required_wedges":12,"horizon_years":100}}]')}};

@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[312366];export const __webpack_modules__={cz0a(e){e.exports=JSON.parse('[{"content":"a^2 - b^2 = (a - b)(a + b)"},{"content":"(x + y)(x - y) = x^2 - y^2"}]')}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 602699.761b3b9299.js.LICENSE.txt */
+export const __rspack_esm_ids=[602699];export const __webpack_modules__={CFAH(e,y,i){i.r(y);let n=(0,i("jTyp").c)("RockingChair",[["polyline",{points:"3.5 2 6.5 12.5 18 12.5",key:"y3iy52"}],["line",{x1:"9.5",x2:"5.5",y1:"12.5",y2:"20",key:"19vg5i"}],["line",{x1:"15",x2:"18.5",y1:"12.5",y2:"20",key:"1inpmv"}],["path",{d:"M2.75 18a13 13 0 0 0 18.5 0",key:"1nquas"}]]);i.d(y,{},{default:n})}};

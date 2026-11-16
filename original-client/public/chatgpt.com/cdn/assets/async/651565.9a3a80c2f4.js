@@ -1,0 +1,2 @@
+/*! LICENSE: 651565.9a3a80c2f4.js.LICENSE.txt */
+export const __rspack_esm_ids=[651565];export const __webpack_modules__={givi(e,c,_){_.r(c);let l=(0,_("jTyp").c)("Clock2",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["polyline",{points:"12 6 12 12 16 10",key:"1g230d"}]]);_.d(c,{},{default:l})}};

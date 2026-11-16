@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[12858];export const __webpack_modules__={muNc(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"currentAmperes":0.5,"turnsPerMeter":100}},{"name":"Maximum supported values","initialValues":{"currentAmperes":5,"turnsPerMeter":1000}},{"name":"direction: clockwise","initialValues":{"direction":"clockwise"}}]')}};

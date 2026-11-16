@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[320843];export const __webpack_modules__={HYAW(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"price":2,"supplyShift":-1}},{"name":"Maximum supported values","initialValues":{"price":8,"supplyShift":1}}]')}};

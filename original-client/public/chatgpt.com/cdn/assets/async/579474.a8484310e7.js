@@ -1,0 +1,2 @@
+/*! LICENSE: 579474.a8484310e7.js.LICENSE.txt */
+export const __rspack_esm_ids=[579474];export const __webpack_modules__={CYXe(a,e,t){t.r(e);let p=(0,t("jTyp").c)("PaintbrushVertical",[["path",{d:"M10 2v2",key:"7u0qdc"}],["path",{d:"M14 2v4",key:"qmzblu"}],["path",{d:"M17 2a1 1 0 0 1 1 1v9H6V3a1 1 0 0 1 1-1z",key:"ycvu00"}],["path",{d:"M6 12a1 1 0 0 0-1 1v1a2 2 0 0 0 2 2h2a1 1 0 0 1 1 1v2.9a2 2 0 1 0 4 0V17a1 1 0 0 1 1-1h2a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1",key:"iw4wnp"}]]);t.d(e,{},{default:p})}};

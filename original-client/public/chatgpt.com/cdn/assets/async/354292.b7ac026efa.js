@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[354292];export const __webpack_modules__={WAUQ(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"population":1000,"landAreaSquareKilometers":5}},{"name":"Maximum supported values","initialValues":{"population":1000000,"landAreaSquareKilometers":1000}}]')}};

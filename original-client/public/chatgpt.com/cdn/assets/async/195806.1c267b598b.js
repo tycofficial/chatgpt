@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[195806];export const __webpack_modules__={qVAG(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"rate":0.25,"waiting_time":0}},{"name":"Maximum supported values","initialValues":{"rate":1,"waiting_time":12}}]')}};

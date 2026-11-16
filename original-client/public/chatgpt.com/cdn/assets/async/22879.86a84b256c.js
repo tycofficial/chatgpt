@@ -1,0 +1,2 @@
+/*! LICENSE: 22879.86a84b256c.js.LICENSE.txt */
+export const __rspack_esm_ids=[22879];export const __webpack_modules__={j6Gl(c,e,_){_.r(e);let r=(0,_("jTyp").c)("Disc",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["circle",{cx:"12",cy:"12",r:"2",key:"1c9p78"}]]);_.d(e,{},{default:r})}};

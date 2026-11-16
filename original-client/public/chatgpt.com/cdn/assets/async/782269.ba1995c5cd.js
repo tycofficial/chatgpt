@@ -1,0 +1,2 @@
+/*! LICENSE: 782269.ba1995c5cd.js.LICENSE.txt */
+export const __rspack_esm_ids=[782269];export const __webpack_modules__={o15G(e,c,_){_.r(c);let a=(0,_("jTyp").c)("MessageSquareDot",[["path",{d:"M11.7 3H5a2 2 0 0 0-2 2v16l4-4h12a2 2 0 0 0 2-2v-2.7",key:"uodpkb"}],["circle",{cx:"18",cy:"6",r:"3",key:"1h7g24"}]]);_.d(c,{},{default:a})}};

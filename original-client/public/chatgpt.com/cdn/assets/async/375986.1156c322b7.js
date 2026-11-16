@@ -1,0 +1,2 @@
+/*! LICENSE: 375986.1156c322b7.js.LICENSE.txt */
+export const __rspack_esm_ids=[375986];export const __webpack_modules__={TagP(e,p,t){t.r(p);let _=(0,t("jTyp").c)("Pilcrow",[["path",{d:"M13 4v16",key:"8vvj80"}],["path",{d:"M17 4v16",key:"7dpous"}],["path",{d:"M19 4H9.5a4.5 4.5 0 0 0 0 9H13",key:"sh4n9v"}]]);t.d(p,{},{default:_})}};

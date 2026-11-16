@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[459941];export const __webpack_modules__={tSSt(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"a":-5,"b":-5,"c":-5}},{"name":"Maximum supported values","initialValues":{"a":5,"b":5,"c":5}},{"name":"Repeated root","initialValues":{"a":1,"b":0,"c":0}},{"name":"Not quadratic","initialValues":{"a":0,"b":0,"c":-4}}]')}};

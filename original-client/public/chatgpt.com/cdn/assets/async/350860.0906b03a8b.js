@@ -1,0 +1,2 @@
+/*! LICENSE: 350860.0906b03a8b.js.LICENSE.txt */
+export const __rspack_esm_ids=[350860];export const __webpack_modules__={RZWt(t,e,_){_.r(e);let r=(0,_("jTyp").c)("SquarePlay",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"m9 8 6 4-6 4Z",key:"f1r3lt"}]]);_.d(e,{},{default:r})}};

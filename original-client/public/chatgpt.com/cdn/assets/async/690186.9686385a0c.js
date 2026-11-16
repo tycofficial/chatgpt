@@ -1,0 +1,2 @@
+/*! LICENSE: 690186.9686385a0c.js.LICENSE.txt */
+export const __rspack_esm_ids=[690186];export const __webpack_modules__={rRlE(e,t,r){r.r(t);let _=(0,r("jTyp").c)("SquareSquare",[["rect",{x:"3",y:"3",width:"18",height:"18",rx:"2",key:"h1oib"}],["rect",{x:"8",y:"8",width:"8",height:"8",rx:"1",key:"z9xiuo"}]]);r.d(t,{},{default:_})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 254152.82a59c743e.js.LICENSE.txt */
+export const __rspack_esm_ids=[254152];export const __webpack_modules__={ZOqG(e,a,t){t.r(a);let _=(0,t("jTyp").c)("BedSingle",[["path",{d:"M3 20v-8a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v8",key:"1wm6mi"}],["path",{d:"M5 10V6a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v4",key:"4k93s5"}],["path",{d:"M3 18h18",key:"1h113x"}]]);t.d(a,{},{default:_})}};

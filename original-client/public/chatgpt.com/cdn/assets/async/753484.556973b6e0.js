@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[753484];export const __webpack_modules__={k4jU(e){e.exports=JSON.parse('[{"name":"lactose_present: false","initialValues":{"lactose_present":false}},{"name":"glucose_present: false","initialValues":{"glucose_present":false}},{"name":"Both sugars absent","initialValues":{"lactose_present":false,"glucose_present":false}}]')}};

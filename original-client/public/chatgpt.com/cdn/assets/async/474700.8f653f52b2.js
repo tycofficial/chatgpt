@@ -1,0 +1,2 @@
+/*! LICENSE: 474700.8f653f52b2.js.LICENSE.txt */
+export const __rspack_esm_ids=[474700];export const __webpack_modules__={CAOz(e,t,a){a.r(t);let p=(0,a("jTyp").c)("SmartphoneNfc",[["rect",{width:"7",height:"12",x:"2",y:"6",rx:"1",key:"5nje8w"}],["path",{d:"M13 8.32a7.43 7.43 0 0 1 0 7.36",key:"1g306n"}],["path",{d:"M16.46 6.21a11.76 11.76 0 0 1 0 11.58",key:"uqvjvo"}],["path",{d:"M19.91 4.1a15.91 15.91 0 0 1 .01 15.8",key:"ujntz3"}]]);a.d(t,{},{default:p})}};

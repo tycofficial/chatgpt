@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[551972];export const __webpack_modules__={lMvE(e){e.exports=JSON.parse('[{"name":"example: blood_glucose","initialValues":{"example":"blood_glucose"}},{"name":"example: thermostat","initialValues":{"example":"thermostat"}},{"name":"initial_deviation: below","initialValues":{"initial_deviation":"below"}}]')}};

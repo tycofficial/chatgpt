@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[487742];export const __webpack_modules__={WpGO(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"a11":-2,"a12":-2,"a21":-2,"a22":-2}},{"name":"Maximum supported values","initialValues":{"a11":2,"a12":2,"a21":2,"a22":2}}]')}};

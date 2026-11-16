@@ -1,0 +1,2 @@
+/*! LICENSE: 664879.f11f850e1a.js.LICENSE.txt */
+export const __rspack_esm_ids=[664879];export const __webpack_modules__={CAEH(a,e,t){t.r(e);let p=(0,t("jTyp").c)("FlipVertical",[["path",{d:"M21 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v3",key:"14bfxa"}],["path",{d:"M21 16v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-3",key:"14rx03"}],["path",{d:"M4 12H2",key:"rhcxmi"}],["path",{d:"M10 12H8",key:"s88cx1"}],["path",{d:"M16 12h-2",key:"10asgb"}],["path",{d:"M22 12h-2",key:"14jgyd"}]]);t.d(e,{},{default:p})}};

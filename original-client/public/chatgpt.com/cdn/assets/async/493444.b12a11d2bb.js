@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[493444];export const __webpack_modules__={pecS(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"carrying_capacity":40,"intrinsic_growth_rate":0.1}},{"name":"Maximum supported values","initialValues":{"carrying_capacity":200,"intrinsic_growth_rate":0.8}}]')}};

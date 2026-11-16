@@ -1,0 +1,2 @@
+/*! LICENSE: 322456.7ed24a74d8.js.LICENSE.txt */
+export const __rspack_esm_ids=[322456];export const __webpack_modules__={GcXw(t,e,p){p.r(e);let _=(0,p("jTyp").c)("MountainSnow",[["path",{d:"m8 3 4 8 5-5 5 15H2L8 3z",key:"otkl63"}],["path",{d:"M4.14 15.08c2.62-1.57 5.24-1.43 7.86.42 2.74 1.94 5.49 2 8.23.19",key:"1pvmmp"}]]);p.d(e,{},{default:_})}};

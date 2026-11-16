@@ -1,0 +1,2 @@
+/*! LICENSE: 328619.731ea86dbe.js.LICENSE.txt */
+export const __rspack_esm_ids=[328619];export const __webpack_modules__={csth(e,t,c){c.r(t);let _=(0,c("jTyp").c)("RectangleVertical",[["rect",{width:"12",height:"20",x:"6",y:"2",rx:"2",key:"1oxtiu"}]]);c.d(t,{},{default:_})}};

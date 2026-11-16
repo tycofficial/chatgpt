@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[579634];export const __webpack_modules__={UpyX(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"initial_concentration_molar":0.1}},{"name":"Maximum supported values","initialValues":{"initial_concentration_molar":0.25}}]')}};

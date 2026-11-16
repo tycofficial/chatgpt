@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[473452];export const __webpack_modules__={Zavg(a){a.exports=JSON.parse('[{"name":"example: hcl-water","initialValues":{"example":"hcl-water"}},{"name":"example: water-ammonia","initialValues":{"example":"water-ammonia"}},{"name":"example: acetic-acid-water","initialValues":{"example":"acetic-acid-water"}}]')}};

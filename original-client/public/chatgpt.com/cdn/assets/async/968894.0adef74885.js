@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[968894];export const __webpack_modules__={Ptoo(i){i.exports=JSON.parse('[{"name":"initial_example: sports drink vs oil and vinegar","initialValues":{"initial_example":"sports drink vs oil and vinegar"}},{"name":"initial_example: air vs granite","initialValues":{"initial_example":"air vs granite"}}]')}};

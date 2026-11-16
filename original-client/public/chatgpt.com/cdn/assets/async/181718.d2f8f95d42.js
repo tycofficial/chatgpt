@@ -1,0 +1,2 @@
+/*! LICENSE: 181718.d2f8f95d42.js.LICENSE.txt */
+export const __rspack_esm_ids=[181718];export const __webpack_modules__={lrkS(e,y,l){l.r(y);let x=(0,l("jTyp").c)("Italic",[["line",{x1:"19",x2:"10",y1:"4",y2:"4",key:"15jd3p"}],["line",{x1:"14",x2:"5",y1:"20",y2:"20",key:"bu0au3"}],["line",{x1:"15",x2:"9",y1:"4",y2:"20",key:"uljnxc"}]]);l.d(y,{},{default:x})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 790716.0af9f1739b.js.LICENSE.txt */
+export const __rspack_esm_ids=[790716];export const __webpack_modules__={vLlM(e,t,_){_.r(t);let p=(0,_("jTyp").c)("PanelRight",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M15 3v18",key:"14nvp0"}]]);_.d(t,{},{default:p})}};

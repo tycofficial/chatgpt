@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[403045];export const __webpack_modules__={WbWi(s){s.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"subsidy_per_unit":0}},{"name":"Maximum supported values","initialValues":{"subsidy_per_unit":4.2}}]')}};

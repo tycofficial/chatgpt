@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[382786];export const __webpack_modules__={OOg1(s){s.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"labor_supply_shift":-1,"labor_demand_shift":-1}},{"name":"Maximum supported values","initialValues":{"labor_supply_shift":1,"labor_demand_shift":1}}]')}};

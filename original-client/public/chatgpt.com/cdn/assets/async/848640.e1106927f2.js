@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[848640];export const __webpack_modules__={JTXP(a){a.exports=JSON.parse('[{"name":"instructionExample: add","initialValues":{"instructionExample":"add"}},{"name":"instructionExample: branch","initialValues":{"instructionExample":"branch"}}]')}};

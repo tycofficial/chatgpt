@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[279872];export const __webpack_modules__={WeLF(s){s.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"mass":0.01,"gravity":0}},{"name":"Maximum supported values","initialValues":{"mass":10000,"gravity":10000}}]')}};

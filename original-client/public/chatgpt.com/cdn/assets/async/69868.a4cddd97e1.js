@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[69868];export const __webpack_modules__={aMDl(a){a.exports=JSON.parse('[{"name":"salt_example: CaF2 with NaF","initialValues":{"salt_example":"CaF2 with NaF"}},{"name":"salt_example: Mg(OH)2 with KOH","initialValues":{"salt_example":"Mg(OH)2 with KOH"}}]')}};

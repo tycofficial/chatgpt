@@ -1,0 +1,2 @@
+/*! LICENSE: 289175.1090f0cbec.js.LICENSE.txt */
+export const __rspack_esm_ids=[289175];export const __webpack_modules__={DXsp(a,e,p){p.r(e);let t=(0,p("jTyp").c)("Scaling",[["path",{d:"M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7",key:"1m0v6g"}],["path",{d:"M14 15H9v-5",key:"pi4jk9"}],["path",{d:"M16 3h5v5",key:"1806ms"}],["path",{d:"M21 3 9 15",key:"15kdhq"}]]);p.d(e,{},{default:t})}};

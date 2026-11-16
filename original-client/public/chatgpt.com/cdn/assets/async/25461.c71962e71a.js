@@ -1,0 +1,2 @@
+/*! LICENSE: 25461.c71962e71a.js.LICENSE.txt */
+export const __rspack_esm_ids=[25461];export const __webpack_modules__={e2jE(e,a,t){t.r(a);let d=(0,t("jTyp").c)("SquareDashedBottomCode",[["path",{d:"M10 9.5 8 12l2 2.5",key:"3mjy60"}],["path",{d:"M14 21h1",key:"v9vybs"}],["path",{d:"m14 9.5 2 2.5-2 2.5",key:"1bir2l"}],["path",{d:"M5 21a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2",key:"as5y1o"}],["path",{d:"M9 21h1",key:"15o7lz"}]]);t.d(a,{},{default:d})}};

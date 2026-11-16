@@ -1,0 +1,2 @@
+/*! LICENSE: 479169.d6fcec8c49.js.LICENSE.txt */
+export const __rspack_esm_ids=[479169];export const __webpack_modules__={V37N(e,a,t){t.r(a);let d=(0,t("jTyp").c)("ScreenShare",[["path",{d:"M13 3H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-3",key:"i8wdob"}],["path",{d:"M8 21h8",key:"1ev6f3"}],["path",{d:"M12 17v4",key:"1riwvh"}],["path",{d:"m17 8 5-5",key:"fqif7o"}],["path",{d:"M17 3h5v5",key:"1o3tu8"}]]);t.d(a,{},{default:d})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 723982.2ae47e26e2.js.LICENSE.txt */
+export const __rspack_esm_ids=[723982];export const __webpack_modules__={Qyhh(h,d,e){e.r(d);let t=(0,e("jTyp").c)("FlaskRound",[["path",{d:"M10 2v7.31",key:"5d1hyh"}],["path",{d:"M14 9.3V1.99",key:"14k4l0"}],["path",{d:"M8.5 2h7",key:"csnxdl"}],["path",{d:"M14 9.3a6.5 6.5 0 1 1-4 0",key:"1r8fvy"}],["path",{d:"M5.52 16h12.96",key:"46hh1i"}]]);e.d(d,{},{default:t})}};

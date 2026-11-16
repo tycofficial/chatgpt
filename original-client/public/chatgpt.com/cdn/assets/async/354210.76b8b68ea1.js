@@ -1,0 +1,2 @@
+/*! LICENSE: 354210.76b8b68ea1.js.LICENSE.txt */
+export const __rspack_esm_ids=[354210];export const __webpack_modules__={NdId(a,d,e){e.r(d);let t=(0,e("jTyp").c)("BatteryCharging",[["path",{d:"M15 7h1a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-2",key:"1sdynx"}],["path",{d:"M6 7H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h1",key:"1gkd3k"}],["path",{d:"m11 7-3 5h4l-3 5",key:"b4a64w"}],["line",{x1:"22",x2:"22",y1:"11",y2:"13",key:"4dh1rd"}]]);e.d(d,{},{default:t})}};

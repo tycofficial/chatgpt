@@ -1,0 +1,2 @@
+/*! LICENSE: 376515.c8fcd2234f.js.LICENSE.txt */
+export const __rspack_esm_ids=[376515];export const __webpack_modules__={AlNv(e,c,r){r.r(c);let t=(0,r("jTyp").c)("CircleArrowLeft",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["path",{d:"M16 12H8",key:"1fr5h0"}],["path",{d:"m12 8-4 4 4 4",key:"15vm53"}]]);r.d(c,{},{default:t})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 357643.0ef0084c08.js.LICENSE.txt */
+export const __rspack_esm_ids=[357643];export const __webpack_modules__={UBHV(t,e,a){a.r(e);let d=(0,a("jTyp").c)("SquareChartGantt",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M9 8h7",key:"kbo1nt"}],["path",{d:"M8 12h6",key:"ikassy"}],["path",{d:"M11 16h5",key:"oq65wt"}]]);a.d(e,{},{default:d})},CRoC(t,e,a){a.r(e);var d=a("UBHV");a.d(e,{default:()=>d.default})}};

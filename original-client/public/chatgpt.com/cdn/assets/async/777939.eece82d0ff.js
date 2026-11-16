@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[777939];export const __webpack_modules__={STui(s){s.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"x":-4,"mu":-1.5,"sigma":0.4}},{"name":"Maximum supported values","initialValues":{"x":4,"mu":1.5,"sigma":1.8}}]')}};

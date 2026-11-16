@@ -1,0 +1,2 @@
+/*! LICENSE: 507030.5c5c833105.js.LICENSE.txt */
+export const __rspack_esm_ids=[507030];export const __webpack_modules__={MAIE(e,a,t){t.r(a);let _=(0,t("jTyp").c)("MessageSquareText",[["path",{d:"M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z",key:"1lielz"}],["path",{d:"M13 8H7",key:"14i4kc"}],["path",{d:"M17 12H7",key:"16if0g"}]]);t.d(a,{},{default:_})}};

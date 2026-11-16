@@ -1,0 +1,2 @@
+/*! LICENSE: 274006.92619b8f07.js.LICENSE.txt */
+export const __rspack_esm_ids=[274006];export const __webpack_modules__={ityJ(e,a,t){t.r(a);let d=(0,t("jTyp").c)("ScreenShareOff",[["path",{d:"M13 3H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-3",key:"i8wdob"}],["path",{d:"M8 21h8",key:"1ev6f3"}],["path",{d:"M12 17v4",key:"1riwvh"}],["path",{d:"m22 3-5 5",key:"12jva0"}],["path",{d:"m17 3 5 5",key:"k36vhe"}]]);t.d(a,{},{default:d})}};

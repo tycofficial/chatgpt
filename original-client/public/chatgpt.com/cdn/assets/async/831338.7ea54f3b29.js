@@ -1,0 +1,2 @@
+/*! LICENSE: 831338.7ea54f3b29.js.LICENSE.txt */
+export const __rspack_esm_ids=[831338];export const __webpack_modules__={UKK5(e,t,_){_.r(t);let o=(0,_("jTyp").c)("Bluetooth",[["path",{d:"m7 7 10 10-5 5V2l5 5L7 17",key:"1q5490"}]]);_.d(t,{},{default:o})}};

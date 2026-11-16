@@ -1,0 +1,2 @@
+/*! LICENSE: 670334.a57492e038.js.LICENSE.txt */
+export const __rspack_esm_ids=[670334];export const __webpack_modules__={xJgk(e,p,t){t.r(p);let _=(0,t("jTyp").c)("CodeXml",[["path",{d:"m18 16 4-4-4-4",key:"1inbqp"}],["path",{d:"m6 8-4 4 4 4",key:"15zrgr"}],["path",{d:"m14.5 4-5 16",key:"e7oirm"}]]);t.d(p,{},{default:_})}};

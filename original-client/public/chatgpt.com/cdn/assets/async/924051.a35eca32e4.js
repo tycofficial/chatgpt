@@ -1,0 +1,2 @@
+/*! LICENSE: 924051.a35eca32e4.js.LICENSE.txt */
+export const __rspack_esm_ids=[924051];export const __webpack_modules__={Db1U(e,c,_){_.r(c);let r=(0,_("jTyp").c)("CircleMinus",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["path",{d:"M8 12h8",key:"1wcyev"}]]);_.d(c,{},{default:r})}};

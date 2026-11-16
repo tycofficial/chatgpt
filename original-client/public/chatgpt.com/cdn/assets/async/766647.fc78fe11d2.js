@@ -1,0 +1,2 @@
+/*! LICENSE: 766647.fc78fe11d2.js.LICENSE.txt */
+export const __rspack_esm_ids=[766647];export const __webpack_modules__={WWZW(e,_,t){t.r(_);let p=(0,t("jTyp").c)("WifiLow",[["path",{d:"M12 20h.01",key:"zekei9"}],["path",{d:"M8.5 16.429a5 5 0 0 1 7 0",key:"1bycff"}]]);t.d(_,{},{default:p})}};

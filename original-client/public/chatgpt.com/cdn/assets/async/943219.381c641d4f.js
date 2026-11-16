@@ -1,0 +1,2 @@
+/*! LICENSE: 943219.381c641d4f.js.LICENSE.txt */
+export const __rspack_esm_ids=[943219];export const __webpack_modules__={twot(c,e,o){o.r(e);let t=(0,o("jTyp").c)("Clock5",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["polyline",{points:"12 6 12 12 14.5 16",key:"1pcbox"}]]);o.d(e,{},{default:t})}};

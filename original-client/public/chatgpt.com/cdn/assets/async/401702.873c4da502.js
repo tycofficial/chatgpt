@@ -1,0 +1,2 @@
+/*! LICENSE: 401702.873c4da502.js.LICENSE.txt */
+export const __rspack_esm_ids=[401702];export const __webpack_modules__={SV7S(e,y,o){o.r(y);let _=(0,o("jTyp").c)("Sword",[["polyline",{points:"14.5 17.5 3 6 3 3 6 3 17.5 14.5",key:"1hfsw2"}],["line",{x1:"13",x2:"19",y1:"19",y2:"13",key:"1vrmhu"}],["line",{x1:"16",x2:"20",y1:"16",y2:"20",key:"1bron3"}],["line",{x1:"19",x2:"21",y1:"21",y2:"19",key:"13pww6"}]]);o.d(y,{},{default:_})}};

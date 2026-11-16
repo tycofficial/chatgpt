@@ -1,0 +1,2 @@
+/*! LICENSE: 352160.f67e710d4d.js.LICENSE.txt */
+export const __rspack_esm_ids=[352160];export const __webpack_modules__={UfAF(e,t,r){r.r(t);let a=(0,r("jTyp").c)("Captions",[["rect",{width:"18",height:"14",x:"3",y:"5",rx:"2",ry:"2",key:"12ruh7"}],["path",{d:"M7 15h4M15 15h2M7 11h2M13 11h4",key:"1ueiar"}]]);r.d(t,{},{default:a})},eK3u(e,t,r){r.r(t);var a=r("UfAF");r.d(t,{default:()=>a.default})}};

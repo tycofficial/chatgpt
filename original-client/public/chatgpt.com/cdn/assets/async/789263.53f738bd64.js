@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[789263];export const __webpack_modules__={JePQ(t){t.exports=JSON.parse('[{"content":"(a+b)^2 = a^2 + 2ab + b^2"},{"content":"(a-b)^2 = a^2 - 2ab + b^2"},{"content":"(x+y)^2 = x^2 + 2xy + y^2"},{"content":"(x-y)^2 = x^2 - 2xy + y^2"}]')}};

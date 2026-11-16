@@ -1,0 +1,2 @@
+/*! LICENSE: 233855.94d725b58f.js.LICENSE.txt */
+export const __rspack_esm_ids=[233855];export const __webpack_modules__={Nmz5(c,e,_){_.r(e);let r=(0,_("jTyp").c)("Music2",[["circle",{cx:"8",cy:"18",r:"4",key:"1fc0mg"}],["path",{d:"M12 18V2l7 4",key:"g04rme"}]]);_.d(e,{},{default:r})}};

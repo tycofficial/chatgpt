@@ -1,0 +1,2 @@
+/*! LICENSE: 576878.eeee279869.js.LICENSE.txt */
+export const __rspack_esm_ids=[576878];export const __webpack_modules__={zCZP(e,t,d){d.r(t);let _=(0,d("jTyp").c)("GalleryHorizontalEnd",[["path",{d:"M2 7v10",key:"a2pl2d"}],["path",{d:"M6 5v14",key:"1kq3d7"}],["rect",{width:"12",height:"18",x:"10",y:"3",rx:"2",key:"13i7bc"}]]);d.d(t,{},{default:_})}};

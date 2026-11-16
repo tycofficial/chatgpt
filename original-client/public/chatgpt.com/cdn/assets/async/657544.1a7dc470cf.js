@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[657544];export const __webpack_modules__={IWRm(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"initialHeightMeters":4,"initialVelocityMetersPerSecond":-8}},{"name":"Maximum supported values","initialValues":{"initialHeightMeters":18,"initialVelocityMetersPerSecond":8}}]')}};

@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[772331];export const __webpack_modules__={CdES(i){i.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"price_change":-2}},{"name":"Maximum supported values","initialValues":{"price_change":2}},{"name":"initial_elasticity: inelastic","initialValues":{"initial_elasticity":"inelastic"}}]')}};

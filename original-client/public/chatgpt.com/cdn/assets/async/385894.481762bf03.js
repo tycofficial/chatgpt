@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[385894];export const __webpack_modules__={qCIW(e){e.exports=JSON.parse('[{"name":"example: reverse-and-scale","initialValues":{"example":"reverse-and-scale"}}]')}};

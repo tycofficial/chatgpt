@@ -1,0 +1,2 @@
+/*! LICENSE: 495777.65a5829fe6.js.LICENSE.txt */
+export const __rspack_esm_ids=[495777];export const __webpack_modules__={EQlE(e,t,a){a.r(t);var r=a("TDgI");a.d(t,{default:()=>r.default})},TDgI(e,t,a){a.r(t);let r=(0,a("jTyp").c)("SquareArrowUp",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"m16 12-4-4-4 4",key:"177agl"}],["path",{d:"M12 16V8",key:"1sbj14"}]]);a.d(t,{},{default:r})}};

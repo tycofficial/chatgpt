@@ -1,0 +1,2 @@
+/*! LICENSE: 696363.e1440635b5.js.LICENSE.txt */
+export const __rspack_esm_ids=[696363];export const __webpack_modules__={TXma(e,t,_){_.r(t);let a=(0,_("jTyp").c)("Briefcase",[["path",{d:"M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16",key:"jecpp"}],["rect",{width:"20",height:"14",x:"2",y:"6",rx:"2",key:"i6l2r4"}]]);_.d(t,{},{default:a})}};

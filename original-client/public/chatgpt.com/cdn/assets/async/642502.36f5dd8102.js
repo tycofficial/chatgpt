@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[642502];export const __webpack_modules__={G3YE(a){a.exports=JSON.parse('[{"name":"initial_pathway: secondary-particles","initialValues":{"initial_pathway":"secondary-particles"}}]')}};

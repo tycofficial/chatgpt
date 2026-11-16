@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[600477];export const __webpack_modules__={pQDw(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"pKa1":0,"pKa2":7.5}},{"name":"Maximum supported values","initialValues":{"pKa1":6.5,"pKa2":14}}]')}};

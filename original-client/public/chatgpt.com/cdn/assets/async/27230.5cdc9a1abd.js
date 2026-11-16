@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[27230];export const __webpack_modules__={Aicn(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"firstChangePercent":-95,"secondChangePercent":-100}},{"name":"Maximum supported values","initialValues":{"firstChangePercent":100,"secondChangePercent":100}}]')}};

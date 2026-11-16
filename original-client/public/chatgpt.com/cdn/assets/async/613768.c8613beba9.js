@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[613768];export const __webpack_modules__={SXYA(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"capacity_change_percent":-35}},{"name":"Maximum supported values","initialValues":{"capacity_change_percent":35}}]')}};

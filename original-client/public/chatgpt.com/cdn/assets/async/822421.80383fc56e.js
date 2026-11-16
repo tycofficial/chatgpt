@@ -1,0 +1,2 @@
+/*! LICENSE: 822421.80383fc56e.js.LICENSE.txt */
+export const __rspack_esm_ids=[822421];export const __webpack_modules__={iGpK(t,e,p){p.r(e);let a=(0,p("jTyp").c)("Baby",[["path",{d:"M9 12h.01",key:"157uk2"}],["path",{d:"M15 12h.01",key:"1k8ypt"}],["path",{d:"M10 16c.5.3 1.2.5 2 .5s1.5-.2 2-.5",key:"1u7htd"}],["path",{d:"M19 6.3a9 9 0 0 1 1.8 3.9 2 2 0 0 1 0 3.6 9 9 0 0 1-17.6 0 2 2 0 0 1 0-3.6A9 9 0 0 1 12 3c2 0 3.5 1.1 3.5 2.5s-.9 2.5-2 2.5c-.8 0-1.5-.4-1.5-1",key:"5yv0yz"}]]);p.d(e,{},{default:a})}};

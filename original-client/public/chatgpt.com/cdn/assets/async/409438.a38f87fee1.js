@@ -1,0 +1,2 @@
+/*! LICENSE: 409438.a38f87fee1.js.LICENSE.txt */
+export const __rspack_esm_ids=[409438];export const __webpack_modules__={giAX(a,e,t){t.r(e);let _=(0,t("jTyp").c)("MoonStar",[["path",{d:"M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9",key:"4ay0iu"}],["path",{d:"M20 3v4",key:"1olli1"}],["path",{d:"M22 5h-4",key:"1gvqau"}]]);t.d(e,{},{default:_})}};

@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[350940];export const __webpack_modules__={ZFTk(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"optionCount":4,"sequenceLength":2}},{"name":"Maximum supported values","initialValues":{"optionCount":8,"sequenceLength":4}},{"name":"replacementMode: without","initialValues":{"replacementMode":"without"}}]')}};

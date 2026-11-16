@@ -1,0 +1,2 @@
+/*! LICENSE: 875556.e636343bc6.js.LICENSE.txt */
+export const __rspack_esm_ids=[875556];export const __webpack_modules__={qeL3(e,_,s){s.r(_);let t=(0,s("jTyp").c)("Flag",[["path",{d:"M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z",key:"i9b6wo"}],["line",{x1:"4",x2:"4",y1:"22",y2:"15",key:"1cm3nv"}]]);s.d(_,{},{default:t})}};

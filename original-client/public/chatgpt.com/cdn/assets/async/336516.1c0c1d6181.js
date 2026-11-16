@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[336516];export const __webpack_modules__={HjHP(e){e.exports=JSON.parse('[{"name":"fermentation_type: alcohol","initialValues":{"fermentation_type":"alcohol"}}]')}};

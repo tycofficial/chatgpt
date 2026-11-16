@@ -1,0 +1,2 @@
+/*! LICENSE: 568253.df664daf23.js.LICENSE.txt */
+export const __rspack_esm_ids=[568253];export const __webpack_modules__={tvTu(e,t,a){a.r(t);let _=(0,a("jTyp").c)("FolderCheck",[["path",{d:"M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z",key:"1kt360"}],["path",{d:"m9 13 2 2 4-4",key:"6343dt"}]]);a.d(t,{},{default:_})}};

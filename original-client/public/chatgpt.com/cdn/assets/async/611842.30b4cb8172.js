@@ -1,0 +1,2 @@
+/*! LICENSE: 611842.30b4cb8172.js.LICENSE.txt */
+export const __rspack_esm_ids=[611842];export const __webpack_modules__={nphR(e,c,t){t.r(c);let _=(0,t("jTyp").c)("Banknote",[["rect",{width:"20",height:"12",x:"2",y:"6",rx:"2",key:"9lu3g6"}],["circle",{cx:"12",cy:"12",r:"2",key:"1c9p78"}],["path",{d:"M6 12h.01M18 12h.01",key:"113zkx"}]]);t.d(c,{},{default:_})}};

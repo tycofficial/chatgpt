@@ -1,0 +1,2 @@
+/*! LICENSE: 967843.4de1aa57ba.js.LICENSE.txt */
+export const __rspack_esm_ids=[967843];export const __webpack_modules__={DRJe(e,t,d){d.r(t);let a=(0,d("jTyp").c)("PanelTopDashed",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M14 9h1",key:"l0svgy"}],["path",{d:"M19 9h2",key:"te2zfg"}],["path",{d:"M3 9h2",key:"1h4ldw"}],["path",{d:"M9 9h1",key:"15jzuz"}]]);d.d(t,{},{default:a})},nMk6(e,t,d){d.r(t);var a=d("DRJe");d.d(t,{default:()=>a.default})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 530716.2eb0ff0825.js.LICENSE.txt */
+export const __rspack_esm_ids=[530716];export const __webpack_modules__={bKsD(e,s,_){_.r(s);let t=(0,_("jTyp").c)("MessageCircle",[["path",{d:"M7.9 20A9 9 0 1 0 4 16.1L2 22Z",key:"vv11sd"}]]);_.d(s,{},{default:t})}};

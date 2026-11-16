@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[324892];export const __webpack_modules__={wJNG(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"incidentAngleDeg":10}},{"name":"Maximum supported values","initialValues":{"incidentAngleDeg":75}}]')}};

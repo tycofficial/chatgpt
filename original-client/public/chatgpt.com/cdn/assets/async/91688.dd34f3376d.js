@@ -1,0 +1,2 @@
+/*! LICENSE: 91688.dd34f3376d.js.LICENSE.txt */
+export const __rspack_esm_ids=[91688];export const __webpack_modules__={f7uL(e,t,r){r.r(t);let _=(0,r("jTyp").c)("Battery",[["rect",{width:"16",height:"10",x:"2",y:"7",rx:"2",ry:"2",key:"1w10f2"}],["line",{x1:"22",x2:"22",y1:"11",y2:"13",key:"4dh1rd"}]]);r.d(t,{},{default:_})}};

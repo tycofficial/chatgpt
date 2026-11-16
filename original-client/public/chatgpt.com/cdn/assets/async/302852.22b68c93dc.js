@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[302852];export const __webpack_modules__={I6VU(a){a.exports=JSON.parse('[{"name":"alcohol_class: secondary","initialValues":{"alcohol_class":"secondary"}},{"name":"alcohol_class: tertiary","initialValues":{"alcohol_class":"tertiary"}},{"name":"oxidation_conditions: strong-aqueous","initialValues":{"oxidation_conditions":"strong-aqueous"}}]')}};

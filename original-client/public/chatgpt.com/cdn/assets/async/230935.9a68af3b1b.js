@@ -1,0 +1,2 @@
+/*! LICENSE: 230935.9a68af3b1b.js.LICENSE.txt */
+export const __rspack_esm_ids=[230935];export const __webpack_modules__={krfC(e,c,r){r.r(c);let _=(0,r("jTyp").c)("CircleArrowUp",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["path",{d:"m16 12-4-4-4 4",key:"177agl"}],["path",{d:"M12 16V8",key:"1sbj14"}]]);r.d(c,{},{default:_})}};

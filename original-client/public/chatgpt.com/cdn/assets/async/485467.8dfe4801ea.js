@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[485467];export const __webpack_modules__={eFDN(n){n.exports=JSON.parse('[{"name":"nutrient: protein","initialValues":{"nutrient":"protein"}},{"name":"nutrient: long-chain fat","initialValues":{"nutrient":"long-chain fat"}}]')}};

@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[845506];export const __webpack_modules__={swTQ(a){a.exports=JSON.parse('[{"name":"aminoAcidExample: glycine and alanine","initialValues":{"aminoAcidExample":"glycine and alanine"}},{"name":"aminoAcidExample: serine and valine","initialValues":{"aminoAcidExample":"serine and valine"}}]')}};

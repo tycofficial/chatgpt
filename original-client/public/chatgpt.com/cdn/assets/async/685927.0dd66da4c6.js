@@ -1,0 +1,2 @@
+/*! LICENSE: 685927.0dd66da4c6.js.LICENSE.txt */
+export const __rspack_esm_ids=[685927];export const __webpack_modules__={fxVT(e,t,p){p.r(t);let d=(0,p("jTyp").c)("ArrowUpNarrowWide",[["path",{d:"m3 8 4-4 4 4",key:"11wl7u"}],["path",{d:"M7 4v16",key:"1glfcx"}],["path",{d:"M11 12h4",key:"q8tih4"}],["path",{d:"M11 16h7",key:"uosisv"}],["path",{d:"M11 20h10",key:"jvxblo"}]]);p.d(t,{},{default:d})}};

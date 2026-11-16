@@ -1,0 +1,2 @@
+/*! LICENSE: 228352.b952c0bd18.js.LICENSE.txt */
+export const __rspack_esm_ids=[228352];export const __webpack_modules__={Lurb(e,p,a){a.r(p);var t=a("gXlp");a.d(p,{default:()=>t.default})},gXlp(e,p,a){a.r(p);let t=(0,a("jTyp").c)("TriangleAlert",[["path",{d:"m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3",key:"wmoenq"}],["path",{d:"M12 9v4",key:"juzpu7"}],["path",{d:"M12 17h.01",key:"p32p05"}]]);a.d(p,{},{default:t})}};

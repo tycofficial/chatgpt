@@ -1,0 +1,2 @@
+/*! LICENSE: 640103.90afd4a1b9.js.LICENSE.txt */
+export const __rspack_esm_ids=[640103];export const __webpack_modules__={hBgb(e,t,_){_.r(t);let c=(0,_("jTyp").c)("MessageCircleOff",[["path",{d:"M20.5 14.9A9 9 0 0 0 9.1 3.5",key:"1iebmn"}],["path",{d:"m2 2 20 20",key:"1ooewy"}],["path",{d:"M5.6 5.6C3 8.3 2.2 12.5 4 16l-2 6 6-2c3.4 1.8 7.6 1.1 10.3-1.7",key:"1ov8ce"}]]);_.d(t,{},{default:c})}};

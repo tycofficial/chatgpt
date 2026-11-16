@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[955727];export const __webpack_modules__={XKQh(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"loop_limit":3,"break_value":1}},{"name":"Maximum supported values","initialValues":{"loop_limit":5,"break_value":6}},{"name":"loop_kind: while","initialValues":{"loop_kind":"while"}}]')}};

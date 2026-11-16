@@ -1,0 +1,2 @@
+/*! LICENSE: 207457.3f1c98176b.js.LICENSE.txt */
+export const __rspack_esm_ids=[207457];export const __webpack_modules__={QkUF(e,a,t){t.r(a);let p=(0,t("jTyp").c)("TimerOff",[["path",{d:"M10 2h4",key:"n1abiw"}],["path",{d:"M4.6 11a8 8 0 0 0 1.7 8.7 8 8 0 0 0 8.7 1.7",key:"10he05"}],["path",{d:"M7.4 7.4a8 8 0 0 1 10.3 1 8 8 0 0 1 .9 10.2",key:"15f7sh"}],["path",{d:"m2 2 20 20",key:"1ooewy"}],["path",{d:"M12 12v-2",key:"fwoke6"}]]);t.d(a,{},{default:p})}};

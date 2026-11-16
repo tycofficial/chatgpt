@@ -1,0 +1,2 @@
+/*! LICENSE: 96682.4055398e6b.js.LICENSE.txt */
+export const __rspack_esm_ids=[96682];export const __webpack_modules__={xj4l(e,p,t){t.r(p);let _=(0,t("jTyp").c)("ReceiptEuro",[["path",{d:"M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z",key:"q3az6g"}],["path",{d:"M8 12h5",key:"1g6qi8"}],["path",{d:"M16 9.5a4 4 0 1 0 0 5.2",key:"b2px4r"}]]);t.d(p,{},{default:_})}};

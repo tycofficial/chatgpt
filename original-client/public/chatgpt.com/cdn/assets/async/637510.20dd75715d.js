@@ -1,0 +1,2 @@
+/*! LICENSE: 637510.20dd75715d.js.LICENSE.txt */
+export const __rspack_esm_ids=[637510];export const __webpack_modules__={tLuN(e,_,t){t.r(_);let a=(0,t("jTyp").c)("Facebook",[["path",{d:"M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z",key:"1jg4f8"}]]);t.d(_,{},{default:a})}};

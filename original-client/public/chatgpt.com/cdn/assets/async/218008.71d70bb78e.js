@@ -1,0 +1,2 @@
+/*! LICENSE: 218008.71d70bb78e.js.LICENSE.txt */
+export const __rspack_esm_ids=[218008];export const __webpack_modules__={Orfe(e,c,_){_.r(c);let l=(0,_("jTyp").c)("Clock10",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["polyline",{points:"12 6 12 12 8 10",key:"atfzqc"}]]);_.d(c,{},{default:l})}};

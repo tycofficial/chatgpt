@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[627178];export const __webpack_modules__={VKDe(e){e.exports=JSON.parse('[{"name":"ecosystem: pond","initialValues":{"ecosystem":"pond"}},{"name":"ecosystem: ocean","initialValues":{"ecosystem":"ocean"}}]')}};

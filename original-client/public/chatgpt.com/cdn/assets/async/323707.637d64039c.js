@@ -1,0 +1,2 @@
+/*! LICENSE: 323707.637d64039c.js.LICENSE.txt */
+export const __rspack_esm_ids=[323707];export const __webpack_modules__={U7uH(e,_,c){c.r(_);let t=(0,c("jTyp").c)("Space",[["path",{d:"M22 17v1c0 .5-.5 1-1 1H3c-.5 0-1-.5-1-1v-1",key:"lt2kga"}]]);c.d(_,{},{default:t})}};

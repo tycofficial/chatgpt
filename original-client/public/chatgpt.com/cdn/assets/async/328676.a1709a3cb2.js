@@ -1,0 +1,2 @@
+/*! LICENSE: 328676.a1709a3cb2.js.LICENSE.txt */
+export const __rspack_esm_ids=[328676];export const __webpack_modules__={Znj2(e,t,p){p.r(t);let _=(0,p("jTyp").c)("Rows4",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M21 7.5H3",key:"1hm9pq"}],["path",{d:"M21 12H3",key:"2avoz0"}],["path",{d:"M21 16.5H3",key:"n7jzkj"}]]);p.d(t,{},{default:_})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 848702.98c47b882f.js.LICENSE.txt */
+export const __rspack_esm_ids=[848702];export const __webpack_modules__={fpaU(e,t,p){p.r(t);let s=(0,p("jTyp").c)("PanelBottomOpen",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M3 15h18",key:"5xshup"}],["path",{d:"m9 10 3-3 3 3",key:"11gsxs"}]]);p.d(t,{},{default:s})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 697337.6d14ad3fd3.js.LICENSE.txt */
+export const __rspack_esm_ids=[697337];export const __webpack_modules__={ylXP(e,t,p){p.r(t);let _=(0,p("jTyp").c)("CircleArrowOutDownLeft",[["path",{d:"M2 12a10 10 0 1 1 10 10",key:"1yn6ov"}],["path",{d:"m2 22 10-10",key:"28ilpk"}],["path",{d:"M8 22H2v-6",key:"sulq54"}]]);p.d(t,{},{default:_})}};

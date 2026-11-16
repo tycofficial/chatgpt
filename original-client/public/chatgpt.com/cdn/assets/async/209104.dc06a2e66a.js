@@ -1,0 +1,2 @@
+/*! LICENSE: 209104.dc06a2e66a.js.LICENSE.txt */
+export const __rspack_esm_ids=[209104];export const __webpack_modules__={cbVr(e,t,h){h.r(t);let r=(0,h("jTyp").c)("MonitorDown",[["path",{d:"M12 13V7",key:"h0r20n"}],["path",{d:"m15 10-3 3-3-3",key:"lzhmyn"}],["rect",{width:"20",height:"14",x:"2",y:"3",rx:"2",key:"48i651"}],["path",{d:"M12 17v4",key:"1riwvh"}],["path",{d:"M8 21h8",key:"1ev6f3"}]]);h.d(t,{},{default:r})}};

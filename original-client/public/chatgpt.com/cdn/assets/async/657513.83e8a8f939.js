@@ -1,0 +1,2 @@
+/*! LICENSE: 657513.83e8a8f939.js.LICENSE.txt */
+export const __rspack_esm_ids=[657513];export const __webpack_modules__={w6gF(e,t,r){r.r(t);var a=r("QkDO");r.d(t,{default:()=>a.default})},QkDO(e,t,r){r.r(t);let a=(0,r("jTyp").c)("SquareChevronRight",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"m10 8 4 4-4 4",key:"1wy4r4"}]]);r.d(t,{},{default:a})}};

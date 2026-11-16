@@ -1,0 +1,2 @@
+/*! LICENSE: 983344.cf696556ec.js.LICENSE.txt */
+export const __rspack_esm_ids=[983344];export const __webpack_modules__={AHI2(a,e,t){t.r(e);let h=(0,t("jTyp").c)("ScanText",[["path",{d:"M3 7V5a2 2 0 0 1 2-2h2",key:"aa7l1z"}],["path",{d:"M17 3h2a2 2 0 0 1 2 2v2",key:"4qcy5o"}],["path",{d:"M21 17v2a2 2 0 0 1-2 2h-2",key:"6vwrx8"}],["path",{d:"M7 21H5a2 2 0 0 1-2-2v-2",key:"ioqczr"}],["path",{d:"M7 8h8",key:"1jbsf9"}],["path",{d:"M7 12h10",key:"b7w52i"}],["path",{d:"M7 16h6",key:"1vyc9m"}]]);t.d(e,{},{default:h})}};

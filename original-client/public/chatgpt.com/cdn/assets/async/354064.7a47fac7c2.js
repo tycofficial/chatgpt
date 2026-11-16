@@ -1,0 +1,2 @@
+/*! LICENSE: 354064.7a47fac7c2.js.LICENSE.txt */
+export const __rspack_esm_ids=[354064];export const __webpack_modules__={NyI9(e,a,t){t.r(a);let _=(0,t("jTyp").c)("MailCheck",[["path",{d:"M22 13V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v12c0 1.1.9 2 2 2h8",key:"12jkf8"}],["path",{d:"m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7",key:"1ocrg3"}],["path",{d:"m16 19 2 2 4-4",key:"1b14m6"}]]);t.d(a,{},{default:_})}};

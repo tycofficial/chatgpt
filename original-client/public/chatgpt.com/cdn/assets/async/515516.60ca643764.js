@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[515516];export const __webpack_modules__={xoBX(a){a.exports=JSON.parse('[{"name":"waste_stream: packaging","initialValues":{"waste_stream":"packaging"}},{"name":"waste_stream: food","initialValues":{"waste_stream":"food"}},{"name":"waste_stream: clothing","initialValues":{"waste_stream":"clothing"}}]')}};

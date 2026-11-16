@@ -1,0 +1,2 @@
+/*! LICENSE: 976790.7bcac545ce.js.LICENSE.txt */
+export const __rspack_esm_ids=[976790];export const __webpack_modules__={e3CR(e,a,t){t.r(a);let p=(0,t("jTyp").c)("ChartColumnIncreasing",[["path",{d:"M13 17V9",key:"1fwyjl"}],["path",{d:"M18 17V5",key:"sfb6ij"}],["path",{d:"M3 3v16a2 2 0 0 0 2 2h16",key:"c24i48"}],["path",{d:"M8 17v-3",key:"17ska0"}]]);t.d(a,{},{default:p})}};

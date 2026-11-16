@@ -1,0 +1,2 @@
+/*! LICENSE: 438937.3274c549da.js.LICENSE.txt */
+export const __rspack_esm_ids=[438937];export const __webpack_modules__={EEQ9(e,t,_){_.r(t);let r=(0,_("jTyp").c)("SquareM",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M8 16V8l4 4 4-4v8",key:"141u4e"}]]);_.d(t,{},{default:r})}};

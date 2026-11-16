@@ -1,0 +1,2 @@
+/*! LICENSE: 684182.aec370b5fe.js.LICENSE.txt */
+export const __rspack_esm_ids=[684182];export const __webpack_modules__={bglQ(e,a,_){_.r(a);let s=(0,_("jTyp").c)("MessageSquare",[["path",{d:"M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z",key:"1lielz"}]]);_.d(a,{},{default:s})}};

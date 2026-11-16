@@ -1,0 +1,2 @@
+/*! LICENSE: 306114.7ca159ed38.js.LICENSE.txt */
+export const __rspack_esm_ids=[306114];export const __webpack_modules__={AGql(e,a,t){t.r(a);let _=(0,t("jTyp").c)("Kanban",[["path",{d:"M6 5v11",key:"mdvv1e"}],["path",{d:"M12 5v6",key:"14ar3b"}],["path",{d:"M18 5v14",key:"7ji314"}]]);t.d(a,{},{default:_})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 931900.78fb01e53d.js.LICENSE.txt */
+export const __rspack_esm_ids=[931900];export const __webpack_modules__={XmJm(c,e,r){r.r(e);let t=(0,r("jTyp").c)("Scissors",[["circle",{cx:"6",cy:"6",r:"3",key:"1lh9wr"}],["path",{d:"M8.12 8.12 12 12",key:"1alkpv"}],["path",{d:"M20 4 8.12 15.88",key:"xgtan2"}],["circle",{cx:"6",cy:"18",r:"3",key:"fqmcym"}],["path",{d:"M14.8 14.8 20 20",key:"ptml3r"}]]);r.d(e,{},{default:t})}};

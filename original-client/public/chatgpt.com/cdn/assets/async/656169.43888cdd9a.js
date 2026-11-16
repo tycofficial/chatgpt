@@ -1,0 +1,2 @@
+/*! LICENSE: 656169.43888cdd9a.js.LICENSE.txt */
+export const __rspack_esm_ids=[656169];export const __webpack_modules__={LKIj(e,p,t){t.r(p);let _=(0,t("jTyp").c)("JapaneseYen",[["path",{d:"M12 9.5V21m0-11.5L6 3m6 6.5L18 3",key:"2ej80x"}],["path",{d:"M6 15h12",key:"1hwgt5"}],["path",{d:"M6 11h12",key:"wf4gp6"}]]);t.d(p,{},{default:_})}};

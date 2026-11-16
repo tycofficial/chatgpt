@@ -1,0 +1,2 @@
+/*! LICENSE: 913660.75bf68fc0f.js.LICENSE.txt */
+export const __rspack_esm_ids=[913660];export const __webpack_modules__={Odze(e,t,a){a.r(t);var d=a("Vjni");a.d(t,{default:()=>d.default})},Vjni(e,t,a){a.r(t);let d=(0,a("jTyp").c)("SquareFunction",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",ry:"2",key:"1m3agn"}],["path",{d:"M9 17c2 0 2.8-1 2.8-2.8V10c0-2 1-3.3 3.2-3",key:"m1af9g"}],["path",{d:"M9 11.2h5.7",key:"3zgcl2"}]]);a.d(t,{},{default:d})}};

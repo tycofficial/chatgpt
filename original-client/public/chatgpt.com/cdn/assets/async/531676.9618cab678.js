@@ -1,0 +1,2 @@
+/*! LICENSE: 531676.9618cab678.js.LICENSE.txt */
+export const __rspack_esm_ids=[531676];export const __webpack_modules__={f5VI(_,e,a){a.r(e);let o=(0,a("jTyp").c)("Bookmark",[["path",{d:"m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z",key:"1fy3hk"}]]);a.d(e,{},{default:o})}};

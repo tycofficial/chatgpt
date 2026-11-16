@@ -1,0 +1,2 @@
+/*! LICENSE: 903743.a5a55036f8.js.LICENSE.txt */
+export const __rspack_esm_ids=[903743];export const __webpack_modules__={L0il(e,t,a){a.r(t);var d=a("Jcyz");a.d(t,{default:()=>d.default})},Jcyz(e,t,a){a.r(t);let d=(0,a("jTyp").c)("SquareSlash",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["line",{x1:"9",x2:"15",y1:"15",y2:"9",key:"1dfufj"}]]);a.d(t,{},{default:d})}};

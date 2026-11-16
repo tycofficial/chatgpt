@@ -1,0 +1,2 @@
+/*! LICENSE: 301907.f3ca6a88c3.js.LICENSE.txt */
+export const __rspack_esm_ids=[301907];export const __webpack_modules__={FKGE(e,t,p){p.r(t);let _=(0,p("jTyp").c)("MoveVertical",[["path",{d:"M12 2v20",key:"t6zp3m"}],["path",{d:"m8 18 4 4 4-4",key:"bh5tu3"}],["path",{d:"m8 6 4-4 4 4",key:"ybng9g"}]]);p.d(t,{},{default:_})}};

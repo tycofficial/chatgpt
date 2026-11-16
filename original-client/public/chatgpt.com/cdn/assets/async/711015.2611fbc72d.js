@@ -1,0 +1,2 @@
+/*! LICENSE: 711015.2611fbc72d.js.LICENSE.txt */
+export const __rspack_esm_ids=[711015];export const __webpack_modules__={T3Si(e,t,p){p.r(t);let d=(0,p("jTyp").c)("CalendarX",[["path",{d:"M8 2v4",key:"1cmpym"}],["path",{d:"M16 2v4",key:"4m81vk"}],["rect",{width:"18",height:"18",x:"3",y:"4",rx:"2",key:"1hopcy"}],["path",{d:"M3 10h18",key:"8toen8"}],["path",{d:"m14 14-4 4",key:"rymu2i"}],["path",{d:"m10 14 4 4",key:"3sz06r"}]]);p.d(t,{},{default:d})}};

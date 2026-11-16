@@ -1,0 +1,2 @@
+/*! LICENSE: 113047.8e9e7deced.js.LICENSE.txt */
+export const __rspack_esm_ids=[113047];export const __webpack_modules__={Fhho(e,t,r){r.r(t);let h=(0,r("jTyp").c)("StretchHorizontal",[["rect",{width:"20",height:"6",x:"2",y:"4",rx:"2",key:"qdearl"}],["rect",{width:"20",height:"6",x:"2",y:"14",rx:"2",key:"1xrn6j"}]]);r.d(t,{},{default:h})}};

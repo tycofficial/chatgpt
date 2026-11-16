@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[661094];export const __webpack_modules__={Xliz(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"force":1,"displacement":1,"angle":0}},{"name":"Maximum supported values","initialValues":{"force":10,"displacement":8,"angle":180}}]')}};

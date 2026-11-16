@@ -1,0 +1,2 @@
+/*! LICENSE: 35660.97cf74b0f6.js.LICENSE.txt */
+export const __rspack_esm_ids=[35660];export const __webpack_modules__={hmVL(e,t,_){_.r(t);let r=(0,_("jTyp").c)("Vibrate",[["path",{d:"m2 8 2 2-2 2 2 2-2 2",key:"sv1b1"}],["path",{d:"m22 8-2 2 2 2-2 2 2 2",key:"101i4y"}],["rect",{width:"8",height:"14",x:"8",y:"5",rx:"1",key:"1oyrl4"}]]);_.d(t,{},{default:r})}};

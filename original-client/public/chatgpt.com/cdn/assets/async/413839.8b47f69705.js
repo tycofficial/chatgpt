@@ -1,0 +1,2 @@
+/*! LICENSE: 413839.8b47f69705.js.LICENSE.txt */
+export const __rspack_esm_ids=[413839];export const __webpack_modules__={FXKW(e,t,a){a.r(t);var d=a("Y9op");a.d(t,{default:()=>d.default})},Y9op(e,t,a){a.r(t);let d=(0,a("jTyp").c)("SquareParking",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M9 17V7h4a3 3 0 0 1 0 6H9",key:"1dfk2c"}]]);a.d(t,{},{default:d})}};

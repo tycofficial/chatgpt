@@ -1,0 +1,2 @@
+/*! LICENSE: 793024.6f16634b29.js.LICENSE.txt */
+export const __rspack_esm_ids=[793024];export const __webpack_modules__={wL3V(p,e,t){t.r(e);let k=(0,t("jTyp").c)("ClockArrowUp",[["path",{d:"M13.228 21.925A10 10 0 1 1 21.994 12.338",key:"1fzlyi"}],["path",{d:"M12 6v6l1.562.781",key:"1ujuk9"}],["path",{d:"m14 18 4-4 4 4",key:"ftkppy"}],["path",{d:"M18 22v-8",key:"su0gjh"}]]);t.d(e,{},{default:k})}};

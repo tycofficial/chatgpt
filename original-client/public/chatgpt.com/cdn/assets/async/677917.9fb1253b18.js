@@ -1,0 +1,2 @@
+/*! LICENSE: 677917.9fb1253b18.js.LICENSE.txt */
+export const __rspack_esm_ids=[677917];export const __webpack_modules__={R2ri(e,d,p){p.r(d);let t=(0,p("jTyp").c)("Heading4",[["path",{d:"M4 12h8",key:"17cfdx"}],["path",{d:"M4 18V6",key:"1rz3zl"}],["path",{d:"M12 18V6",key:"zqpxq5"}],["path",{d:"M17 10v4h4",key:"13sv97"}],["path",{d:"M21 10v8",key:"1kdml4"}]]);p.d(d,{},{default:t})}};

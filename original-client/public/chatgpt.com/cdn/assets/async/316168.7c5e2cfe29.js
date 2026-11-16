@@ -1,0 +1,2 @@
+/*! LICENSE: 316168.7c5e2cfe29.js.LICENSE.txt */
+export const __rspack_esm_ids=[316168];export const __webpack_modules__={CNHQ(e,_,t){t.r(_);let d=(0,t("jTyp").c)("Undo",[["path",{d:"M3 7v6h6",key:"1v2h90"}],["path",{d:"M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13",key:"1r6uu6"}]]);t.d(_,{},{default:d})}};

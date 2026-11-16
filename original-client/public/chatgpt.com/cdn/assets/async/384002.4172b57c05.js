@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[384002];export const __webpack_modules__={DuiF(e){e.exports=JSON.parse('[{"name":"solvent: benzene","initialValues":{"solvent":"benzene"}},{"name":"solvent: cyclohexane","initialValues":{"solvent":"cyclohexane"}}]')}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 207219.985f3fe19d.js.LICENSE.txt */
+export const __rspack_esm_ids=[207219];export const __webpack_modules__={qLgi(a,e,t){t.r(e);let p=(0,t("jTyp").c)("BookA",[["path",{d:"M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20",key:"k3hazp"}],["path",{d:"m8 13 4-7 4 7",key:"4rari8"}],["path",{d:"M9.1 11h5.7",key:"1gkovt"}]]);t.d(e,{},{default:p})}};

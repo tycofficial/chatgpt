@@ -1,0 +1,2 @@
+/*! LICENSE: 260115.9b8f45a3a1.js.LICENSE.txt */
+export const __rspack_esm_ids=[260115];export const __webpack_modules__={W8LK(e,t,d){d.r(t);let _=(0,d("jTyp").c)("Dice2",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",ry:"2",key:"1m3agn"}],["path",{d:"M15 9h.01",key:"x1ddxp"}],["path",{d:"M9 15h.01",key:"fzyn71"}]]);d.d(t,{},{default:_})}};

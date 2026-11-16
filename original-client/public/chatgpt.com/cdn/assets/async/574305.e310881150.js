@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[574305];export const __webpack_modules__={CGFG(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"tStatistic":-5,"degreesOfFreedom":1}},{"name":"Maximum supported values","initialValues":{"tStatistic":5,"degreesOfFreedom":50}},{"name":"testType: one_sided","initialValues":{"testType":"one_sided"}}]')}};

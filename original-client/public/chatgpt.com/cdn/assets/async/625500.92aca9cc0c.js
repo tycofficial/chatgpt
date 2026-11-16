@@ -1,0 +1,2 @@
+/*! LICENSE: 625500.92aca9cc0c.js.LICENSE.txt */
+export const __rspack_esm_ids=[625500];export const __webpack_modules__={RY5Q(t,e,a){a.r(e);let h=(0,a("jTyp").c)("ChartGantt",[["path",{d:"M10 6h8",key:"zvc2xc"}],["path",{d:"M12 16h6",key:"yi5mkt"}],["path",{d:"M3 3v16a2 2 0 0 0 2 2h16",key:"c24i48"}],["path",{d:"M8 11h7",key:"wz2hg0"}]]);a.d(e,{},{default:h})}};

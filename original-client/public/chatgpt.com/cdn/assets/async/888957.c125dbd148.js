@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[888957];export const __webpack_modules__={O5Sr(a){a.exports=JSON.parse('[{"name":"population_pair: rabbit-and-fox","initialValues":{"population_pair":"rabbit-and-fox"}},{"name":"population_pair: generic-prey-and-predator","initialValues":{"population_pair":"generic-prey-and-predator"}}]')}};

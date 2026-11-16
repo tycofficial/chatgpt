@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[570748];export const __webpack_modules__={oxrr(a){a.exports=JSON.parse('[{"name":"island_area: small","initialValues":{"island_area":"small"}},{"name":"isolation: far","initialValues":{"isolation":"far"}},{"name":"Small, far island","initialValues":{"island_area":"small","isolation":"far"}}]')}};

@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[746215];export const __webpack_modules__={aaiB(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"labor":1}},{"name":"Maximum supported values","initialValues":{"labor":8}}]')}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 934754.9a90b81ed0.js.LICENSE.txt */
+export const __rspack_esm_ids=[934754];export const __webpack_modules__={l4fy(e,s,_){_.r(s);let d=(0,_("jTyp").c)("Undo2",[["path",{d:"M9 14 4 9l5-5",key:"102s5s"}],["path",{d:"M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11",key:"f3b9sd"}]]);_.d(s,{},{default:d})}};

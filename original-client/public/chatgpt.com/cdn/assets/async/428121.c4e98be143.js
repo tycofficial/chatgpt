@@ -1,0 +1,2 @@
+/*! LICENSE: 428121.c4e98be143.js.LICENSE.txt */
+export const __rspack_esm_ids=[428121];export const __webpack_modules__={bQIt(t,a,e){e.r(a);let _=(0,e("jTyp").c)("StickyNote",[["path",{d:"M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8Z",key:"qazsjp"}],["path",{d:"M15 3v4a2 2 0 0 0 2 2h4",key:"40519r"}]]);e.d(a,{},{default:_})}};

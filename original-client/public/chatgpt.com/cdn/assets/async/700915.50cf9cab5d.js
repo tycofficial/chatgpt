@@ -1,0 +1,2 @@
+/*! LICENSE: 700915.50cf9cab5d.js.LICENSE.txt */
+export const __rspack_esm_ids=[700915];export const __webpack_modules__={oGOv(e,_,o){o.r(_);let t=(0,o("jTyp").c)("Axe",[["path",{d:"m14 12-8.5 8.5a2.12 2.12 0 1 1-3-3L11 9",key:"csbz4o"}],["path",{d:"M15 13 9 7l4-4 6 6h3a8 8 0 0 1-7 7z",key:"113wfo"}]]);o.d(_,{},{default:t})}};

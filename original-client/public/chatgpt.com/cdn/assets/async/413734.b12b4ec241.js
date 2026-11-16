@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[413734];export const __webpack_modules__={olze(e){e.exports=JSON.parse('[{"name":"example: food coloring","initialValues":{"example":"food coloring"}},{"name":"example: leaf pigments","initialValues":{"example":"leaf pigments"}}]')}};

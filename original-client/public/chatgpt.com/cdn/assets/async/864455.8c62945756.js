@@ -1,0 +1,2 @@
+/*! LICENSE: 864455.8c62945756.js.LICENSE.txt */
+export const __rspack_esm_ids=[864455];export const __webpack_modules__={rUG0(a,e,t){t.r(e);let p=(0,t("jTyp").c)("CookingPot",[["path",{d:"M2 12h20",key:"9i4pu4"}],["path",{d:"M20 12v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-8",key:"u0tga0"}],["path",{d:"m4 8 16-4",key:"16g0ng"}],["path",{d:"m8.86 6.78-.45-1.81a2 2 0 0 1 1.45-2.43l1.94-.48a2 2 0 0 1 2.43 1.46l.45 1.8",key:"12cejc"}]]);t.d(e,{},{default:p})}};

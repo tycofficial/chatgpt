@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[145909];export const __webpack_modules__={GeJE(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"heatKj":0}},{"name":"Maximum supported values","initialValues":{"heatKj":60}},{"name":"material: copper","initialValues":{"material":"copper"}},{"name":"material: sand","initialValues":{"material":"sand"}}]')}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 458558.ae220ec813.js.LICENSE.txt */
+export const __rspack_esm_ids=[458558];export const __webpack_modules__={H7hf(t,o,_){_.r(o);let e=(0,_("jTyp").c)("Navigation",[["polygon",{points:"3 11 22 2 13 21 11 13 3 11",key:"1ltx0t"}]]);_.d(o,{},{default:e})}};

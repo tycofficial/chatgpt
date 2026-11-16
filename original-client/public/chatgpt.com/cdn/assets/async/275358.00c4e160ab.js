@@ -1,0 +1,2 @@
+/*! LICENSE: 275358.00c4e160ab.js.LICENSE.txt */
+export const __rspack_esm_ids=[275358];export const __webpack_modules__={Qtvy(e,t,_){_.r(t);let p=(0,_("jTyp").c)("MoveLeft",[["path",{d:"M6 8L2 12L6 16",key:"kyvwex"}],["path",{d:"M2 12H22",key:"1m8cig"}]]);_.d(t,{},{default:p})}};

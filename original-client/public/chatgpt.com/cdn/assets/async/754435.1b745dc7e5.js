@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[754435];export const __webpack_modules__={OdL7(t){t.exports=JSON.parse('[{"content":"f(x) = x^3 - 3x"},{"content":"f(x) = x^2"},{"content":"f(x) = \\\\sin(x)"},{"content":"f(x) = \\\\cos(x)"},{"content":"f(x) = e^x"},{"content":"f(x) = \\\\ln(x)"},{"content":"f(x) = |x|"},{"content":"f(x) = \\\\frac{1}{x}"}]')}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 987173.f2b6e7623e.js.LICENSE.txt */
+export const __rspack_esm_ids=[987173];export const __webpack_modules__={IbA1(e,c,_){_.r(c);let p=(0,_("jTyp").c)("Eclipse",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["path",{d:"M12 2a7 7 0 1 0 10 10",key:"1yuj32"}]]);_.d(c,{},{default:p})}};

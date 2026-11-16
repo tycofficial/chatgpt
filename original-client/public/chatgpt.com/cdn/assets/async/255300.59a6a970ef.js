@@ -1,0 +1,2 @@
+/*! LICENSE: 255300.59a6a970ef.js.LICENSE.txt */
+export const __rspack_esm_ids=[255300];export const __webpack_modules__={X4HO(e,c,_){_.r(c);let s=(0,_("jTyp").c)("User",[["path",{d:"M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2",key:"975kel"}],["circle",{cx:"12",cy:"7",r:"4",key:"17ys0d"}]]);_.d(c,{},{default:s})}};

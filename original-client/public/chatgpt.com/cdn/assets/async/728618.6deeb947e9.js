@@ -1,0 +1,2 @@
+/*! LICENSE: 728618.6deeb947e9.js.LICENSE.txt */
+export const __rspack_esm_ids=[728618];export const __webpack_modules__={CM4q(e,c,r){r.r(c);let t=(0,r("jTyp").c)("CircleArrowRight",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["path",{d:"M8 12h8",key:"1wcyev"}],["path",{d:"m12 16 4-4-4-4",key:"1i9zcv"}]]);r.d(c,{},{default:t})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 212291.5b96310c13.js.LICENSE.txt */
+export const __rspack_esm_ids=[212291];export const __webpack_modules__={h2Hk(e,t,_){_.r(t);let r=(0,_("jTyp").c)("SquareChevronDown",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"m16 10-4 4-4-4",key:"894hmk"}]]);_.d(t,{},{default:r})}};

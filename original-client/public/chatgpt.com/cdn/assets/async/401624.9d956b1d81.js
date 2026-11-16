@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[401624];export const __webpack_modules__={GvY0(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"angleDeg":-180}},{"name":"Maximum supported values","initialValues":{"angleDeg":180}}]')}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 146033.4751525a08.js.LICENSE.txt */
+export const __rspack_esm_ids=[146033];export const __webpack_modules__={Xjeu(e,t,d){d.r(t);var a=d("lVBX");d.d(t,{default:()=>a.default})},lVBX(e,t,d){d.r(t);let a=(0,d("jTyp").c)("SquareCode",[["path",{d:"M10 9.5 8 12l2 2.5",key:"3mjy60"}],["path",{d:"m14 9.5 2 2.5-2 2.5",key:"1bir2l"}],["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}]]);d.d(t,{},{default:a})}};

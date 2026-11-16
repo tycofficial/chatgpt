@@ -1,0 +1,2 @@
+/*! LICENSE: 905077.36a7a433ed.js.LICENSE.txt */
+export const __rspack_esm_ids=[905077];export const __webpack_modules__={buAh(e,t,p){p.r(t);let r=(0,p("jTyp").c)("TableProperties",[["path",{d:"M15 3v18",key:"14nvp0"}],["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M21 9H3",key:"1338ky"}],["path",{d:"M21 15H3",key:"9uk58r"}]]);p.d(t,{},{default:r})}};

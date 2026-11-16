@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[610600];export const __webpack_modules__={jkOG(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"n":0}},{"name":"Maximum supported values","initialValues":{"n":6}}]')}};

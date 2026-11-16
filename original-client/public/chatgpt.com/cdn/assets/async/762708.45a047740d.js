@@ -1,0 +1,2 @@
+/*! LICENSE: 762708.45a047740d.js.LICENSE.txt */
+export const __rspack_esm_ids=[762708];export const __webpack_modules__={aeBP(e,c,r){r.r(c);let t=(0,r("jTyp").c)("Webcam",[["circle",{cx:"12",cy:"10",r:"8",key:"1gshiw"}],["circle",{cx:"12",cy:"10",r:"3",key:"ilqhr7"}],["path",{d:"M7 22h10",key:"10w4w3"}],["path",{d:"M12 22v-4",key:"1utk9m"}]]);r.d(c,{},{default:t})}};

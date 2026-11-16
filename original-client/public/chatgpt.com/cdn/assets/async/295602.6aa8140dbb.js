@@ -1,0 +1,2 @@
+/*! LICENSE: 295602.6aa8140dbb.js.LICENSE.txt */
+export const __rspack_esm_ids=[295602];export const __webpack_modules__={jh8K(e,t,_){_.r(t);let c=(0,_("jTyp").c)("Dice1",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",ry:"2",key:"1m3agn"}],["path",{d:"M12 12h.01",key:"1mp3jc"}]]);_.d(t,{},{default:c})}};

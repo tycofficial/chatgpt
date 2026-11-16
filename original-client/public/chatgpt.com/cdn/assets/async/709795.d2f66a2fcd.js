@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[709795];export const __webpack_modules__={pbGR(s){s.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"turnsRatio":0.1,"loadResistanceOhms":1}},{"name":"Maximum supported values","initialValues":{"turnsRatio":10,"loadResistanceOhms":10000}}]')}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 520429.42b69bd5db.js.LICENSE.txt */
+export const __rspack_esm_ids=[520429];export const __webpack_modules__={iJuo(e,o,p){p.r(o);let _=(0,p("jTyp").c)("SkipForward",[["polygon",{points:"5 4 15 12 5 20 5 4",key:"16p6eg"}],["line",{x1:"19",x2:"19",y1:"5",y2:"19",key:"futhcm"}]]);p.d(o,{},{default:_})}};

@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[959570];export const __webpack_modules__={CFwE(a){a.exports=JSON.parse('[{"name":"mechanism: facilitatedDiffusion","initialValues":{"mechanism":"facilitatedDiffusion"}},{"name":"mechanism: activeTransport","initialValues":{"mechanism":"activeTransport"}}]')}};

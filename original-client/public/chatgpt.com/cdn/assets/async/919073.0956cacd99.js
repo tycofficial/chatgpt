@@ -1,0 +1,2 @@
+/*! LICENSE: 919073.0956cacd99.js.LICENSE.txt */
+export const __rspack_esm_ids=[919073];export const __webpack_modules__={BEv5(c,e,r){r.r(e);let _=(0,r("jTyp").c)("CircleDot",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["circle",{cx:"12",cy:"12",r:"1",key:"41hilf"}]]);r.d(e,{},{default:_})}};

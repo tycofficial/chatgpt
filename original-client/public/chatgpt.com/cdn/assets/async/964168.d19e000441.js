@@ -1,0 +1,2 @@
+/*! LICENSE: 964168.d19e000441.js.LICENSE.txt */
+export const __rspack_esm_ids=[964168];export const __webpack_modules__={yc1s(e,t,_){_.r(t);let p=(0,_("jTyp").c)("AlignCenter",[["path",{d:"M17 12H7",key:"16if0g"}],["path",{d:"M19 18H5",key:"18s9l3"}],["path",{d:"M21 6H3",key:"1jwq7v"}]]);_.d(t,{},{default:p})}};

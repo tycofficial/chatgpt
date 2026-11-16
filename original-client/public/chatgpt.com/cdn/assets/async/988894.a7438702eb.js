@@ -1,0 +1,2 @@
+/*! LICENSE: 988894.a7438702eb.js.LICENSE.txt */
+export const __rspack_esm_ids=[988894];export const __webpack_modules__={ap4A(e,s,y){y.r(s);let t=(0,y("jTyp").c)("Variable",[["path",{d:"M8 21s-4-3-4-9 4-9 4-9",key:"uto9ud"}],["path",{d:"M16 3s4 3 4 9-4 9-4 9",key:"4w2vsq"}],["line",{x1:"15",x2:"9",y1:"9",y2:"15",key:"f7djnv"}],["line",{x1:"9",x2:"15",y1:"9",y2:"15",key:"1shsy8"}]]);y.d(s,{},{default:t})}};

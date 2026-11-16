@@ -1,0 +1,2 @@
+/*! LICENSE: 795180.9720d35d45.js.LICENSE.txt */
+export const __rspack_esm_ids=[795180];export const __webpack_modules__={VgOD(e,t,_){_.r(t);let p=(0,_("jTyp").c)("SquareChevronUp",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"m8 14 4-4 4 4",key:"fy2ptz"}]]);_.d(t,{},{default:p})}};

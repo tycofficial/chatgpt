@@ -1,0 +1,2 @@
+/*! LICENSE: 125801.2de5ec0ae3.js.LICENSE.txt */
+export const __rspack_esm_ids=[125801];export const __webpack_modules__={uh71(t,e,p){p.r(e);let _=(0,p("jTyp").c)("ArrowRightFromLine",[["path",{d:"M3 5v14",key:"1nt18q"}],["path",{d:"M21 12H7",key:"13ipq5"}],["path",{d:"m15 18 6-6-6-6",key:"6tx3qv"}]]);p.d(e,{},{default:_})}};

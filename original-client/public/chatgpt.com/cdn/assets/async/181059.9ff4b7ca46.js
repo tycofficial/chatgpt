@@ -1,0 +1,2 @@
+/*! LICENSE: 181059.9ff4b7ca46.js.LICENSE.txt */
+export const __rspack_esm_ids=[181059];export const __webpack_modules__={KdRt(t,e,_){_.r(e);let r=(0,_("jTyp").c)("Ratio",[["rect",{width:"12",height:"20",x:"6",y:"2",rx:"2",key:"1oxtiu"}],["rect",{width:"20",height:"12",x:"2",y:"6",rx:"2",key:"9lu3g6"}]]);_.d(e,{},{default:r})}};

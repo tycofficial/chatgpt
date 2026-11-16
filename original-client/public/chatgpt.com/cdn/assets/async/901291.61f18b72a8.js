@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[901291];export const __webpack_modules__={aVbD(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"fieldStrengthNewtonsPerCoulomb":0,"areaSquareMeters":0.5,"angleDegrees":0}},{"name":"Maximum supported values","initialValues":{"fieldStrengthNewtonsPerCoulomb":10,"areaSquareMeters":5,"angleDegrees":90}}]')}};

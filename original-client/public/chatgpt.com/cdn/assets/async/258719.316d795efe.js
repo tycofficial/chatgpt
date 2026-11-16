@@ -1,0 +1,2 @@
+/*! LICENSE: 258719.316d795efe.js.LICENSE.txt */
+export const __rspack_esm_ids=[258719];export const __webpack_modules__={dr4H(e,t,_){_.r(t);let d=(0,_("jTyp").c)("Video",[["path",{d:"m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5",key:"ftymec"}],["rect",{x:"2",y:"6",width:"14",height:"12",rx:"2",key:"158x01"}]]);_.d(t,{},{default:d})}};

@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[299651];export const __webpack_modules__={WVl5(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"number":0}},{"name":"Maximum supported values","initialValues":{"number":9999}}]')}};

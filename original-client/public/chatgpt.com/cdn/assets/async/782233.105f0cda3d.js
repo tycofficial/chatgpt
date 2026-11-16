@@ -1,0 +1,2 @@
+/*! LICENSE: 782233.105f0cda3d.js.LICENSE.txt */
+export const __rspack_esm_ids=[782233];export const __webpack_modules__={ZO5Q(e,t,p){p.r(t);let _=(0,p("jTyp").c)("TextQuote",[["path",{d:"M17 6H3",key:"16j9eg"}],["path",{d:"M21 12H8",key:"scolzb"}],["path",{d:"M21 18H8",key:"1wfozv"}],["path",{d:"M3 12v6",key:"fv4c87"}]]);p.d(t,{},{default:_})}};

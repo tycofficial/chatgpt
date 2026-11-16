@@ -1,0 +1,2 @@
+/*! LICENSE: 675702.12ed7b222c.js.LICENSE.txt */
+export const __rspack_esm_ids=[675702];export const __webpack_modules__={mO5Y(c,e,r){r.r(e);let t=(0,r("jTyp").c)("Scale3d",[["circle",{cx:"19",cy:"19",r:"2",key:"17f5cg"}],["circle",{cx:"5",cy:"5",r:"2",key:"1gwv83"}],["path",{d:"M5 7v12h12",key:"vtaa4r"}],["path",{d:"m5 19 6-6",key:"jh6hbb"}]]);r.d(e,{},{default:t})}};

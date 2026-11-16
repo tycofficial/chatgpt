@@ -1,0 +1,2 @@
+/*! LICENSE: 458792.e0c79f32e5.js.LICENSE.txt */
+export const __rspack_esm_ids=[458792];export const __webpack_modules__={pGAc(e,t,_){_.r(t);let p=(0,_("jTyp").c)("ChevronRight",[["path",{d:"m9 18 6-6-6-6",key:"mthhwq"}]]);_.d(t,{},{default:p})}};

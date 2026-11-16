@@ -1,0 +1,2 @@
+/*! LICENSE: 834432.3d05a965f2.js.LICENSE.txt */
+export const __rspack_esm_ids=[834432];export const __webpack_modules__={aawZ(a,e,p){p.r(e);let _=(0,p("jTyp").c)("BookmarkCheck",[["path",{d:"m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2Z",key:"169p4p"}],["path",{d:"m9 10 2 2 4-4",key:"1gnqz4"}]]);p.d(e,{},{default:_})}};

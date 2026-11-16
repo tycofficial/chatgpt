@@ -1,0 +1,2 @@
+/*! LICENSE: 829560.ce10960f3f.js.LICENSE.txt */
+export const __rspack_esm_ids=[829560];export const __webpack_modules__={k21J(e,o,p){p.r(o);let t=(0,p("jTyp").c)("SeparatorVertical",[["line",{x1:"12",x2:"12",y1:"3",y2:"21",key:"1efggb"}],["polyline",{points:"8 8 4 12 8 16",key:"bnfmv4"}],["polyline",{points:"16 16 20 12 16 8",key:"u90052"}]]);p.d(o,{},{default:t})}};

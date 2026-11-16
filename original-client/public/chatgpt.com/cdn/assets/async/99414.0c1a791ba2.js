@@ -1,0 +1,2 @@
+/*! LICENSE: 99414.0c1a791ba2.js.LICENSE.txt */
+export const __rspack_esm_ids=[99414];export const __webpack_modules__={ALaQ(a,t,e){e.r(t);let d=(0,e("jTyp").c)("OctagonAlert",[["path",{d:"M12 16h.01",key:"1drbdi"}],["path",{d:"M12 8v4",key:"1got3b"}],["path",{d:"M15.312 2a2 2 0 0 1 1.414.586l4.688 4.688A2 2 0 0 1 22 8.688v6.624a2 2 0 0 1-.586 1.414l-4.688 4.688a2 2 0 0 1-1.414.586H8.688a2 2 0 0 1-1.414-.586l-4.688-4.688A2 2 0 0 1 2 15.312V8.688a2 2 0 0 1 .586-1.414l4.688-4.688A2 2 0 0 1 8.688 2z",key:"1fd625"}]]);e.d(t,{},{default:d})}};

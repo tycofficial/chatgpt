@@ -1,0 +1,2 @@
+/*! LICENSE: 81569.a69886432d.js.LICENSE.txt */
+export const __rspack_esm_ids=[81569];export const __webpack_modules__={O7N0(a,e,_){_.r(e);let t=(0,_("jTyp").c)("ThumbsDown",[["path",{d:"M17 14V2",key:"8ymqnk"}],["path",{d:"M9 18.12 10 14H4.17a2 2 0 0 1-1.92-2.56l2.33-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.76a2 2 0 0 0-1.79 1.11L12 22a3.13 3.13 0 0 1-3-3.88Z",key:"m61m77"}]]);_.d(e,{},{default:t})}};

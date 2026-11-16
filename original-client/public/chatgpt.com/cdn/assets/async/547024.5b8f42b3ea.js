@@ -1,0 +1,2 @@
+/*! LICENSE: 547024.5b8f42b3ea.js.LICENSE.txt */
+export const __rspack_esm_ids=[547024];export const __webpack_modules__={pxtB(t,e,p){p.r(e);let r=(0,p("jTyp").c)("GalleryHorizontal",[["path",{d:"M2 3v18",key:"pzttux"}],["rect",{width:"12",height:"18",x:"6",y:"3",rx:"2",key:"btr8bg"}],["path",{d:"M22 3v18",key:"6jf3v"}]]);p.d(e,{},{default:r})}};

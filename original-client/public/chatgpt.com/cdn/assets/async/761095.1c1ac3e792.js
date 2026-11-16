@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[761095];export const __webpack_modules__={m7gB(s){s.exports=JSON.parse('[{"name":"isotope_system: potassium-40-to-argon-40","initialValues":{"isotope_system":"potassium-40-to-argon-40"}},{"name":"isotope_system: uranium-238-to-lead-206","initialValues":{"isotope_system":"uranium-238-to-lead-206"}}]')}};

@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[171559];export const __webpack_modules__={XjVv(a){a.exports=JSON.parse('[{"name":"material: aluminum","initialValues":{"material":"aluminum"}},{"name":"material: copper","initialValues":{"material":"copper"}}]')}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 341181.3079c809fd.js.LICENSE.txt */
+export const __rspack_esm_ids=[341181];export const __webpack_modules__={zcMp(t,_,e){e.r(_);let c=(0,e("jTyp").c)("ArrowBigRight",[["path",{d:"M6 9h6V5l7 7-7 7v-4H6V9z",key:"7fvt9c"}]]);e.d(_,{},{default:c})}};

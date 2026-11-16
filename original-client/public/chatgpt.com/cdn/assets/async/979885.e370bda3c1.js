@@ -1,0 +1,2 @@
+/*! LICENSE: 979885.e370bda3c1.js.LICENSE.txt */
+export const __rspack_esm_ids=[979885];export const __webpack_modules__={A1f6(e,t,d){d.r(t);var r=d("RpVO");d.d(t,{default:()=>r.default})},RpVO(e,t,d){d.r(t);let r=(0,d("jTyp").c)("GitCommitHorizontal",[["circle",{cx:"12",cy:"12",r:"3",key:"1v7zrd"}],["line",{x1:"3",x2:"9",y1:"12",y2:"12",key:"1dyftd"}],["line",{x1:"15",x2:"21",y1:"12",y2:"12",key:"oup4p8"}]]);d.d(t,{},{default:r})}};

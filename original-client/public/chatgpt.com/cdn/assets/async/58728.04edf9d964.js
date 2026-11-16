@@ -1,0 +1,2 @@
+/*! LICENSE: 58728.04edf9d964.js.LICENSE.txt */
+export const __rspack_esm_ids=[58728];export const __webpack_modules__={z7L6(e,t,_){_.r(t);let p=(0,_("jTyp").c)("PanelTop",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M3 9h18",key:"1pudct"}]]);_.d(t,{},{default:p})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 435868.f0c34fdb48.js.LICENSE.txt */
+export const __rspack_esm_ids=[435868];export const __webpack_modules__={QSRd(e,d,t){t.r(d);let a=(0,t("jTyp").c)("Languages",[["path",{d:"m5 8 6 6",key:"1wu5hv"}],["path",{d:"m4 14 6-6 2-3",key:"1k1g8d"}],["path",{d:"M2 5h12",key:"or177f"}],["path",{d:"M7 2h1",key:"1t2jsx"}],["path",{d:"m22 22-5-10-5 10",key:"don7ne"}],["path",{d:"M14 18h6",key:"1m8k6r"}]]);t.d(d,{},{default:a})}};

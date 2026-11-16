@@ -1,0 +1,2 @@
+/*! LICENSE: 648836.86b1731912.js.LICENSE.txt */
+export const __rspack_esm_ids=[648836];export const __webpack_modules__={Sfas(e,_,s){s.r(_);let t=(0,s("jTyp").c)("MoveDown",[["path",{d:"M8 18L12 22L16 18",key:"cskvfv"}],["path",{d:"M12 2V22",key:"r89rzk"}]]);s.d(_,{},{default:t})}};

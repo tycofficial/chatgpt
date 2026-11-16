@@ -1,0 +1,2 @@
+/*! LICENSE: 884519.a78b2a6fe1.js.LICENSE.txt */
+export const __rspack_esm_ids=[884519];export const __webpack_modules__={mOfg(e,o,t){t.r(o);let _=(0,t("jTyp").c)("DoorClosed",[["path",{d:"M18 20V6a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v14",key:"36qu9e"}],["path",{d:"M2 20h20",key:"owomy5"}],["path",{d:"M14 12v.01",key:"xfcn54"}]]);t.d(o,{},{default:_})}};

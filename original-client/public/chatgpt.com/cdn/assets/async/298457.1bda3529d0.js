@@ -1,0 +1,2 @@
+/*! LICENSE: 298457.1bda3529d0.js.LICENSE.txt */
+export const __rspack_esm_ids=[298457];export const __webpack_modules__={uvaV(e,t,p){p.r(t);let s=(0,p("jTyp").c)("ListVideo",[["path",{d:"M12 12H3",key:"18klou"}],["path",{d:"M16 6H3",key:"1wxfjs"}],["path",{d:"M12 18H3",key:"11ftsu"}],["path",{d:"m16 12 5 3-5 3v-6Z",key:"zpskkp"}]]);p.d(t,{},{default:s})}};

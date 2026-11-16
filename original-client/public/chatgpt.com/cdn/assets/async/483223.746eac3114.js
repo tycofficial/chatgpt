@@ -1,0 +1,2 @@
+/*! LICENSE: 483223.746eac3114.js.LICENSE.txt */
+export const __rspack_esm_ids=[483223];export const __webpack_modules__={ffiK(e,t,_){_.r(t);let d=(0,_("jTyp").c)("ArrowBigDownDash",[["path",{d:"M15 5H9",key:"1tp3ed"}],["path",{d:"M15 9v3h4l-7 7-7-7h4V9z",key:"ncdc4b"}]]);_.d(t,{},{default:d})}};

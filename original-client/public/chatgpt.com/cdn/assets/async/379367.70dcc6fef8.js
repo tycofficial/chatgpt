@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[379367];export const __webpack_modules__={lWBI(e){e.exports=JSON.parse('[{"name":"example: nitrate","initialValues":{"example":"nitrate"}},{"name":"example: benzene","initialValues":{"example":"benzene"}}]')}};

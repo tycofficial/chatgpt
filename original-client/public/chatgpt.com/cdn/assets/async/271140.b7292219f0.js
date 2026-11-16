@@ -1,0 +1,2 @@
+/*! LICENSE: 271140.b7292219f0.js.LICENSE.txt */
+export const __rspack_esm_ids=[271140];export const __webpack_modules__={UfOu(t,e,a){a.r(e);var d=a("Qt8p");a.d(e,{default:()=>d.default})},Qt8p(t,e,a){a.r(e);let d=(0,a("jTyp").c)("SquarePilcrow",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M12 12H9.5a2.5 2.5 0 0 1 0-5H17",key:"1l9586"}],["path",{d:"M12 7v10",key:"jspqdw"}],["path",{d:"M16 7v10",key:"lavkr4"}]]);a.d(e,{},{default:d})}};

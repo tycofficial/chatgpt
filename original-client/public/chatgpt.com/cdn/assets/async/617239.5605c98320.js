@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[617239];export const __webpack_modules__={lnIY(s,_,e){s.exports=e.p+"assets/jordy.f5eb0c70d5.svg"}};

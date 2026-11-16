@@ -1,0 +1,2 @@
+/*! LICENSE: 174540.98c37d0835.js.LICENSE.txt */
+export const __rspack_esm_ids=[174540];export const __webpack_modules__={qMtD(e,o,_){_.r(o);let p=(0,_("jTyp").c)("SkipBack",[["polygon",{points:"19 20 9 12 19 4 19 20",key:"o2sva"}],["line",{x1:"5",x2:"5",y1:"19",y2:"5",key:"1ocqjk"}]]);_.d(o,{},{default:p})}};

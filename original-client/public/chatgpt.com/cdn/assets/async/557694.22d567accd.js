@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[557694];export const __webpack_modules__={rFnP(a){a.exports=JSON.parse('[{"name":"animal: frog","initialValues":{"animal":"frog"}},{"name":"animal: chicken","initialValues":{"animal":"chicken"}},{"name":"animal: mammal","initialValues":{"animal":"mammal"}}]')}};

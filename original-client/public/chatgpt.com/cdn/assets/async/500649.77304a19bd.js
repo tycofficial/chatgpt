@@ -1,0 +1,2 @@
+/*! LICENSE: 500649.77304a19bd.js.LICENSE.txt */
+export const __rspack_esm_ids=[500649];export const __webpack_modules__={nEAe(e,t,p){p.r(t);let _=(0,p("jTyp").c)("CornerUpRight",[["polyline",{points:"15 14 20 9 15 4",key:"1tbx3s"}],["path",{d:"M4 20v-7a4 4 0 0 1 4-4h12",key:"1lu4f8"}]]);p.d(t,{},{default:_})}};

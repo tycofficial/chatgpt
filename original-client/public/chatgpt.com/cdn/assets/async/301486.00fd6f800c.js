@@ -1,0 +1,2 @@
+/*! LICENSE: 301486.00fd6f800c.js.LICENSE.txt */
+export const __rspack_esm_ids=[301486];export const __webpack_modules__={oivu(e,t,p){p.r(t);let r=(0,p("jTyp").c)("SquareLibrary",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M7 7v10",key:"d5nglc"}],["path",{d:"M11 7v10",key:"pptsnr"}],["path",{d:"m15 7 2 10",key:"1m7qm5"}]]);p.d(t,{},{default:r})}};

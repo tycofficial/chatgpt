@@ -1,0 +1,2 @@
+/*! LICENSE: 22570.60f1bbce4e.js.LICENSE.txt */
+export const __rspack_esm_ids=[22570];export const __webpack_modules__={p8eD(e,_,p){p.r(_);let s=(0,p("jTyp").c)("Axis3d",[["path",{d:"M4 4v16h16",key:"1s015l"}],["path",{d:"m4 20 7-7",key:"17qe9y"}]]);p.d(_,{},{default:s})}};

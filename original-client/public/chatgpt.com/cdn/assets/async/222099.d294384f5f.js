@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[222099];export const __webpack_modules__={kqAy(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"degrees_of_freedom":3,"central_probability":0.9}},{"name":"Maximum supported values","initialValues":{"degrees_of_freedom":60,"central_probability":0.99}}]')}};

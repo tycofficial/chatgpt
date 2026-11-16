@@ -1,0 +1,2 @@
+/*! LICENSE: 713709.f4a79c7c17.js.LICENSE.txt */
+export const __rspack_esm_ids=[713709];export const __webpack_modules__={jzee(e,c,r){r.r(c);let t=(0,r("jTyp").c)("UserSearch",[["circle",{cx:"10",cy:"7",r:"4",key:"e45bow"}],["path",{d:"M10.3 15H7a4 4 0 0 0-4 4v2",key:"3bnktk"}],["circle",{cx:"17",cy:"17",r:"3",key:"18b49y"}],["path",{d:"m21 21-1.9-1.9",key:"1g2n9r"}]]);r.d(c,{},{default:t})}};

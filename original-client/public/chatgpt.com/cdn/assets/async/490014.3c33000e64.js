@@ -1,0 +1,2 @@
+/*! LICENSE: 490014.3c33000e64.js.LICENSE.txt */
+export const __rspack_esm_ids=[490014];export const __webpack_modules__={IYmz(t,e,r){r.r(e);let h=(0,r("jTyp").c)("AlignStartHorizontal",[["rect",{width:"6",height:"16",x:"4",y:"6",rx:"2",key:"1n4dg1"}],["rect",{width:"6",height:"9",x:"14",y:"6",rx:"2",key:"17khns"}],["path",{d:"M22 2H2",key:"fhrpnj"}]]);r.d(e,{},{default:h})}};

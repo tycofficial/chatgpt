@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[489317];export const __webpack_modules__={hxF3(e){e.exports=JSON.parse('[{"name":"effect: founder","initialValues":{"effect":"founder"}}]')}};

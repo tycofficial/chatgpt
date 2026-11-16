@@ -1,0 +1,2 @@
+/*! LICENSE: 873683.ec2dc65f74.js.LICENSE.txt */
+export const __rspack_esm_ids=[873683];export const __webpack_modules__={DZ13(c,e,_){_.r(e);let p=(0,_("jTyp").c)("Disc2",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["circle",{cx:"12",cy:"12",r:"4",key:"4exip2"}],["path",{d:"M12 12h.01",key:"1mp3jc"}]]);_.d(e,{},{default:p})}};

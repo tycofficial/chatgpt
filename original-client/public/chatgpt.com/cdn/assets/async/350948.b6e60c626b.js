@@ -1,0 +1,2 @@
+/*! LICENSE: 350948.b6e60c626b.js.LICENSE.txt */
+export const __rspack_esm_ids=[350948];export const __webpack_modules__={TXD8(c,e,l){l.r(e);let r=(0,l("jTyp").c)("EllipsisVertical",[["circle",{cx:"12",cy:"12",r:"1",key:"41hilf"}],["circle",{cx:"12",cy:"5",r:"1",key:"gxeob9"}],["circle",{cx:"12",cy:"19",r:"1",key:"lyex9k"}]]);l.d(e,{},{default:r})}};

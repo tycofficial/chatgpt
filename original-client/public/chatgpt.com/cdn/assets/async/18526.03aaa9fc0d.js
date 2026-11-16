@@ -1,0 +1,2 @@
+/*! LICENSE: 18526.03aaa9fc0d.js.LICENSE.txt */
+export const __rspack_esm_ids=[18526];export const __webpack_modules__={fB7W(t,e,r){r.r(e);let d=(0,r("jTyp").c)("AlignHorizontalJustifyEnd",[["rect",{width:"6",height:"14",x:"2",y:"5",rx:"2",key:"dy24zr"}],["rect",{width:"6",height:"10",x:"12",y:"7",rx:"2",key:"1ht384"}],["path",{d:"M22 2v20",key:"40qfg1"}]]);r.d(e,{},{default:d})}};

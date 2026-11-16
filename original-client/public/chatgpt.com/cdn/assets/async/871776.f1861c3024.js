@@ -1,0 +1,2 @@
+/*! LICENSE: 871776.f1861c3024.js.LICENSE.txt */
+export const __rspack_esm_ids=[871776];export const __webpack_modules__={pt0E(e,t,o){o.r(t);let p=(0,o("jTyp").c)("ArrowDownToLine",[["path",{d:"M12 17V3",key:"1cwfxf"}],["path",{d:"m6 11 6 6 6-6",key:"12ii2o"}],["path",{d:"M19 21H5",key:"150jfl"}]]);o.d(t,{},{default:p})}};

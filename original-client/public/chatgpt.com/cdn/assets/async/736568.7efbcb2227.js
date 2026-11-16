@@ -1,0 +1,2 @@
+/*! LICENSE: 736568.7efbcb2227.js.LICENSE.txt */
+export const __rspack_esm_ids=[736568];export const __webpack_modules__={B99S(e,t,y){y.r(t);let _=(0,y("jTyp").c)("Monitor",[["rect",{width:"20",height:"14",x:"2",y:"3",rx:"2",key:"48i651"}],["line",{x1:"8",x2:"16",y1:"21",y2:"21",key:"1svkeh"}],["line",{x1:"12",x2:"12",y1:"17",y2:"21",key:"vw1qmm"}]]);y.d(t,{},{default:_})}};

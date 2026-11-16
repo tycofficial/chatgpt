@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[612999];export const __webpack_modules__={lfFS(e){e.exports=JSON.parse('[{"name":"route: direct","initialValues":{"route":"direct"}},{"name":"route: detour","initialValues":{"route":"detour"}},{"name":"route: round_trip","initialValues":{"route":"round_trip"}}]')}};

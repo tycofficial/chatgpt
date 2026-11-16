@@ -1,0 +1,2 @@
+/*! LICENSE: 278224.6d4c24e6fc.js.LICENSE.txt */
+export const __rspack_esm_ids=[278224];export const __webpack_modules__={RuR0(e,t,a){a.r(t);let _=(0,a("jTyp").c)("SquarePower",[["path",{d:"M12 7v4",key:"xawao1"}],["path",{d:"M7.998 9.003a5 5 0 1 0 8-.005",key:"1pek45"}],["rect",{x:"3",y:"3",width:"18",height:"18",rx:"2",key:"h1oib"}]]);a.d(t,{},{default:_})}};

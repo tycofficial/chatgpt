@@ -1,0 +1,2 @@
+/*! LICENSE: 986494.bd7de76df6.js.LICENSE.txt */
+export const __rspack_esm_ids=[986494];export const __webpack_modules__={q0X9(e,s,t){t.r(s);let _=(0,t("jTyp").c)("MessageCircleX",[["path",{d:"M7.9 20A9 9 0 1 0 4 16.1L2 22Z",key:"vv11sd"}],["path",{d:"m15 9-6 6",key:"1uzhvr"}],["path",{d:"m9 9 6 6",key:"z0biqf"}]]);t.d(s,{},{default:_})}};

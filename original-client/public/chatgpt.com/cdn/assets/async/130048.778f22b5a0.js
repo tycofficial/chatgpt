@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[130048];export const __webpack_modules__={DJ26(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"zScore":-3.5}},{"name":"Maximum supported values","initialValues":{"zScore":3.5}},{"name":"testType: one-sided","initialValues":{"testType":"one-sided"}},{"name":"Continuous z-score","initialValues":{"zScore":1.645}}]')}};

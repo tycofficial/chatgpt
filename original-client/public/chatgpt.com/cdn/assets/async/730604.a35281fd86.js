@@ -1,0 +1,2 @@
+/*! LICENSE: 730604.a35281fd86.js.LICENSE.txt */
+export const __rspack_esm_ids=[730604];export const __webpack_modules__={pDqT(e,p,t){t.r(p);let _=(0,t("jTyp").c)("Tally4",[["path",{d:"M4 4v16",key:"6qkkli"}],["path",{d:"M9 4v16",key:"81ygyz"}],["path",{d:"M14 4v16",key:"12vmem"}],["path",{d:"M19 4v16",key:"8ij5ei"}]]);t.d(p,{},{default:_})}};

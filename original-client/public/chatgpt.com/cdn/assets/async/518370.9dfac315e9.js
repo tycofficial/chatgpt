@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[518370];export const __webpack_modules__={THch(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"lambda":0.5,"count":0}},{"name":"Maximum supported values","initialValues":{"lambda":20,"count":40}},{"name":"Rare-event interval","initialValues":{"lambda":1.5,"count":2}}]')}};

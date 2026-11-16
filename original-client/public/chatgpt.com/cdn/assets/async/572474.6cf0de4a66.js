@@ -1,0 +1,2 @@
+/*! LICENSE: 572474.6cf0de4a66.js.LICENSE.txt */
+export const __rspack_esm_ids=[572474];export const __webpack_modules__={ViQM(e,_,t){t.r(_);let a=(0,t("jTyp").c)("Framer",[["path",{d:"M5 16V9h14V2H5l14 14h-7m-7 0 7 7v-7m-7 0h7",key:"1a2nng"}]]);t.d(_,{},{default:a})}};

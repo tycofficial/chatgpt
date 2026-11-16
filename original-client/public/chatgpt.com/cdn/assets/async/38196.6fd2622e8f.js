@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[38196];export const __webpack_modules__={r1oj(a){a.exports=JSON.parse('[{"name":"example_family: position","initialValues":{"example_family":"position"}},{"name":"example_family: functional-group","initialValues":{"example_family":"functional-group"}}]')}};

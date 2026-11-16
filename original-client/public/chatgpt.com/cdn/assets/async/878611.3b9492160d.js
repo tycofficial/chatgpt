@@ -1,0 +1,2 @@
+/*! LICENSE: 878611.3b9492160d.js.LICENSE.txt */
+export const __rspack_esm_ids=[878611];export const __webpack_modules__={G4rz(e,_,c){c.r(_);let t=(0,c("jTyp").c)("Check",[["path",{d:"M20 6 9 17l-5-5",key:"1gmf2c"}]]);c.d(_,{},{default:t})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 435197.c8f2298af9.js.LICENSE.txt */
+export const __rspack_esm_ids=[435197];export const __webpack_modules__={uZg2(e,d,t){t.r(d);let a=(0,t("jTyp").c)("IndentDecrease",[["path",{d:"M21 12H11",key:"wd7e0v"}],["path",{d:"M21 18H11",key:"4wu86t"}],["path",{d:"M21 6H11",key:"6dy1d6"}],["path",{d:"m7 8-4 4 4 4",key:"o5hrat"}]]);t.d(d,{},{default:a})},Ue97(e,d,t){t.r(d);var a=t("uZg2");t.d(d,{default:()=>a.default})}};

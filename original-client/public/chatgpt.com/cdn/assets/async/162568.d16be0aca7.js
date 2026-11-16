@@ -1,0 +1,2 @@
+/*! LICENSE: 162568.d16be0aca7.js.LICENSE.txt */
+export const __rspack_esm_ids=[162568];export const __webpack_modules__={uV9A(e,t,c){c.r(t);let _=(0,c("jTyp").c)("GitCommitVertical",[["path",{d:"M12 3v6",key:"1holv5"}],["circle",{cx:"12",cy:"12",r:"3",key:"1v7zrd"}],["path",{d:"M12 15v6",key:"a9ows0"}]]);c.d(t,{},{default:_})}};

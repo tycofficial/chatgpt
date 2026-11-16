@@ -1,0 +1,2 @@
+/*! LICENSE: 205686.907952fb5a.js.LICENSE.txt */
+export const __rspack_esm_ids=[205686];export const __webpack_modules__={a4IG(e,p,t){t.r(p);let _=(0,t("jTyp").c)("ArrowUpDown",[["path",{d:"m21 16-4 4-4-4",key:"f6ql7i"}],["path",{d:"M17 20V4",key:"1ejh1v"}],["path",{d:"m3 8 4-4 4 4",key:"11wl7u"}],["path",{d:"M7 4v16",key:"1glfcx"}]]);t.d(p,{},{default:_})}};

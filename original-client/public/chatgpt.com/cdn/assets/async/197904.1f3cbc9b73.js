@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[197904];export const __webpack_modules__={cEPi(t){t.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"contactX":-1.2,"contactY":-1.2}},{"name":"Maximum supported values","initialValues":{"contactX":1.2,"contactY":1.2}}]')}};

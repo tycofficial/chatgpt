@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[800747];export const __webpack_modules__={vfJP(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"packetRatePerSecond":1,"chargePerPacketCoulombs":0.5}},{"name":"Maximum supported values","initialValues":{"packetRatePerSecond":8,"chargePerPacketCoulombs":3}}]')}};

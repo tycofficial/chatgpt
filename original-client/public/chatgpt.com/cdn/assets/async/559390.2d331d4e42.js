@@ -1,0 +1,2 @@
+/*! LICENSE: 559390.2d331d4e42.js.LICENSE.txt */
+export const __rspack_esm_ids=[559390];export const __webpack_modules__={Zys8(e,t,d){d.r(t);let p=(0,d("jTyp").c)("ArrowRightLeft",[["path",{d:"m16 3 4 4-4 4",key:"1x1c3m"}],["path",{d:"M20 7H4",key:"zbl0bi"}],["path",{d:"m8 21-4-4 4-4",key:"h9nckh"}],["path",{d:"M4 17h16",key:"g4d7ey"}]]);d.d(t,{},{default:p})}};

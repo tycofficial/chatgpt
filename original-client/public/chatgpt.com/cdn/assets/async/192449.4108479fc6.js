@@ -1,0 +1,2 @@
+/*! LICENSE: 192449.4108479fc6.js.LICENSE.txt */
+export const __rspack_esm_ids=[192449];export const __webpack_modules__={sz3V(e,a,t){t.r(a);let s=(0,t("jTyp").c)("MessageSquareWarning",[["path",{d:"M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z",key:"1lielz"}],["path",{d:"M12 7v2",key:"stiyo7"}],["path",{d:"M12 13h.01",key:"y0uutt"}]]);t.d(a,{},{default:s})}};

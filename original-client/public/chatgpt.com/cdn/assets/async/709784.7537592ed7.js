@@ -1,0 +1,2 @@
+/*! LICENSE: 709784.7537592ed7.js.LICENSE.txt */
+export const __rspack_esm_ids=[709784];export const __webpack_modules__={rL9w(e,t,_){_.r(t);let r=(0,_("jTyp").c)("Columns2",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M12 3v18",key:"108xh3"}]]);_.d(t,{},{default:r})}};

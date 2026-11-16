@@ -1,0 +1,2 @@
+/*! LICENSE: 789652.25cf0b9698.js.LICENSE.txt */
+export const __rspack_esm_ids=[789652];export const __webpack_modules__={fo38(t,e,p){p.r(e);let o=(0,p("jTyp").c)("PanelsTopLeft",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M3 9h18",key:"1pudct"}],["path",{d:"M9 21V9",key:"1oto5p"}]]);p.d(e,{},{default:o})}};

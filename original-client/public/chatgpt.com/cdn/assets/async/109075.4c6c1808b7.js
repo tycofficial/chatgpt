@@ -1,0 +1,2 @@
+/*! LICENSE: 109075.4c6c1808b7.js.LICENSE.txt */
+export const __rspack_esm_ids=[109075];export const __webpack_modules__={M2AV(t,e,_){_.r(e);let o=(0,_("jTyp").c)("PanelBottom",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M3 15h18",key:"5xshup"}]]);_.d(e,{},{default:o})}};

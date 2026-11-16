@@ -1,0 +1,2 @@
+/*! LICENSE: 117373.bd212f8402.js.LICENSE.txt */
+export const __rspack_esm_ids=[117373];export const __webpack_modules__={Z4qC9(o,e,t){t.r(e);let _=(0,t("jTyp").c)("Inbox",[["polyline",{points:"22 12 16 12 14 15 10 15 8 12 2 12",key:"o97t9d"}],["path",{d:"M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z",key:"oot6mr"}]]);t.d(e,{},{default:_})}};

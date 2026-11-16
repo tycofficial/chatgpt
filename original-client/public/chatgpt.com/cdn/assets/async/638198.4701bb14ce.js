@@ -1,0 +1,2 @@
+/*! LICENSE: 638198.4701bb14ce.js.LICENSE.txt */
+export const __rspack_esm_ids=[638198];export const __webpack_modules__={SUod(e,t,_){_.r(t);let a=(0,_("jTyp").c)("ChevronsLeft",[["path",{d:"m11 17-5-5 5-5",key:"13zhaf"}],["path",{d:"m18 17-5-5 5-5",key:"h8a8et"}]]);_.d(t,{},{default:a})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 38177.9cd62d0001.js.LICENSE.txt */
+export const __rspack_esm_ids=[38177];export const __webpack_modules__={QjAF(e,t,_){_.r(t);let p=(0,_("jTyp").c)("ChevronsUpDown",[["path",{d:"m7 15 5 5 5-5",key:"1hf1tw"}],["path",{d:"m7 9 5-5 5 5",key:"sgt6xg"}]]);_.d(t,{},{default:p})}};

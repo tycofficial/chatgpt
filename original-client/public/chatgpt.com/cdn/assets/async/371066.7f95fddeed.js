@@ -1,0 +1,2 @@
+/*! LICENSE: 371066.7f95fddeed.js.LICENSE.txt */
+export const __rspack_esm_ids=[371066];export const __webpack_modules__={vGnJ(e,t,d){d.r(t);let r=(0,d("jTyp").c)("AlignEndHorizontal",[["rect",{width:"6",height:"16",x:"4",y:"2",rx:"2",key:"z5wdxg"}],["rect",{width:"6",height:"9",x:"14",y:"9",rx:"2",key:"um7a8w"}],["path",{d:"M22 22H2",key:"19qnx5"}]]);d.d(t,{},{default:r})}};

@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[270241];export const __webpack_modules__={oF6t(o){o.exports=JSON.parse('[{"name":"topology: mesh","initialValues":{"topology":"mesh"}},{"name":"topology: star","initialValues":{"topology":"star"}},{"name":"topology: tree","initialValues":{"topology":"tree"}}]')}};

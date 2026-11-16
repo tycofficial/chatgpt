@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[686852];export const __webpack_modules__={amOg(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"currency_value":-2}},{"name":"Maximum supported values","initialValues":{"currency_value":2}}]')}};

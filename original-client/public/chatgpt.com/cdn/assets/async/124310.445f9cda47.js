@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[124310];export const __webpack_modules__={u5fd(s){s.exports=JSON.parse('[{"content":"A = \\\\sqrt{s(s-a)(s-b)(s-c)}"},{"content":"A=\\\\sqrt{s(s-a)(s-b)(s-c)},\\\\ s=\\\\frac{a+b+c}{2}"},{"content":"\\\\text{Area}=\\\\sqrt{s(s-a)(s-b)(s-c)}"}]')}};

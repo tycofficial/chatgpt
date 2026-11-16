@@ -1,0 +1,2 @@
+/*! LICENSE: 946510.55375ecda2.js.LICENSE.txt */
+export const __rspack_esm_ids=[946510];export const __webpack_modules__={lpTI(a,e,t){t.r(e);let _=(0,t("jTyp").c)("Section",[["path",{d:"M16 5a4 3 0 0 0-8 0c0 4 8 3 8 7a4 3 0 0 1-8 0",key:"vqan6v"}],["path",{d:"M8 19a4 3 0 0 0 8 0c0-4-8-3-8-7a4 3 0 0 1 8 0",key:"wdjd8o"}]]);t.d(e,{},{default:_})}};

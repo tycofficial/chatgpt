@@ -1,0 +1,2 @@
+/*! LICENSE: 933448.ca46977f2e.js.LICENSE.txt */
+export const __rspack_esm_ids=[933448];export const __webpack_modules__={jmgs(e,_,s){s.r(_);let t=(0,s("jTyp").c)("Unlink2",[["path",{d:"M15 7h2a5 5 0 0 1 0 10h-2m-6 0H7A5 5 0 0 1 7 7h2",key:"1re2ne"}]]);s.d(_,{},{default:t})}};

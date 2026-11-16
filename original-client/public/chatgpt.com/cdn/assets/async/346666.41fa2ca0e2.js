@@ -1,0 +1,2 @@
+/*! LICENSE: 346666.41fa2ca0e2.js.LICENSE.txt */
+export const __rspack_esm_ids=[346666];export const __webpack_modules__={PjaF(e,t,y){y.r(t);let d=(0,y("jTyp").c)("BatteryLow",[["rect",{width:"16",height:"10",x:"2",y:"7",rx:"2",ry:"2",key:"1w10f2"}],["line",{x1:"22",x2:"22",y1:"11",y2:"13",key:"4dh1rd"}],["line",{x1:"6",x2:"6",y1:"11",y2:"13",key:"1wd6dw"}]]);y.d(t,{},{default:d})}};

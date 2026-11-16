@@ -1,0 +1,2 @@
+/*! LICENSE: 85680.df8adee601.js.LICENSE.txt */
+export const __rspack_esm_ids=[85680];export const __webpack_modules__={OmrM(e,_,t){t.r(_);let p=(0,t("jTyp").c)("Tally2",[["path",{d:"M4 4v16",key:"6qkkli"}],["path",{d:"M9 4v16",key:"81ygyz"}]]);t.d(_,{},{default:p})}};

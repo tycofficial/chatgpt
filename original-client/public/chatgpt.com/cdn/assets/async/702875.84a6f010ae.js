@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[702875];export const __webpack_modules__={bQB3(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"enthalpyChangeKilojoules":-100}},{"name":"Maximum supported values","initialValues":{"enthalpyChangeKilojoules":100}},{"name":"No net enthalpy change","initialValues":{"enthalpyChangeKilojoules":0}}]')}};

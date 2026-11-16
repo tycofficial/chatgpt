@@ -1,0 +1,2 @@
+/*! LICENSE: 283734.5530499212.js.LICENSE.txt */
+export const __rspack_esm_ids=[283734];export const __webpack_modules__={B38V(e,a,t){t.r(a);let _=(0,t("jTyp").c)("PenLine",[["path",{d:"M12 20h9",key:"t2du7b"}],["path",{d:"M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z",key:"1ykcvy"}]]);t.d(a,{},{default:_})}};

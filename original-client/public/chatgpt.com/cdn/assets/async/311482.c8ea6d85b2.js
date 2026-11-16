@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[311482];export const __webpack_modules__={YDRb(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"initial_temperature_k":300,"activation_energy_kj_mol":8}},{"name":"Maximum supported values","initialValues":{"initial_temperature_k":900,"activation_energy_kj_mol":28}}]')}};

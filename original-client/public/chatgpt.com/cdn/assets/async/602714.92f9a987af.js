@@ -1,0 +1,2 @@
+/*! LICENSE: 602714.92f9a987af.js.LICENSE.txt */
+export const __rspack_esm_ids=[602714];export const __webpack_modules__={Ev8g(t,e,i){i.r(e);let h=(0,i("jTyp").c)("AlignVerticalJustifyEnd",[["rect",{width:"14",height:"6",x:"5",y:"12",rx:"2",key:"4l4tp2"}],["rect",{width:"10",height:"6",x:"7",y:"2",rx:"2",key:"ypihtt"}],["path",{d:"M2 22h20",key:"272qi7"}]]);i.d(e,{},{default:h})}};

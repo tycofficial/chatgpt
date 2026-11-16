@@ -1,0 +1,2 @@
+/*! LICENSE: 261748.b7dafd6d89.js.LICENSE.txt */
+export const __rspack_esm_ids=[261748];export const __webpack_modules__={A3JA(e,t,_){_.r(t);let r=(0,_("jTyp").c)("Pause",[["rect",{x:"14",y:"4",width:"4",height:"16",rx:"1",key:"zuxfzm"}],["rect",{x:"6",y:"4",width:"4",height:"16",rx:"1",key:"1okwgv"}]]);_.d(t,{},{default:r})}};

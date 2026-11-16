@@ -1,0 +1,2 @@
+/*! LICENSE: 15226.4490fa2e6c.js.LICENSE.txt */
+export const __rspack_esm_ids=[15226];export const __webpack_modules__={Jvcc(e,d,t){t.r(d);var p=t("p8eD");t.d(d,{default:()=>p.default})},p8eD(e,d,t){t.r(d);let p=(0,t("jTyp").c)("Axis3d",[["path",{d:"M4 4v16h16",key:"1s015l"}],["path",{d:"m4 20 7-7",key:"17qe9y"}]]);t.d(d,{},{default:p})}};

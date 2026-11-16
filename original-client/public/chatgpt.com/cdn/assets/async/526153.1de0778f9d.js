@@ -1,0 +1,2 @@
+/*! LICENSE: 526153.1de0778f9d.js.LICENSE.txt */
+export const __rspack_esm_ids=[526153];export const __webpack_modules__={WRyZ(e,t,d){d.r(t);let p=(0,d("jTyp").c)("RectangleEllipsis",[["rect",{width:"20",height:"12",x:"2",y:"6",rx:"2",key:"9lu3g6"}],["path",{d:"M12 12h.01",key:"1mp3jc"}],["path",{d:"M17 12h.01",key:"1m0b6t"}],["path",{d:"M7 12h.01",key:"eqddd0"}]]);d.d(t,{},{default:p})}};

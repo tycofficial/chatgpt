@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[14272];export const __webpack_modules__={lopq(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"x1":0,"x2":0}},{"name":"Maximum supported values","initialValues":{"x1":10,"x2":10}}]')}};

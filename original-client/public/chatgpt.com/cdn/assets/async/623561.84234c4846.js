@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[623561];export const __webpack_modules__={MlML(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"rank":1}},{"name":"Maximum supported values","initialValues":{"rank":4}},{"name":"Three retained singular components","initialValues":{"rank":3}}]')}};

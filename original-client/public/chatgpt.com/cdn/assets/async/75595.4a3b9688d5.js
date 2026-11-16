@@ -1,0 +1,2 @@
+/*! LICENSE: 75595.4a3b9688d5.js.LICENSE.txt */
+export const __rspack_esm_ids=[75595];export const __webpack_modules__={gIDn(e,t,p){p.r(t);let _=(0,p("jTyp").c)("AlignVerticalSpaceAround",[["rect",{width:"10",height:"6",x:"7",y:"9",rx:"2",key:"b1zbii"}],["path",{d:"M22 20H2",key:"1p1f7z"}],["path",{d:"M22 4H2",key:"1b7qnq"}]]);p.d(t,{},{default:_})}};

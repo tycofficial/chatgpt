@@ -1,0 +1,2 @@
+/*! LICENSE: 676382.48d753d559.js.LICENSE.txt */
+export const __rspack_esm_ids=[676382];export const __webpack_modules__={hr3M(e,t,r){r.r(t);var d=r("OQd1");r.d(t,{default:()=>d.default})},OQd1(e,t,r){r.r(t);let d=(0,r("jTyp").c)("ChartColumnBig",[["path",{d:"M3 3v16a2 2 0 0 0 2 2h16",key:"c24i48"}],["rect",{x:"15",y:"5",width:"4",height:"12",rx:"1",key:"q8uenq"}],["rect",{x:"7",y:"8",width:"4",height:"9",rx:"1",key:"sr5ea"}]]);r.d(t,{},{default:d})}};

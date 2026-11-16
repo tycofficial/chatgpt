@@ -1,0 +1,2 @@
+/*! LICENSE: 503269.3f7ceccdfb.js.LICENSE.txt */
+export const __rspack_esm_ids=[503269];export const __webpack_modules__={kC3L(t,_,e){e.r(_);let o=(0,e("jTyp").c)("Mountain",[["path",{d:"m8 3 4 8 5-5 5 15H2L8 3z",key:"otkl63"}]]);e.d(_,{},{default:o})}};

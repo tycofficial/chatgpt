@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[901964];export const __webpack_modules__={zhuo(s,e,a){var o=a("ABep"),i=a("LNJT");a.d(e,{},{IsoscelesTriangleCaption:s=>(0,o.jsx)(i.a,{...s,variant:"isosceles"}),IsoscelesTriangleControls:s=>(0,o.jsx)(i.b,{...s,variant:"isosceles"}),IsoscelesTriangleVisualization:s=>(0,o.jsx)(i.c,{...s,variant:"isosceles"})})}};

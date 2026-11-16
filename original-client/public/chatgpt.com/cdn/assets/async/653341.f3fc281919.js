@@ -1,0 +1,2 @@
+/*! LICENSE: 653341.f3fc281919.js.LICENSE.txt */
+export const __rspack_esm_ids=[653341];export const __webpack_modules__={ts8s(e,_,s){s.r(_);let t=(0,s("jTyp").c)("Underline",[["path",{d:"M6 4v6a6 6 0 0 0 12 0V4",key:"9kb039"}],["line",{x1:"4",x2:"20",y1:"20",y2:"20",key:"nun2al"}]]);s.d(_,{},{default:t})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 14954.1921d72336.js.LICENSE.txt */
+export const __rspack_esm_ids=[14954];export const __webpack_modules__={KBt6(t,e,d){d.r(e);var a=d("fo38");d.d(e,{default:()=>a.default})},fo38(t,e,d){d.r(e);let a=(0,d("jTyp").c)("PanelsTopLeft",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M3 9h18",key:"1pudct"}],["path",{d:"M9 21V9",key:"1oto5p"}]]);d.d(e,{},{default:a})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 255060.21edd4be5d.js.LICENSE.txt */
+export const __rspack_esm_ids=[255060];export const __webpack_modules__={SACe(e,t,_){_.r(t);let c=(0,_("jTyp").c)("GalleryVerticalEnd",[["path",{d:"M7 2h10",key:"nczekb"}],["path",{d:"M5 6h14",key:"u2x4p"}],["rect",{width:"18",height:"12",x:"3",y:"10",rx:"2",key:"l0tzu3"}]]);_.d(t,{},{default:c})}};

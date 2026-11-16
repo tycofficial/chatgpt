@@ -1,0 +1,2 @@
+/*! LICENSE: 974848.f23b8408ab.js.LICENSE.txt */
+export const __rspack_esm_ids=[974848];export const __webpack_modules__={dkdN(e,t,_){_.r(t);let d=(0,_("jTyp").c)("MoveRight",[["path",{d:"M18 8L22 12L18 16",key:"1r0oui"}],["path",{d:"M2 12H22",key:"1m8cig"}]]);_.d(t,{},{default:d})}};

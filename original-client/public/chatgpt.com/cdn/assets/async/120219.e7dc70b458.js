@@ -1,0 +1,2 @@
+/*! LICENSE: 120219.e7dc70b458.js.LICENSE.txt */
+export const __rspack_esm_ids=[120219];export const __webpack_modules__={YrQE(e,t,_){_.r(t);let a=(0,_("jTyp").c)("FilterX",[["path",{d:"M13.013 3H2l8 9.46V19l4 2v-8.54l.9-1.055",key:"1fi1da"}],["path",{d:"m22 3-5 5",key:"12jva0"}],["path",{d:"m17 3 5 5",key:"k36vhe"}]]);_.d(t,{},{default:a})}};

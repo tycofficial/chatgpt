@@ -1,0 +1,2 @@
+/*! LICENSE: 145971.0326b86a0d.js.LICENSE.txt */
+export const __rspack_esm_ids=[145971];export const __webpack_modules__={JK6r(e,t,_){_.r(t);let a=(0,_("jTyp").c)("Navigation2Off",[["path",{d:"M9.31 9.31 5 21l7-4 7 4-1.17-3.17",key:"qoq2o2"}],["path",{d:"M14.53 8.88 12 2l-1.17 3.17",key:"k3sjzy"}],["line",{x1:"2",x2:"22",y1:"2",y2:"22",key:"a6p6uj"}]]);_.d(t,{},{default:a})}};

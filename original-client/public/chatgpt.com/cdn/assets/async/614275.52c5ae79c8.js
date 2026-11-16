@@ -1,0 +1,2 @@
+/*! LICENSE: 614275.52c5ae79c8.js.LICENSE.txt */
+export const __rspack_esm_ids=[614275];export const __webpack_modules__={oSTg(e,a,_){_.r(a);let p=(0,_("jTyp").c)("SquareCheckBig",[["path",{d:"M21 10.5V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h12.5",key:"1uzm8b"}],["path",{d:"m9 11 3 3L22 4",key:"1pflzl"}]]);_.d(a,{},{default:p})}};

@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[67944];export const __webpack_modules__={AKUB(a){a.exports=JSON.parse('[{"name":"crystallization_method: evaporation","initialValues":{"crystallization_method":"evaporation"}}]')}};

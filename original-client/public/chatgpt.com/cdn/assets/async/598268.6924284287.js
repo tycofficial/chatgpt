@@ -1,0 +1,2 @@
+/*! LICENSE: 598268.6924284287.js.LICENSE.txt */
+export const __rspack_esm_ids=[598268];export const __webpack_modules__={FKEE(e,t,_){_.r(t);let p=(0,_("jTyp").c)("Megaphone",[["path",{d:"m3 11 18-5v12L3 14v-3z",key:"n962bs"}],["path",{d:"M11.6 16.8a3 3 0 1 1-5.8-1.6",key:"1yl0tm"}]]);_.d(t,{},{default:p})}};
