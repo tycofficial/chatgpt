@@ -1,5 +1,5 @@
 /** Explicit prototype-local identity; never a Google/OpenAI authentication. */
-import { getSiteAccount } from './site-account.mjs?v=0e54443bf396616d';
+import { getSiteAccount } from './site-account.mjs?v=7a172eaaf0f3c282';
 const siteAccount = getSiteAccount();
 const registeredSiteUser = siteAccount?.role === 'user' && siteAccount.planType === 'free' ? siteAccount : null;
 const administrator = siteAccount?.role === 'administrator' && siteAccount.planType === 'pro' ? siteAccount : null;

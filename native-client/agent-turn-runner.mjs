@@ -41,7 +41,7 @@ export async function runAgentTurn(server, running) {
     meta.underlyingApiEffort = turn.reasoningEffort === 'ultra' ? 'max' : turn.reasoningEffort;
     if (turn.reasoningEffort === 'ultra') {
       if (server.agentOptions.ultraOrchestration !== true) throw Object.assign(Error('Site Ultra orchestration is not enabled in this deployment. No provider request was submitted.'), { code: 'ULTRA_ORCHESTRATION_NOT_ENABLED', retryable: false });
-      const { createUltraToolExecutor } = await import('./site-ultra-orchestrator.mjs?v=0e54443bf396616d');
+      const { createUltraToolExecutor } = await import('./site-ultra-orchestrator.mjs?v=7a172eaaf0f3c282');
       executor = createUltraToolExecutor({ baseExecutor: executor, streamCompletion: options => server.streamCompletion(options), turn, checkpoint: cp, save, getSettings: executionSettings, getContext: () => [...server.messages(thread, turn, { omitCurrent: true }), ...cp.transcript], now: server.now, redact: errorText });
     }
     // A partial response is genuine saved output, not a completed tool call.

@@ -12,6 +12,7 @@ function requestHeaders(settings) {
 // Do not guess effort support for provider aliases or other model families.
 const VERIFIED_REASONING_EFFORTS = Object.freeze({
   'gpt-6.1-sol': Object.freeze(['low', 'medium', 'high', 'xhigh', 'max']),
+  'gpt-6.1-terra': Object.freeze(['none', 'low', 'medium', 'high', 'xhigh', 'max']),
   'gpt-6-astra': Object.freeze(['low', 'medium', 'high', 'xhigh', 'max']),
   'gpt-6-sol': Object.freeze(['none', 'low', 'medium', 'high', 'xhigh', 'max']),
   'gpt-6-luna': Object.freeze(['none', 'low', 'medium', 'high', 'xhigh', 'max']),
@@ -58,19 +59,31 @@ export function verifyResponseReasoning(settings, response) {
   }
 }
 
-async function responseError(response) {
-  let detail, code;
-  try {
-    const body = await response.json();
-    detail = body.error?.message || body.message || body.detail;
-    code = body.error?.code || body.code;
-  } catch { /* Some providers return an HTML error page. */ }
-  const exhausted = /insufficient.{0,32}(?:balance|quota|credit)|(?:credit|balance|quota).{0,32}(?:exhaust|insufficient)|额度不足|余额不足/i.test(String(detail || '') + ' ' + String(code || ''));
-  const error = new Error(exhausted ? `API 额度或余额已耗尽。${detail || '请补充服务商额度后重试。'}` : detail || (response.status === 401 || response.status === 403 ? 'API 认证失败，请在设置中检查密钥及模型访问权限。' : response.status === 429 ? 'API 请求过于频繁或额度不足，请稍后重试。' : `API 请求失败（HTTP ${response.status}）`));
-  error.status = response.status;
-  error.code = exhausted ? 'API_QUOTA_EXHAUSTED' : code || 'API_REQUEST_FAILED';
-  error.retryable = !exhausted && (response.status === 408 || response.status === 429 || response.status >= 500);
+function providerError(body, { status, requestId, transportStatus = status } = {}) {
+  const detail = body?.error && typeof body.error === 'object' ? body.error : body;
+  const message = typeof body?.error === 'string' ? body.error : detail?.message || (typeof detail?.detail === 'string' ? detail.detail : undefined);
+  const code = detail?.code || body?.code;
+  const subscriptionQuota = code === 'subscription_sharing_usage_limit_exceeded';
+  const exhausted = /insufficient.{0,32}(?:balance|quota|credit)|(?:credit|balance|quota).{0,32}(?:exhaust|insufficient)|insufficient_quota|额度不足|余额不足/i.test(String(message || '') + ' ' + String(code || ''));
+  const explicitStatus = [detail?.status_code, detail?.http_status, body?.status_code].find(value => Number.isInteger(value) && value >= 400 && value < 600);
+  status ??= explicitStatus;
+  const error = new Error(subscriptionQuota ? `ChatGPT 订阅额度暂时不可用。${message || '请在官网用量页面查看恢复时间。'}` : exhausted ? `API 额度或余额已耗尽。${message || '请补充服务商额度后重试。'}` : message || (status === 401 || status === 403 ? 'API 认证失败，请在设置中检查密钥及模型访问权限。' : status === 429 ? 'API 请求过于频繁或额度不足，请稍后重试。' : status ? `API 请求失败（HTTP ${status}）` : '模型响应失败。'));
+  error.status = status;
+  error.transportStatus = transportStatus;
+  error.providerCode = code || null;
+  error.code = subscriptionQuota ? 'SUBSCRIPTION_QUOTA_EXHAUSTED' : exhausted ? 'API_QUOTA_EXHAUSTED' : code || 'API_REQUEST_FAILED';
+  error.param = detail?.param ?? null;
+  error.requestId = detail?.request_id || body?.request_id || requestId || null;
+  if (subscriptionQuota || exhausted) error.retryable = false;
+  else if (status) error.retryable = status === 408 || status === 429 || status >= 500;
+  else if (['server_error','rate_limit_exceeded'].includes(code) || detail?.type === 'server_error') error.retryable = true;
+  else if (['invalid_api_key','permission_denied','invalid_request_error','model_not_found'].includes(code) || detail?.type === 'invalid_request_error') error.retryable = false;
   return error;
+}
+async function responseError(response) {
+  let body;
+  try { body = await response.json(); } catch { /* Some providers return an HTML error page. */ }
+  return providerError(body, { status: response.status, requestId: response.headers.get('x-request-id') });
 }
 
 export async function getModels(settings, signal) {
@@ -100,9 +113,9 @@ export class SSEDecoder {
   }
 }
 
-export async function streamCompletion({ settings, messages, tools, signal, onDelta = () => {}, onActivity = () => {} }) {
+export async function streamCompletion({ settings, messages, tools, signal, onDelta = () => {}, onActivity = () => {}, responsesTransport }) {
   if (settings.apiTransport === 'responses' || settings.reasoningMode === 'pro') {
-    return streamResponses({ settings, messages, tools, signal, onDelta, onActivity });
+    return streamResponses({ settings, messages, tools, signal, onDelta, onActivity, responsesTransport });
   }
   const payload = { model: settings.model, messages: messages.map(({ response_items, ...message }) => message), stream: true };
   const effort = validatedReasoningEffort(settings);
@@ -117,7 +130,7 @@ export async function streamCompletion({ settings, messages, tools, signal, onDe
   const toolCalls = [];
   let finished = false;
   const consume = (body) => {
-    if (body.error) throw new Error(body.error.message || String(body.error));
+    if (body.error) throw providerError(body, { transportStatus: response.status, requestId: response.headers.get('x-request-id') });
     if (body.usage) assembled.usage = body.usage;
     const choice = body.choices?.[0];
     if (!choice) return;
@@ -201,14 +214,15 @@ export function toResponsesTools(tools = []) {
 }
 
 /** Responses transport preserves the same app-facing assistant/tool-call contract. */
-async function streamResponses({ settings, messages, tools, signal, onDelta, onActivity }) {
+async function streamResponses({ settings, messages, tools, signal, onDelta, onActivity, responsesTransport }) {
   const payload = { model: settings.model, input: toResponsesInput(messages), stream: true, store: false, include: ['reasoning.encrypted_content'] };
   if (settings.serviceTier) payload.service_tier = settings.serviceTier;
   const reasoning = responsesReasoning(settings);
   if (reasoning) payload.reasoning = reasoning;
   if ((!allowedReasoningEfforts(settings.model).length || reasoning?.effort === 'none') && settings.temperature !== undefined && settings.temperature !== null && settings.temperature !== '') payload.temperature = Number(settings.temperature);
   if (tools?.length) { payload.tools = toResponsesTools(tools); payload.tool_choice = 'auto'; }
-  const response = await fetch(apiURL(settings.apiBase, 'responses'), { method: 'POST', headers: requestHeaders(settings), body: JSON.stringify(payload), signal });
+  const fallbackResponses = () => fetch(apiURL(settings.apiBase, 'responses'), { method: 'POST', headers: requestHeaders(settings), body: JSON.stringify(payload), signal });
+  const response = responsesTransport ? await responsesTransport(payload, { signal, fallbackResponses }) : await fallbackResponses();
   if (!response.ok) throw await responseError(response);
 
   const assembled = { role: 'assistant', content: '' };
@@ -247,9 +261,9 @@ async function streamResponses({ settings, messages, tools, signal, onDelta, onA
     });
   };
   const ingestResponse = body => {
-    if (body.error) throw new Error(body.error.message || String(body.error));
+    if (body.error) throw providerError(body, { transportStatus: response.status, requestId: response.headers.get('x-request-id') });
     if (body.usage) assembled.usage = body.usage;
-    if (body.status === 'failed') throw new Error(body.error?.message || '模型响应失败。');
+    if (body.status === 'failed') throw providerError(body, { transportStatus: response.status, requestId: response.headers.get('x-request-id') });
     verifyResponseReasoning(settings, body);
     (body.output || []).forEach((item,index) => ingestItem(item,index,true));
     if (!body.output?.length && typeof body.output_text === 'string') textPart(0,0,body.output_text);
@@ -258,8 +272,8 @@ async function streamResponses({ settings, messages, tools, signal, onDelta, onA
     assembled.finish_reason = body.status === 'incomplete' ? 'length' : calls.size ? 'tool_calls' : 'stop';
   };
   const consume = body => {
-    if (body.error) throw new Error(body.error.message || String(body.error));
-    if (body.type === 'error') throw new Error(body.message || body.code || 'Responses API 返回错误。');
+    if (body.error) throw providerError(body, { transportStatus: response.status, requestId: response.headers.get('x-request-id') });
+    if (body.type === 'error') throw providerError(body, { transportStatus: response.status, requestId: response.headers.get('x-request-id') });
     const index = outputIndex(body);
     switch (body.type) {
       case 'response.output_item.added': ingestItem(body.item,index); break;
@@ -278,7 +292,7 @@ async function streamResponses({ settings, messages, tools, signal, onDelta, onA
         assembled.reasoning = (assembled.reasoning || '') + (body.delta || ''); onActivity({type:'reasoning_delta'}); onDelta('',assembled); break;
       case 'response.completed':
       case 'response.incomplete': ingestResponse(body.response || {}); finished = true; break;
-      case 'response.failed': throw new Error(body.response?.error?.message || '模型响应失败。');
+      case 'response.failed': throw providerError({ ...body.response, request_id: body.request_id || body.response?.request_id }, { transportStatus: response.status, requestId: response.headers.get('x-request-id') });
       default: if (Array.isArray(body.output) || typeof body.output_text === 'string') ingestResponse(body);
     }
   };

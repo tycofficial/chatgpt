@@ -1,5 +1,6 @@
 /**
  * Baseline captured from the signed-in first-party Work picker, 2026-11-15.
+ * Additional manual models require a separately recorded dual-source match.
  * A provider's /v1/models response alone must never expand this catalog.
  * Future additions require both an official OpenAI release and a matching
  * provider model, with a separately verified picker preset mapping.
@@ -8,6 +9,7 @@ export const WORK_MODEL_IDS = Object.freeze([
   'gpt-6-luna',
   'gpt-6.1-sol',
   'gpt-6-astra',
+  'gpt-6.1-terra',
 ]);
 
 export const WORK_PRESETS = Object.freeze([
@@ -19,7 +21,7 @@ export const WORK_PRESETS = Object.freeze([
   Object.freeze({id:'gpt-6-astra:xhigh',model:'gpt-6-astra',effort:'xhigh',label:'极高',displayLabel:'GPT-6 Astra 极高'}),
 ]);
 
-export const WORK_MODEL_LABELS=Object.freeze({'gpt-6-luna':'GPT-6 Luna','gpt-6.1-sol':'GPT-6.1 Sol','gpt-6-astra':'GPT-6 Astra'});
+export const WORK_MODEL_LABELS=Object.freeze({'gpt-6-luna':'GPT-6 Luna','gpt-6.1-sol':'GPT-6.1 Sol','gpt-6-astra':'GPT-6 Astra','gpt-6.1-terra':'GPT-6.1 Terra'});
 // Exact public locale IDs: composer.mode.local.reasoning.{none,low,medium,
 // high,xhigh,max}.label (low uses .low.label.v2). These are original labels.
 export const WORK_EFFORT_LABELS=Object.freeze({none:'无',low:'轻度',medium:'中',high:'高',xhigh:'极高',max:'Max',ultra:'Ultra'});
@@ -37,6 +39,19 @@ export const WORK_PINNED_EFFORTS=Object.freeze({
   'gpt-6-luna':Object.freeze(['none','low','medium','high','xhigh','max']),
   'gpt-6.1-sol':Object.freeze(['low','medium','high','xhigh','max','ultra']),
   'gpt-6-astra':Object.freeze(['low','medium','high','xhigh','max','ultra']),
+  'gpt-6.1-terra':Object.freeze(['none','low','medium','high','xhigh','max']),
+});
+// This manual addition has a public release and an exact provider catalog match.
+// Model membership is not proof that the provider currently permits inference.
+export const WORK_ADDITIONAL_MODEL_PROVENANCE=Object.freeze({
+  'gpt-6.1-terra':Object.freeze({
+    officialModelId:'gpt-6.1-terra',providerExactModelId:'gpt-6.1-terra',
+    officialRelease:'https://learn.chatgpt.com/docs/changelog#2026-10-26',
+    officialCapabilities:'https://developers.openai.com/api/docs/models/gpt-6.1-terra.md',
+    providerModelsCheckedAt:'2026-11-16T14:14:05Z',providerModelsStatus:200,
+    surfaces:Object.freeze(['work','codex']),manualOnly:true,curatedPreset:false,
+    inferenceVerified:false,siteUltraEnabled:false,
+  }),
 });
 // Ultra is a site execution mode; it is never a provider reasoning_effort enum.
 // The runner must execute genuine parallel delegation with the same base family.

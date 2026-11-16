@@ -82,3 +82,28 @@ test('Chat compatibility never sends local Responses history metadata to the ups
   await streamCompletion({settings:{...settings,apiTransport:undefined},messages:[{role:'assistant',content:'prior',response_items:[{type:'reasoning',encrypted_content:'cipher'}]}]});
   assert.deepEqual(body.messages,[{role:'assistant',content:'prior'}]);
 });
+
+test('a quota failure inside HTTP200 SSE preserves actual code, parameter and request ID without becoming retryable',async t=>{
+  t.mock.method(globalThis,'fetch',async()=>eventsResponse([{type:'response.failed',request_id:'request_fixture',response:{status:'failed',error:{code:'subscription_sharing_usage_limit_exceeded',message:'Actual fixture plan limit',param:'model'}}}]));
+  await assert.rejects(streamCompletion({settings,messages:[]}),error=>{
+    assert.equal(error.code,'SUBSCRIPTION_QUOTA_EXHAUSTED');assert.equal(error.providerCode,'subscription_sharing_usage_limit_exceeded');assert.equal(error.transportStatus,200);assert.equal(error.status,undefined);assert.equal(error.param,'model');assert.equal(error.requestId,'request_fixture');assert.equal(error.retryable,false);assert.match(error.message,/ChatGPT 订阅额度/);return true;
+  });
+});
+
+test('HTTP quota errors retain provider details and distinguish API balance from subscription usage',async t=>{
+  t.mock.method(globalThis,'fetch',async()=>new Response(JSON.stringify({error:{code:'insufficient_quota',message:'Fixture API credits exhausted',param:'account'}}),{status:429,headers:{'Content-Type':'application/json','x-request-id':'http_fixture'}}));
+  await assert.rejects(streamCompletion({settings,messages:[]}),error=>{assert.equal(error.code,'API_QUOTA_EXHAUSTED');assert.equal(error.providerCode,'insufficient_quota');assert.equal(error.status,429);assert.equal(error.param,'account');assert.equal(error.requestId,'http_fixture');assert.equal(error.retryable,false);return true;});
+});
+
+test('an optional raw Responses transport uses the existing codec and receives no gateway credentials',async t=>{
+  let received;const calls=[];
+  t.mock.method(globalThis,'fetch',async()=>{throw Error('The gateway must not run for an accepted custom response');});
+  const result=await streamCompletion({settings:{...settings,apiKey:'fixture-private-key'},messages:[{role:'user',content:'neutral transport fixture'}],responsesTransport:async(payload,options)=>{received=payload;assert.equal(typeof options.fallbackResponses,'function');assert.equal(JSON.stringify(payload).includes('fixture-private-key'),false);return eventsResponse([{type:'response.output_text.delta',output_index:0,delta:'transport fixture'}, {type:'response.completed',response:completed([textItem('transport fixture')])}]);},onDelta:delta=>calls.push(delta)});
+  assert.equal(received.model,settings.model);assert.equal(received.store,false);assert.equal(result.content,'transport fixture');assert.equal(calls.join(''),'transport fixture');
+});
+
+test('custom transport fallback invokes the ordinary authorized Responses request exactly once',async t=>{
+  let requests=0;
+  t.mock.method(globalThis,'fetch',async(url,options)=>{requests++;assert.equal(url,'https://provider.example/v1/responses');assert.equal(options.headers.Authorization,'Bearer fixture-key');return Response.json(completed([textItem('fallback fixture')]));});
+  const result=await streamCompletion({settings:{...settings,apiKey:'fixture-key'},messages:[],responsesTransport:(_payload,{fallbackResponses})=>fallbackResponses()});assert.equal(result.content,'fallback fixture');assert.equal(requests,1);
+});

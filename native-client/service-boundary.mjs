@@ -1,20 +1,21 @@
-import * as modelCatalog from '../model-catalog.js?v=0e54443bf396616d';
-import { createModelCatalogAdapter } from './model-catalog-adapter.mjs?v=0e54443bf396616d';
-import { DEFAULT_SETTINGS } from '../config.js?v=0e54443bf396616d';
-import { streamCompletion, PythonRuntime, PYTHON_TOOL } from '../runtime.js?v=0e54443bf396616d';
-import { LocalAppServer, LocalProtocolSocket } from './local-app-server.mjs?v=0e54443bf396616d';
-import { getPrototypeLocalSession, getPrototypeLocalAuth, getLocalAccountCheck, getLocalOptimizedAccount, getLocalWhamAccounts, getPrototypeCurrentUser, isPrototypeLocalSession, clearPrototypeLocalSession, getLocalSignedOutUrl, getLocalAccountStorageKey } from './local-identity.mjs?v=0e54443bf396616d';
-import { getPrototypeConfiguration } from './local-configuration.mjs?v=0e54443bf396616d';
-import { ClassicChatAdapter } from './classic-chat-adapter.mjs?v=0e54443bf396616d';
-import { LocalConversationPubSub } from './local-pubsub.mjs?v=0e54443bf396616d';
-import { readLocalUserPreferences, updateLocalUserPreference, acknowledgeLocalAnnouncement } from './local-user-preferences.mjs?v=0e54443bf396616d';
-import { createBrowserToolExecutor } from './browser-tool-executor.mjs?v=0e54443bf396616d';
-import { createLocalPricingAdapter } from './local-pricing.mjs?v=0e54443bf396616d';
-import { SITE_ACCOUNT_SERVICE, getSiteAccount, hasModelSelectionAccess, logoutSiteAccount } from './site-account.mjs?v=0e54443bf396616d';
-import { createLocalCodexAdapter } from './local-codex-adapter.mjs?v=0e54443bf396616d';
-import { isOpenStreetMapTileRequest, fetchOpenStreetMapTile } from './local-map-provider.mjs?v=0e54443bf396616d';
-import { createLocalDiscoveryAdapter } from './local-discovery.mjs?v=0e54443bf396616d';
-import { createLocalDotAdapter } from './local-dot-adapter.mjs?v=0e54443bf396616d';
+import * as modelCatalog from '../model-catalog.js?v=7a172eaaf0f3c282';
+import { createModelCatalogAdapter } from './model-catalog-adapter.mjs?v=7a172eaaf0f3c282';
+import { DEFAULT_SETTINGS } from '../config.js?v=7a172eaaf0f3c282';
+import { streamCompletion, PythonRuntime, PYTHON_TOOL } from '../runtime.js?v=7a172eaaf0f3c282';
+import { LocalAppServer, LocalProtocolSocket } from './local-app-server.mjs?v=7a172eaaf0f3c282';
+import { getPrototypeLocalSession, getPrototypeLocalAuth, getLocalAccountCheck, getLocalOptimizedAccount, getLocalWhamAccounts, getPrototypeCurrentUser, isPrototypeLocalSession, clearPrototypeLocalSession, getLocalSignedOutUrl, getLocalAccountStorageKey } from './local-identity.mjs?v=7a172eaaf0f3c282';
+import { getPrototypeConfiguration } from './local-configuration.mjs?v=7a172eaaf0f3c282';
+import { ClassicChatAdapter } from './classic-chat-adapter.mjs?v=7a172eaaf0f3c282';
+import { LocalConversationPubSub } from './local-pubsub.mjs?v=7a172eaaf0f3c282';
+import { readLocalUserPreferences, updateLocalUserPreference, acknowledgeLocalAnnouncement } from './local-user-preferences.mjs?v=7a172eaaf0f3c282';
+import { createBrowserToolExecutor } from './browser-tool-executor.mjs?v=7a172eaaf0f3c282';
+import { createLocalPricingAdapter } from './local-pricing.mjs?v=7a172eaaf0f3c282';
+import { SITE_ACCOUNT_SERVICE, getSiteAccount, hasModelSelectionAccess, logoutSiteAccount } from './site-account.mjs?v=7a172eaaf0f3c282';
+import { createLocalCodexAdapter } from './local-codex-adapter.mjs?v=7a172eaaf0f3c282';
+import { isOpenStreetMapTileRequest, fetchOpenStreetMapTile } from './local-map-provider.mjs?v=7a172eaaf0f3c282';
+import { createLocalDiscoveryAdapter } from './local-discovery.mjs?v=7a172eaaf0f3c282';
+import { createLocalDotAdapter } from './local-dot-adapter.mjs?v=7a172eaaf0f3c282';
+import { createLocalMapsService } from './local-maps-service.mjs?v=7a172eaaf0f3c282';
 
 export const localModelAdapter = createModelCatalogAdapter(modelCatalog);
 export const localProtocolDiagnostics = [];
@@ -29,6 +30,7 @@ export const localToolExecutor = createBrowserToolExecutor({ PythonRuntime, PYTH
 });
 export const localPricingAdapter = createLocalPricingAdapter({ diagnostics: localProtocolDiagnostics, readMembership: () => getSiteAccount() });
 export const localDiscoveryAdapter = createLocalDiscoveryAdapter({ storage: { getItem: key => globalThis.localStorage.getItem(key), setItem: (key, value) => globalThis.localStorage.setItem(key, value) }, getAccountId: () => getPrototypeLocalAuth()?.accountId ?? null, diagnostics: localProtocolDiagnostics });
+export const localMapsService = createLocalMapsService({ storage: { getItem: key => globalThis.localStorage.getItem(key), setItem: (key, value) => globalThis.localStorage.setItem(key, value) }, getAccountId: () => getPrototypeLocalAuth()?.accountId ?? null, diagnostics: localProtocolDiagnostics });
 export const localAppServer = new LocalAppServer({
   storage: {
     getItem: key => globalThis.localStorage.getItem(getLocalAccountStorageKey(key)),
@@ -134,7 +136,7 @@ export function installNetworkBoundary() {
     }
     if (request.method === 'GET' && /^\/(?:__codex-api\/|backend-api\/)?(?:tpp\/)?models\/?$/.test(url.pathname)) {
       diagnostics.push({ type: 'local-adapter', service: 'models', source: 'model-catalog.js', capabilitySource: modelCatalog.WORK_CATALOG_PROVENANCE.pinned });
-      return response(localModelAdapter.getChatGptModels());
+      return response(/\/tpp\/models\/?$/.test(url.pathname) ? localModelAdapter.getWorkModels() : localModelAdapter.getChatGptModels());
     }
     if (request.method === 'GET' && /^\/(?:__codex-api\/|backend-api\/)?celsius\/ws\/user\/?$/.test(url.pathname)) {
       const socket = new URL('/__prototype/local-conversations', location.href);
@@ -147,6 +149,8 @@ export function installNetworkBoundary() {
       if (artifact) return artifact;
       const dot = await localDotAdapter.handle(request, adapterPath);
       if (dot) return dot;
+      const maps = await localMapsService.handle(request, adapterPath);
+      if (maps) return maps;
       const pricing = await localPricingAdapter.handle(request, adapterPath);
       if (pricing) return pricing;
       const discovery = await localDiscoveryAdapter.handle(request, adapterPath);

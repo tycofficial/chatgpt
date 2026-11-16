@@ -155,7 +155,7 @@ async function relayFixture({ stream = completedStream(), dropFirstAck = false }
     async recordUsageError(error) { fixture.quotaError = error.code; },
   };
   const client = new BridgeClient({ store: disk, sessions: {}, official, baseURL: 'https://fixture-site.example', fetch: async (_url, options) => {
-    const value = JSON.parse(options.body); requests.push(value);
+    const value = JSON.parse(options.body); if (!Array.isArray(value.events)) return json({ status: 'claimed', cancelled: false, ackSeq: -1 }); requests.push(value);
     for (const event of value.events) { if (received.has(event.seq)) assert.deepEqual(received.get(event.seq), event); received.set(event.seq, event); }
     if (dropFirstAck && !fixture.dropped) { fixture.dropped = true; throw Error('fixture transport lost acknowledgement'); }
     return json({ ackSeq: value.events.at(-1).seq });

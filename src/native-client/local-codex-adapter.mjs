@@ -12,10 +12,11 @@
  * aVy5 async/131573.a965ef0d42.js:523279-547256 (local submission hook).
  * EAKz retains its original protocol/state reconciliation over LocalProtocolSocket.
  */
+import { WORK_MODEL_IDS } from './model-catalog.js';
 export const CODEX_DETAIL_MODE = 'STEPS_COMMANDS';
 export const WORK_DETAIL_MODE = 'STEPS_PROSE';
 export const CODEX_BROWSER_UI_GATES = Object.freeze(['3999836663', '4019944087', '515412992']);
-export const CODEX_MODEL_IDS = Object.freeze(['gpt-6-luna', 'gpt-6.1-sol', 'gpt-6-astra']);
+export const CODEX_MODEL_IDS = WORK_MODEL_IDS;
 export const CODEX_SOURCE_CONTRACT = Object.freeze({
   route: '/', routeState: 'sidebarProductMode', productMode: 'codex',
   policyModule: 'ztxE', policyExport: 'a',
@@ -56,7 +57,7 @@ export function createLocalCodexAdapter({
   const rows = models.getRpcModelList()?.data;
   const modelIds = [...new Set(Array.isArray(rows) ? rows.map(row => row.model ?? row.id) : [])];
   if (modelIds.length !== CODEX_MODEL_IDS.length || modelIds.some(id => !MODEL_SET.has(id))) {
-    throw new RangeError('Codex must use the same explicit three-model catalog as Work');
+    throw new RangeError('Codex must use the same explicit verified model catalog as Work');
   }
 
   function state() {

@@ -15,6 +15,7 @@ import { createLocalCodexAdapter } from './local-codex-adapter.mjs';
 import { isOpenStreetMapTileRequest, fetchOpenStreetMapTile } from './local-map-provider.mjs';
 import { createLocalDiscoveryAdapter } from './local-discovery.mjs';
 import { createLocalDotAdapter } from './local-dot-adapter.mjs';
+import { createLocalMapsService } from './local-maps-service.mjs';
 
 export const localModelAdapter = createModelCatalogAdapter(modelCatalog);
 export const localProtocolDiagnostics = [];
@@ -29,6 +30,7 @@ export const localToolExecutor = createBrowserToolExecutor({ PythonRuntime, PYTH
 });
 export const localPricingAdapter = createLocalPricingAdapter({ diagnostics: localProtocolDiagnostics, readMembership: () => getSiteAccount() });
 export const localDiscoveryAdapter = createLocalDiscoveryAdapter({ storage: { getItem: key => globalThis.localStorage.getItem(key), setItem: (key, value) => globalThis.localStorage.setItem(key, value) }, getAccountId: () => getPrototypeLocalAuth()?.accountId ?? null, diagnostics: localProtocolDiagnostics });
+export const localMapsService = createLocalMapsService({ storage: { getItem: key => globalThis.localStorage.getItem(key), setItem: (key, value) => globalThis.localStorage.setItem(key, value) }, getAccountId: () => getPrototypeLocalAuth()?.accountId ?? null, diagnostics: localProtocolDiagnostics });
 export const localAppServer = new LocalAppServer({
   storage: {
     getItem: key => globalThis.localStorage.getItem(getLocalAccountStorageKey(key)),
@@ -126,7 +128,7 @@ export function installNetworkBoundary() {
     }
     if (request.method === 'GET' && /^\/(?:__codex-api\/|backend-api\/)?(?:tpp\/)?models\/?$/.test(url.pathname)) {
       diagnostics.push({ type: 'local-adapter', service: 'models', source: 'model-catalog.js', capabilitySource: modelCatalog.WORK_CATALOG_PROVENANCE.pinned });
-      return response(localModelAdapter.getChatGptModels());
+      return response(/\/tpp\/models\/?$/.test(url.pathname) ? localModelAdapter.getWorkModels() : localModelAdapter.getChatGptModels());
     }
     if (request.method === 'GET' && /^\/(?:__codex-api\/|backend-api\/)?celsius\/ws\/user\/?$/.test(url.pathname)) {
       const socket = new URL('/__prototype/local-conversations', location.href);
@@ -139,6 +141,8 @@ export function installNetworkBoundary() {
       if (artifact) return artifact;
       const dot = await localDotAdapter.handle(request, adapterPath);
       if (dot) return dot;
+      const maps = await localMapsService.handle(request, adapterPath);
+      if (maps) return maps;
       const pricing = await localPricingAdapter.handle(request, adapterPath);
       if (pricing) return pricing;
       const discovery = await localDiscoveryAdapter.handle(request, adapterPath);

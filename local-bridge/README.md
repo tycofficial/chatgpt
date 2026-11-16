@@ -49,9 +49,18 @@ Rotating refreshes are serialized with an on-disk per-registration lock and atom
 ## Verification
 
 ```powershell
-node --test .\local-bridge\test\bridge.test.mjs
+node --test .\local-bridge\test\*.test.mjs
 ```
 
 Tests use local fixture JWT keys, fake OAuth/inference/relay transports and loopback HTTP only. They cover PKCE/state, ID/access token verification, scope restrictions, refresh serialization, sign-out, credential redaction, sequence replay, incomplete streams, quota pauses, and local cookie/CSRF checks. They never open an authorization browser or call a real account.
 
 The program is online only while this computer and process remain running. A website relay job is not proof of a cloud worker or of continued execution after the local process stops.
+
+
+## Relay v4: concurrent execution and stop
+
+Use the updated relay with migration0002 applied before starting this bridge version. The local scheduler serves at most3 inference jobs simultaneously (configurable down to1), keeps their job IDs in the polling exclusion list, and renews a per-process lease. Each job has its own AbortController and heartbeat; stopping one job leaves other requests running. A silent stream is checked for cancellation every1.5 seconds plus network latency. A revoked pairing stops its active requests. Temporary network failure cannot guarantee immediate delivery of a stop, and previously consumed inference is subject to official accounting.
+
+Website cancellation is distinct from a browser reader detach. DELETE marks a durable cancellation, and this host actually aborts its official HTTP request when the heartbeat or event acknowledgement reports that state. A cancelled acknowledgement never advances the local outbox cursor. Partial output stays in the protected journal, without a fabricated successful completion. Retrying an outbox does not repeat inference. A resumed claimed job with no protected journal fails explicitly instead of guessing whether it already ran.
+
+The initial data chunk is relayed immediately; lost acknowledgements are retried during a later silent wait. Atomic file replacement tolerates bounded Windows sharing/antivirus contention while keeping the previous credential/checkpoint intact. No OAuth scope or authorization behavior changed.

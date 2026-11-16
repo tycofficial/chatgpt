@@ -2,23 +2,23 @@
  * Loads the public original component graph with explicit local host services.
  * Private original backend credentials are never used by this entry point.
  */
-import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter } from './service-boundary.mjs?v=0e54443bf396616d';
-import * as mapLibreRenderer from './map-vendor/maplibre-gl.mjs?v=0e54443bf396616d';
-import { createLocalMapProvider } from './local-map-provider.mjs?v=0e54443bf396616d';
-import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs?v=0e54443bf396616d';
-import { getPrototypeLocalSession, getPrototypeLocalAuth, isPrototypeLocalSession, getPrototypeLocalAuthGeneration, clearPrototypeLocalSession } from './local-identity.mjs?v=0e54443bf396616d';
-import { createLocalHostSettingsClass } from './local-host-settings.mjs?v=0e54443bf396616d';
-import { createLocalWorkPolicy } from './local-work-policy.mjs?v=0e54443bf396616d';
-import { hasModelSelectionAccess, getSiteLoginUrl } from './site-account.mjs?v=0e54443bf396616d';
-import { createNativeModelSelectionPolicy, createNativeThinkingEntryPolicy } from './local-model-selection-policy.mjs?v=0e54443bf396616d';
-import { createLocalHostClaimsReader } from './local-token-identity.mjs?v=0e54443bf396616d';
+import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter } from './service-boundary.mjs?v=7a172eaaf0f3c282';
+import * as mapLibreRenderer from './map-vendor/maplibre-gl.mjs?v=7a172eaaf0f3c282';
+import { createLocalMapProvider } from './local-map-provider.mjs?v=7a172eaaf0f3c282';
+import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs?v=7a172eaaf0f3c282';
+import { getPrototypeLocalSession, getPrototypeLocalAuth, isPrototypeLocalSession, getPrototypeLocalAuthGeneration, clearPrototypeLocalSession } from './local-identity.mjs?v=7a172eaaf0f3c282';
+import { createLocalHostSettingsClass } from './local-host-settings.mjs?v=7a172eaaf0f3c282';
+import { createLocalWorkPolicy } from './local-work-policy.mjs?v=7a172eaaf0f3c282';
+import { hasModelSelectionAccess, getSiteLoginUrl } from './site-account.mjs?v=7a172eaaf0f3c282';
+import { createNativeModelSelectionPolicy, createNativeThinkingEntryPolicy } from './local-model-selection-policy.mjs?v=7a172eaaf0f3c282';
+import { createLocalHostClaimsReader } from './local-token-identity.mjs?v=7a172eaaf0f3c282';
 
 const boundary = installNetworkBoundary();
 globalThis.__originalClientProbe = boundary.diagnostics;
 installSyntheticDocumentState();
 if (globalThis.__CHATGPT_REPLICA_ENV__) window.__reactRouterContext.basename = globalThis.__CHATGPT_REPLICA_ENV__.basePath.replace(/\/$/, '') || '/';
 
-const plan = await (await fetch(new URL('./entry-plan.json?v=0e54443bf396616d', import.meta.url))).json();
+const plan = await (await fetch(new URL('./entry-plan.json?v=7a172eaaf0f3c282', import.meta.url))).json();
 const { __webpack_require__: requireOriginal } = await import(plan.runtime);
 // One mechanical entry transform defers its terminal hxQI invocation and
 // rebases its relative imports. All original factories and chunks are retained.

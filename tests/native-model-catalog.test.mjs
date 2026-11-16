@@ -15,3 +15,62 @@ test('raw display title contains only effort and model version has its own field
 test('the Chat alias stays a plain API model selection without Work orchestration',()=>{const raw=adapter.getChatGptModels();assert(!raw.models.find(m=>m.slug==='auto').thinking_efforts.some(e=>e.thinking_effort==='ultra'));assert(!raw.versions.find(v=>v.id==='auto').intelligence_presets.some(e=>e.thinking_effort==='ultra'));});
 test('the six observed default presets remain distinct from manual model capabilities',()=>{assert.equal(adapter.getSliderModelsConfig().presets[0].length,6);assert.deepEqual(adapter.getSliderModelsConfig().presets[0].map(e=>[e.model,e.reasoning_effort]),catalog.WORK_PRESETS.map(e=>[e.model,e.effort]));});
 test('source mode separation and both Ultra gates use verified site permission',()=>{const source=fs.readFileSync(new URL('../src/native-client/local-configuration.mjs',import.meta.url),'utf8').replace(/^import .*;\r?$/gm,'').replace(/^export\s+/gm,'');for(const access of [false,true]){const context=vm.createContext({catalog,createModelCatalogAdapter,getPrototypeStatsigUser:()=>({userID:'fixture-user',customIDs:{}}),isPrototypeLocalSession:()=>true,hasModelSelectionAccess:()=>access,structuredClone,Date});new vm.Script(source+'\nglobalThis.fixtureConfig=getPrototypeConfiguration();',{filename:'local-configuration.mjs (isolated fixture)'}).runInContext(context);const config=context.fixtureConfig;assert.equal(config.layer_configs['3040264819'].value.merged_picker,false);for(const id of ['536305374','1186680773']){assert.equal(config.feature_gates[id].value,access);assert.equal(Object.values(config.feature_gates).filter(g=>g.name===id).length,2);}}});
+
+test('Fast survives the source TFzY two-level service-tier filter without adding it to Chat',()=>{
+  const raw=adapter.getChatGptModels();
+  const presetTiers=new Set(raw.versions.flatMap(v=>v.intelligence_presets).flatMap(p=>(p.service_tier_options??[]).filter(t=>t.service_tier!=='standard').map(t=>t.service_tier)));
+  assert(presetTiers.has('fast'));
+  for(const id of catalog.WORK_MODEL_IDS){
+    const row=raw.models.find(m=>m.slug===id);
+    assert(row.service_tier_options.filter(t=>presetTiers.has(t.service_tier)).some(t=>t.service_tier==='fast'));
+    assert(adapter.getRpcModelList().data.find(m=>m.model===id).serviceTiers.some(t=>t.id==='fast'));
+  }
+  assert.equal(raw.models.find(m=>m.slug==='auto').service_tier_options,undefined);
+  assert(raw.versions.find(v=>v.id==='auto').intelligence_presets.every(p=>p.service_tier_options===undefined));
+  assert.equal(adapter.provenance.fastMode.providerPriorityVerified,false);
+});
+
+test('dual-matched Terra stays manual in Work and Codex, with no invented Ultra or Chat preset',()=>{
+  const id='gpt-6.1-terra',efforts=['none','low','medium','high','xhigh','max'];
+  assert(catalog.WORK_MODEL_IDS.includes(id));
+  assert.deepEqual(catalog.WORK_PINNED_EFFORTS[id],efforts);
+  assert.deepEqual(catalog.getWorkSelectionCatalog({model:id,selectionMode:'pinned'}).map(x=>x.effort),efforts);
+  assert(!catalog.WORK_PRESETS.some(p=>p.model===id));
+  assert(!catalog.SITE_ULTRA_ORCHESTRATION.models.includes(id));
+  const raw=adapter.getChatGptModels();
+  assert(raw.models.find(m=>m.slug===id).is_work_mode_model);
+  assert(!raw.versions.find(v=>v.id==='auto').intelligence_presets.some(p=>p.model_slug===id));
+  assert(!raw.versions.find(v=>v.id==='latest').intelligence_presets.some(p=>p.model_slug===id));
+  assert.deepEqual(adapter.getRpcModelList().data.find(m=>m.model===id).supportedReasoningEfforts.map(x=>x.reasoningEffort),efforts);
+  assert.equal(catalog.WORK_ADDITIONAL_MODEL_PROVENANCE[id].manualOnly,true);
+  assert.equal(catalog.WORK_ADDITIONAL_MODEL_PROVENANCE[id].inferenceVerified,false);
+});
+test('Codex accepts exactly the shared verified manual catalog and rejects provider extras',()=>{
+  const source=fs.readFileSync(new URL('../src/native-client/local-codex-adapter.mjs',import.meta.url),'utf8').replace(/^import .*;$/gm,'').replace(/^export\s+/gm,'');
+  const context=vm.createContext({WORK_MODEL_IDS:catalog.WORK_MODEL_IDS,Object,Set,Map,TypeError,RangeError,structuredClone});
+  new vm.Script(source+'\nglobalThis.fixtureFactory=createLocalCodexAdapter;globalThis.fixtureIds=CODEX_MODEL_IDS;').runInContext(context);
+  assert.equal(context.fixtureIds,catalog.WORK_MODEL_IDS);
+  const options={appServer:{dispatch(){},subscribe(){return()=>{};}},models:adapter,readSettings:()=>({})};
+  assert.doesNotThrow(()=>context.fixtureFactory(options));
+  const extraModel={...adapter,getRpcModelList:()=>({data:[...adapter.getRpcModelList().data,{model:'unverified-provider-model'}]})};
+  assert.throws(()=>context.fixtureFactory({...options,models:extraModel}),/explicit verified model catalog/);
+  const wrongModel={...adapter,getRpcModelList:()=>({data:adapter.getRpcModelList().data.map((row,i)=>i?row:{...row,model:'unverified-provider-model'})})};
+  assert.throws(()=>context.fixtureFactory({...options,models:wrongModel}),/explicit verified model catalog/);
+});
+
+test('Work default uses the original curated latest version and never the Chat alias',()=>{
+  const work=adapter.getWorkModels(),chat=adapter.getChatGptModels(),selection=catalog.normalizeWorkSelection({});
+  assert.equal(chat.default_model_slug,'auto');
+  assert.equal(work.default_model_slug,selection.model);
+  assert.equal(work.models.find(m=>m.slug===selection.model).default_thinking_effort,FRONTEND_TO_RAW_EFFORT[selection.effort]);
+  assert(!work.models.some(m=>m.slug==='auto'));
+  assert(!work.categories.some(m=>m.default_model==='auto'));
+  assert(!work.versions.some(m=>m.id==='auto'));
+  assert(work.internal_groups.every(g=>!g.model_ids.includes('auto')));
+  const latest=work.versions.find(v=>v.id==='latest');
+  assert.deepEqual(latest.slugs,[...new Set(catalog.WORK_PRESETS.map(p=>p.model))]);
+  assert(latest.slugs.includes(selection.model));
+  assert.equal(latest.intelligence_presets.length,6);
+  assert(!latest.slugs.includes('gpt-6.1-terra'));
+  assert(work.versions.some(v=>v.id==='gpt-6.1-terra'));
+});

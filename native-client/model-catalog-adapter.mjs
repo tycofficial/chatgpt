@@ -12,6 +12,10 @@ export const RAW_TO_FRONTEND_EFFORT = Object.freeze(Object.fromEntries(
 
 export function createModelCatalogAdapter(catalog) {
   const ids = [...catalog.WORK_MODEL_IDS];
+  // Preserve the original Fast UI and preference even when this host cannot
+  // claim accelerated provider processing. The runner independently gates
+  // actual service_tier forwarding on verifiedPriority.
+  const fastOptions = () => [{ service_tier: 'fast', title: 'Fast', subtitle: '' }];
   const curated = catalog.getWorkSelectionCatalog({ selectionMode: 'auto' });
   const manual = new Map(ids.map(model => [model, catalog.getWorkSelectionCatalog({ model, selectionMode: 'pinned' })]));
   const selection = catalog.normalizeWorkSelection({});
@@ -33,6 +37,7 @@ export function createModelCatalogAdapter(catalog) {
     manualCapabilitySource: catalog.WORK_CATALOG_PROVENANCE.pinned,
     originalManualMembershipCaptured: false,
     originalPrivateMetadata: false,
+    fastMode: { originalServiceTierId: 'fast', originalPreferenceKey: 'chatgpt-tpp-cloud-service-tier-v1', uiPreference: true, providerPriorityVerified: false },
     siteUltraOrchestration: catalog.SITE_ULTRA_ORCHESTRATION,
     frontendChatAlias: { slug: 'auto', apiModel: selection.model, meaning: 'frontend selection alias, not an additional gateway model' },
     description: 'Curated presets come from the explicit six-position capture. Per-model manual efforts combine API capabilities with explicit site Ultra orchestration; they are not a captured original account response.',
@@ -46,6 +51,7 @@ export function createModelCatalogAdapter(catalog) {
       selected_display_title: choice.label,
       selected_display_version: choice.model === 'auto' ? 'ChatGPT' : modelLabel(choice.model),
       preset_type: 'available',
+      ...(choice.model === 'auto' ? {} : { service_tier_options: fastOptions() }),
     };
   }
   function version(id, label, modelIds, choices) {
@@ -84,12 +90,13 @@ export function createModelCatalogAdapter(catalog) {
           full_label: choice.label,
         })),
         is_work_mode_model: true,
+        service_tier_options: fastOptions(),
         enabled_tools: [],
         tags: [],
       }))],
       internal_groups: [{ group: 'default', model_ids: ['auto', ...ids] }],
       versions: [
-        version('latest', catalog.WORK_DEFAULT_OPTION.label, ids, curated),
+        version('latest', catalog.WORK_DEFAULT_OPTION.label, [...new Set(curated.map(choice => choice.model))], curated),
         ...ids.map(model => version(model, modelLabel(model), [model], manual.get(model))),
         // Source iLYI chooses Chat from isWorkModeModel=false; its original
         // picker needs a version radio to select this frontend alias again.
@@ -98,6 +105,21 @@ export function createModelCatalogAdapter(catalog) {
       slider_settings: curated.map(choice => ({ model_slug: choice.model, thinking_effort: rawEffort(choice.effort) })),
       workspace_model_policy: null,
       adapter_provenance: provenance,
+    };
+  }
+  function getWorkModels() {
+    const raw = getChatGptModels(), workIds = new Set(ids);
+    // TFzY.p consumes this exact default_model_slug field. qJjJ/osfW use it
+    // only when no valid saved Work preference exists, then TFzY.k picks
+    // the original latest version and TuVM/LLIt retains its six presets.
+    return {
+      ...raw,
+      default_model_slug: selection.model,
+      categories: raw.categories.filter(row => workIds.has(row.default_model)),
+      models: raw.models.filter(row => workIds.has(row.slug)),
+      versions: raw.versions.filter(row => row.id !== 'auto'),
+      internal_groups: raw.internal_groups.map(group => ({ ...group, model_ids: group.model_ids.filter(id => workIds.has(id)) })),
+      adapter_provenance: { ...provenance, surface: 'work', frontendChatAlias: undefined, defaultSelectionSource: 'curated-six-position-catalog-with-original-latest-version' },
     };
   }
   function getRpcModelList(params = {}) {
@@ -134,6 +156,8 @@ export function createModelCatalogAdapter(catalog) {
         defaultReasoningEffort: defaults.get(model),
         supportedReasoningEfforts: manual.get(model).map(choice => ({ reasoningEffort: choice.effort, description: '', ...(choice.effort === 'ultra' ? { adapterExecutionMode: catalog.SITE_ULTRA_ORCHESTRATION } : {}) })),
         inputModalities: ['text'],
+        serviceTiers: [{ id: 'fast', name: 'Fast', description: '' }],
+        adapterServiceTierCapability: { uiPreference: true, providerPriorityVerified: false },
         adapterCapabilitySource: catalog.WORK_CATALOG_PROVENANCE.pinned,
       })),
       nextCursor: end < ids.length ? `local-models:${end}` : null,
@@ -143,5 +167,5 @@ export function createModelCatalogAdapter(catalog) {
   function getSliderModelsConfig() {
     return { presets: [curated.map(choice => ({ model: choice.model, reasoning_effort: choice.effort }))] };
   }
-  return { getChatGptModels, getRpcModelList, getSliderModelsConfig, provenance };
+  return { getChatGptModels, getWorkModels, getRpcModelList, getSliderModelsConfig, provenance };
 }

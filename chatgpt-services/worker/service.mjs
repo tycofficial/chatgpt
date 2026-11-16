@@ -16,35 +16,65 @@ const account=record=>record.role==='user'?{id:'site-user:'+record.id,accountId:
 async function issueUserSession(env,user){const token=hex(crypto.getRandomValues(new Uint8Array(32))),expiresAt=Date.now()+30*86400000;await query(env,'INSERT INTO user_sessions(token_hash,user_id,expires_at,created_at) VALUES(?,?,?,?)',await digest(token),user.id,expiresAt,Date.now()).run();return json({token,expiresAt,user:account({...user,role:'user'})});}
 async function largeBody(request,limit=2000000){if(Number(request.headers.get('Content-Length'))>limit)throw Error('Request too large');const text=await request.text();if(text.length>limit)throw Error('Request too large');return JSON.parse(text||'{}');}
 async function bridgeIdentity(request,env){const token=(request.headers.get('authorization')||'').replace(/^Bearer\s+/i,'');if(!/^[a-f0-9]{64}$/.test(token))return null;return query(env,'SELECT * FROM bridges WHERE token_hash=? AND revoked=0',await digest(token)).first();}
-async function bridgeStatus(env){const peer=await query(env,'SELECT id,last_seen,profile FROM bridges WHERE revoked=0 ORDER BY last_seen DESC LIMIT 1').first();return peer?{online:peer.last_seen>Date.now()-75000,lastSeen:peer.last_seen,profile:JSON.parse(peer.profile),source:'authorized-local-host'}:{online:false,lastSeen:null,profile:null,source:'not-paired'};}
+const leaseMs=30000;
+const uuidPattern=/^[a-f0-9-]{36}$/i;
+const maxSlots=value=>Number.isInteger(value)?Math.max(1,Math.min(3,value)):1;
+const changes=result=>Number(result?.meta?.changes??result?.changes??0);
+function safeJobError(value){if(value==null)return null;if(typeof value==='string')return value.slice(0,2000);return JSON.stringify({message:String(value.message||'The local host request failed').slice(0,2000),code:typeof value.code==='string'?value.code:null,httpStatus:Number.isInteger(value.httpStatus)?value.httpStatus:null,requestId:typeof value.requestId==='string'?value.requestId:null,param:typeof value.param==='string'?value.param:null});}
+function errorFields(value){if(!value)return{error:null,errorDetails:null};try{const data=JSON.parse(value);if(data&&typeof data==='object')return{error:data.message||'The local host request failed',errorDetails:data};}catch{}return{error:value,errorDetails:null};}
+async function eventAck(env,id){return(await query(env,'SELECT MAX(seq) AS seq FROM job_events WHERE job_id=?',id).first()).seq??-1;}
+async function bridgeStatus(env){const peer=await query(env,'SELECT id,last_seen,profile FROM bridges WHERE revoked=0 ORDER BY last_seen DESC LIMIT 1').first();return peer?{online:peer.last_seen>Date.now()-75000,lastSeen:peer.last_seen,profile:JSON.parse(peer.profile),source:'authorized-local-host',protocolVersion:4}:{online:false,lastSeen:null,profile:null,source:'not-paired',protocolVersion:4};}
 async function bridgeRoute(request,env,path){
  const peer=await bridgeIdentity(request,env);if(!peer)return fail(401,'BRIDGE_AUTH_REQUIRED','本机连接未配对或已撤销。');
  if(path==='/bridge/poll'&&request.method==='POST'){
-  const data=await largeBody(request,200000),profile=data.profile||{};
-  const safe={planType:typeof profile.planType==='string'?profile.planType:null,models:Array.isArray(profile.models)?profile.models.slice(0,100).map(m=>({slug:String(m.slug||m.id||''),display_name:String(m.display_name||m.name||m.slug||m.id||''),visibility:m.visibility||'list'})):[],authenticated:profile.authenticated===true,quota:profile.quota?{remaining:typeof profile.quota.remaining==='number'?profile.quota.remaining:null,state:profile.quota.state==='request-paused'?'request-paused':'unknown',errorCode:String(profile.quota.errorCode||profile.quota.code||''),resetAt:profile.quota.resetAt||null,source:String(profile.quota.source||'official-service'),updatedAt:Date.now()}:null,updatedAt:Date.now()};
+  const data=await largeBody(request,200000),profile=data.profile||{},modern=uuidPattern.test(data.instanceId||''),owner=modern?data.instanceId:peer.id;
+  const active=Array.isArray(data.activeJobIds)?[...new Set(data.activeJobIds)]:[];
+  if(active.length>3||active.some(id=>typeof id!=='string'||!uuidPattern.test(id)))return fail(400,'INVALID_ACTIVE_JOBS','活跃任务列表无效。');
+  const capacity=modern?maxSlots(profile.capabilities?.maxConcurrentJobs):1;
+  const safe={planType:typeof profile.planType==='string'?profile.planType:null,models:Array.isArray(profile.models)?profile.models.slice(0,100).map(m=>({slug:String(m.slug||m.id||''),display_name:String(m.display_name||m.name||m.slug||m.id||''),visibility:m.visibility||'list'})):[],authenticated:profile.authenticated===true,quota:profile.quota?{remaining:typeof profile.quota.remaining==='number'?profile.quota.remaining:null,state:profile.quota.state==='request-paused'?'request-paused':'unknown',errorCode:String(profile.quota.errorCode||profile.quota.code||''),resetAt:profile.quota.resetAt||null,source:String(profile.quota.source||'official-service'),updatedAt:Date.now()}:null,capabilities:{protocolVersion:modern?4:3,maxConcurrentJobs:capacity,cancelInference:modern&&profile.capabilities?.cancelInference===true},updatedAt:Date.now()};
   await query(env,'UPDATE bridges SET last_seen=?,profile=? WHERE id=?',Date.now(),JSON.stringify(safe),peer.id).run();
+  for(const id of active)await query(env,"UPDATE jobs SET claim_expires_at=? WHERE id=? AND bridge_id=? AND claim_owner=? AND status IN ('claimed','streaming')",Date.now()+leaseMs,id,peer.id,owner).run();
   if(!safe.authenticated||!safe.models.length||safe.quota?.state==='request-paused'){
-   if(safe.quota?.state==='request-paused')await query(env,"UPDATE jobs SET status='failed',updated_at=?,error=? WHERE bridge_id=? AND status='queued'",Date.now(),'ChatGPT 订阅额度暂时不可用：'+safe.quota.errorCode,peer.id).run();
-   return json({job:null});
+   if(safe.quota?.state==='request-paused')await query(env,"UPDATE jobs SET status='failed',updated_at=?,error=? WHERE bridge_id=? AND status='queued'",Date.now(),safeJobError({message:'ChatGPT 订阅额度暂时不可用。',code:safe.quota.errorCode,httpStatus:429}),peer.id).run();
+   return json({job:null,capacity,protocolVersion:4});
   }
-  const pending=await query(env,"SELECT id,payload,status FROM jobs WHERE bridge_id=? AND status IN ('queued','claimed','streaming') ORDER BY created_at LIMIT 1",peer.id).first();
-  if(pending?.status==='queued')await query(env,"UPDATE jobs SET status='claimed',updated_at=? WHERE id=? AND status='queued'",Date.now(),pending.id).run();
-  return json({job:pending?{id:pending.id,payload:JSON.parse(pending.payload),resume:pending.status!=='queued'}:null});
+  if(active.length>=capacity)return json({job:null,capacity,protocolVersion:4});
+  const exclude=active.length?' AND id NOT IN ('+active.map(()=>'?').join(',')+')':'';
+  for(let retry=0;retry<4;retry++){
+   const instant=Date.now();
+   const pending=await query(env,"SELECT id,payload,status,claim_count,claim_owner,claim_expires_at FROM jobs WHERE bridge_id=? AND status IN ('queued','claimed','streaming') AND (status='queued' OR claim_expires_at<? OR (?=0 AND claim_owner=?))"+exclude+" ORDER BY CASE WHEN status='queued' THEN 1 ELSE 0 END,created_at,id LIMIT 1",peer.id,instant,modern?1:0,owner,...active).first();
+   if(!pending)return json({job:null,capacity,protocolVersion:4});
+   const claimed=await query(env,"UPDATE jobs SET status=CASE WHEN status='queued' THEN 'claimed' ELSE status END,claim_owner=?,claim_expires_at=?,claim_count=claim_count+1,updated_at=? WHERE id=? AND bridge_id=? AND status=? AND claim_count=? AND COALESCE(claim_owner,'')=? AND claim_expires_at=? AND NOT EXISTS(SELECT 1 FROM job_cancellations WHERE job_id=jobs.id) AND ((?=0 AND status!='queued' AND claim_owner=?) OR (SELECT COUNT(*) FROM jobs j WHERE j.bridge_id=? AND j.status IN ('claimed','streaming') AND j.claim_expires_at>?)<?)",owner,instant+leaseMs,instant,pending.id,peer.id,pending.status,pending.claim_count,pending.claim_owner||'',pending.claim_expires_at,modern?1:0,owner,peer.id,instant,capacity).run();
+   if(changes(claimed))return json({job:{id:pending.id,payload:JSON.parse(pending.payload),resume:pending.status!=='queued'||pending.claim_count>0},capacity,protocolVersion:4});
+  }
+  return json({job:null,capacity,protocolVersion:4});
  }
- const match=/^\/bridge\/jobs\/([a-f0-9-]+)\/events$/.exec(path);
+ const match=/^\/bridge\/jobs\/([a-f0-9-]+)\/(events|heartbeat)$/.exec(path);
  if(match&&request.method==='POST'){
-  const job=await query(env,'SELECT id,status FROM jobs WHERE id=? AND bridge_id=?',match[1],peer.id).first();if(!job)return fail(404,'JOB_NOT_FOUND','任务不存在。');if(job.status==='cancelled')return json({cancelled:true});if(['complete','failed'].includes(job.status))return json({accepted:true,status:job.status});
-  const data=await largeBody(request,400000),events=Array.isArray(data.events)?data.events:[];
+  const job=await query(env,'SELECT id,status,claim_owner FROM jobs WHERE id=? AND bridge_id=?',match[1],peer.id).first();if(!job)return fail(404,'JOB_NOT_FOUND','任务不存在。');
+  if(job.status==='cancelled')return json({cancelled:true,status:'cancelled',ackSeq:await eventAck(env,job.id)});
+  if(['complete','failed'].includes(job.status))return json({accepted:true,status:job.status,terminal:true,ackSeq:await eventAck(env,job.id)});
+  const data=await largeBody(request,400000),owner=uuidPattern.test(data.instanceId||'')?data.instanceId:peer.id;
+  if(job.claim_owner&&job.claim_owner!==owner)return fail(409,'JOB_CLAIM_CHANGED','此任务已属于另一个本机进程；不能继续提交旧进程的结果。');
+  if(match[2]==='heartbeat'){
+   await env.DB.batch([query(env,'UPDATE bridges SET last_seen=? WHERE id=?',Date.now(),peer.id),query(env,"UPDATE jobs SET claim_expires_at=? WHERE id=? AND status IN ('claimed','streaming')",Date.now()+leaseMs,job.id)]);
+   const latest=await query(env,'SELECT status FROM jobs WHERE id=?',job.id).first();return json({accepted:true,cancelled:latest.status==='cancelled',status:latest.status,terminal:['complete','failed'].includes(latest.status),ackSeq:await eventAck(env,job.id)});
+  }
+  const events=Array.isArray(data.events)?data.events:[];
   if(events.length>100||events.some(event=>!Number.isSafeInteger(event.seq)||event.seq<0||JSON.stringify(event.data||{}).length>100000))return fail(400,'INVALID_EVENTS','任务事件格式不正确。');
+  let cursor=await eventAck(env,job.id);
+  for(const event of events){if(event.seq<=cursor){const old=await query(env,'SELECT data FROM job_events WHERE job_id=? AND seq=?',job.id,event.seq).first();if(!old||old.data!==JSON.stringify(event.data))return fail(409,'EVENT_SEQUENCE_CONFLICT','重复事件的内容不一致。');}else if(event.seq!==++cursor)return fail(409,'EVENT_SEQUENCE_GAP','事件必须从0开始连续提交。');}
   const state=['complete','failed'].includes(data.status)?data.status:'streaming';
-  const writes=events.map(event=>query(env,'INSERT OR IGNORE INTO job_events(job_id,seq,data) VALUES(?,?,?)',job.id,event.seq,JSON.stringify(event.data)));
-  writes.push(query(env,'UPDATE jobs SET status=?,updated_at=?,error=? WHERE id=?',state,Date.now(),data.error?String(data.error).slice(0,1000):null,job.id));
+  if(state!=='streaming'){const last=events.at(-1)?.data||JSON.parse((await query(env,'SELECT data FROM job_events WHERE job_id=? ORDER BY seq DESC LIMIT 1',job.id).first())?.data||'null');if(last?.type!=='end')return fail(400,'TERMINAL_END_REQUIRED','终止状态必须包含真实流结束事件。');}
+  const writes=events.map(event=>query(env,"INSERT OR IGNORE INTO job_events(job_id,seq,data) SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM jobs WHERE id=? AND status NOT IN ('complete','failed','cancelled'))",job.id,event.seq,JSON.stringify(event.data),job.id));
+  writes.push(query(env,"UPDATE jobs SET status=?,updated_at=?,error=?,claim_expires_at=? WHERE id=? AND status NOT IN ('complete','failed','cancelled')",state,Date.now(),safeJobError(data.error),Date.now()+leaseMs,job.id));
   writes.push(query(env,'UPDATE bridges SET last_seen=? WHERE id=?',Date.now(),peer.id));
-  if(data.usage)writes.push(query(env,'INSERT OR IGNORE INTO usage_events(id,source,model,input_tokens,output_tokens,created_at,error_code) VALUES(?,?,?,?,?,?,?)',job.id,'chatgpt-plan',String(data.model||''),Math.max(0,Number(data.usage.input_tokens)||0),Math.max(0,Number(data.usage.output_tokens)||0),Date.now(),data.errorCode?String(data.errorCode):null));
-  await env.DB.batch(writes);return json({accepted:true,status:state,ackSeq:(await query(env,'SELECT MAX(seq) AS seq FROM job_events WHERE job_id=?',job.id).first()).seq??-1});
+  if(data.usage)writes.push(query(env,'INSERT OR IGNORE INTO usage_events(id,source,model,input_tokens,output_tokens,created_at,error_code) VALUES(?,?,?,?,?,?,?)',job.id,'chatgpt-plan',String(data.model||''),Math.max(0,Number(data.usage.input_tokens)||0),Math.max(0,Number(data.usage.output_tokens)||0),Date.now(),typeof data.error?.code==='string'?data.error.code:data.errorCode?String(data.errorCode):null));
+  await env.DB.batch(writes);const latest=await query(env,'SELECT status FROM jobs WHERE id=?',job.id).first();return json({accepted:true,status:latest.status,cancelled:latest.status==='cancelled',ackSeq:await eventAck(env,job.id)});
  }
  return fail(404,'BRIDGE_ROUTE_NOT_FOUND','本机连接接口不存在。');
 }
+
 async function route(request,env){const path=new URL(request.url).pathname;
  if(path==='/health'){const admin=await configured(env);return json({ready:true,adminConfigured:Boolean(admin),storage:'D1',version:'admin-auth-1'});}
  if(path==='/auth/register'&&request.method==='POST'){
@@ -74,24 +104,35 @@ async function route(request,env){const path=new URL(request.url).pathname;
  if(admin.role!=='administrator')return fail(403,'ADMIN_MEMBERSHIP_REQUIRED','此功能需要管理员 Pro 账户。');
  if(path==='/bridge/status')return json(await bridgeStatus(env));
  if(path==='/bridge/pair'&&request.method==='POST'){const id=crypto.randomUUID(),token=hex(crypto.getRandomValues(new Uint8Array(32)));await query(env,'INSERT INTO bridges(id,token_hash,last_seen,profile) VALUES(?,?,?,?)',id,await digest(token),0,'{}').run();return json({bridgeId:id,bridgeToken:token});}
- if(path==='/bridge/revoke'&&request.method==='POST'){const data=await readBody(request);await query(env,'UPDATE bridges SET revoked=1 WHERE id=?',String(data.bridgeId||'')).run();return json({revoked:true});}
+ if(path==='/bridge/revoke'&&request.method==='POST'){const data=await readBody(request),id=String(data.bridgeId||'');await env.DB.batch([query(env,'UPDATE bridges SET revoked=1 WHERE id=?',id),query(env,"INSERT OR IGNORE INTO job_cancellations(job_id,created_at) SELECT id,? FROM jobs WHERE bridge_id=? AND status NOT IN ('complete','failed','cancelled')",Date.now(),id),query(env,"UPDATE jobs SET status='cancelled',updated_at=? WHERE bridge_id=? AND status NOT IN ('complete','failed','cancelled')",Date.now(),id)]);return json({revoked:true});}
  if(path==='/jobs'&&request.method==='POST'){
   const data=await largeBody(request),payload=data.payload;
   if(typeof payload?.model!=='string'||!Array.isArray(payload.input))return fail(400,'INVALID_INFERENCE','缺少所选模型或对话历史。');
   const id=/^[a-f0-9-]{36}$/i.test(data.id||'')?data.id:crypto.randomUUID();
   const previous=await query(env,'SELECT id,status,payload FROM jobs WHERE id=?',id).first();
   if(previous){if(previous.payload!==JSON.stringify(payload))return fail(409,'JOB_ID_CONFLICT','任务编号已对应另一项请求。');return json({id:previous.id,status:previous.status,reattached:true},202);}
+  if(await query(env,'SELECT job_id FROM job_cancellations WHERE job_id=?',id).first())return json({id,status:'cancelled',reattached:true},202);
   const online=await query(env,'SELECT id,profile FROM bridges WHERE revoked=0 AND last_seen>? ORDER BY last_seen DESC LIMIT 1',Date.now()-75000).first();
   if(!online||JSON.parse(online.profile).authenticated!==true)return fail(409,'BRIDGE_OFFLINE','授权的本机未在线，使用备用 API。');
   if(JSON.parse(online.profile).quota?.state==='request-paused')return fail(429,'SUBSCRIPTION_QUOTA_EXHAUSTED','ChatGPT 订阅额度暂时不可用。请到官网用量页面查看恢复时间。');
   const available=JSON.parse(online.profile).models||[];if(!available.some(model=>model.slug===payload.model))return fail(400,'SUBSCRIPTION_MODEL_UNAVAILABLE','本机订阅未提供所选模型，请选择账户支持的模型。');
-  await query(env,"INSERT INTO jobs(id,bridge_id,payload,status,created_at,updated_at) VALUES(?,?,?,'queued',?,?)",id,online.id,JSON.stringify(payload),Date.now(),Date.now()).run();return json({id,status:'queued'},202);
+  await query(env,"INSERT OR IGNORE INTO jobs(id,bridge_id,payload,status,created_at,updated_at) SELECT ?,?,?,'queued',?,? WHERE NOT EXISTS(SELECT 1 FROM job_cancellations WHERE job_id=?)",id,online.id,JSON.stringify(payload),Date.now(),Date.now(),id).run();
+  const created=await query(env,'SELECT id,status,payload FROM jobs WHERE id=?',id).first();
+  if(!created)return json({id,status:'cancelled',reattached:true},202);
+  if(created.payload!==JSON.stringify(payload))return fail(409,'JOB_ID_CONFLICT','任务编号已对应另一项请求。');
+  return json({id,status:created.status},202);
  }
  const jobPath=/^\/jobs\/([a-f0-9-]+)(?:\/events)?$/.exec(path);
- if(jobPath){const job=await query(env,'SELECT id,status,updated_at,error FROM jobs WHERE id=?',jobPath[1]).first();if(!job)return fail(404,'JOB_NOT_FOUND','任务不存在。');
-  if(request.method==='DELETE'){await query(env,"UPDATE jobs SET status='cancelled',updated_at=? WHERE id=?",Date.now(),job.id).run();return json({cancelled:true});}
+ if(jobPath){
+  const job=await query(env,'SELECT id,status,updated_at,error FROM jobs WHERE id=?',jobPath[1]).first();
+  if(request.method==='DELETE'){
+   if(job&&['complete','failed'].includes(job.status))return json({cancelled:false,alreadyTerminal:true,status:job.status});
+   await env.DB.batch([query(env,'INSERT OR IGNORE INTO job_cancellations(job_id,created_at) VALUES(?,?)',jobPath[1],Date.now()),query(env,"UPDATE jobs SET status='cancelled',updated_at=? WHERE id=? AND status NOT IN ('complete','failed')",Date.now(),jobPath[1])]);
+   const latest=await query(env,'SELECT status FROM jobs WHERE id=?',jobPath[1]).first();return latest&&['complete','failed'].includes(latest.status)?json({cancelled:false,alreadyTerminal:true,status:latest.status}):json({cancelled:true,status:'cancelled'});
+  }
+  if(!job){const stopped=await query(env,'SELECT created_at FROM job_cancellations WHERE job_id=?',jobPath[1]).first();return stopped?json({id:jobPath[1],status:'cancelled',updated_at:stopped.created_at,error:null,errorDetails:null,events:[]}):fail(404,'JOB_NOT_FOUND','任务不存在。');}
   const rawAfter=new URL(request.url).searchParams.get('after'),after=rawAfter===null?-1:Number(rawAfter);if(!Number.isSafeInteger(after)||after< -1)return fail(400,'INVALID_CURSOR','无效的恢复位置。');
-  const events=await query(env,'SELECT seq,data FROM job_events WHERE job_id=? AND seq>? ORDER BY seq LIMIT 100',job.id,after).all();return json({...job,events:events.results.map(event=>({seq:event.seq,data:JSON.parse(event.data)}))});
+  const events=await query(env,'SELECT seq,data FROM job_events WHERE job_id=? AND seq>? ORDER BY seq LIMIT 100',job.id,after).all();return json({...job,...errorFields(job.error),events:events.results.map(event=>({seq:event.seq,data:JSON.parse(event.data)}))});
  }
  if(path==='/usage'){const sums=await query(env,'SELECT source,COUNT(*) AS requests,SUM(input_tokens) AS input_tokens,SUM(output_tokens) AS output_tokens FROM usage_events GROUP BY source').all();return json({sources:sums.results,subscription:{remaining:null,source:'not-reported-by-official-service'},officialUsageUrl:'https://chatgpt.com/settings/usage'});}
  return fail(404,'ROUTE_NOT_FOUND','接口不存在。');

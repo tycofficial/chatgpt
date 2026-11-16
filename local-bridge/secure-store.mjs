@@ -36,7 +36,12 @@ export class ProtectedStore {
       const target = this.resolve(name), temporary = target + '.' + crypto.randomUUID() + '.tmp'; await fs.mkdir(path.dirname(target), { recursive: true, mode: 0o700 });
       const handle = await fs.open(temporary, 'wx', 0o600);
       try { await handle.writeFile(JSON.stringify(value)); await handle.sync(); } finally { await handle.close(); }
-      try { await fs.rename(temporary, target); } catch (error) { await fs.unlink(temporary).catch(() => {}); throw error; }
+      try {
+        for (let retry = 0; ; retry++) {
+          try { await fs.rename(temporary, target); break; }
+          catch (error) { if (process.platform !== 'win32' || !['EPERM', 'EACCES', 'EBUSY'].includes(error.code) || retry >= 6) throw error; await wait(Math.min(250, 20 * 2 ** retry)); }
+        }
+      } catch (error) { await fs.unlink(temporary).catch(() => {}); throw error; }
     };
     const result = this.queue.then(operation); this.queue = result.catch(() => {}); return result;
   }
