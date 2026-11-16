@@ -1,4 +1,4 @@
-import { isHostCheckpoint } from './preferred-host-transport.mjs?v=6beecd2404810423';
+import { isHostCheckpoint } from './preferred-host-transport.mjs?v=c1dca215dd59102e';
 /** Site-provided Ultra orchestration. This is not an OpenAI provider effort enum. */
 export const ULTRA_MODELS = Object.freeze(['gpt-6.1-sol', 'gpt-6-astra']);
 export const ULTRA_TOOL = Object.freeze({

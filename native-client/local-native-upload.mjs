@@ -81,7 +81,7 @@ export function wrapNativeFileUploadClass(NativeWebFetch, files, referenceURL = 
 
 /*
 boot-adapter.mjs integration, before the native GDNt factory is instantiated:
-  import { ..., localFilesService } from './service-boundary.mjs?v=6beecd2404810423';
+  import { ..., localFilesService } from './service-boundary.mjs?v=c1dca215dd59102e';
   // Include the function above (or import its committed equivalent).
   overrideExports('GDNt', {}, { deferred: true }, {
     b: NativeWebFetch => wrapNativeFileUploadClass(NativeWebFetch, localFilesService),

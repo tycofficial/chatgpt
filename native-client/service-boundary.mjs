@@ -1,27 +1,27 @@
-import * as modelCatalog from '../model-catalog.js?v=6beecd2404810423';
-import { createModelCatalogAdapter } from './model-catalog-adapter.mjs?v=6beecd2404810423';
-import { DEFAULT_SETTINGS } from '../config.js?v=6beecd2404810423';
-import { streamCompletion, PythonRuntime, PYTHON_TOOL } from '../runtime.js?v=6beecd2404810423';
-import { LocalAppServer, LocalProtocolSocket } from './local-app-server.mjs?v=6beecd2404810423';
-import { getPrototypeLocalSession, getPrototypeLocalAuth, getLocalAccountCheck, getLocalOptimizedAccount, getLocalWhamAccounts, getPrototypeCurrentUser, isPrototypeLocalSession, clearPrototypeLocalSession, getLocalSignedOutUrl, getLocalAccountStorageKey } from './local-identity.mjs?v=6beecd2404810423';
-import { getPrototypeConfiguration, setLocalLibraryAvailability } from './local-configuration.mjs?v=6beecd2404810423';
-import { ClassicChatAdapter } from './classic-chat-adapter.mjs?v=6beecd2404810423';
-import { LocalConversationPubSub } from './local-pubsub.mjs?v=6beecd2404810423';
-import { readLocalUserPreferences, updateLocalUserPreference, acknowledgeLocalAnnouncement } from './local-user-preferences.mjs?v=6beecd2404810423';
-import { createLocalPersonalizationService } from './local-personalization-service.mjs?v=6beecd2404810423';
-import { createPersonalizationIdentityProvider, createPersonalizedSettingsReader } from './local-personalization-context.mjs?v=6beecd2404810423';
-import { createBrowserToolExecutor } from './browser-tool-executor.mjs?v=6beecd2404810423';
-import { createLocalFilesService } from './local-files-service.mjs?v=6beecd2404810423';
-import { createLocalLibraryService } from './local-library-service.mjs?v=6beecd2404810423';
-import { createLocalInputPreparer } from './local-input-preparation.mjs?v=6beecd2404810423';
-import { createLocalPricingAdapter } from './local-pricing.mjs?v=6beecd2404810423';
-import { SITE_ACCOUNT_SERVICE, getSiteAccount, getSiteSessionToken, hasModelSelectionAccess, logoutSiteAccount } from './site-account.mjs?v=6beecd2404810423';
-import { createLocalCodexAdapter } from './local-codex-adapter.mjs?v=6beecd2404810423';
-import { isOpenStreetMapTileRequest, fetchOpenStreetMapTile } from './local-map-provider.mjs?v=6beecd2404810423';
-import { createLocalDiscoveryAdapter } from './local-discovery.mjs?v=6beecd2404810423';
-import { createLocalDotAdapter } from './local-dot-adapter.mjs?v=6beecd2404810423';
-import { createLocalMapsService } from './local-maps-service.mjs?v=6beecd2404810423';
-import { createPreferredHostTransport, createPreferredCompletion, turnHostCheckpoints, cancelTurnHostRequests } from './preferred-host-transport.mjs?v=6beecd2404810423';
+import * as modelCatalog from '../model-catalog.js?v=c1dca215dd59102e';
+import { createModelCatalogAdapter } from './model-catalog-adapter.mjs?v=c1dca215dd59102e';
+import { DEFAULT_SETTINGS } from '../config.js?v=c1dca215dd59102e';
+import { streamCompletion, PythonRuntime, PYTHON_TOOL } from '../runtime.js?v=c1dca215dd59102e';
+import { LocalAppServer, LocalProtocolSocket } from './local-app-server.mjs?v=c1dca215dd59102e';
+import { getPrototypeLocalSession, getPrototypeLocalAuth, getLocalAccountCheck, getLocalOptimizedAccount, getLocalWhamAccounts, getPrototypeCurrentUser, isPrototypeLocalSession, clearPrototypeLocalSession, getLocalSignedOutUrl, getLocalAccountStorageKey } from './local-identity.mjs?v=c1dca215dd59102e';
+import { getPrototypeConfiguration, setLocalLibraryAvailability } from './local-configuration.mjs?v=c1dca215dd59102e';
+import { ClassicChatAdapter } from './classic-chat-adapter.mjs?v=c1dca215dd59102e';
+import { LocalConversationPubSub } from './local-pubsub.mjs?v=c1dca215dd59102e';
+import { readLocalUserPreferences, updateLocalUserPreference, acknowledgeLocalAnnouncement } from './local-user-preferences.mjs?v=c1dca215dd59102e';
+import { createLocalPersonalizationService } from './local-personalization-service.mjs?v=c1dca215dd59102e';
+import { createPersonalizationIdentityProvider, createPersonalizedSettingsReader } from './local-personalization-context.mjs?v=c1dca215dd59102e';
+import { createBrowserToolExecutor } from './browser-tool-executor.mjs?v=c1dca215dd59102e';
+import { createLocalFilesService } from './local-files-service.mjs?v=c1dca215dd59102e';
+import { createLocalLibraryService } from './local-library-service.mjs?v=c1dca215dd59102e';
+import { createLocalInputPreparer } from './local-input-preparation.mjs?v=c1dca215dd59102e';
+import { createLocalPricingAdapter } from './local-pricing.mjs?v=c1dca215dd59102e';
+import { SITE_ACCOUNT_SERVICE, getSiteAccount, getSiteSessionToken, hasModelSelectionAccess, logoutSiteAccount } from './site-account.mjs?v=c1dca215dd59102e';
+import { createLocalCodexAdapter } from './local-codex-adapter.mjs?v=c1dca215dd59102e';
+import { isOpenStreetMapTileRequest, fetchOpenStreetMapTile } from './local-map-provider.mjs?v=c1dca215dd59102e';
+import { createLocalDiscoveryAdapter } from './local-discovery.mjs?v=c1dca215dd59102e';
+import { createLocalDotAdapter } from './local-dot-adapter.mjs?v=c1dca215dd59102e';
+import { createLocalMapsService } from './local-maps-service.mjs?v=c1dca215dd59102e';
+import { createPreferredHostTransport, createPreferredCompletion, turnHostCheckpoints, cancelTurnHostRequests } from './preferred-host-transport.mjs?v=c1dca215dd59102e';
 
 export const localModelAdapter = createModelCatalogAdapter(modelCatalog);
 export const localProtocolDiagnostics = [];
@@ -42,6 +42,9 @@ export const localPersonalizationService = createLocalPersonalizationService({
   onDiagnostic: event => localProtocolDiagnostics.push(event),
 });
 const readPersonalizedSettings = createPersonalizedSettingsReader({ readSettings: () => ({ ...DEFAULT_SETTINGS }), personalization: localPersonalizationService, getIdentity: getPersonalizationIdentity });
+// A local preview/session flag is not a verified site account. File ownership
+// must use the same boot-bound identity guard as account-owned preferences.
+const getOwnedFileAccountId = () => getPersonalizationIdentity()?.accountId ?? null;
 export const localPreferredHostTransport = createPreferredHostTransport({ baseURL: SITE_ACCOUNT_SERVICE,
   fetchImpl: (...args) => globalThis.fetch(...args), getSiteAccount, getSiteSessionToken,
   onDiagnostic: event => localProtocolDiagnostics.push(event),
@@ -54,12 +57,12 @@ export const localToolExecutor = createBrowserToolExecutor({ PythonRuntime, PYTH
 });
 export const localFilesService = createLocalFilesService({ storage: localToolExecutor.storage,
   metadataStorage: { getItem: key => globalThis.localStorage.getItem(key), setItem: (key, value) => globalThis.localStorage.setItem(key, value) },
-  getAccountId: () => getPrototypeLocalAuth()?.accountId ?? null,
+  getAccountId: getOwnedFileAccountId,
   getWorkspacePrefix: localToolExecutor.getWorkspacePrefix, diagnostics: localProtocolDiagnostics,
 });
 export const localLibraryService = createLocalLibraryService({ files: localFilesService,
   metadataStorage: { getItem: key => globalThis.localStorage.getItem(key), setItem: (key, value) => globalThis.localStorage.setItem(key, value) },
-  getAccountId: () => getPrototypeLocalAuth()?.accountId ?? null, diagnostics: localProtocolDiagnostics,
+  getAccountId: getOwnedFileAccountId, diagnostics: localProtocolDiagnostics,
 });
 export const localLibraryByteTransport = Object.freeze({
   ownsObjectURL: value => localLibraryService.ownsObjectURL(value),
@@ -247,7 +250,8 @@ export function installNetworkBoundary() {
     const link = event.target instanceof Element && event.target.closest('a[href]');
     if (!link) return;
     const url = new URL(link.href, location.href);
-    if (!['http:', 'https:'].includes(url.protocol)) {
+    const ownedDownload = url.protocol === 'blob:' && link.hasAttribute('download') && localLibraryService.ownsObjectURL(url.href);
+    if (!ownedDownload && !['http:', 'https:'].includes(url.protocol)) {
       event.preventDefault();
       event.stopPropagation();
       diagnostics.push({ type: 'navigation-unavailable', origin: url.origin });

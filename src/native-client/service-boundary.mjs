@@ -42,6 +42,9 @@ export const localPersonalizationService = createLocalPersonalizationService({
   onDiagnostic: event => localProtocolDiagnostics.push(event),
 });
 const readPersonalizedSettings = createPersonalizedSettingsReader({ readSettings: () => ({ ...DEFAULT_SETTINGS }), personalization: localPersonalizationService, getIdentity: getPersonalizationIdentity });
+// A local preview/session flag is not a verified site account. File ownership
+// must use the same boot-bound identity guard as account-owned preferences.
+const getOwnedFileAccountId = () => getPersonalizationIdentity()?.accountId ?? null;
 export const localPreferredHostTransport = createPreferredHostTransport({ baseURL: SITE_ACCOUNT_SERVICE,
   fetchImpl: (...args) => globalThis.fetch(...args), getSiteAccount, getSiteSessionToken,
   onDiagnostic: event => localProtocolDiagnostics.push(event),
@@ -54,12 +57,12 @@ export const localToolExecutor = createBrowserToolExecutor({ PythonRuntime, PYTH
 });
 export const localFilesService = createLocalFilesService({ storage: localToolExecutor.storage,
   metadataStorage: { getItem: key => globalThis.localStorage.getItem(key), setItem: (key, value) => globalThis.localStorage.setItem(key, value) },
-  getAccountId: () => getPrototypeLocalAuth()?.accountId ?? null,
+  getAccountId: getOwnedFileAccountId,
   getWorkspacePrefix: localToolExecutor.getWorkspacePrefix, diagnostics: localProtocolDiagnostics,
 });
 export const localLibraryService = createLocalLibraryService({ files: localFilesService,
   metadataStorage: { getItem: key => globalThis.localStorage.getItem(key), setItem: (key, value) => globalThis.localStorage.setItem(key, value) },
-  getAccountId: () => getPrototypeLocalAuth()?.accountId ?? null, diagnostics: localProtocolDiagnostics,
+  getAccountId: getOwnedFileAccountId, diagnostics: localProtocolDiagnostics,
 });
 export const localLibraryByteTransport = Object.freeze({
   ownsObjectURL: value => localLibraryService.ownsObjectURL(value),
@@ -239,7 +242,8 @@ export function installNetworkBoundary() {
     const link = event.target instanceof Element && event.target.closest('a[href]');
     if (!link) return;
     const url = new URL(link.href, location.href);
-    if (!['http:', 'https:'].includes(url.protocol)) {
+    const ownedDownload = url.protocol === 'blob:' && link.hasAttribute('download') && localLibraryService.ownsObjectURL(url.href);
+    if (!ownedDownload && !['http:', 'https:'].includes(url.protocol)) {
       event.preventDefault();
       event.stopPropagation();
       diagnostics.push({ type: 'navigation-unavailable', origin: url.origin });
