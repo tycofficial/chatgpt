@@ -1,6 +1,6 @@
 /** Original classic Chat REST/SSE shapes over the same real local thread engine. */
-import { FRONTEND_TO_RAW_EFFORT } from './model-catalog-adapter.mjs?v=3b90ea6eb4e00062';
-import { turnHostCheckpoints } from './preferred-host-transport.mjs?v=3b90ea6eb4e00062';
+import { FRONTEND_TO_RAW_EFFORT } from './model-catalog-adapter.mjs?v=a0a40643d9533070';
+import { turnHostCheckpoints } from './preferred-host-transport.mjs?v=a0a40643d9533070';
 export class ClassicChatAdapter {
   constructor({ appServer, models, now = Date.now, uuid = () => crypto.randomUUID(), onConversationChange = () => {}, heartbeatMs = 10000 }) { this.server = appServer; this.models = models; this.now = now; this.uuid = uuid; this.onConversationChange = onConversationChange; this.heartbeatMs = heartbeatMs; this.mutationQueue = Promise.resolve(); }
   json(body, status = 200) { return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }); }

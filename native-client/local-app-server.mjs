@@ -1,5 +1,5 @@
 /** Original app-server protocol over real, resumable local execution. */
-import { runAgentTurn } from './agent-turn-runner.mjs?v=3b90ea6eb4e00062';
+import { runAgentTurn } from './agent-turn-runner.mjs?v=a0a40643d9533070';
 export class RpcError extends Error {
   constructor(code, message, data) { super(message); this.name = 'RpcError'; this.code = code; if (data !== undefined) this.data = data; }
 }
