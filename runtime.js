@@ -59,14 +59,18 @@ export function verifyResponseReasoning(settings, response) {
 }
 
 async function responseError(response) {
-  let detail;
+  let detail, code;
   try {
     const body = await response.json();
     detail = body.error?.message || body.message || body.detail;
+    code = body.error?.code || body.code;
   } catch { /* Some providers return an HTML error page. */ }
-  if (response.status === 401 || response.status === 403) return new Error(detail || 'API 认证失败，请在设置中检查密钥及模型访问权限。');
-  if (response.status === 429) return new Error(detail || 'API 请求过于频繁或额度不足，请稍后重试。');
-  return new Error(detail || `API 请求失败（HTTP ${response.status}）`);
+  const exhausted = /insufficient.{0,32}(?:balance|quota|credit)|(?:credit|balance|quota).{0,32}(?:exhaust|insufficient)|额度不足|余额不足/i.test(String(detail || '') + ' ' + String(code || ''));
+  const error = new Error(exhausted ? `API 额度或余额已耗尽。${detail || '请补充服务商额度后重试。'}` : detail || (response.status === 401 || response.status === 403 ? 'API 认证失败，请在设置中检查密钥及模型访问权限。' : response.status === 429 ? 'API 请求过于频繁或额度不足，请稍后重试。' : `API 请求失败（HTTP ${response.status}）`));
+  error.status = response.status;
+  error.code = exhausted ? 'API_QUOTA_EXHAUSTED' : code || 'API_REQUEST_FAILED';
+  error.retryable = !exhausted && (response.status === 408 || response.status === 429 || response.status >= 500);
+  return error;
 }
 
 export async function getModels(settings, signal) {
@@ -96,9 +100,9 @@ export class SSEDecoder {
   }
 }
 
-export async function streamCompletion({ settings, messages, tools, signal, onDelta = () => {} }) {
+export async function streamCompletion({ settings, messages, tools, signal, onDelta = () => {}, onActivity = () => {} }) {
   if (settings.apiTransport === 'responses' || settings.reasoningMode === 'pro') {
-    return streamResponses({ settings, messages, tools, signal, onDelta });
+    return streamResponses({ settings, messages, tools, signal, onDelta, onActivity });
   }
   const payload = { model: settings.model, messages: messages.map(({ response_items, ...message }) => message), stream: true };
   const effort = validatedReasoningEffort(settings);
@@ -119,9 +123,10 @@ export async function streamCompletion({ settings, messages, tools, signal, onDe
     if (!choice) return;
     const delta = choice.delta || choice.message || {};
     const content = typeof delta.content === 'string' ? delta.content : Array.isArray(delta.content) ? delta.content.map(part => part.text || '').join('') : '';
-    if (content) { assembled.content += content; onDelta(content, assembled); }
-    if (delta.reasoning_content) { assembled.reasoning = (assembled.reasoning || '') + delta.reasoning_content; onDelta('', assembled); }
+    if (content) { assembled.content += content; onActivity({type:'text_delta'}); onDelta(content, assembled); }
+    if (delta.reasoning_content) { assembled.reasoning = (assembled.reasoning || '') + delta.reasoning_content; onActivity({type:'reasoning_delta'}); onDelta('', assembled); }
     for (const call of delta.tool_calls || []) {
+      onActivity({type:'tool_delta'});
       const index = call.index ?? toolCalls.findIndex(t => t?.id === call.id);
       const position = index < 0 ? toolCalls.length : index;
       const target = toolCalls[position] ||= { id: '', type: 'function', function: { name: '', arguments: '' } };
@@ -196,7 +201,7 @@ export function toResponsesTools(tools = []) {
 }
 
 /** Responses transport preserves the same app-facing assistant/tool-call contract. */
-async function streamResponses({ settings, messages, tools, signal, onDelta }) {
+async function streamResponses({ settings, messages, tools, signal, onDelta, onActivity }) {
   const payload = { model: settings.model, input: toResponsesInput(messages), stream: true, store: false, include: ['reasoning.encrypted_content'] };
   if (settings.serviceTier) payload.service_tier = settings.serviceTier;
   const reasoning = responsesReasoning(settings);
@@ -220,6 +225,7 @@ async function streamResponses({ settings, messages, tools, signal, onDelta }) {
     if (next === previous) return;
     texts.set(key, { index, contentIndex, text: next });
     assembled.content = [...texts.values()].sort((a,b) => a.index-b.index || a.contentIndex-b.contentIndex).map(part => part.text).join('');
+    onActivity({type:'text_delta'});
     onDelta(next.startsWith(previous) ? next.slice(previous.length) : '', assembled);
   };
   const ensureCall = (index, item = {}) => {
@@ -234,7 +240,7 @@ async function streamResponses({ settings, messages, tools, signal, onDelta }) {
     if (!item) return;
     if (item.id) itemIndexes.set(item.id, index);
     if (complete) items.set(index, structuredClone(item));
-    if (item.type === 'function_call') ensureCall(index, item);
+    if (item.type === 'function_call') { onActivity({type:'tool_delta'}); ensureCall(index, item); }
     if (item.type === 'message') (item.content || []).forEach((part, contentIndex) => {
       if (part.type === 'output_text') textPart(index, contentIndex, part.text || '');
       if (part.type === 'refusal') textPart(index, contentIndex, part.refusal || '');
@@ -263,12 +269,13 @@ async function streamResponses({ settings, messages, tools, signal, onDelta }) {
       case 'response.refusal.delta': textPart(index,body.content_index || 0,body.delta || '',true); break;
       case 'response.refusal.done': textPart(index,body.content_index || 0,body.refusal || ''); break;
       case 'response.function_call_arguments.delta': {
+        onActivity({type:'tool_delta'});
         const call = ensureCall(index,{ id: body.item_id, ...(body.call_id ? {call_id:body.call_id} : {}), ...(body.name ? {name:body.name} : {}) });
         call.arguments += body.delta || ''; refreshCalls(); break;
       }
       case 'response.function_call_arguments.done': ensureCall(index,{ id: body.item_id, arguments: body.arguments || '', ...(body.name ? {name:body.name} : {}) }); break;
       case 'response.reasoning_summary_text.delta':
-        assembled.reasoning = (assembled.reasoning || '') + (body.delta || ''); onDelta('',assembled); break;
+        assembled.reasoning = (assembled.reasoning || '') + (body.delta || ''); onActivity({type:'reasoning_delta'}); onDelta('',assembled); break;
       case 'response.completed':
       case 'response.incomplete': ingestResponse(body.response || {}); finished = true; break;
       case 'response.failed': throw new Error(body.response?.error?.message || '模型响应失败。');

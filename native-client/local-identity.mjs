@@ -1,4 +1,5 @@
 /** Explicit prototype-local identity; never a Google/OpenAI authentication. */
+import { getSiteAccount } from './site-account.mjs?v=78e7bc02bd4001a6';
 export const LOCAL_ACCOUNT_ID = '00000000-0000-4000-8000-000000000001';
 export const LOCAL_USER_ID = 'user-local-prototype';
 export const LOCAL_ACCOUNT_USER_ID = 'local-prototype-account-owner';
@@ -12,15 +13,18 @@ try {
   if (option !== '1' && option !== '0') enabled = globalThis.sessionStorage.getItem(toggleKey) === '1' || (globalThis.sessionStorage.getItem(toggleKey) === null && globalThis.__CHATGPT_REPLICA_ENV__?.localIdentity === true);
 } catch {}
 let generation = 1;
+const administrator = getSiteAccount();
+if (administrator) enabled = true;
 const marker = 'local-prototype-not-an-openai-token';
 const account = { id: LOCAL_ACCOUNT_ID, userId: LOCAL_ACCOUNT_USER_ID, planType: 'free', structure: 'personal', workspaceType: null, organizationId: null, computeResidency: null, isFedrampCompliantWorkspace: false, isDelinquent: false };
 const user = { id: LOCAL_USER_ID, name: '本地账户', email: 'local-prototype@example.invalid', created: Math.floor(Date.now() / 1000), is_test_user: false };
 const context = { locale: 'zh-CN', deviceId: 'local-prototype' };
-const session = { accessToken: marker, account, user, statsigContext: context, adapterIdentity: 'prototype-local-only' };
+if (administrator) { account.planType = 'pro'; user.name = administrator.username; user.email = administrator.username.toLowerCase() + '@local.invalid'; user.created = Math.floor(administrator.createdAt / 1000); }
+const session = { accessToken: marker, sessionToken: 'site-account-reference:' + LOCAL_USER_ID, authProvider: 'local-username-password', account, user, statsigContext: context, adapterIdentity: 'prototype-local-only' };
 const snapshot = {
   accessToken: marker, accountId: LOCAL_ACCOUNT_ID, accountUserId: LOCAL_ACCOUNT_USER_ID,
   userId: LOCAL_USER_ID, userCreated: user.created, isTestUser: false, isSignup: false,
-  email: user.email, name: user.name, picture: undefined, planType: 'free', computeResidency: null,
+  email: user.email, name: user.name, picture: undefined, planType: account.planType, computeResidency: null,
   source: 'localAdapter', targetingAccount: account, targetingRequest: context,
   adapterIdentity: 'prototype-local-only', googleAuthenticated: false, openaiAuthenticated: false,
 };
@@ -29,7 +33,7 @@ export const getPrototypeLocalSession = () => enabled ? session : null;
 export const getPrototypeLocalAuth = () => enabled ? snapshot : null;
 export const getPrototypeLocalAuthGeneration = () => generation;
 export function getPrototypeCurrentUser() {
-  return enabled ? { id: user.id, created: user.created, email: user.email, name: user.name, first_name: '本地账户', email_domain_type: null, phone_number: null, picture: null } : null;
+  return enabled ? { id: user.id, created: user.created, email: user.email, name: user.name, first_name: user.name, email_domain_type: null, phone_number: null, picture: null } : null;
 }
 export function clearPrototypeLocalSession({ reload = true } = {}) {
   enabled = false; generation++;
@@ -58,8 +62,8 @@ export function getLocalAccountCheck() {
       [LOCAL_ACCOUNT_ID]: {
         account: {
           account_id: LOCAL_ACCOUNT_ID, account_user_id: LOCAL_ACCOUNT_USER_ID,
-          account_user_role: 'account-owner', structure: 'personal', plan_type: 'free',
-          name: '本地账户', display_name: '本地账户', is_zdr: false, is_openai_internal: false,
+          account_user_role: 'account-owner', structure: 'personal', plan_type: account.planType,
+          name: user.name, display_name: user.name, is_zdr: false, is_openai_internal: false,
           is_deactivated: false, is_most_recent_expired_subscription_gratis: false,
           is_fedramp_compliant_workspace: false,
           adapter_identity: 'prototype-local-only',

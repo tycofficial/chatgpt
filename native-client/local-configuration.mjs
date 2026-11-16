@@ -1,6 +1,6 @@
-import * as catalog from '../model-catalog.js?v=254853a0391083ac';
-import { createModelCatalogAdapter } from './model-catalog-adapter.mjs?v=254853a0391083ac';
-import { getPrototypeStatsigUser, isPrototypeLocalSession } from './local-identity.mjs?v=254853a0391083ac';
+import * as catalog from '../model-catalog.js?v=78e7bc02bd4001a6';
+import { createModelCatalogAdapter } from './model-catalog-adapter.mjs?v=78e7bc02bd4001a6';
+import { getPrototypeStatsigUser, isPrototypeLocalSession } from './local-identity.mjs?v=78e7bc02bd4001a6';
 const models = createModelCatalogAdapter(catalog);
 // Same public _DJB2 algorithm as original module MEQB (Statsig key lookup).
 function hash(name) { let value = 0; for (let index = 0; index < name.length; index++) value = ((value << 5) - value + name.charCodeAt(index)) | 0; return String(value >>> 0); }

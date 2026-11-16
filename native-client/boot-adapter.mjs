@@ -3,18 +3,20 @@
  * Loads the original component graph; changes only declared service boundaries.
  * It has not been run against the original bundles.
  */
-import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities } from './service-boundary.mjs?v=254853a0391083ac';
-import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs?v=254853a0391083ac';
-import { getPrototypeLocalAuth, isPrototypeLocalSession, getPrototypeLocalAuthGeneration, clearPrototypeLocalSession } from './local-identity.mjs?v=254853a0391083ac';
-import { createLocalHostSettingsClass } from './local-host-settings.mjs?v=254853a0391083ac';
-import { createLocalWorkPolicy } from './local-work-policy.mjs?v=254853a0391083ac';
+import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities } from './service-boundary.mjs?v=78e7bc02bd4001a6';
+import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs?v=78e7bc02bd4001a6';
+import { getPrototypeLocalAuth, isPrototypeLocalSession, getPrototypeLocalAuthGeneration, clearPrototypeLocalSession } from './local-identity.mjs?v=78e7bc02bd4001a6';
+import { createLocalHostSettingsClass } from './local-host-settings.mjs?v=78e7bc02bd4001a6';
+import { createLocalWorkPolicy } from './local-work-policy.mjs?v=78e7bc02bd4001a6';
+import { hasModelSelectionAccess, getSiteLoginUrl } from './site-account.mjs?v=78e7bc02bd4001a6';
+import { createNativeModelSelectionPolicy } from './local-model-selection-policy.mjs?v=78e7bc02bd4001a6';
 
 const boundary = installNetworkBoundary();
 globalThis.__originalClientProbe = boundary.diagnostics;
 installSyntheticDocumentState();
 if (globalThis.__CHATGPT_REPLICA_ENV__) window.__reactRouterContext.basename = globalThis.__CHATGPT_REPLICA_ENV__.basePath.replace(/\/$/, '') || '/';
 
-const plan = await (await fetch(new URL('./entry-plan.json?v=254853a0391083ac', import.meta.url))).json();
+const plan = await (await fetch(new URL('./entry-plan.json?v=78e7bc02bd4001a6', import.meta.url))).json();
 const { __webpack_require__: requireOriginal } = await import(plan.runtime);
 // One mechanical entry transform defers its terminal hxQI invocation and
 // rebases its relative imports. All original factories and chunks are retained.
@@ -118,12 +120,35 @@ adaptFactory('dbUr', factory => function(module, exports, require) {
   return factory.call(this, module, exports, scopedRequire);
 });
 
+// Site policy uses the source picker's own disabled prop. It disables the
+// original trigger, open callback and model shortcut without replacing its UI.
+// The merged-picker layer stays enabled, preserving Chat/Work.
+adaptFactory('pPWr', factory => function(module, exports, require) {
+  let PolicyPicker;
+  const scopedRequire = new Proxy(require, {
+    get(target, key, receiver) {
+      if (key !== 'd') return Reflect.get(target, key, receiver);
+      return (destination, getters, values) => {
+        if (destination === exports && (getters?.a || values?.a)) {
+          const getOriginal = getters?.a ?? (() => values.a);
+          getters = { ...getters, a: () => PolicyPicker ??= createNativeModelSelectionPolicy(getOriginal(), require('zd8w').createElement, hasModelSelectionAccess) };
+          if (values?.a) { values = { ...values }; delete values.a; }
+        }
+        return require.d(destination, getters, values);
+      };
+    },
+  });
+  return factory.call(this, module, exports, scopedRequire);
+});
+
 // The explicit ?localSession=1 switch supplies an unmistakably local identity.
 // Default is signed out. No Google/OpenAI login or captured credential is used.
 // The original auth state machine is the default; originalAuth=0 is a comparison-only local shim.
 const useOriginalAuth = new URL(location.href).searchParams.get('originalAuth') !== '0';
 boundary.diagnostics.push({ type: 'auth-state-engine', source: useOriginalAuth ? 'original-QdUF-with-local-bootstrap' : 'declared-local-auth-getters' });
-if (!useOriginalAuth) overrideExports('QdUF', {
+overrideExports('QdUF', {
+  getBrowserAuthPageUrl: name => name === 'login' ? new URL(getSiteLoginUrl(), location.href) : new URL('/auth/' + name, location.origin),
+  ...(!useOriginalAuth ? {
   loadBrowserChatGptAuth: async () => getPrototypeLocalAuth(),
   getOrLoadBrowserChatGptAuth: () => getPrototypeLocalAuth(),
   getBrowserChatGptAuthSnapshot: getPrototypeLocalAuth,
@@ -141,6 +166,7 @@ if (!useOriginalAuth) overrideExports('QdUF', {
   maybeRedirectToBrowserChatGptLogin: () => false,
   maybeRedirectToBrowserChatGptLogout: () => false,
   redirectToBrowserChatGptLogin: () => boundary.diagnostics.push({ type: 'unavailable', service: 'login' }),
+  } : {}),
 });
 
 // Browser-saved HTML omits the initial module bootstrap. Reconstitute the exact

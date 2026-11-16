@@ -1,16 +1,27 @@
-import * as modelCatalog from '../model-catalog.js?v=254853a0391083ac';
-import { createModelCatalogAdapter } from './model-catalog-adapter.mjs?v=254853a0391083ac';
-import { DEFAULT_SETTINGS } from '../config.js?v=254853a0391083ac';
-import { streamCompletion } from '../runtime.js?v=254853a0391083ac';
-import { LocalAppServer, LocalProtocolSocket } from './local-app-server.mjs?v=254853a0391083ac';
-import { getPrototypeLocalSession, getPrototypeLocalAuth, getLocalAccountCheck, getLocalOptimizedAccount, getLocalWhamAccounts, getPrototypeCurrentUser, isPrototypeLocalSession, clearPrototypeLocalSession, getLocalSignedOutUrl } from './local-identity.mjs?v=254853a0391083ac';
-import { getPrototypeConfiguration } from './local-configuration.mjs?v=254853a0391083ac';
-import { ClassicChatAdapter } from './classic-chat-adapter.mjs?v=254853a0391083ac';
-import { LocalConversationPubSub } from './local-pubsub.mjs?v=254853a0391083ac';
-import { readLocalUserPreferences, updateLocalUserPreference, acknowledgeLocalAnnouncement } from './local-user-preferences.mjs?v=254853a0391083ac';
+import * as modelCatalog from '../model-catalog.js?v=78e7bc02bd4001a6';
+import { createModelCatalogAdapter } from './model-catalog-adapter.mjs?v=78e7bc02bd4001a6';
+import { DEFAULT_SETTINGS } from '../config.js?v=78e7bc02bd4001a6';
+import { streamCompletion, PythonRuntime, PYTHON_TOOL } from '../runtime.js?v=78e7bc02bd4001a6';
+import { LocalAppServer, LocalProtocolSocket } from './local-app-server.mjs?v=78e7bc02bd4001a6';
+import { getPrototypeLocalSession, getPrototypeLocalAuth, getLocalAccountCheck, getLocalOptimizedAccount, getLocalWhamAccounts, getPrototypeCurrentUser, isPrototypeLocalSession, clearPrototypeLocalSession, getLocalSignedOutUrl } from './local-identity.mjs?v=78e7bc02bd4001a6';
+import { getPrototypeConfiguration } from './local-configuration.mjs?v=78e7bc02bd4001a6';
+import { ClassicChatAdapter } from './classic-chat-adapter.mjs?v=78e7bc02bd4001a6';
+import { LocalConversationPubSub } from './local-pubsub.mjs?v=78e7bc02bd4001a6';
+import { readLocalUserPreferences, updateLocalUserPreference, acknowledgeLocalAnnouncement } from './local-user-preferences.mjs?v=78e7bc02bd4001a6';
+import { createBrowserToolExecutor } from './browser-tool-executor.mjs?v=78e7bc02bd4001a6';
+import { createLocalPricingAdapter } from './local-pricing.mjs?v=78e7bc02bd4001a6';
+import { SITE_ACCOUNT_SERVICE, getSiteAccount, logoutSiteAccount } from './site-account.mjs?v=78e7bc02bd4001a6';
 
 export const localModelAdapter = createModelCatalogAdapter(modelCatalog);
 export const localProtocolDiagnostics = [];
+// Original analytics retries must never grow an unbounded browser log.
+localProtocolDiagnostics.push = function (...events) {
+  const size = Array.prototype.push.apply(this, events);
+  if (size > 500) this.splice(0, size - 500);
+  return this.length;
+};
+export const localToolExecutor = createBrowserToolExecutor({ PythonRuntime, PYTHON_TOOL });
+export const localPricingAdapter = createLocalPricingAdapter({ diagnostics: localProtocolDiagnostics, readMembership: () => getSiteAccount() });
 export const localAppServer = new LocalAppServer({
   storage: {
     getItem: key => globalThis.localStorage.getItem(key),
@@ -21,13 +32,15 @@ export const localAppServer = new LocalAppServer({
   models: localModelAdapter,
   catalog: modelCatalog,
   diagnostics: localProtocolDiagnostics,
+  toolExecutor: localToolExecutor,
+  agentOptions: { toolTransport: 'responses', verifiedPriority: false },
 });
 export const localConversationPubSub = new LocalConversationPubSub(localAppServer);
 export const localClassicChatAdapter = new ClassicChatAdapter({ appServer: localAppServer, models: localModelAdapter, onConversationChange: (type, payload) => localConversationPubSub.publish(type, payload) });
 export function getLocalExecutionCapabilities() {
   return { executionSource: 'local-app-server',
     textConversations: Boolean(DEFAULT_SETTINGS.apiBase && DEFAULT_SETTINGS.apiKey && typeof streamCompletion === 'function' && typeof localAppServer.dispatch === 'function' && modelCatalog.WORK_MODEL_IDS.length),
-    openaiCloudEntitlement: false, filesystem: false, tools: [] };
+    openaiCloudEntitlement: false, filesystem: true, tools: localToolExecutor.tools.map(tool => tool.function.name), filesystemScope: 'browser-origin-workspace', pythonEnvironment: 'pyodide-webassembly' };
 }
 
 /** Only local assets/adapters and the explicitly configured gateway can run. */
@@ -42,6 +55,7 @@ export function installNetworkBoundary() {
   const response = (body, status = 200) => new Response(JSON.stringify(body), {
     status, headers: { 'Content-Type': 'application/json' },
   });
+  const isTelemetry = url => /^(?:\/ces\/v1\/(?:rgstr|telemetry\/intake)|\/v1\/(?:sdk_exception|rgstr)|\/api\/v2\/(?:logs|rum))\/?$/.test(url.pathname);
   globalThis.fetch = async (input, init) => {
     const request = new Request(input, init);
     const url = new URL(request.url, location.href);
@@ -52,6 +66,9 @@ export function installNetworkBoundary() {
       const headers = new Headers(request.headers); headers.delete('Authorization'); headers.delete('Cookie');
       return originalFetch(new Request(request, {headers,credentials:'omit'}));
     }
+    if (url.origin === SITE_ACCOUNT_SERVICE && /^\/(?:auth\/(?:login|session|logout)|bridge\/status|usage|jobs(?:\/[^/]+(?:\/events)?)?)$/.test(url.pathname)) return originalFetch(new Request(request, { credentials: 'omit', redirect: 'error' }));
+    // Consume analytics locally; never forward captured telemetry to its vendor.
+    if (isTelemetry(url)) return response({ success: true });
     if (local && (/^\/cdn\//.test(url.pathname) || /^\/__prototype\//.test(url.pathname))) {
       const headers = new Headers(request.headers);
       headers.delete('Authorization');
@@ -73,7 +90,8 @@ export function installNetworkBoundary() {
       const body = new URLSearchParams(await request.text());
       if (body.get('csrfToken') !== localCsrfToken) return response({ error: 'Invalid local signout token' }, 403);
       const target = getLocalSignedOutUrl();
-      localAppServer.interruptAll();
+      localAppServer.interruptAll({ reason: 'logout' });
+      await logoutSiteAccount();
       clearPrototypeLocalSession({ reload: false });
       return response({ url: target });
     }
@@ -106,6 +124,10 @@ export function installNetworkBoundary() {
     }
     const adapterPath = url.pathname.replace(/^\/(?:__codex-api|backend-api)(?=\/)/, '');
     try {
+      const artifact = await localToolExecutor.handleArtifactRequest(request, adapterPath);
+      if (artifact) return artifact;
+      const pricing = await localPricingAdapter.handle(request, adapterPath);
+      if (pricing) return pricing;
       const classic = await localClassicChatAdapter.handle(request, adapterPath);
       if (classic) return classic;
     } catch (error) {
@@ -126,7 +148,7 @@ export function installNetworkBoundary() {
   };
   globalThis.EventSource = DeniedConnection;
   globalThis.XMLHttpRequest = DeniedConnection;
-  try { Object.defineProperty(navigator, 'sendBeacon', { configurable: true, value: () => false }); } catch {}
+  try { Object.defineProperty(navigator, 'sendBeacon', { configurable: true, value: address => { try { return isTelemetry(new URL(address, location.href)); } catch { return false; } } }); } catch {}
   const originalOpen = window.open.bind(window);
   window.open = (url, ...rest) => {
     const target = new URL(url ?? 'about:blank', location.href);
@@ -146,7 +168,7 @@ export function installNetworkBoundary() {
       diagnostics.push({ type: 'navigation-unavailable', origin: url.origin });
     }
   }, true);
-  window.addEventListener('pagehide', () => localAppServer.interruptAll());
+  window.addEventListener('pagehide', () => localAppServer.interruptAll({ reason: 'pagehide' }));
   return { diagnostics };
 }
 

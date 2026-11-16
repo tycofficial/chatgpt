@@ -1,7 +1,7 @@
 /** Original classic Chat REST/SSE shapes over the same real local thread engine. */
-import { FRONTEND_TO_RAW_EFFORT } from './model-catalog-adapter.mjs?v=254853a0391083ac';
+import { FRONTEND_TO_RAW_EFFORT } from './model-catalog-adapter.mjs?v=78e7bc02bd4001a6';
 export class ClassicChatAdapter {
-  constructor({ appServer, models, now = Date.now, uuid = () => crypto.randomUUID(), onConversationChange = () => {} }) { this.server = appServer; this.models = models; this.now = now; this.uuid = uuid; this.onConversationChange = onConversationChange; }
+  constructor({ appServer, models, now = Date.now, uuid = () => crypto.randomUUID(), onConversationChange = () => {}, heartbeatMs = 10000 }) { this.server = appServer; this.models = models; this.now = now; this.uuid = uuid; this.onConversationChange = onConversationChange; this.heartbeatMs = heartbeatMs; }
   json(body, status = 200) { return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }); }
   summary(thread) {
     return { id: thread.id, title: thread.name || 'New chat', create_time: new Date(thread.createdAt * 1000).toISOString(), update_time: new Date(thread.updatedAt * 1000).toISOString(), conversation_origin: thread.adapterMetadata.conversationOrigin ?? null, gizmo_id: null, is_archived: !!thread.archived, is_starred: !!thread.adapterMetadata.isStarred };
@@ -9,27 +9,40 @@ export class ClassicChatAdapter {
   message(thread, turn, item, role) {
     const text = role === 'user' ? item.content.map(part => part.text).join('\n') : item.text;
     const frontendSlug = thread.adapterMetadata?.classicModelSlugs?.[turn.id] ?? thread.adapterMetadata?.frontendModelSlug ?? turn.model;
-    const done = turn.status === 'completed', terminal = ['completed', 'failed', 'interrupted'].includes(turn.status);
+    const done = turn.status === 'completed', terminal = ['completed', 'failed', 'interrupted'].includes(turn.status), itemDone = terminal || turn.adapterMetadata.completedItemIds?.includes(item.id);
+    const lastAssistant = turn.items.findLast(value => value.type === 'agentMessage')?.id === item.id;
     return {
       id: role === 'user' ? item.clientId ?? item.id : item.id,
       author: { role, name: null, metadata: {} },
       create_time: turn.startedAt, update_time: turn.completedAt ?? this.now() / 1000,
       content: { content_type: 'text', parts: [text] },
-      status: role === 'user' || done ? 'finished_successfully' : terminal ? 'finished_partial_completion' : 'in_progress',
-      end_turn: role === 'assistant' && terminal,
-      weight: 1, recipient: 'all', channel: role === 'assistant' ? 'final' : null,
-      metadata: { model_slug: frontendSlug, thinking_effort: FRONTEND_TO_RAW_EFFORT[turn.reasoningEffort], adapter_api_model: turn.model, is_complete: role === 'user' || terminal, ...(done && role === 'assistant' ? { finish_details: { type: 'stop', stop_tokens: [] } } : {}), adapter_source: 'local-original-client-adapter' },
+      status: role === 'user' || done || itemDone && !terminal ? 'finished_successfully' : terminal ? 'finished_partial_completion' : 'in_progress',
+      end_turn: role === 'assistant' && terminal && lastAssistant && (!turn.adapterMetadata.resumable || turn.adapterMetadata.resumePolicy === 'manual'),
+      weight: 1, recipient: 'all', channel: role === 'assistant' ? item.phase === 'commentary' ? 'commentary' : 'final' : null,
+      metadata: { model_slug: frontendSlug, thinking_effort: FRONTEND_TO_RAW_EFFORT[turn.reasoningEffort], adapter_api_model: turn.model, is_complete: role === 'user' || Boolean(itemDone), ...(done && role === 'assistant' ? { finish_details: { type: 'stop', stop_tokens: [] } } : {}), adapter_source: 'local-original-client-adapter' },
     };
+  }
+  projectItem(thread, turn, item) {
+    if (item.type === 'userMessage' || item.type === 'agentMessage') return [this.message(thread, turn, item, item.type === 'userMessage' ? 'user' : 'assistant')];
+    if (item.type !== 'mcpToolCall') return [];
+    const finished = item.status !== 'inProgress', base = { create_time: turn.startedAt, update_time: this.now() / 1000, weight: 1, metadata: { model_slug: thread.adapterMetadata.frontendModelSlug ?? turn.model, thinking_effort: FRONTEND_TO_RAW_EFFORT[turn.reasoningEffort], adapter_source: 'browser-workspace-mcp', mcp_tool_call: { server: item.server, tool: item.tool, status: item.status } } };
+    const call = { ...base, id: item.id + '-call', author: { role: 'assistant', name: null, metadata: {} }, recipient: item.tool, channel: 'commentary', content: { content_type: 'code', language: item.tool === 'python' ? 'python' : 'json', text: item.tool === 'python' ? item.arguments.code || '' : JSON.stringify(item.arguments, null, 2) }, status: finished ? 'finished_successfully' : 'in_progress', end_turn: false };
+    if (!finished) return [call];
+    const output = item.result || { content: [{ type: 'text', text: item.error?.message || 'Tool execution was interrupted' }], isError: true };
+    let text = output.content.filter(part => part.type === 'text').map(part => part.text).join('\n');
+    const data = output.structuredContent, files = data?.files || (data?.file ? [data.file] : []);
+    if (files.length) text += '\n\n' + files.map(file => '[' + file.name + '](' + file.url + ')').join('\n');
+    return [call, { ...base, id: item.id + '-result', author: { role: 'tool', name: item.tool, metadata: {} }, recipient: 'all', channel: null, content: { content_type: 'text', parts: [text] }, status: output.isError ? 'finished_partial_completion' : 'finished_successfully', end_turn: false }];
   }
   detail(thread) {
     const root = thread.adapterMetadata.classicRootId ?? `local-root-${thread.id}`, mapping = { [root]: { id: root, message: null, parent: null, children: [] } };
     let parent = root;
     for (const turn of thread.turns) for (const item of turn.items) {
-      if (!['userMessage', 'agentMessage'].includes(item.type)) continue;
-      const message = this.message(thread, turn, item, item.type === 'userMessage' ? 'user' : 'assistant');
-      mapping[message.id] = { id: message.id, message, parent, children: [] };
-      mapping[parent].children.push(message.id);
-      parent = message.id;
+      for (const message of this.projectItem(thread, turn, item)) {
+        mapping[message.id] = { id: message.id, message, parent, children: [] };
+        mapping[parent].children.push(message.id);
+        parent = message.id;
+      }
     }
     return {
       title: thread.name || 'New chat', create_time: thread.createdAt, update_time: thread.updatedAt,
@@ -69,7 +82,8 @@ export class ClassicChatAdapter {
     if (method === 'GET' && /^\/conversation\/[^/]+$/.test(pathname)) return this.json(this.detail(this.server.getThread(decodeURIComponent(pathname.split('/')[2]))));
     if (method === 'GET' && /^\/conversation\/[^/]+\/stream_status$/.test(pathname)) {
       const thread = this.server.getThread(decodeURIComponent(pathname.split('/')[2]));
-      return this.json({ conversation_id: thread.id, is_streaming: this.server.running.has(thread.id) });
+      const last = thread.turns.at(-1);
+      return this.json({ status: this.server.running.has(thread.id) ? 'IS_STREAMING' : last?.status === 'completed' ? 'COMPLETE' : last?.adapterMetadata?.resumable && last?.adapterMetadata?.resumePolicy !== 'manual' ? 'FAILURE' : 'UNAVAILABLE' });
     }
     if (method === 'PATCH' && /^\/conversation\/[^/]+$/.test(pathname)) {
       const thread = this.server.getThread(decodeURIComponent(pathname.split('/')[2])), body = await request.json();
@@ -90,6 +104,14 @@ export class ClassicChatAdapter {
       this.onConversationChange('conversation-history-update', { conversation_id: thread.id, update_type: method === 'POST' ? 'conversation-pinned' : 'conversation-unpinned' });
       return this.json({});
     }
+    if (method === 'POST' && pathname === '/f/conversation/resume') {
+      const body = await request.json();
+      if (typeof body.conversation_id !== 'string' || body.offset != null && (!Number.isSafeInteger(body.offset) || body.offset < 0)) return this.json({ error: { code: 'INVALID_RESUME', message: 'Resume requires a conversation ID and nonnegative offset' } }, 400);
+      const thread = this.server.getThread(body.conversation_id), current = this.server.running.get(thread.id)?.turn ?? thread.turns.at(-1);
+      if (!current) return this.json({ error: { code: 'TURN_NOT_FOUND', message: 'No turn exists to resume' } }, 404);
+      const transaction = current.status === 'completed' || this.server.running.has(thread.id) ? { result: { turn: structuredClone(current) } } : this.server.dispatch('turn/resume', { threadId: thread.id, turnId: current.id });
+      return this.attachStream(request, thread, transaction);
+    }
     if (method === 'POST' && pathname === '/stop_conversation') {
       const body = await request.json(); this.server.getThread(body.conversation_id); this.server.interrupt(body.conversation_id);
       return this.json({});
@@ -98,6 +120,7 @@ export class ClassicChatAdapter {
     return null;
   }
   stream(request, body) {
+    if (body.action === 'continue') { const thread = this.server.getThread(body.conversation_id); return this.attachStream(request, thread, this.server.dispatch('turn/resume', { threadId: thread.id })); }
     if (!['next', undefined].includes(body.action)) return this.json({ error: { message: `Classic Chat action ${body.action} is not implemented`, code: 'LOCAL_ADAPTER_UNIMPLEMENTED' } }, 501);
     const messages = body.messages;
     if (!Array.isArray(messages) || messages.length !== 1 || typeof messages[0]?.id !== 'string' || !messages[0].id || messages[0]?.author?.role !== 'user' || messages[0]?.content?.content_type !== 'text' || !Array.isArray(messages[0].content.parts) || messages[0].content.parts.some(part => typeof part !== 'string')) return this.json({ error: { message: 'This adapter accepts one text user message; multimodal and tool inputs are not implemented', code: 'LOCAL_TEXT_ONLY' } }, 400);
@@ -130,22 +153,28 @@ export class ClassicChatAdapter {
       thread.adapterMetadata.frontendModelSlug = frontendSlug;
       this.server.persist();
     }
-    let remove = () => {}, removeAbort = () => {}, closed = false;
+    return this.attachStream(request, thread, transaction);
+  }
+  attachStream(request, thread, transaction) {
+    const turnId = transaction.result.turn.id;
+    let remove = () => {}, removeAbort = () => {}, closed = false, heartbeat;
     const interruptOwn = () => { if (this.server.running.get(thread.id)?.turn.id === turnId) this.server.interrupt(thread.id); };
     const stream = new ReadableStream({
       start: controller => {
         const emit = payload => { if (!closed) controller.enqueue(new TextEncoder().encode(`data: ${typeof payload === 'string' ? payload : JSON.stringify(payload)}\n\n`)); };
-        const close = () => { if (closed) return; closed = true; remove(); removeAbort(); controller.close(); };
-        const abort = () => { interruptOwn(); close(); };
-        const assistant = () => this.server.getThread(thread.id).turns.find(turn => turn.id === turnId)?.items.find(item => item.type === 'agentMessage');
+        heartbeat = setInterval(() => { if (!closed) controller.enqueue(new TextEncoder().encode('event: ping\ndata: {}\n\n')); }, this.heartbeatMs);
+        const close = () => { if (closed) return; closed = true; clearInterval(heartbeat); remove(); removeAbort(); controller.close(); };
+        // A transport disconnect detaches this reader; only the explicit stop
+        // REST/RPC command cancels execution. Page lifecycle saves a checkpoint.
+        const abort = () => close();
+        const assistant = () => this.server.getThread(thread.id).turns.find(turn => turn.id === turnId)?.items.findLast(item => item.type === 'agentMessage');
         const finishStream = turn => {
           if (turn.status === 'completed') {
-            const item = assistant();
-            if (item) emit({ conversation_id: thread.id, message: this.message(thread, turn, item, 'assistant') });
+            for (const item of turn.items) for (const message of this.projectItem(thread, turn, item)) emit({ conversation_id: thread.id, message });
             emit({ type: 'message_stream_complete', conversation_id: thread.id });
             emit({ type: 'main_stream_complete', conversation_id: thread.id, turn_exchange_id: turnId });
             emit('[DONE]');
-          } else emit({ error: turn.error?.message ?? 'The local turn was interrupted', error_code: turn.status === 'interrupted' ? 'local_turn_interrupted' : 'local_gateway_error', can_retry: false, error_reason: turn.status });
+          } else emit({ error: turn.error?.message ?? 'The local turn was interrupted', error_code: turn.adapterMetadata.lastFailure?.code ?? (turn.status === 'interrupted' ? 'local_turn_interrupted' : 'local_gateway_error'), can_retry: turn.adapterMetadata.resumePolicy === 'automatic', error_reason: turn.status });
           close();
         };
         remove = this.server.subscribe(event => {
@@ -156,20 +185,23 @@ export class ClassicChatAdapter {
             const item = assistant();
             if (item) emit({ conversation_id: thread.id, message: this.message(thread, turn, item, 'assistant') });
           }
+          if (['item/started', 'item/completed'].includes(event.method) && params.item?.type === 'mcpToolCall') for (const message of this.projectItem(thread, turn, params.item)) emit({ conversation_id: thread.id, message });
           if (event.method === 'turn/completed') finishStream(params.turn);
         });
         request.signal?.addEventListener('abort', abort, { once: true });
         removeAbort = () => request.signal?.removeEventListener('abort', abort);
         const userItem = this.server.getThread(thread.id).turns.find(turn => turn.id === turnId).items.find(item => item.type === 'userMessage');
         emit({ type: 'input_message', conversation_id: thread.id, input_message: this.message(thread, transaction.result.turn, userItem, 'user') });
+        const current = this.server.getThread(thread.id).turns.find(value => value.id === turnId);
+        for (const item of current.items) if (item.type !== 'userMessage') for (const message of this.projectItem(thread, current, item)) emit({ conversation_id: thread.id, message });
+        if (transaction.afterReply) setTimeout(transaction.afterReply, 0);
         if (request.signal?.aborted) abort();
-        else if (transaction.afterReply) setTimeout(transaction.afterReply, 0);
-        else {
+        else if (!transaction.afterReply) {
           const existing = this.server.getThread(thread.id).turns.find(turn => turn.id === turnId);
           if (existing.status !== 'inProgress') queueMicrotask(() => finishStream(existing));
         }
       },
-      cancel: () => { closed = true; remove(); removeAbort(); interruptOwn(); },
+      cancel: () => { closed = true; clearInterval(heartbeat); remove(); removeAbort(); },
     });
     return new Response(stream, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'X-Local-Adapter': 'original-classic-chat-rest' } });
   }

@@ -80,7 +80,7 @@ async function execute({ id, code, files = [] }) {
     }
   }
   const before = snapshot(runtime.FS);
-  let stdout = '', stderr = '', result = '';
+  let stdout = '', stderr = '', result = '', executionError = null;
   const outDecoder = new TextDecoder(), errDecoder = new TextDecoder();
   runtime.setStdin({ stdin: () => undefined });
   runtime.setStdout({ write: bytes => { stdout += outDecoder.decode(bytes, { stream: true }); return bytes.length; } });
@@ -94,7 +94,7 @@ async function execute({ id, code, files = [] }) {
       result = String(value);
       value?.destroy?.();
     }
-  } catch (error) { stderr += `${error.message || error}\n`; }
+  } catch (error) { executionError = String(error.message || error); stderr += `${executionError}\n`; }
   try { runtime.runPython('import sys as _runtime_sys; _runtime_sys.stdout.flush(); _runtime_sys.stderr.flush()'); } catch { /* Closed streams do not prevent artifact recovery. */ }
   // Capture every open figure even if model code omitted savefig()/show().
   try {
@@ -120,7 +120,7 @@ if 'matplotlib.pyplot' in _runtime_sys.modules:
   try { runtime.runPython('_runtime_sys.stdout.flush(); _runtime_sys.stderr.flush()'); } catch { /* Preserve any remaining output. */ }
   stdout += outDecoder.decode();
   stderr += errDecoder.decode();
-  return { stdout, stderr, result, files: generated, images: generated.filter(file => file.mime.startsWith('image/') && file.mime !== 'image/svg+xml').map(file => file.dataUrl) };
+  return { ok: executionError === null, error: executionError, stdout, stderr, result, files: generated, images: generated.filter(file => file.mime.startsWith('image/') && file.mime !== 'image/svg+xml').map(file => file.dataUrl) };
 }
 
 let queue = Promise.resolve();

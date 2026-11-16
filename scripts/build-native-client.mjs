@@ -7,7 +7,7 @@ const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const referenceInput=path.join(root,'.test-output/original-client-prototype');
 const input=path.join(root,'src/native-client');
 const output=path.join(root,'native-client');
-const helpers=['boot-adapter.mjs','service-boundary.mjs','synthetic-bootstrap.mjs','public-auth-envelope.mjs','local-identity.mjs','local-configuration.mjs','local-user-preferences.mjs','local-host-settings.mjs','local-work-policy.mjs','local-pubsub.mjs','model-catalog-adapter.mjs','local-app-server.mjs','classic-chat-adapter.mjs','entry-library.mjs'];
+const helpers=['boot-adapter.mjs','service-boundary.mjs','synthetic-bootstrap.mjs','public-auth-envelope.mjs','local-identity.mjs','site-account.mjs','local-model-selection-policy.mjs','local-configuration.mjs','local-user-preferences.mjs','local-host-settings.mjs','local-work-policy.mjs','local-pubsub.mjs','model-catalog-adapter.mjs','local-app-server.mjs','classic-chat-adapter.mjs','agent-turn-runner.mjs','browser-tool-executor.mjs','local-pricing.mjs','entry-library.mjs'];
 if(process.argv.includes('--from-reference')){
  await fs.mkdir(input,{recursive:true});
  for(const name of [...helpers,'entry-plan.json']){const file=path.join(input,name),temporary=file+'.'+process.pid+'.tmp';await fs.writeFile(temporary,await fs.readFile(path.join(referenceInput,name)));await fs.rename(temporary,file);}
@@ -53,12 +53,17 @@ await navigator.serviceWorker.ready;
 if (!navigator.serviceWorker.controller || !new URL(navigator.serviceWorker.controller.scriptURL).pathname.endsWith('/native-client-worker.js')) {
  await new Promise((resolve,reject)=>{const done=()=>{clearTimeout(timer);navigator.serviceWorker.removeEventListener('controllerchange',done);resolve();};const timer=setTimeout(()=>reject(Error('Original asset host did not become ready')),20000);navigator.serviceWorker.addEventListener('controllerchange',done);if(navigator.serviceWorker.controller)done();});
 }
-await import('./boot-adapter.mjs?v='+${JSON.stringify(release)});
+const siteAccount = await import('./site-account.mjs?v='+${JSON.stringify(release)});
+if(location.pathname.replace(/\\/$/,'') === rootURL.pathname+'login') siteAccount.renderSiteLoginPage();
+else { await siteAccount.initializeSiteAccount(); await import('./boot-adapter.mjs?v='+${JSON.stringify(release)}); }
 `;
 await write(path.join(output,'bootstrap.mjs'),bootstrap);
-const worker=`const SOURCE_BUILD=${JSON.stringify(sourceBuild)};
+const worker=`import {BrowserWorkspaceStore,workspacePath} from './native-client/browser-tool-executor.mjs?v=${release}';
+const workspace=new BrowserWorkspaceStore();
+const SOURCE_BUILD=${JSON.stringify(sourceBuild)};
 const BASE=new URL('./',self.location.href).pathname;
 const CACHE='chatgpt-original-assets-'+SOURCE_BUILD;
+const SHELL_CACHE='chatgpt-native-shell-${release}';
 self.addEventListener('install',event=>event.waitUntil(self.skipWaiting()));
 self.addEventListener('activate',event=>event.waitUntil(self.clients.claim()));
 function mirror(url){
@@ -69,7 +74,23 @@ function mirror(url){
 }
 self.addEventListener('fetch',event=>{
  if(event.request.method!=='GET')return;
- const mapped=mirror(new URL(event.request.url));if(!mapped)return;
+ const requested=new URL(event.request.url);
+ const artifactPrefix=BASE+'__local_artifacts/';
+ if(requested.origin===self.location.origin&&requested.pathname.startsWith(artifactPrefix)){
+  event.respondWith((async()=>{try{
+   const parts=requested.pathname.slice(artifactPrefix.length).split('/'),thread=decodeURIComponent(parts.shift()),name=workspacePath(parts.map(decodeURIComponent).join('/'));
+   const bytes=await workspace.read(encodeURIComponent(thread)+'/'+name);
+   const types={png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',webp:'image/webp',svg:'image/svg+xml',pdf:'application/pdf',txt:'text/plain',md:'text/markdown',csv:'text/csv',json:'application/json',html:'text/html'};
+   return new Response(bytes,{headers:{'Content-Type':types[name.split('.').at(-1)]||'application/octet-stream','Content-Disposition':"attachment; filename*=UTF-8''"+encodeURIComponent(name.split('/').at(-1)),'Cache-Control':'private,no-store','X-Content-Type-Options':'nosniff'}});
+  }catch{return new Response('File not found in this browser workspace',{status:404});}})());return;
+ }
+ if(event.request.mode==='navigate'&&requested.origin===self.location.origin&&requested.pathname.startsWith(BASE)){
+  event.respondWith((async()=>{const cache=await caches.open(SHELL_CACHE),key=new URL(BASE+'index.html',self.location.origin).href;
+   try{let page=await fetch(event.request);if(page.status===404)page=await fetch(key,{cache:'no-store'});if(page.ok)await cache.put(key,page.clone());return page;}
+   catch(error){const saved=await cache.match(key);if(saved)return saved;throw error;}
+  })());return;
+ }
+ const mapped=mirror(requested);if(!mapped)return;
  event.respondWith((async()=>{
   const cache=await caches.open(CACHE),cached=await cache.match(event.request.url);if(cached)return cached;
   const fetched=await fetch(mapped,{credentials:'omit',redirect:'error'});

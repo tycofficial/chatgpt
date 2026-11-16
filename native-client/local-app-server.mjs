@@ -1,4 +1,5 @@
-/** Local, text-only implementation of the original app-server wire protocol. */
+/** Original app-server protocol over real, resumable local execution. */
+import { runAgentTurn } from './agent-turn-runner.mjs?v=78e7bc02bd4001a6';
 export class RpcError extends Error {
   constructor(code, message, data) { super(message); this.name = 'RpcError'; this.code = code; if (data !== undefined) this.data = data; }
 }
@@ -10,8 +11,11 @@ const errorShape = message => ({ message, codexErrorInfo: null, additionalDetail
 const defaultCollaboration = model => ({ mode: 'default', settings: { model, reasoning_effort: null, developer_instructions: null } });
 
 export class LocalAppServer {
-  constructor({ storage, streamCompletion, readSettings, models, catalog, diagnostics = [], now = Date.now, uuid = () => crypto.randomUUID() }) {
+  constructor({ storage, streamCompletion, readSettings, models, catalog, diagnostics = [], now = Date.now, uuid = () => crypto.randomUUID(), toolExecutor = null, checkpointStore = null, agentOptions = {} }) {
     this.storage = storage;
+    this.toolExecutor = toolExecutor;
+    this.checkpointStore = checkpointStore;
+    this.agentOptions = agentOptions;
     this.streamCompletion = streamCompletion;
     this.readSettings = readSettings;
     this.models = models;
@@ -48,7 +52,8 @@ export class LocalAppServer {
           turn.error = null;
           turn.completedAt = Math.floor(this.now() / 1000);
           turn.durationMs = Math.max(0, this.now() - (turn.adapterMetadata?.startedAtMs ?? this.now()));
-          turn.adapterMetadata = { ...turn.adapterMetadata, interruption: 'page-reload-no-cloud-continuation' };
+          turn.adapterMetadata = { ...turn.adapterMetadata, interruption: 'page-reload-checkpoint-saved', resumable: Boolean(turn.adapterMetadata?.checkpoint), resumePolicy: 'automatic' };
+          for (const call of turn.adapterMetadata.checkpoint?.pendingCalls || []) if (call.state === 'running') call.state = 'uncertain';
           changed = true;
         }
         thread.status = idle();
@@ -119,7 +124,7 @@ export class LocalAppServer {
     if (!object(params)) throw new RpcError(-32602, 'RPC params must be an object');
     if (this.loadError && method !== 'initialize' && method !== 'model/list') throw this.loadError;
     switch (method) {
-      case 'initialize': return { result: { userAgent: 'local-original-client-text-adapter', adapterCapabilities: { textGeneration: true, toolExecution: false, filesystem: false, cloudEnvironment: false } } };
+      case 'initialize': return { result: { userAgent: 'local-original-client-agent-adapter', adapterCapabilities: { textGeneration: true, toolExecution: Boolean(this.toolExecutor?.execute), filesystem: Boolean(this.toolExecutor?.storage), cloudEnvironment: false, resumableCheckpoints: true } } };
       case 'initialized': return { result: {} };
       case 'model/list': return { result: this.models.getRpcModelList(params) };
       case 'thread/list': {
@@ -179,6 +184,7 @@ export class LocalAppServer {
         const threadSettings = this.settingsSnapshot(thread);
         return { result: {}, afterReply: () => this.notify('thread/settings/updated', { threadId: thread.id, threadSettings }) };
       }
+      case 'turn/resume': return this.resumeTurn(params);
       case 'turn/start':
       case 'turn/addUserMessage': return this.startTurn(params, method === 'turn/addUserMessage');
       case 'turn/interrupt': {
@@ -217,6 +223,7 @@ export class LocalAppServer {
     const duplicate = params.clientUserMessageId && thread.turns.find(turn => turn.clientUserMessageId === params.clientUserMessageId);
     if (duplicate) {
       if (duplicate.adapterMetadata.fingerprint !== fingerprint) throw new RpcError(-32602, 'A client user-message ID cannot be reused with different input or model settings');
+      if (duplicate.status !== 'completed' && duplicate.adapterMetadata?.resumable && duplicate.adapterMetadata?.checkpoint) return this.resumeTurn({ threadId: thread.id, turnId: duplicate.id });
       return { result: { turn: copy(duplicate), ...(admission ? { clientUserMessageId: params.clientUserMessageId, admissionOutcome: 'duplicate', serverUserMessageId: duplicate.items[0].id } : {}) } };
     }
     if (this.running.has(thread.id)) throw new RpcError(-32000, 'A turn is already running in this local thread; queueing and steering are not implemented');
@@ -253,10 +260,13 @@ export class LocalAppServer {
       },
     };
   }
-  messages(thread, turn) {
+  messages(thread, turn, { omitCurrent = false } = {}) {
     const instructions = [...new Set([this.readSettings().customInstructions, ...thread.adapterMetadata.instructions, ...turn.adapterMetadata.instructions].filter(value => typeof value === 'string' && value.trim()))];
     const messages = instructions.length ? [{ role: 'system', content: instructions.join('\n\n') }] : [];
     for (const entry of thread.turns) {
+      if (entry.id === turn.id && omitCurrent) break;
+      const transcript = entry.adapterMetadata?.checkpoint?.transcript ?? entry.adapterMetadata?.apiTranscript;
+      if (transcript?.length) { messages.push(...copy(transcript)); if (entry.id === turn.id) break; continue; }
       for (const item of entry.items) {
         if (item.type === 'userMessage') messages.push({ role: 'user', content: item.content.map(part => part.text).join('\n') });
         if (item.type === 'agentMessage' && item.text) messages.push({ role: 'assistant', content: item.text, ...(entry.adapterMetadata.gatewayResponseItems ? { response_items: copy(entry.adapterMetadata.gatewayResponseItems) } : {}) });
@@ -297,37 +307,28 @@ export class LocalAppServer {
         this.notify('item/agentMessage/delta', { threadId: thread.id, turnId: turn.id, itemId: running.assistant.id, delta });
       }
     }
-    if (this.now() - running.lastSavedAt >= 250) { this.persist(); running.lastSavedAt = this.now(); }
+    if (this.now() - running.lastSavedAt >= (this.agentOptions.persistIntervalMs ?? 1000)) { this.persist(); running.lastSavedAt = this.now(); }
   }
-  async runTurn(running) {
-    const { thread, turn, controller } = running;
-    try {
-      const settings = { ...this.readSettings(), model: turn.model, reasoningEffort: turn.reasoningEffort, autoPython: false, ...(turn.serviceTier === 'fast' ? { apiTransport: 'responses', serviceTier: 'priority' } : {}) };
-      const result = await this.streamCompletion({ settings, messages: this.messages(thread, turn), tools: [], signal: controller.signal, onDelta: (_delta, assembled) => this.append(running, assembled.content ?? '', assembled.reasoning ?? '') });
-      if (running.terminal) return;
-      this.append(running, result.content ?? '', result.reasoning ?? '');
-      if (result.tool_calls?.length) throw Error('The gateway requested a tool, but tool execution is not implemented by this local adapter');
-      if (!result.content) throw Error('The gateway returned no assistant text');
-      if (result.finish_reason === 'length') throw Error('The gateway stopped before completing the assistant response (length limit)');
-      if (result.finish_reason !== 'stop') throw Error(`The gateway did not confirm a completed text response (${result.finish_reason ?? 'missing completion signal'})`);
-      if (result.usage) turn.adapterMetadata.gatewayUsage = copy(result.usage);
-      if (result.actual_reasoning) turn.adapterMetadata.actualReasoning = copy(result.actual_reasoning);
-      if (result.response_items) turn.adapterMetadata.gatewayResponseItems = copy(result.response_items);
-      this.finish(running, 'completed', null);
-    } catch (error) {
-      if (running.terminal) return;
-      if (controller.signal.aborted || error?.name === 'AbortError') this.finish(running, 'interrupted', null);
-      else {
-        const key = this.readSettings().apiKey;
-        const message = String(error?.message ?? error).replaceAll(key || '\u0000NO_KEY\u0000', '[redacted]');
-        this.finish(running, 'failed', errorShape(message));
-      }
-    }
+  async runTurn(running) { return runAgentTurn(this, running); }
+  resumeTurn(params) {
+    const thread = this.getThread(params.threadId), turn = params.turnId ? thread.turns.find(value => value.id === params.turnId) : thread.turns.at(-1);
+    if (!turn) throw new RpcError(-32001, 'turn_not_found');
+    if (this.running.has(thread.id)) return { result: { turn: copy(this.running.get(thread.id).turn) } };
+    if (turn.status === 'completed') return { result: { turn: copy(turn) } };
+    if (!turn.adapterMetadata?.checkpoint) throw new RpcError(-32602, 'No resumable execution checkpoint exists');
+    if (params.model && params.model !== turn.model) throw new RpcError(-32602, 'Resume preserves the original turn model');
+    turn.status = 'inProgress'; turn.error = null; turn.completedAt = null; turn.durationMs = null; thread.status = active();
+    for (const call of turn.adapterMetadata.checkpoint.pendingCalls || []) if (call.state === 'running') call.state = 'uncertain';
+    const running = { thread, turn, controller: new AbortController(), terminal: false, assistant: null, reasoning: null, lastSavedAt: this.now() };
+    this.running.set(thread.id, running); this.persist();
+    return { result: { turn: copy(turn) }, afterReply: () => { this.notify('thread/status/changed', { threadId: thread.id, status: thread.status }); this.notify('turn/started', { threadId: thread.id, turn: copy(turn) }); this.runTurn(running).catch(error => this.diagnostics.push({ type: 'local-turn-finalization-error', message: error.message })); } };
   }
   finish(running, status, error) {
     if (running.terminal) return;
     const { thread, turn } = running;
     turn.status = status;
+    if (turn.adapterMetadata?.checkpoint && status !== 'completed') { turn.adapterMetadata.resumable = true; turn.adapterMetadata.resumePolicy ??= status === 'interrupted' && running.interruptReason === 'pagehide' ? 'automatic' : 'manual'; turn.adapterMetadata.checkpoint.state = status; for (const call of turn.adapterMetadata.checkpoint.pendingCalls || []) if (call.state === 'running') call.state = 'uncertain'; }
+    for (const item of turn.items) if (item.type === 'mcpToolCall' && item.status === 'inProgress') { item.status = 'failed'; item.result = { content: [{ type: 'text', text: 'Execution was interrupted; tool completion is unknown. It has not been reported as successful.' }], isError: true }; item.error = null; this.notify('item/completed', { threadId: thread.id, turnId: turn.id, item }); }
     turn.error = error;
     turn.completedAt = Math.floor(this.now() / 1000);
     turn.durationMs = Math.max(0, this.now() - turn.adapterMetadata.startedAtMs);
@@ -338,18 +339,20 @@ export class LocalAppServer {
     running.terminal = true;
     this.running.delete(thread.id);
     if (running.reasoning && !running.reasoningComplete) this.notify('item/completed', { threadId: thread.id, turnId: turn.id, item: running.reasoning });
-    if (running.assistant) this.notify('item/completed', { threadId: thread.id, turnId: turn.id, item: running.assistant });
+    if (running.assistant && !running.assistantComplete) this.notify('item/completed', { threadId: thread.id, turnId: turn.id, item: running.assistant });
     if (turn.error) this.notify('error', { threadId: thread.id, turnId: turn.id, error: turn.error, willRetry: false });
     this.notify('turn/completed', { threadId: thread.id, turn: copy(turn) });
     this.notify('thread/status/changed', { threadId: thread.id, status: thread.status });
   }
-  interrupt(threadId) {
+  interrupt(threadId, { reason = 'user' } = {}) {
     const running = this.running.get(threadId);
     if (!running) return;
+    running.interruptReason = reason;
+    running.turn.adapterMetadata.resumePolicy = reason === 'pagehide' ? 'automatic' : 'manual';
     running.controller.abort(new DOMException('Turn interrupted locally', 'AbortError'));
     this.finish(running, 'interrupted', null);
   }
-  interruptAll() { for (const threadId of this.running.keys()) this.interrupt(threadId); }
+  interruptAll({ reason = 'pagehide' } = {}) { for (const threadId of this.running.keys()) this.interrupt(threadId, { reason }); }
 }
 
 /** EAKz's existing protocol consumer remains unchanged. */

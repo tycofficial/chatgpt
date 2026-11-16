@@ -1,4 +1,9 @@
 import fs from 'node:fs';
+if (fs.existsSync('native-client/active.json')) {
+  const { execFileSync } = await import('node:child_process');
+  execFileSync(process.execPath, ['scripts/build-native-client.mjs', '--activate'], { stdio: 'inherit' });
+  process.exit(0);
+}
 const build=new Date().toISOString().replace(/\D/g,'').slice(0,14);
 let html=fs.readFileSync('index.html','utf8');
 html=html.replace(/\sdata-app-build="[^"]*"/,'').replace('<html ','<html data-app-build="'+build+'" ');

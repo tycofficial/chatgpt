@@ -1,16 +1,27 @@
 import * as modelCatalog from './model-catalog.js';
 import { createModelCatalogAdapter } from './model-catalog-adapter.mjs';
 import { DEFAULT_SETTINGS } from './config.js';
-import { streamCompletion } from './runtime.js';
+import { streamCompletion, PythonRuntime, PYTHON_TOOL } from './runtime.js';
 import { LocalAppServer, LocalProtocolSocket } from './local-app-server.mjs';
 import { getPrototypeLocalSession, getPrototypeLocalAuth, getLocalAccountCheck, getLocalOptimizedAccount, getLocalWhamAccounts, getPrototypeCurrentUser, isPrototypeLocalSession, clearPrototypeLocalSession, getLocalSignedOutUrl } from './local-identity.mjs';
 import { getPrototypeConfiguration } from './local-configuration.mjs';
 import { ClassicChatAdapter } from './classic-chat-adapter.mjs';
 import { LocalConversationPubSub } from './local-pubsub.mjs';
 import { readLocalUserPreferences, updateLocalUserPreference, acknowledgeLocalAnnouncement } from './local-user-preferences.mjs';
+import { createBrowserToolExecutor } from './browser-tool-executor.mjs';
+import { createLocalPricingAdapter } from './local-pricing.mjs';
+import { SITE_ACCOUNT_SERVICE, getSiteAccount, logoutSiteAccount } from './site-account.mjs';
 
 export const localModelAdapter = createModelCatalogAdapter(modelCatalog);
 export const localProtocolDiagnostics = [];
+// Original analytics retries must never grow an unbounded browser log.
+localProtocolDiagnostics.push = function (...events) {
+  const size = Array.prototype.push.apply(this, events);
+  if (size > 500) this.splice(0, size - 500);
+  return this.length;
+};
+export const localToolExecutor = createBrowserToolExecutor({ PythonRuntime, PYTHON_TOOL });
+export const localPricingAdapter = createLocalPricingAdapter({ diagnostics: localProtocolDiagnostics, readMembership: () => getSiteAccount() });
 export const localAppServer = new LocalAppServer({
   storage: {
     getItem: key => globalThis.localStorage.getItem(key),
@@ -21,13 +32,15 @@ export const localAppServer = new LocalAppServer({
   models: localModelAdapter,
   catalog: modelCatalog,
   diagnostics: localProtocolDiagnostics,
+  toolExecutor: localToolExecutor,
+  agentOptions: { toolTransport: 'responses', verifiedPriority: false },
 });
 export const localConversationPubSub = new LocalConversationPubSub(localAppServer);
 export const localClassicChatAdapter = new ClassicChatAdapter({ appServer: localAppServer, models: localModelAdapter, onConversationChange: (type, payload) => localConversationPubSub.publish(type, payload) });
 export function getLocalExecutionCapabilities() {
   return { executionSource: 'local-app-server',
     textConversations: Boolean(DEFAULT_SETTINGS.apiBase && DEFAULT_SETTINGS.apiKey && typeof streamCompletion === 'function' && typeof localAppServer.dispatch === 'function' && modelCatalog.WORK_MODEL_IDS.length),
-    openaiCloudEntitlement: false, filesystem: false, tools: [] };
+    openaiCloudEntitlement: false, filesystem: true, tools: localToolExecutor.tools.map(tool => tool.function.name), filesystemScope: 'browser-origin-workspace', pythonEnvironment: 'pyodide-webassembly' };
 }
 
 /** Only local assets/adapters and the explicitly configured gateway can run. */
@@ -42,10 +55,14 @@ export function installNetworkBoundary() {
   const response = (body, status = 200) => new Response(JSON.stringify(body), {
     status, headers: { 'Content-Type': 'application/json' },
   });
+  const isTelemetry = url => /^(?:\/ces\/v1\/(?:rgstr|telemetry\/intake)|\/v1\/(?:sdk_exception|rgstr)|\/api\/v2\/(?:logs|rum))\/?$/.test(url.pathname);
   globalThis.fetch = async (input, init) => {
     const request = new Request(input, init);
     const url = new URL(request.url, location.href);
     const local = url.origin === location.origin;
+    if (url.origin === SITE_ACCOUNT_SERVICE && /^\/(?:auth\/(?:login|session|logout)|bridge\/status|usage|jobs(?:\/[^/]+(?:\/events)?)?)$/.test(url.pathname)) return originalFetch(new Request(request, { credentials: 'omit', redirect: 'error' }));
+    // Consume analytics locally; never forward captured telemetry to its vendor.
+    if (isTelemetry(url)) return response({ success: true });
     if (local && (/^\/cdn\//.test(url.pathname) || /^\/__prototype\//.test(url.pathname))) {
       const headers = new Headers(request.headers);
       headers.delete('Authorization');
@@ -65,7 +82,8 @@ export function installNetworkBoundary() {
       const body = new URLSearchParams(await request.text());
       if (body.get('csrfToken') !== localCsrfToken) return response({ error: 'Invalid local signout token' }, 403);
       const target = getLocalSignedOutUrl();
-      localAppServer.interruptAll();
+      localAppServer.interruptAll({ reason: 'logout' });
+      await logoutSiteAccount();
       clearPrototypeLocalSession({ reload: false });
       return response({ url: target });
     }
@@ -98,6 +116,10 @@ export function installNetworkBoundary() {
     }
     const adapterPath = url.pathname.replace(/^\/(?:__codex-api|backend-api)(?=\/)/, '');
     try {
+      const artifact = await localToolExecutor.handleArtifactRequest(request, adapterPath);
+      if (artifact) return artifact;
+      const pricing = await localPricingAdapter.handle(request, adapterPath);
+      if (pricing) return pricing;
       const classic = await localClassicChatAdapter.handle(request, adapterPath);
       if (classic) return classic;
     } catch (error) {
@@ -118,7 +140,7 @@ export function installNetworkBoundary() {
   };
   globalThis.EventSource = DeniedConnection;
   globalThis.XMLHttpRequest = DeniedConnection;
-  try { Object.defineProperty(navigator, 'sendBeacon', { configurable: true, value: () => false }); } catch {}
+  try { Object.defineProperty(navigator, 'sendBeacon', { configurable: true, value: address => { try { return isTelemetry(new URL(address, location.href)); } catch { return false; } } }); } catch {}
   const originalOpen = window.open.bind(window);
   window.open = (url, ...rest) => {
     const target = new URL(url ?? 'about:blank', location.href);
@@ -138,7 +160,7 @@ export function installNetworkBoundary() {
       diagnostics.push({ type: 'navigation-unavailable', origin: url.origin });
     }
   }, true);
-  window.addEventListener('pagehide', () => localAppServer.interruptAll());
+  window.addEventListener('pagehide', () => localAppServer.interruptAll({ reason: 'pagehide' }));
   return { diagnostics };
 }
 
