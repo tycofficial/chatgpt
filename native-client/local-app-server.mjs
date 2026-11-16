@@ -1,6 +1,6 @@
 /** Original app-server protocol over real, resumable local execution. */
-import { runAgentTurn } from './agent-turn-runner.mjs?v=0aac55f3ab721b68';
-import { parseClassicInputMessages } from './classic-input-messages.mjs?v=0aac55f3ab721b68';
+import { runAgentTurn } from './agent-turn-runner.mjs?v=6beecd2404810423';
+import { parseClassicInputMessages } from './classic-input-messages.mjs?v=6beecd2404810423';
 export class RpcError extends Error {
   constructor(code, message, data) { super(message); this.name = 'RpcError'; this.code = code; if (data !== undefined) this.data = data; }
 }
@@ -319,7 +319,7 @@ export class LocalAppServer {
     };
   }
   messages(thread, turn, { omitCurrent = false } = {}) {
-    const instructions = [...new Set([this.readSettings().customInstructions, ...thread.adapterMetadata.instructions, ...turn.adapterMetadata.instructions].filter(value => typeof value === 'string' && value.trim()))];
+    const instructions = [...new Set([this.readSettings({ thread, turn }).customInstructions, ...thread.adapterMetadata.instructions, ...turn.adapterMetadata.instructions].filter(value => typeof value === 'string' && value.trim()))];
     const messages = instructions.length ? [{ role: 'system', content: instructions.join('\n\n') }] : [];
     for (const entry of thread.turns) {
       if (entry.id === turn.id && omitCurrent) break;

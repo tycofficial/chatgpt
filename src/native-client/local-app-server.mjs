@@ -319,7 +319,7 @@ export class LocalAppServer {
     };
   }
   messages(thread, turn, { omitCurrent = false } = {}) {
-    const instructions = [...new Set([this.readSettings().customInstructions, ...thread.adapterMetadata.instructions, ...turn.adapterMetadata.instructions].filter(value => typeof value === 'string' && value.trim()))];
+    const instructions = [...new Set([this.readSettings({ thread, turn }).customInstructions, ...thread.adapterMetadata.instructions, ...turn.adapterMetadata.instructions].filter(value => typeof value === 'string' && value.trim()))];
     const messages = instructions.length ? [{ role: 'system', content: instructions.join('\n\n') }] : [];
     for (const entry of thread.turns) {
       if (entry.id === turn.id && omitCurrent) break;

@@ -8,6 +8,8 @@ import { getPrototypeConfiguration, setLocalLibraryAvailability } from './local-
 import { ClassicChatAdapter } from './classic-chat-adapter.mjs';
 import { LocalConversationPubSub } from './local-pubsub.mjs';
 import { readLocalUserPreferences, updateLocalUserPreference, acknowledgeLocalAnnouncement } from './local-user-preferences.mjs';
+import { createLocalPersonalizationService } from './local-personalization-service.mjs';
+import { createPersonalizationIdentityProvider, createPersonalizedSettingsReader } from './local-personalization-context.mjs';
 import { createBrowserToolExecutor } from './browser-tool-executor.mjs';
 import { createLocalFilesService } from './local-files-service.mjs';
 import { createLocalLibraryService } from './local-library-service.mjs';
@@ -29,6 +31,17 @@ localProtocolDiagnostics.push = function (...events) {
   if (size > 500) this.splice(0, size - 500);
   return this.length;
 };
+const getPersonalizationIdentity = createPersonalizationIdentityProvider({ getSiteAccount, getLocalIdentity: getPrototypeLocalAuth, getStorageKey: getLocalAccountStorageKey });
+export const localPersonalizationService = createLocalPersonalizationService({
+  storage: {
+    getItem: key => globalThis.localStorage.getItem(key),
+    setItem: (key, value) => globalThis.localStorage.setItem(key, value),
+    removeItem: key => globalThis.localStorage.removeItem(key),
+  },
+  getIdentity: getPersonalizationIdentity, getStorageKey: getLocalAccountStorageKey,
+  onDiagnostic: event => localProtocolDiagnostics.push(event),
+});
+const readPersonalizedSettings = createPersonalizedSettingsReader({ readSettings: () => ({ ...DEFAULT_SETTINGS }), personalization: localPersonalizationService, getIdentity: getPersonalizationIdentity });
 export const localPreferredHostTransport = createPreferredHostTransport({ baseURL: SITE_ACCOUNT_SERVICE,
   fetchImpl: (...args) => globalThis.fetch(...args), getSiteAccount, getSiteSessionToken,
   onDiagnostic: event => localProtocolDiagnostics.push(event),
@@ -66,7 +79,7 @@ export const localAppServer = new LocalAppServer({
   },
   streamCompletion: localPreferredCompletion,
   onIdleTurnInterrupt: ({ turn, reason }) => Promise.all(turnHostCheckpoints(turn).map(checkpoint => (reason === 'pagehide' ? localPreferredHostTransport.detach : localPreferredHostTransport.cancel)(checkpoint, { onCheckpoint: () => localAppServer.persist() }))),
-  readSettings: () => ({ ...DEFAULT_SETTINGS }),
+  readSettings: readPersonalizedSettings,
   models: localModelAdapter,
   catalog: modelCatalog,
   diagnostics: localProtocolDiagnostics,
@@ -174,6 +187,8 @@ export function installNetworkBoundary() {
     }
     const adapterPath = url.pathname.replace(/^\/(?:__codex-api|backend-api)(?=\/)/, '');
     try {
+      const personalization = await localPersonalizationService.handle(request, adapterPath);
+      if (personalization) return personalization;
       const artifact = await localToolExecutor.handleArtifactRequest(request, adapterPath);
       if (artifact) return artifact;
       const dot = await localDotAdapter.handle(request, adapterPath);

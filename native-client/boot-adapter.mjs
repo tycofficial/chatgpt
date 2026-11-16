@@ -2,24 +2,24 @@
  * Loads the public original component graph with explicit local host services.
  * Private original backend credentials are never used by this entry point.
  */
-import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter, localFilesService, localLibraryService, localLibraryByteTransport } from './service-boundary.mjs?v=0aac55f3ab721b68';
-import * as mapLibreRenderer from './map-vendor/maplibre-gl.mjs?v=0aac55f3ab721b68';
-import { createLocalMapProvider } from './local-map-provider.mjs?v=0aac55f3ab721b68';
-import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs?v=0aac55f3ab721b68';
-import { getPrototypeLocalSession, getPrototypeLocalAuth, isPrototypeLocalSession, getPrototypeLocalAuthGeneration, clearPrototypeLocalSession } from './local-identity.mjs?v=0aac55f3ab721b68';
-import { createLocalHostSettingsClass } from './local-host-settings.mjs?v=0aac55f3ab721b68';
-import { createLocalWorkPolicy } from './local-work-policy.mjs?v=0aac55f3ab721b68';
-import { hasModelSelectionAccess, getSiteLoginUrl } from './site-account.mjs?v=0aac55f3ab721b68';
-import { createNativeModelSelectionPolicy, createNativeThinkingEntryPolicy } from './local-model-selection-policy.mjs?v=0aac55f3ab721b68';
-import { createLocalHostClaimsReader } from './local-token-identity.mjs?v=0aac55f3ab721b68';
-import { wrapNativeFileUploadClass } from './local-native-upload.mjs?v=0aac55f3ab721b68';
+import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter, localFilesService, localLibraryService, localLibraryByteTransport } from './service-boundary.mjs?v=6beecd2404810423';
+import * as mapLibreRenderer from './map-vendor/maplibre-gl.mjs?v=6beecd2404810423';
+import { createLocalMapProvider } from './local-map-provider.mjs?v=6beecd2404810423';
+import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs?v=6beecd2404810423';
+import { getPrototypeLocalSession, getPrototypeLocalAuth, isPrototypeLocalSession, getPrototypeLocalAuthGeneration, clearPrototypeLocalSession } from './local-identity.mjs?v=6beecd2404810423';
+import { createLocalHostSettingsClass } from './local-host-settings.mjs?v=6beecd2404810423';
+import { createLocalWorkPolicy } from './local-work-policy.mjs?v=6beecd2404810423';
+import { hasModelSelectionAccess, getSiteLoginUrl } from './site-account.mjs?v=6beecd2404810423';
+import { createNativeModelSelectionPolicy, createNativeThinkingEntryPolicy } from './local-model-selection-policy.mjs?v=6beecd2404810423';
+import { createLocalHostClaimsReader } from './local-token-identity.mjs?v=6beecd2404810423';
+import { wrapNativeFileUploadClass } from './local-native-upload.mjs?v=6beecd2404810423';
 
 const boundary = installNetworkBoundary();
 globalThis.__originalClientProbe = boundary.diagnostics;
 installSyntheticDocumentState();
 if (globalThis.__CHATGPT_REPLICA_ENV__) window.__reactRouterContext.basename = globalThis.__CHATGPT_REPLICA_ENV__.basePath.replace(/\/$/, '') || '/';
 
-const plan = await (await fetch(new URL('./entry-plan.json?v=0aac55f3ab721b68', import.meta.url))).json();
+const plan = await (await fetch(new URL('./entry-plan.json?v=6beecd2404810423', import.meta.url))).json();
 const { __webpack_require__: requireOriginal } = await import(plan.runtime);
 // One mechanical entry transform defers its terminal hxQI invocation and
 // rebases its relative imports. All original factories and chunks are retained.
