@@ -30,6 +30,35 @@ test('Responses SSE decodes split Chinese and does not duplicate completed outpu
   assert.equal(result.content,'你好，世界');assert.deepEqual(deltas.map(x=>x[0]),['你好','，世界']);assert.equal(result.response_items[0].encrypted_content,'cipher');assert.equal(result.finish_reason,'stop');
 });
 
+test('Responses exposes actual commentary before its first text delta and preserves its phase on follow-up',async t=>{
+  const commentary={...textItem('Working on the actual task.'),phase:'commentary'},final={...textItem('Completed.','msg_2'),phase:'final_answer'};
+  const requests=[],deltas=[];
+  t.mock.method(globalThis,'fetch',async(_url,options)=>{
+    requests.push(JSON.parse(options.body));
+    const item=requests.length===1?commentary:final;
+    return eventsResponse([{type:'response.output_item.added',output_index:0,item:{...item,status:'in_progress',content:[]}},{type:'response.output_text.delta',output_index:0,content_index:0,item_id:item.id,delta:item.content[0].text},{type:'response.completed',response:completed([item])}]);
+  });
+  const first=await streamCompletion({settings,messages:[{role:'user',content:'Do the task.'}],onDelta:(text,value)=>deltas.push({text,phase:value.phase})});
+  assert.equal(deltas[0].phase,'commentary');assert.equal(first.phase,'commentary');assert.equal(first.response_items[0].phase,'commentary');
+  const next=await streamCompletion({settings,messages:[{role:'user',content:'Do the task.'},first]});
+  assert.equal(requests[1].input.at(-1).phase,'commentary');assert.equal(next.phase,'final_answer');
+  assert.deepEqual(toResponsesInput([{role:'assistant',content:'Retained progress without complete raw items.',phase:'commentary'}]),[{role:'assistant',content:'Retained progress without complete raw items.',phase:'commentary'}]);
+});
+
+test('a later phase-unknown assistant message does not inherit an earlier commentary phase',async t=>{
+  t.mock.method(globalThis,'fetch',async()=>Response.json(completed([{...textItem('Progress.','msg_progress'),phase:'commentary'},textItem('Legacy completed answer.','msg_legacy')])));
+  const result=await streamCompletion({settings,messages:[]});assert.equal(result.phase,undefined);assert.equal(result.response_items[1].phase,undefined);assert.equal(result.finish_reason,'stop');
+});
+
+test('EOF and DONE without an actual response terminal event reject complete-looking tool calls',async t=>{
+  const item={type:'function_call',id:'fc_unconfirmed',call_id:'call_unconfirmed',name:'python',arguments:'{"code":"6*7"}',status:'completed'};
+  for(const withDone of [false,true]){
+    const wire='data: '+JSON.stringify({type:'response.output_item.done',output_index:0,item})+'\n\n'+(withDone?'data: [DONE]\n\n':'');
+    const transport=async()=>new Response(wire,{headers:{'Content-Type':'text/event-stream'}});
+    await assert.rejects(streamCompletion({settings,messages:[],tools:[PYTHON_TOOL],responsesTransport:transport}),error=>error.code==='INCOMPLETE_RESPONSE_STREAM'&&error.retryable===false);
+  }
+});
+
 test('Responses SSE assembles fragmented parallel function calls without duplicating final arguments',async t=>{
   const first={type:'function_call',id:'fc_1',call_id:'call_1',name:'python',arguments:'{"code":"6*7"}',status:'completed'};
   const second={type:'function_call',id:'fc_2',call_id:'call_2',name:'create_file',arguments:'{"name":"a.txt","content":"x"}',status:'completed'};
@@ -79,7 +108,7 @@ test('Pro explicitly selects Responses and malformed function results are reject
 test('Chat compatibility never sends local Responses history metadata to the upstream Chat API',async t=>{
   let body;
   t.mock.method(globalThis,'fetch',async(_url,options)=>{body=JSON.parse(options.body);return Response.json({choices:[{message:{role:'assistant',content:'OK'}}]});});
-  await streamCompletion({settings:{...settings,apiTransport:undefined},messages:[{role:'assistant',content:'prior',response_items:[{type:'reasoning',encrypted_content:'cipher'}]}]});
+  await streamCompletion({settings:{...settings,apiTransport:undefined},messages:[{role:'assistant',content:'prior',phase:'commentary',response_items:[{type:'reasoning',encrypted_content:'cipher'}]}]});
   assert.deepEqual(body.messages,[{role:'assistant',content:'prior'}]);
 });
 

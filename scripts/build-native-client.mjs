@@ -7,7 +7,7 @@ const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const referenceInput=path.join(root,'.test-output/original-client-prototype');
 const input=path.join(root,'src/native-client');
 const output=path.join(root,'native-client');
-const helpers=['boot-adapter.mjs','service-boundary.mjs','synthetic-bootstrap.mjs','public-auth-envelope.mjs','local-identity.mjs','local-token-identity.mjs','site-account.mjs','local-model-selection-policy.mjs','local-configuration.mjs','local-user-preferences.mjs','local-host-settings.mjs','local-work-policy.mjs','local-codex-adapter.mjs','local-dot-adapter.mjs','local-map-provider.mjs','local-maps-service.mjs','local-discovery.mjs','public-plugin-catalog.mjs','local-pubsub.mjs','model-catalog-adapter.mjs','local-app-server.mjs','classic-chat-adapter.mjs','agent-turn-runner.mjs','site-ultra-orchestrator.mjs','browser-tool-executor.mjs','local-pricing.mjs','entry-library.mjs'];
+const helpers=['boot-adapter.mjs','service-boundary.mjs','preferred-host-transport.mjs','synthetic-bootstrap.mjs','public-auth-envelope.mjs','local-identity.mjs','local-token-identity.mjs','site-account.mjs','local-model-selection-policy.mjs','local-configuration.mjs','local-user-preferences.mjs','local-host-settings.mjs','local-work-policy.mjs','local-codex-adapter.mjs','local-dot-adapter.mjs','local-map-provider.mjs','local-maps-service.mjs','local-discovery.mjs','public-plugin-catalog.mjs','local-pubsub.mjs','model-catalog-adapter.mjs','local-app-server.mjs','classic-chat-adapter.mjs','agent-turn-runner.mjs','site-ultra-orchestrator.mjs','browser-tool-executor.mjs','local-files-service.mjs','local-native-upload.mjs','local-input-preparation.mjs','local-pricing.mjs','entry-library.mjs'];
 if(process.argv.includes('--from-reference')){
  await fs.mkdir(input,{recursive:true});
  for(const name of [...helpers,'entry-plan.json']){const file=path.join(input,name),temporary=file+'.'+process.pid+'.tmp';await fs.writeFile(temporary,await fs.readFile(path.join(referenceInput,name)));await fs.rename(temporary,file);}
@@ -72,7 +72,7 @@ plan.status='original-module-graph-with-local-service-adapter';
 await write(path.join(output,'entry-plan.json'),JSON.stringify(plan,null,2)+'\n');
 const bootstrap=`const rootURL = new URL('../', import.meta.url);
 const releaseFetch = globalThis.fetch.bind(globalThis);
-globalThis.__CHATGPT_REPLICA_ENV__ = Object.freeze({basePath:rootURL.pathname,localIdentity:true,useOriginalAuth:true,release:${JSON.stringify(release)},sourceBuild:${JSON.stringify(sourceBuild)}});
+globalThis.__CHATGPT_REPLICA_ENV__ = Object.freeze({basePath:rootURL.pathname,localIdentity:true,useOriginalAuth:true,preferredHostEnabled:true,release:${JSON.stringify(release)},sourceBuild:${JSON.stringify(sourceBuild)}});
 const workerURL = new URL('native-client-worker.js?v='+${JSON.stringify(release)}, rootURL);
 if (!navigator.serviceWorker) throw Error('This browser does not support the original-client asset host');
 await navigator.serviceWorker.register(workerURL,{scope:rootURL.pathname,type:'module',updateViaCache:'none'});

@@ -117,7 +117,7 @@ export async function streamCompletion({ settings, messages, tools, signal, onDe
   if (settings.apiTransport === 'responses' || settings.reasoningMode === 'pro') {
     return streamResponses({ settings, messages, tools, signal, onDelta, onActivity, responsesTransport });
   }
-  const payload = { model: settings.model, messages: messages.map(({ response_items, ...message }) => message), stream: true };
+  const payload = { model: settings.model, messages: messages.map(({ response_items, phase, ...message }) => message), stream: true };
   const effort = validatedReasoningEffort(settings);
   if (effort !== undefined) payload.reasoning_effort = effort;
   if ((!allowedReasoningEfforts(settings.model).length || effort === 'none') && settings.temperature !== undefined && settings.temperature !== '' && settings.temperature !== null) payload.temperature = Number(settings.temperature);
@@ -200,7 +200,9 @@ export function toResponsesInput(messages) {
         return structuredClone(part);
       });
     }
-    if (content !== undefined && content !== null && content !== '') input.push({ role: message.role, content });
+    if (content !== undefined && content !== null && content !== '') input.push({ role: message.role, content,
+      ...(message.role === 'assistant' && ['commentary', 'final_answer'].includes(message.phase) ? { phase: message.phase } : {}),
+    });
     for (const call of message.tool_calls || []) {
       input.push({ type: 'function_call', call_id: call.id, name: call.function.name, arguments: call.function.arguments || '{}' });
     }
@@ -255,10 +257,14 @@ async function streamResponses({ settings, messages, tools, signal, onDelta, onA
     if (item.id) itemIndexes.set(item.id, index);
     if (complete) items.set(index, structuredClone(item));
     if (item.type === 'function_call') { onActivity({type:'tool_delta'}); ensureCall(index, item); }
-    if (item.type === 'message') (item.content || []).forEach((part, contentIndex) => {
-      if (part.type === 'output_text') textPart(index, contentIndex, part.text || '');
-      if (part.type === 'refusal') textPart(index, contentIndex, part.refusal || '');
-    });
+    if (item.type === 'message') {
+      if (item.phase === 'commentary' || item.phase === 'final_answer') assembled.phase = item.phase;
+      else delete assembled.phase;
+      (item.content || []).forEach((part, contentIndex) => {
+        if (part.type === 'output_text') textPart(index, contentIndex, part.text || '');
+        if (part.type === 'refusal') textPart(index, contentIndex, part.refusal || '');
+      });
+    }
   };
   const ingestResponse = body => {
     if (body.error) throw providerError(body, { transportStatus: response.status, requestId: response.headers.get('x-request-id') });
@@ -319,6 +325,7 @@ async function streamResponses({ settings, messages, tools, signal, onDelta, onA
     } finally { reader.releaseLock(); }
   }
   refreshCalls();
+  if (!['stop', 'tool_calls', 'length'].includes(assembled.finish_reason)) throw Object.assign(new Error('API 流未确认完成，未执行该响应中的工具调用。已保留实际收到的进度，请检查连接后重试。'), { code: 'INCOMPLETE_RESPONSE_STREAM', retryable: false });
   if (assembled.tool_calls?.some(call => !call.id || !call.function.name)) throw new Error('服务商返回的工具调用缺少 call_id 或名称。');
   for (const [index,call] of calls) if (items.has(index)) items.set(index,{...items.get(index),...call});
   if (items.size) assembled.response_items = [...items.entries()].sort((a,b)=>a[0]-b[0]).map(([,item])=>item);

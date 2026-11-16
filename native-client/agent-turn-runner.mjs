@@ -1,11 +1,17 @@
 /** Resumable API/tool loop. Original frontend receives its existing item lifecycle. */
+import { isHostCheckpoint } from './preferred-host-transport.mjs?v=533b5cd1fed6f95d';
 const clone = value => structuredClone(value);
 const CONTINUE = 'Continue the unfinished response from the saved text, without repeating it. Preserve the requested task, model and reasoning effort. Do not claim any tool succeeded unless its recorded output confirms it.';
 const compactUsage = usage => Object.fromEntries(['input_tokens', 'output_tokens', 'total_tokens', 'prompt_tokens', 'completion_tokens', 'input_tokens_details', 'output_tokens_details', 'prompt_tokens_details', 'completion_tokens_details'].filter(key => usage[key] !== undefined).map(key => [key, clone(usage[key])]));
 const toolError = message => ({ isError: true, content: [{ type: 'text', text: message }], structuredContent: { error: message } });
 function waitForRetry(ms, signal) { return new Promise((resolve, reject) => { const abort = () => { clearTimeout(timer); reject(signal.reason); }; const timer = setTimeout(() => { signal.removeEventListener('abort', abort); resolve(); }, ms); signal.addEventListener('abort', abort, { once: true }); if (signal.aborted) abort(); }); }
+function responsePhase(result) {
+  const value = result.response_items?.findLast(item => item.type === 'message' && item.role === 'assistant')?.phase ?? result.phase;
+  return value === 'commentary' || value === 'final_answer' ? value : null;
+}
 function assistantMessage(result) {
-  return { role: 'assistant', content: result.content || '', ...(result.tool_calls?.length ? { tool_calls: clone(result.tool_calls) } : {}), ...(result.response_items?.length ? { response_items: clone(result.response_items) } : {}) };
+  const phase = responsePhase(result);
+  return { role: 'assistant', content: result.content || '', ...(phase ? { phase } : {}), ...(result.tool_calls?.length ? { tool_calls: clone(result.tool_calls) } : {}), ...(result.response_items?.length ? { response_items: clone(result.response_items) } : {}) };
 }
 export async function checkpoint(server, running) {
   server.persist();
@@ -20,7 +26,7 @@ function completeItems(server, running) {
 export async function runAgentTurn(server, running) {
   const { thread, turn, controller } = running, signal = controller.signal;
   const meta = turn.adapterMetadata;
-  const cp = meta.checkpoint ??= { schemaVersion: 1, state: 'model', rounds: 0, transcript: [{ role: 'user', content: turn.items.find(item => item.type === 'userMessage').content.map(part => part.text).join('\n') }], pendingCalls: [], completedCalls: {}, metrics: [], interruptedAttempts: [] };
+  const cp = meta.checkpoint ??= { schemaVersion: 1, state: 'model', rounds: 0, transcript: [], pendingCalls: [], completedCalls: {}, metrics: [], interruptedAttempts: [] };
   let executor = server.toolExecutor;
   const save = () => checkpoint(server, running);
   const errorText = error => String(error?.message || error).replaceAll(server.readSettings().apiKey || '\0NO_KEY\0', '[redacted]');
@@ -36,22 +42,48 @@ export async function runAgentTurn(server, running) {
     return settings;
   };
   try {
+    // Validate bytes before creating a provider/host job; saved inputs replay verbatim.
+    if (!cp.transcript.length) {
+      const input = turn.items.find(item => item.type === 'userMessage').content;
+      const prepared = typeof server.prepareUserInput === 'function'
+        ? await server.prepareUserInput({ input: clone(input), threadId: thread.id, turnId: turn.id, thread, turn, signal })
+        : { content: input.map(part => part.text).join('\n'), source: 'original-text-input', files: [], images: [] };
+      signal.throwIfAborted(); server.assertExecutionAllowed(turn);
+      if (typeof prepared?.content !== 'string' && !Array.isArray(prepared?.content)) throw Object.assign(Error('The local input resolver returned invalid provider content'), { code: 'INVALID_PREPARED_INPUT', retryable: false });
+      const previousInput = { transcript: cp.transcript, preparedInput: cp.preparedInput, materializedFiles: meta.materializedFiles };
+      cp.transcript = [{ role: 'user', content: clone(prepared.content) }];
+      cp.preparedInput = { source: prepared.source, files: clone(prepared.files ?? []), images: clone(prepared.images ?? []) };
+      meta.materializedFiles = clone(prepared.files ?? []);
+      try { await save(); delete meta.inputPreparationFailure; }
+      catch (cause) {
+        // A dataURL may fit OPFS but exceed the local history quota. Do not leave
+        // its uncommitted large transcript in memory, poisoning every later save.
+        cp.transcript = previousInput.transcript;
+        if (previousInput.preparedInput === undefined) delete cp.preparedInput; else cp.preparedInput = previousInput.preparedInput;
+        if (previousInput.materializedFiles === undefined) delete meta.materializedFiles; else meta.materializedFiles = previousInput.materializedFiles;
+        meta.inputPreparationFailure = { code: 'LOCAL_INPUT_CHECKPOINT_STORAGE', files: clone(prepared.files ?? []), images: clone(prepared.images ?? []), at: server.now() };
+        try { server.persist(); } catch { /* The normal failure path reports any remaining storage error. */ }
+        throw Object.assign(Error('The prepared input could not be saved in browser history. Actual uploaded file bytes were preserved and no model request was submitted. Free browser storage or use a smaller image, then retry.'), { code: 'LOCAL_INPUT_CHECKPOINT_STORAGE', status: 507, retryable: false, cause });
+      }
+    }
     meta.requestedEffort = turn.reasoningEffort;
     meta.productExecutionMode = turn.reasoningEffort === 'ultra' ? 'ultra' : 'standard';
     meta.underlyingApiEffort = turn.reasoningEffort === 'ultra' ? 'max' : turn.reasoningEffort;
     if (turn.reasoningEffort === 'ultra') {
       if (server.agentOptions.ultraOrchestration !== true) throw Object.assign(Error('Site Ultra orchestration is not enabled in this deployment. No provider request was submitted.'), { code: 'ULTRA_ORCHESTRATION_NOT_ENABLED', retryable: false });
-      const { createUltraToolExecutor } = await import('./site-ultra-orchestrator.mjs?v=7a172eaaf0f3c282');
-      executor = createUltraToolExecutor({ baseExecutor: executor, streamCompletion: options => server.streamCompletion(options), turn, checkpoint: cp, save, getSettings: executionSettings, getContext: () => [...server.messages(thread, turn, { omitCurrent: true }), ...cp.transcript], now: server.now, redact: errorText });
+      const { createUltraToolExecutor } = await import('./site-ultra-orchestrator.mjs?v=533b5cd1fed6f95d');
+      executor = createUltraToolExecutor({ baseExecutor: executor, streamCompletion: options => server.streamCompletion(options), turn, checkpoint: cp, save, getSettings: executionSettings, getContext: () => [...server.messages(thread, turn, { omitCurrent: true }), ...cp.transcript], getAbortMode: () => running.interruptReason === 'pagehide' ? 'pagehide' : signal.reason?.requiresTransportResume ? 'transport' : 'user', now: server.now, redact: errorText });
     }
     // A partial response is genuine saved output, not a completed tool call.
-    if (cp.partialResponse) {
+    const reattachFrame = cp.inFlight && (isHostCheckpoint(cp.inFlight.transport) || cp.inFlight.result);
+    if (cp.partialResponse && !reattachFrame) {
       const partial = cp.partialResponse;
-      if (partial.content) cp.transcript.push({ role: 'assistant', content: partial.content });
+      if (partial.content) cp.transcript.push({ role: 'assistant', content: partial.content, ...(partial.phase ? { phase: partial.phase } : {}) });
       cp.transcript.push({ role: 'user', content: CONTINUE });
       cp.interruptedAttempts.push({ at: Date.now(), partialCharacters: partial.content?.length || 0 });
       cp.partialResponse = null;
     }
+    if (cp.inFlight && !reattachFrame) { cp.abandonedApiAttempts ??= []; cp.abandonedApiAttempts.push({ metricIndex: cp.inFlight.metricIndex, transport: cp.inFlight.transport }); cp.inFlight = null; }
     if (cp.nextResumeAt > server.now()) await waitForRetry(Math.min(30000, cp.nextResumeAt - server.now()), signal);
     const maxRounds = server.agentOptions.maxApiRounds ?? 64;
     let roundsThisRun = 0, retries = 0;
@@ -69,7 +101,7 @@ export async function runAgentTurn(server, running) {
         }
         let output, fatalToolError;
         if (record.state === 'uncertain' || record.state === 'running') {
-          output = await executor?.recoverCall?.(record.call) ?? toolError('The previous page closed while this tool was running. Completion is unknown; it has not been executed again. Inspect saved files before deciding whether a new call is necessary.');
+          output = await executor?.recoverCall?.(record.call, { threadId: thread.id, turnId: turn.id, signal }) ?? toolError('The previous page closed while this tool was running. Completion is unknown; it has not been executed again. Inspect saved files before deciding whether a new call is necessary.');
         } else {
           record.state = 'running'; cp.state = 'tool'; await save(); const started = server.now();
           try {
@@ -94,39 +126,61 @@ export async function runAgentTurn(server, running) {
       const tools = executor?.tools || [], instruction = tools.length ? [{ role: 'system', content: 'Execute requested work using the available real tools instead of only announcing a plan. For a multi-step job, persist running progress with task_status and mark complete only after the deliverables exist. Continue correcting actual tool errors. Python runs in a browser Pyodide environment, not a hosted shell; only workspace files persist after reload. Never claim unexecuted shell, network or file operations. Return real artifact download URLs supplied by tools.' }] : [];
       if (turn.reasoningEffort === 'ultra') instruction.push({ role: 'system', content: 'This is the site-provided Ultra execution mode. Use delegate_tasks for independent analysis when it benefits the task; it runs1–3 real parallel workers from the same selected family at API max effort. Inspect their actual results and reconcile differences. You own the real file/Python tools and final synthesis. This is application orchestration, not OpenAI private Ultra infrastructure. Never claim a worker or tool succeeded when its result reports failure.' });
       const messages = [...instruction, ...server.messages(thread, turn, { omitCurrent: true }), ...clone(cp.transcript)];
-      running.assistant = null; running.assistantComplete = false; running.reasoning = null; running.reasoningComplete = false;
-      const metric = { sequence: ++cp.rounds, model: turn.model, effort: turn.reasoningEffort, underlyingApiEffort: settings.reasoningEffort, productExecutionMode: meta.productExecutionMode, startedAt: server.now(), firstOutputAt: null, transport: settings.apiTransport || 'chat/completions' }; cp.metrics.push(metric); cp.state = 'model';
-      await save();
-      metric.requestSentAt = server.now();
+      let frame = cp.inFlight, metric;
+      if (frame && (isHostCheckpoint(frame.transport) || frame.result)) {
+        metric = cp.metrics[frame.metricIndex]; if (!metric) throw Error('The in-flight transport metric is missing; no replacement request was submitted');
+        running.assistant = turn.items.find(item => item.id === frame.assistantItemId) ?? (cp.partialResponse?.content ? turn.items.findLast(item => item.type === 'agentMessage' && item.text === cp.partialResponse.content) : null);
+        running.reasoning = turn.items.find(item => item.id === frame.reasoningItemId) ?? (cp.partialResponse?.reasoning ? turn.items.findLast(item => item.type === 'reasoning' && item.summary?.[0] === cp.partialResponse.reasoning) : null);
+        running.assistantComplete = false; running.reasoningComplete = frame.reasoningComplete === true;
+        metric.resumeCount = (metric.resumeCount || 0) + 1; metric.lastResumeAt = server.now();
+      } else {
+        running.assistant = null; running.assistantComplete = false; running.reasoning = null; running.reasoningComplete = false;
+        metric = { sequence: ++cp.rounds, model: turn.model, effort: turn.reasoningEffort, underlyingApiEffort: settings.reasoningEffort, productExecutionMode: meta.productExecutionMode, startedAt: server.now(), firstOutputAt: null, transport: settings.apiTransport || 'chat/completions' }; cp.metrics.push(metric);
+        frame = cp.inFlight = { metricIndex: cp.metrics.length - 1, transport: {}, assistantItemId: null, reasoningItemId: null, reasoningComplete: false };
+        metric.transportCheckpoint = frame.transport;
+      }
+      cp.state = 'model'; await save(); metric.requestSentAt ??= server.now();
       let result;
       try {
-        result = await server.streamCompletion({ settings, messages, tools, signal, onActivity: () => { if (metric.firstOutputAt == null) metric.firstOutputAt = server.now(); }, onDelta: (_delta, assembled) => {
+        result = frame.result ? clone(frame.result) : await server.streamCompletion({ settings, messages, tools, signal,
+          transportContext: { checkpoint: frame.transport, requestId: turn.id + ':' + metric.sequence, onCheckpoint: save, reattach: isHostCheckpoint(frame.transport), savedPartial: cp.partialResponse, requiredConcurrency: turn.reasoningEffort === 'ultra' ? 3 : 1, getAbortMode: () => running.interruptReason === 'pagehide' ? 'pagehide' : signal.reason?.requiresTransportResume ? 'transport' : 'user' },
+          onActivity: () => { if (metric.firstOutputAt == null) metric.firstOutputAt = server.now(); }, onDelta: (_delta, assembled) => {
+          if (running.terminal) return;
           if (metric.firstOutputAt == null && (assembled.content || assembled.reasoning || assembled.tool_calls?.length)) metric.firstOutputAt = server.now();
-          cp.partialResponse = { content: assembled.content || '', reasoning: assembled.reasoning || '' };
-          server.append(running, assembled.content || '', assembled.reasoning || '');
+          cp.partialResponse = { content: assembled.content || '', reasoning: assembled.reasoning || '', ...(assembled.phase ? { phase: assembled.phase } : {}) };
+          server.append(running, assembled.content || '', assembled.reasoning || '', assembled.phase);
+          frame.assistantItemId = running.assistant?.id ?? frame.assistantItemId; frame.reasoningItemId = running.reasoning?.id ?? frame.reasoningItemId; frame.reasoningComplete = running.reasoningComplete === true;
         } });
+        if (!['stop', 'tool_calls', 'length'].includes(result.finish_reason)) throw Object.assign(Error('The provider stream did not confirm a complete or explicitly truncated response; no tool was executed and no commentary continuation was submitted.'), { code: 'INCOMPLETE_RESPONSE_STREAM', retryable: false });
+        frame.result = clone(result); await save();
       } catch (error) {
         metric.endedAt = server.now(); metric.totalMs = metric.endedAt - metric.startedAt; metric.error = errorText(error);
-        const retryable = error.retryable === true || error.retryable !== false && ![400, 401, 402, 403, 404, 422].includes(error.status) && /fetch|network|stream|connection|timeout|terminated|socket/i.test(metric.error);
+        const hostPending = isHostCheckpoint(frame.transport) && !frame.transport.consumerFinished && !frame.transport.cancelRequested && frame.transport.state !== 'cancelled';
+        if (hostPending && (error.requiresTransportResume || signal.aborted && running.interruptReason === 'pagehide')) {
+          frame.needsReattach = true; error.requiresTransportResume = true; if (!signal.aborted) { cp.hostFailures = (cp.hostFailures || 0) + 1; error.hostFailureCounted = true; }
+          metric.status = error.status ?? null; metric.code = error.code ?? null; metric.retryable = false; await save(); throw error;
+        }
+        const retryable = error.retryable === true || error.retryable !== false && ![400,401,402,403,404,422].includes(error.status) && /fetch|network|stream|connection|timeout|terminated|socket/i.test(metric.error);
         metric.status = error.status ?? null; metric.code = error.code ?? null; metric.retryable = retryable;
         if (retryable) cp.networkFailures = (cp.networkFailures || 0) + 1;
         if (!signal.aborted && retryable && retries++ < (server.agentOptions.streamRetries ?? 2)) {
           completeItems(server, running);
-          if (cp.partialResponse?.content) { cp.transcript.push({ role: 'assistant', content: cp.partialResponse.content }); cp.transcript.push({ role: 'user', content: CONTINUE }); }
-          cp.partialResponse = null; cp.state = 'retrying';
+          if (cp.partialResponse?.content) { cp.transcript.push({ role: 'assistant', content: cp.partialResponse.content, ...(cp.partialResponse.phase ? { phase: cp.partialResponse.phase } : {}) }); cp.transcript.push({ role: 'user', content: CONTINUE }); }
+          cp.partialResponse = null; cp.inFlight = null; cp.state = 'retrying';
           const retryDelay = Math.min(30000, error.retryAfterMs ?? (server.agentOptions.retryDelayMs ?? 500) * 2 ** Math.min(cp.networkFailures - 1, 5)); cp.nextResumeAt = server.now() + retryDelay;
           await save(); await waitForRetry(retryDelay, signal); continue;
         }
         throw error;
       }
       if (running.terminal) return;
-      cp.networkFailures = 0; cp.nextResumeAt = null;
-      server.append(running, result.content || '', result.reasoning || '');
-      if (running.assistant && result.tool_calls?.length) running.assistant.phase = 'commentary';
+      cp.networkFailures = 0; cp.hostFailures = 0; cp.nextResumeAt = null;
+      const phase = responsePhase(result);
+      server.append(running, result.content || '', result.reasoning || '', phase ?? 'final_answer');
+      if (running.assistant && result.tool_calls?.length && !phase) running.assistant.phase = 'commentary';
       completeItems(server, running);
       metric.endedAt = server.now(); metric.totalMs = metric.endedAt - metric.startedAt; metric.ttftMs = metric.firstOutputAt == null ? null : metric.firstOutputAt - metric.requestSentAt; metric.finishReason = result.finish_reason;
       if (result.usage) metric.usage = compactUsage(result.usage);
-      cp.partialResponse = null;
+      cp.partialResponse = null; cp.inFlight = null;
       if (result.finish_reason === 'length' && result.tool_calls?.length) {
         if (result.content) cp.transcript.push({ role: 'assistant', content: result.content });
         cp.transcript.push({ role: 'user', content: 'The previous output was truncated during a function call. No incomplete call has been executed. Reissue complete tool calls with valid JSON, then continue the task.' }); cp.state = 'continuing'; await save(); continue;
@@ -136,6 +190,7 @@ export async function runAgentTurn(server, running) {
       if (result.actual_reasoning) meta.actualReasoning = clone(result.actual_reasoning);
       if (result.response_items) meta.gatewayResponseItems = clone(result.response_items);
       if (result.tool_calls?.length) {
+        cp.commentaryOnlyRounds = 0;
         if (!tools.length) throw Error('Gateway requested a tool that was not available');
         const seen = new Set();
         cp.pendingCalls = result.tool_calls.map(call => {
@@ -144,8 +199,16 @@ export async function runAgentTurn(server, running) {
           if (completed && (completed.name !== call.function.name || completed.arguments !== call.function.arguments)) throw Error('Gateway reused a tool-call ID with different arguments');
           return { call: clone(call), state: 'queued' };
         });
-        if (running.assistant) running.assistant.phase = 'commentary'; cp.state = 'tool'; await save(); continue;
+        if (running.assistant && !phase) running.assistant.phase = 'commentary'; cp.state = 'tool'; await save(); continue;
       }
+      if (phase === 'commentary' && result.finish_reason === 'stop') {
+        cp.commentaryOnlyRounds = (cp.commentaryOnlyRounds || 0) + 1;
+        cp.state = 'continuing'; await save();
+        if (cp.commentaryOnlyRounds >= (server.agentOptions.maxConsecutiveCommentaryRounds ?? 3)) throw Object.assign(Error('The model returned only intermediate commentary without completing the requested work. The unfinished execution checkpoint was saved; no tool or deliverable was reported as successful.'), { code: 'COMMENTARY_WITHOUT_COMPLETION', retryable: false });
+        cp.transcript.push({ role: 'user', content: 'Your previous message was explicitly marked as intermediate commentary, not a final answer. Continue the actual user task, use the available real tools when needed, and provide a final_answer only after the requested work is completed or its actual limitation has been explained.' });
+        await save(); continue;
+      }
+      cp.commentaryOnlyRounds = 0;
       if (result.finish_reason === 'length' || cp.taskState?.status === 'running') {
         cp.transcript.push({ role: 'user', content: result.finish_reason === 'length' ? CONTINUE : 'The recorded task is still running. Continue the remaining work using tools, then mark task_status complete when finished.' });
         cp.state = 'continuing'; await save(); continue;
@@ -158,9 +221,12 @@ export async function runAgentTurn(server, running) {
     if (running.terminal) return;
     cp.state = signal.aborted ? 'interrupted' : 'failed'; meta.resumable = true;
     const retryable = error.retryable === true || error.retryable !== false && ![400, 401, 402, 403, 404, 422].includes(error.status) && /fetch|network|stream|connection|timeout|terminated|socket/i.test(errorText(error));
-    meta.resumePolicy = signal.aborted ? running.interruptReason === 'pagehide' ? 'automatic' : 'manual' : retryable && (cp.networkFailures || 0) < (server.agentOptions.maxConsecutiveFailures ?? 6) ? 'automatic' : 'manual';
+    if (error.requiresTransportResume && !error.hostFailureCounted && !signal.aborted) cp.hostFailures = (cp.hostFailures || 0) + 1;
+    const transportRetry = error.requiresTransportResume === true && ![401,403].includes(error.status) && (cp.hostFailures || 0) < (server.agentOptions.maxConsecutiveFailures ?? 6);
+    meta.resumePolicy = signal.aborted ? running.interruptReason === 'pagehide' ? 'automatic' : 'manual' : transportRetry ? 'automatic' : retryable && (cp.networkFailures || 0) < (server.agentOptions.maxConsecutiveFailures ?? 6) ? 'automatic' : 'manual';
+    if (error.requiresTransportResume) cp.nextResumeAt = server.now() + Math.min(30000, (server.agentOptions.retryDelayMs ?? 500) * 2 ** Math.min(cp.hostFailures || 1, 5));
     if (retryable) cp.nextResumeAt = server.now() + Math.min(30000, (server.agentOptions.retryDelayMs ?? 500) * 2 ** Math.min(cp.networkFailures || 1, 5));
-    meta.lastFailure = { code: error.code ?? null, status: error.status ?? null, retryable }; 
+    meta.lastFailure = { code: error.code ?? null, status: error.status ?? null, providerCode: error.providerCode ?? null, requestId: error.requestId ?? null, param: error.param ?? null, retryable, requiresTransportResume: error.requiresTransportResume === true }; 
     try { await save(); } catch (saveError) { server.diagnostics.push({ type: 'checkpoint-error', message: errorText(saveError) }); }
     if (signal.aborted || error?.name === 'AbortError') server.finish(running, 'interrupted', null);
     else server.finish(running, 'failed', { message: errorText(error), codexErrorInfo: null, additionalDetails: null, misalignment: null });

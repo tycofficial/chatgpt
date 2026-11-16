@@ -28,6 +28,19 @@ async function store() {
   await fs.mkdir(path.join(directory, 'locks'), { mode: 0o700 });
   return new ProtectedStore(directory);
 }
+test('owner-only initialization remains usable with an open existing file and preserves its bytes', async () => {
+  const disk = await store();
+  await disk.initialize();
+  await disk.write('open-fixture.json', { neutral: 'unchanged' });
+  const handle = await fs.open(disk.resolve('open-fixture.json'), 'r');
+  try {
+    await disk.initialize();
+    assert.deepEqual(await disk.read('open-fixture.json'), { neutral: 'unchanged' });
+    assert.match(await handle.readFile('utf8'), /unchanged/);
+    await disk.write('new-fixture.json', { writable: true });
+    assert.deepEqual(await disk.read('new-fixture.json'), { writable: true });
+  } finally { await handle.close(); }
+});
 async function jwt(claims, audience, options = {}) {
   return new jose.SignJWT(claims).setProtectedHeader({ alg: 'RS256', kid: 'fixture-signing-key' }).setIssuer(ISSUER).setAudience(audience).setIssuedAt().setExpirationTime(options.exp || '1h').sign(signing.privateKey);
 }

@@ -2,6 +2,9 @@
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const MAX_FILE = 20 * 1024 * 1024;
+const decodeWorkspaceText = bytes => bytes[0] === 0xff && bytes[1] === 0xfe
+  ? new TextDecoder('utf-16le').decode(bytes)
+  : bytes[0] === 0xfe && bytes[1] === 0xff ? new TextDecoder('utf-16be').decode(bytes) : decoder.decode(bytes);
 const mime = name => ({ txt: 'text/plain', md: 'text/markdown', py: 'text/x-python', js: 'text/javascript', html: 'text/html', svg: 'image/svg+xml', csv: 'text/csv', json: 'application/json', png: 'image/png', pdf: 'application/pdf', zip: 'application/zip' }[name.split('.').at(-1)] || 'application/octet-stream');
 export function workspacePath(value) {
   const raw = String(value || '').replace(/\\/g, '/').replace(/^\/mnt\/data\//, '');
@@ -52,13 +55,13 @@ export function createBrowserToolExecutor({ PythonRuntime, PYTHON_TOOL, storage 
   const artifact = (threadId, name, size, prefix) => ({ name, path: '/mnt/data/' + name, mime: mime(name), size, url: url(threadId, name, prefix) });
   const result = (data, isError = false) => ({ content: [{ type: 'text', text: JSON.stringify(data) }, ...(data.files || (data.file ? [data.file] : [])).map(file => ({ type: 'resource_link', uri: globalThis.location ? new URL(file.url, location.origin).href : file.url, name: file.name, mimeType: file.mime }))], structuredContent: data, isError });
   return {
-    tools, storage, capabilitySource: 'browser-origin-local-tools',
+    tools, storage, getWorkspacePrefix: namespace, capabilitySource: 'browser-origin-local-tools',
     async execute(call, { threadId, signal, onStatus = () => {}, onTaskStatus = () => {} }) {
       signal?.throwIfAborted(); const name = call.function.name, args = JSON.parse(call.function.arguments || '{}'), prefix = namespace(threadId);
       if (name === 'task_status') { if (!['running', 'complete'].includes(args.status)) throw Error('Invalid task status'); await onTaskStatus({ status: args.status, summary: String(args.summary || '') }); return result({ status: args.status, summary: args.summary }); }
       if (name === 'list_files') return result({ files: (await storage.list(prefix)).map(f => artifact(threadId, f.name, f.size, prefix)) });
       if (name === 'create_file' || name === 'write_file') { const path = workspacePath(args.name ?? args.path); if (typeof args.content !== 'string') throw Error('File content must be text'); const bytes = encoder.encode(args.content); await storage.write(prefix + '/' + path, bytes); return result({ file: artifact(threadId, path, bytes.length, prefix) }); }
-      if (name === 'read_file') { const path = workspacePath(args.path), bytes = await storage.read(prefix + '/' + path), text = decoder.decode(bytes), offset = Math.max(0, Number(args.offset) || 0), length = Math.min(50000, Math.max(1, Number(args.length) || 30000)); return result({ path: '/mnt/data/' + path, content: text.slice(offset, offset + length), offset, totalCharacters: text.length, truncated: offset + length < text.length }); }
+      if (name === 'read_file') { const path = workspacePath(args.path), bytes = await storage.read(prefix + '/' + path), text = decodeWorkspaceText(bytes), offset = Math.max(0, Number(args.offset) || 0), length = Math.min(50000, Math.max(1, Number(args.length) || 30000)); return result({ path: '/mnt/data/' + path, content: text.slice(offset, offset + length), offset, totalCharacters: text.length, truncated: offset + length < text.length }); }
       if (name === 'delete_file') { const path = workspacePath(args.path); await storage.remove(prefix + '/' + path); return result({ path: '/mnt/data/' + path, deleted: true }); }
       if (name !== 'python' || !PythonRuntime) throw Error('Tool is not available: ' + name);
       if (typeof args.code !== 'string') throw Error('Python code must be text');

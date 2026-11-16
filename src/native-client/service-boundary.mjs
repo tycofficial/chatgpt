@@ -9,13 +9,16 @@ import { ClassicChatAdapter } from './classic-chat-adapter.mjs';
 import { LocalConversationPubSub } from './local-pubsub.mjs';
 import { readLocalUserPreferences, updateLocalUserPreference, acknowledgeLocalAnnouncement } from './local-user-preferences.mjs';
 import { createBrowserToolExecutor } from './browser-tool-executor.mjs';
+import { createLocalFilesService } from './local-files-service.mjs';
+import { createLocalInputPreparer } from './local-input-preparation.mjs';
 import { createLocalPricingAdapter } from './local-pricing.mjs';
-import { SITE_ACCOUNT_SERVICE, getSiteAccount, hasModelSelectionAccess, logoutSiteAccount } from './site-account.mjs';
+import { SITE_ACCOUNT_SERVICE, getSiteAccount, getSiteSessionToken, hasModelSelectionAccess, logoutSiteAccount } from './site-account.mjs';
 import { createLocalCodexAdapter } from './local-codex-adapter.mjs';
 import { isOpenStreetMapTileRequest, fetchOpenStreetMapTile } from './local-map-provider.mjs';
 import { createLocalDiscoveryAdapter } from './local-discovery.mjs';
 import { createLocalDotAdapter } from './local-dot-adapter.mjs';
 import { createLocalMapsService } from './local-maps-service.mjs';
+import { createPreferredHostTransport, createPreferredCompletion, turnHostCheckpoints, cancelTurnHostRequests } from './preferred-host-transport.mjs';
 
 export const localModelAdapter = createModelCatalogAdapter(modelCatalog);
 export const localProtocolDiagnostics = [];
@@ -25,8 +28,20 @@ localProtocolDiagnostics.push = function (...events) {
   if (size > 500) this.splice(0, size - 500);
   return this.length;
 };
+export const localPreferredHostTransport = createPreferredHostTransport({ baseURL: SITE_ACCOUNT_SERVICE,
+  fetchImpl: (...args) => globalThis.fetch(...args), getSiteAccount, getSiteSessionToken,
+  onDiagnostic: event => localProtocolDiagnostics.push(event),
+});
+export const localPreferredCompletion = createPreferredCompletion({ runtimeCompletion: streamCompletion, preferredTransport: localPreferredHostTransport,
+  enabled: () => globalThis.__CHATGPT_REPLICA_ENV__?.preferredHostEnabled === true,
+});
 export const localToolExecutor = createBrowserToolExecutor({ PythonRuntime, PYTHON_TOOL,
   getWorkspaceNamespace: () => hasModelSelectionAccess() ? null : getSiteAccount()?.accountId ?? 'guest',
+});
+export const localFilesService = createLocalFilesService({ storage: localToolExecutor.storage,
+  metadataStorage: { getItem: key => globalThis.localStorage.getItem(key), setItem: (key, value) => globalThis.localStorage.setItem(key, value) },
+  getAccountId: () => getPrototypeLocalAuth()?.accountId ?? null,
+  getWorkspacePrefix: localToolExecutor.getWorkspacePrefix, diagnostics: localProtocolDiagnostics,
 });
 export const localPricingAdapter = createLocalPricingAdapter({ diagnostics: localProtocolDiagnostics, readMembership: () => getSiteAccount() });
 export const localDiscoveryAdapter = createLocalDiscoveryAdapter({ storage: { getItem: key => globalThis.localStorage.getItem(key), setItem: (key, value) => globalThis.localStorage.setItem(key, value) }, getAccountId: () => getPrototypeLocalAuth()?.accountId ?? null, diagnostics: localProtocolDiagnostics });
@@ -36,12 +51,14 @@ export const localAppServer = new LocalAppServer({
     getItem: key => globalThis.localStorage.getItem(getLocalAccountStorageKey(key)),
     setItem: (key, value) => globalThis.localStorage.setItem(getLocalAccountStorageKey(key), value),
   },
-  streamCompletion,
+  streamCompletion: localPreferredCompletion,
+  onIdleTurnInterrupt: ({ turn, reason }) => Promise.all(turnHostCheckpoints(turn).map(checkpoint => (reason === 'pagehide' ? localPreferredHostTransport.detach : localPreferredHostTransport.cancel)(checkpoint, { onCheckpoint: () => localAppServer.persist() }))),
   readSettings: () => ({ ...DEFAULT_SETTINGS }),
   models: localModelAdapter,
   catalog: modelCatalog,
   diagnostics: localProtocolDiagnostics,
   toolExecutor: localToolExecutor,
+  prepareUserInput: createLocalInputPreparer({ files: localFilesService }),
   agentOptions: { toolTransport: 'responses', verifiedPriority: false, ultraOrchestration: true },
   getExecutionPolicy: () => ({ modelSelection: hasModelSelectionAccess() }),
 });
@@ -100,6 +117,8 @@ export function installNetworkBoundary() {
       if (body.get('csrfToken') !== localCsrfToken) return response({ error: 'Invalid local signout token' }, 403);
       const target = getLocalSignedOutUrl();
       localAppServer.interruptAll({ reason: 'logout' });
+      const stopResults = await cancelTurnHostRequests(localPreferredHostTransport, [...localAppServer.threads.values()].flatMap(thread => thread.turns), { onCheckpoint: () => localAppServer.persist() });
+      for (const result of stopResults) if (result.status === 'rejected') diagnostics.push({ type: 'local-signout-host-cancel-unconfirmed', code: result.reason?.code ?? null });
       await logoutSiteAccount();
       clearPrototypeLocalSession({ reload: false });
       return response({ url: target });
@@ -147,6 +166,8 @@ export function installNetworkBoundary() {
       if (pricing) return pricing;
       const discovery = await localDiscoveryAdapter.handle(request, adapterPath);
       if (discovery) return discovery;
+      const files = await localFilesService.handle(request, adapterPath);
+      if (files) return files;
       const classic = await localClassicChatAdapter.handle(request, adapterPath);
       if (classic) return classic;
     } catch (error) {
@@ -199,8 +220,8 @@ export function installNetworkBoundary() {
  * filesystem and cloud execution remain explicit unsupported RPC errors.
  */
 export class LocalAppServerSocket extends LocalProtocolSocket {
-  constructor(diagnostics = localProtocolDiagnostics) {
-    super(localAppServer, diagnostics);
+  constructor(diagnostics = localProtocolDiagnostics, server = localAppServer) {
+    super(server, diagnostics);
     const auth = getPrototypeLocalAuth();
     if (auth) this.authenticatedPrincipal = { accountId: auth.accountId, userId: auth.userId };
   }

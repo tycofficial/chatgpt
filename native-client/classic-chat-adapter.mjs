@@ -1,5 +1,5 @@
 /** Original classic Chat REST/SSE shapes over the same real local thread engine. */
-import { FRONTEND_TO_RAW_EFFORT } from './model-catalog-adapter.mjs?v=7a172eaaf0f3c282';
+import { FRONTEND_TO_RAW_EFFORT } from './model-catalog-adapter.mjs?v=533b5cd1fed6f95d';
 export class ClassicChatAdapter {
   constructor({ appServer, models, now = Date.now, uuid = () => crypto.randomUUID(), onConversationChange = () => {}, heartbeatMs = 10000 }) { this.server = appServer; this.models = models; this.now = now; this.uuid = uuid; this.onConversationChange = onConversationChange; this.heartbeatMs = heartbeatMs; }
   json(body, status = 200) { return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }); }
@@ -7,7 +7,8 @@ export class ClassicChatAdapter {
     return { id: thread.id, title: thread.name || 'New chat', create_time: new Date(thread.createdAt * 1000).toISOString(), update_time: new Date(thread.updatedAt * 1000).toISOString(), conversation_origin: thread.adapterMetadata.conversationOrigin ?? null, gizmo_id: null, is_archived: !!thread.archived, is_starred: !!thread.adapterMetadata.isStarred };
   }
   message(thread, turn, item, role) {
-    const text = role === 'user' ? item.content.map(part => part.text).join('\n') : item.text;
+    const original = role === 'user' ? turn.adapterMetadata?.classicUserMessage : null;
+    const text = role === 'user' ? item.content.filter(part => part.type === 'text').map(part => part.text).join('\n') : item.text;
     const frontendSlug = thread.adapterMetadata?.classicModelSlugs?.[turn.id] ?? thread.adapterMetadata?.frontendModelSlug ?? turn.model;
     const done = turn.status === 'completed', terminal = ['completed', 'failed', 'interrupted'].includes(turn.status), itemDone = terminal || turn.adapterMetadata.completedItemIds?.includes(item.id);
     const lastAssistant = turn.items.findLast(value => value.type === 'agentMessage')?.id === item.id;
@@ -15,11 +16,11 @@ export class ClassicChatAdapter {
       id: role === 'user' ? item.clientId ?? item.id : item.id,
       author: { role, name: null, metadata: {} },
       create_time: turn.startedAt, update_time: turn.completedAt ?? this.now() / 1000,
-      content: { content_type: 'text', parts: [text] },
+      content: original ? structuredClone(original.content) : { content_type: 'text', parts: [text] },
       status: role === 'user' || done || itemDone && !terminal ? 'finished_successfully' : terminal ? 'finished_partial_completion' : 'in_progress',
       end_turn: role === 'assistant' && terminal && lastAssistant && (!turn.adapterMetadata.resumable || turn.adapterMetadata.resumePolicy === 'manual'),
       weight: 1, recipient: 'all', channel: role === 'assistant' ? item.phase === 'commentary' ? 'commentary' : 'final' : null,
-      metadata: { model_slug: frontendSlug, thinking_effort: FRONTEND_TO_RAW_EFFORT[turn.reasoningEffort], adapter_api_model: turn.model, is_complete: role === 'user' || Boolean(itemDone), ...(done && role === 'assistant' ? { finish_details: { type: 'stop', stop_tokens: [] } } : {}), adapter_source: 'local-original-client-adapter' },
+      metadata: { ...(original?.metadata ? structuredClone(original.metadata) : {}), model_slug: frontendSlug, thinking_effort: FRONTEND_TO_RAW_EFFORT[turn.reasoningEffort], adapter_api_model: turn.model, is_complete: role === 'user' || Boolean(itemDone), ...(done && role === 'assistant' ? { finish_details: { type: 'stop', stop_tokens: [] } } : {}), adapter_source: 'local-original-client-adapter' },
     };
   }
   projectItem(thread, turn, item) {
@@ -123,7 +124,7 @@ export class ClassicChatAdapter {
     if (body.action === 'continue') { const thread = this.server.getThread(body.conversation_id); return this.attachStream(request, thread, this.server.dispatch('turn/resume', { threadId: thread.id })); }
     if (!['next', undefined].includes(body.action)) return this.json({ error: { message: `Classic Chat action ${body.action} is not implemented`, code: 'LOCAL_ADAPTER_UNIMPLEMENTED' } }, 501);
     const messages = body.messages;
-    if (!Array.isArray(messages) || messages.length !== 1 || typeof messages[0]?.id !== 'string' || !messages[0].id || messages[0]?.author?.role !== 'user' || messages[0]?.content?.content_type !== 'text' || !Array.isArray(messages[0].content.parts) || messages[0].content.parts.some(part => typeof part !== 'string')) return this.json({ error: { message: 'This adapter accepts one text user message; multimodal and tool inputs are not implemented', code: 'LOCAL_TEXT_ONLY' } }, 400);
+    if (!Array.isArray(messages) || messages.length !== 1 || typeof messages[0]?.id !== 'string' || !messages[0].id || messages[0]?.author?.role !== 'user' || !['text', 'multimodal_text'].includes(messages[0]?.content?.content_type) || !Array.isArray(messages[0].content.parts) || messages[0].content.parts.some(part => typeof part !== 'string' && !(part?.content_type === 'image_asset_pointer' && typeof part.asset_pointer === 'string'))) return this.json({ error: { message: 'This adapter accepts one original text or image user message with local attachment metadata', code: 'LOCAL_INPUT_UNSUPPORTED' } }, 400);
     const incoming = messages[0], defaultModel = this.models.getRpcModelList().data.find(model => model.isDefault)?.model;
     const model = body.model === 'auto' ? defaultModel : body.model;
     const rawEffort = body.thinking_effort ?? body.reasoning_effort;
@@ -140,7 +141,8 @@ export class ClassicChatAdapter {
       transaction.afterReply?.();
     }
     const transaction = this.server.dispatch('turn/start', {
-      threadId: thread.id, input: incoming.content.parts.map(text => ({ type: 'text', text, text_elements: [] })),
+      threadId: thread.id, input: incoming.content.parts.map(part => typeof part === 'string' ? { type: 'text', text: part, text_elements: [] } : { type: 'image', url: part.asset_pointer }),
+      classicUserMessage: { content: structuredClone(incoming.content), metadata: structuredClone(incoming.metadata ?? {}), author: { role: 'user' } },
       clientUserMessageId: incoming.id, model, effort, serviceTier: body.service_tier ?? body.serviceTier,
       selectionMode: body.selectionMode, systemHints: Array.isArray(body.system_hints) ? body.system_hints : [],
       responsesapiClientMetadata: { ...body.responsesapi_client_metadata, requestedModel: body.model, adapterOrigin: 'classic-chat-rest' },

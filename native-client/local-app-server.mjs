@@ -1,5 +1,5 @@
 /** Original app-server protocol over real, resumable local execution. */
-import { runAgentTurn } from './agent-turn-runner.mjs?v=7a172eaaf0f3c282';
+import { runAgentTurn } from './agent-turn-runner.mjs?v=533b5cd1fed6f95d';
 export class RpcError extends Error {
   constructor(code, message, data) { super(message); this.name = 'RpcError'; this.code = code; if (data !== undefined) this.data = data; }
 }
@@ -11,11 +11,13 @@ const errorShape = message => ({ message, codexErrorInfo: null, additionalDetail
 const defaultCollaboration = model => ({ mode: 'default', settings: { model, reasoning_effort: null, developer_instructions: null } });
 
 export class LocalAppServer {
-  constructor({ storage, streamCompletion, readSettings, models, catalog, diagnostics = [], now = Date.now, uuid = () => crypto.randomUUID(), toolExecutor = null, checkpointStore = null, agentOptions = {}, getExecutionPolicy = null }) {
+  constructor({ storage, streamCompletion, readSettings, models, catalog, diagnostics = [], now = Date.now, uuid = () => crypto.randomUUID(), toolExecutor = null, checkpointStore = null, agentOptions = {}, getExecutionPolicy = null, onIdleTurnInterrupt = null, prepareUserInput = null }) {
     this.storage = storage;
     this.toolExecutor = toolExecutor;
+    this.prepareUserInput = prepareUserInput;
     this.checkpointStore = checkpointStore;
     this.agentOptions = agentOptions;
+    this.onIdleTurnInterrupt = onIdleTurnInterrupt;
     this.getExecutionPolicy = getExecutionPolicy ?? (() => ({ modelSelection: false, fixedModel: 'gpt-6-luna', defaultEffort: 'low', allowedEfforts: ['low', 'medium'] }));
     this.streamCompletion = streamCompletion;
     this.readSettings = readSettings;
@@ -104,9 +106,13 @@ export class LocalAppServer {
     };
   }
   textInput(params) {
-    if (!Array.isArray(params.input) || !params.input.length) throw new RpcError(-32602, 'A nonempty text input array is required');
-    for (const item of params.input) if (!object(item) || item.type !== 'text' || typeof item.text !== 'string') throw new RpcError(-32601, 'This local adapter currently supports text input only; files, images and tool input are not implemented');
-    if (!params.input.some(item => item.text.trim())) throw new RpcError(-32602, 'Text input must not be empty');
+    if (!Array.isArray(params.input) || !params.input.length && !params.classicUserMessage?.metadata?.attachments?.length) throw new RpcError(-32602, 'A nonempty original input array is required');
+    for (const item of params.input) {
+      const supported = object(item) && (item.type === 'text' && typeof item.text === 'string' || item.type === 'image' && (typeof item.url === 'string' || typeof item.fileId === 'string') || item.type === 'localImage' && typeof item.path === 'string');
+      if (!supported) throw new RpcError(-32601, 'This local adapter accepts original text, image and localImage inputs only');
+      if (item.type !== 'text' && typeof this.prepareUserInput !== 'function') throw new RpcError(-32601, 'The real image resolver is not connected');
+    }
+    if (!params.input.some(item => item.type !== 'text' || item.text.trim()) && !params.classicUserMessage?.metadata?.attachments?.length) throw new RpcError(-32602, 'User input must not be empty');
     return copy(params.input);
   }
   snapshot(thread, includeTurns = true) { const result = copy(thread); if (!includeTurns) result.turns = []; return result; }
@@ -202,7 +208,7 @@ export class LocalAppServer {
         const thread = this.getThread(params.threadId), running = this.running.get(thread.id);
         if (running && params.turnId != null && running.turn.id !== params.turnId) throw new RpcError(-32602, 'The requested turn is not the active turn');
         if (!running && params.turnId != null && !thread.turns.some(turn => turn.id === params.turnId)) throw new RpcError(-32001, 'turn_not_found');
-        return { result: {}, afterReply: () => { if (running) this.interrupt(thread.id); } };
+        return { result: {}, afterReply: () => { this.interrupt(thread.id, { turnId: params.turnId }); } };
       }
       case 'thread/stop': {
         this.getThread(params.threadId);
@@ -231,7 +237,9 @@ export class LocalAppServer {
   startTurn(params, admission) {
     const thread = this.getThread(params.threadId), input = this.textInput(params), selected = this.selection(params, thread);
     if (params.outputSchema != null) throw new RpcError(-32601, 'Structured-output schema execution is not implemented by this local text adapter');
-    const fingerprint = JSON.stringify([input, selected.model, selected.reasoningEffort, selected.serviceTier]);
+    const fingerprintParts = [input, selected.model, selected.reasoningEffort, selected.serviceTier];
+    if (params.classicUserMessage?.metadata?.attachments?.length) fingerprintParts.push(params.classicUserMessage.metadata.attachments);
+    const fingerprint = JSON.stringify(fingerprintParts);
     const duplicate = params.clientUserMessageId && thread.turns.find(turn => turn.clientUserMessageId === params.clientUserMessageId);
     if (duplicate) {
       if (duplicate.adapterMetadata.fingerprint !== fingerprint) throw new RpcError(-32602, 'A client user-message ID cannot be reused with different input or model settings');
@@ -245,17 +253,17 @@ export class LocalAppServer {
       startedAt: Math.floor(startedAtMs / 1000), completedAt: null, durationMs: null,
       model: selected.model, reasoningEffort: selected.reasoningEffort, serviceTier: selected.serviceTier,
       clientUserMessageId: params.clientUserMessageId ?? null,
-      adapterMetadata: { startedAtMs, fingerprint, executionPolicy: selected.executionPolicy, selectionMode: selected.selectionMode, curatedPresetMatch: selected.curatedPresetMatch, clientMetadata: copy(params.responsesapiClientMetadata ?? null), instructions: this.instructions(params) },
+      adapterMetadata: { startedAtMs, fingerprint, executionPolicy: selected.executionPolicy, selectionMode: selected.selectionMode, curatedPresetMatch: selected.curatedPresetMatch, clientMetadata: copy(params.responsesapiClientMetadata ?? null), instructions: this.instructions(params), ...(params.classicUserMessage ? { classicUserMessage: copy(params.classicUserMessage) } : {}) },
     };
     const previous = copy(thread);
     this.updateSelection(thread, selected, params);
     thread.turns.push(turn);
     thread.status = active();
     thread.updatedAt = thread.recencyAt = turn.startedAt;
-    const prompt = input.map(item => item.text).join('\n');
+    const prompt = input.filter(item => item.type === 'text').map(item => item.text).join('\n');
     if (!thread.preview) thread.preview = prompt.slice(0, 240);
     const named = !thread.name;
-    if (named) thread.name = prompt.trim().split('\n')[0].slice(0, 80);
+    if (named) thread.name = prompt.trim().split('\n')[0].slice(0, 80) || (input.some(item => item.type !== 'text') ? 'Image conversation' : 'Attachment conversation');
     try { this.persist(); } catch (error) { this.threads.set(thread.id, previous); throw error; }
     const running = { thread, turn, controller: new AbortController(), terminal: false, assistant: null, reasoning: null, lastSavedAt: startedAtMs };
     this.running.set(thread.id, running);
@@ -278,7 +286,7 @@ export class LocalAppServer {
     for (const entry of thread.turns) {
       if (entry.id === turn.id && omitCurrent) break;
       const transcript = entry.adapterMetadata?.checkpoint?.transcript ?? entry.adapterMetadata?.apiTranscript;
-      if (transcript?.length) { messages.push(...copy(transcript)); if (entry.id === turn.id) break; continue; }
+      if (transcript?.length) { messages.push(...copy(transcript)); const partial = entry.adapterMetadata?.checkpoint?.partialResponse?.content; if (entry.id !== turn.id && partial) messages.push({ role: 'assistant', content: partial, ...(entry.adapterMetadata.checkpoint.partialResponse.phase ? { phase: entry.adapterMetadata.checkpoint.partialResponse.phase } : {}) }); if (entry.id === turn.id) break; continue; }
       for (const item of entry.items) {
         if (item.type === 'userMessage') messages.push({ role: 'user', content: item.content.map(part => part.text).join('\n') });
         if (item.type === 'agentMessage' && item.text) messages.push({ role: 'assistant', content: item.text, ...(entry.adapterMetadata.gatewayResponseItems ? { response_items: copy(entry.adapterMetadata.gatewayResponseItems) } : {}) });
@@ -287,13 +295,14 @@ export class LocalAppServer {
     }
     return messages;
   }
-  append(running, text, reasoning) {
+  append(running, text, reasoning, phase = null) {
     if (running.terminal) return;
     const { thread, turn } = running;
     if (reasoning) {
       if (!running.reasoning) {
         running.reasoning = { type: 'reasoning', id: this.uuid(), summary: [''], content: [] };
         turn.items.push(running.reasoning);
+        if (turn.adapterMetadata.checkpoint?.inFlight) turn.adapterMetadata.checkpoint.inFlight.reasoningItemId = running.reasoning.id;
         this.notify('item/started', { threadId: thread.id, turnId: turn.id, item: running.reasoning });
       }
       const old = running.reasoning.summary[0];
@@ -307,10 +316,12 @@ export class LocalAppServer {
     if (text) {
       if (!running.assistant) {
         if (running.reasoning && !running.reasoningComplete) { this.notify('item/completed', { threadId: thread.id, turnId: turn.id, item: running.reasoning }); running.reasoningComplete = true; }
-        running.assistant = { type: 'agentMessage', id: this.uuid(), text: '', phase: 'final_answer' };
+        running.assistant = { type: 'agentMessage', id: this.uuid(), text: '', phase: phase === 'commentary' ? 'commentary' : 'final_answer' };
         turn.items.push(running.assistant);
+        if (turn.adapterMetadata.checkpoint?.inFlight) turn.adapterMetadata.checkpoint.inFlight.assistantItemId = running.assistant.id;
         this.notify('item/started', { threadId: thread.id, turnId: turn.id, item: running.assistant });
       }
+      if (phase === 'commentary' || phase === 'final_answer') running.assistant.phase = phase;
       const old = running.assistant.text;
       if (!text.startsWith(old)) throw Error('Gateway replaced already streamed assistant text');
       const delta = text.slice(old.length);
@@ -357,9 +368,13 @@ export class LocalAppServer {
     this.notify('turn/completed', { threadId: thread.id, turn: copy(turn) });
     this.notify('thread/status/changed', { threadId: thread.id, status: thread.status });
   }
-  interrupt(threadId, { reason = 'user' } = {}) {
+  interrupt(threadId, { reason = 'user', turnId = null } = {}) {
     const running = this.running.get(threadId);
-    if (!running) return;
+    if (!running) {
+      const thread = this.threads.get(threadId), turn = turnId ? thread?.turns.find(value => value.id === turnId) : thread?.turns.at(-1);
+      if (turn && this.onIdleTurnInterrupt) Promise.resolve(this.onIdleTurnInterrupt({ threadId, turn, reason })).catch(error => this.diagnostics.push({ type: 'local-idle-transport-stop-error', message: String(error?.message || error) }));
+      return;
+    }
     running.interruptReason = reason;
     running.turn.adapterMetadata.resumePolicy = reason === 'pagehide' ? 'automatic' : 'manual';
     running.controller.abort(new DOMException('Turn interrupted locally', 'AbortError'));

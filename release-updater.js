@@ -1,10 +1,25 @@
 /** Apply a coherent deployed release when the current conversation is idle. */
+function visibleComposerElement(element) {
+  if (element.closest?.('[hidden],[aria-hidden="true"],[inert]')) return false;
+  // React Activity retains the other mode's composer under display:none.
+  for (let parent = element; parent; parent = parent.parentElement) {
+    if (parent.style?.display === 'none' || parent.style?.visibility === 'hidden') return false;
+  }
+  return !element.getClientRects || element.getClientRects().length > 0;
+}
+
 export function composerHasDraft(document = globalThis.document) {
-  return [...(document?.querySelectorAll?.('textarea,[contenteditable="true"]') || [])].some(element => {
-    if (element.closest?.('[hidden],[aria-hidden="true"]')) return false;
-    if (element.getClientRects && !element.getClientRects().length) return false;
+  const textDraft = [...(document?.querySelectorAll?.('textarea,[contenteditable="true"]') || [])].some(element => {
+    if (!visibleComposerElement(element)) return false;
     return String(element.value ?? element.innerText ?? element.textContent ?? '').trim().length > 0;
   });
+  if (textDraft) return true;
+  // These attributes belong to the original composer, not message-history files.
+  return [...(document?.querySelectorAll?.('[data-composer-body] [data-composer-attachments][data-visible-attachments]') || [])].some(container =>
+    visibleComposerElement(container) && [...container.children].some(child =>
+      visibleComposerElement(child) && (child.childElementCount > 0 || String(child.textContent ?? '').trim().length > 0)
+    )
+  );
 }
 
 export function createReleaseUpdater({

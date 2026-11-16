@@ -224,3 +224,74 @@ test('unenabled Ultra fails explicitly without silently sending max or an unsupp
   const id = start(server), result = await turn(server, id, { effort: 'ultra' });
   assert.equal(calls, 0); assert.equal(result.status, 'failed'); assert.equal(result.adapterMetadata.lastFailure.code, 'ULTRA_ORCHESTRATION_NOT_ENABLED');
 });
+
+
+test('actual Responses commentary continues through a real file tool to final without changing the selected model or effort', async () => {
+  const { streamCompletion } = await import('../runtime.js'); const previous = globalThis.fetch, store = workspace(); let requests = 0;
+  globalThis.fetch = async (url, options) => {
+    assert.equal(String(url), 'https://fixture.invalid/v1/responses'); const payload = JSON.parse(options.body); requests++;
+    assert.equal(payload.model, 'gpt-6.1-sol'); assert.equal(payload.reasoning.effort, 'high');
+    let output;
+    if (requests === 1) output = [{ id: 'real-commentary', type: 'message', role: 'assistant', phase: 'commentary', content: [{ type: 'output_text', text: 'I will create the actual neutral file.' }] }];
+    else if (requests === 2) {
+      assert(payload.input.some(item => item.type === 'message' && item.phase === 'commentary'));
+      output = [{ id: 'file-call-item', type: 'function_call', call_id: 'real-phase-file', name: 'create_file', arguments: JSON.stringify({ name: 'phase-proof.txt', content: 'Actual file created after intermediate commentary.' }) }];
+    } else {
+      assert.equal(requests, 3); const result = payload.input.find(item => item.type === 'function_call_output' && item.call_id === 'real-phase-file'); assert(result); assert.match(result.output, /phase-proof.txt/);
+      output = [{ id: 'real-final', type: 'message', role: 'assistant', phase: 'final_answer', content: [{ type: 'output_text', text: 'The actual file is ready.' }] }];
+    }
+    return new Response('data: ' + JSON.stringify({ type: 'response.completed', response: { id: 'phase-response-' + requests, model: payload.model, reasoning: payload.reasoning, status: 'completed', output } }) + '\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
+  };
+  try {
+    const server = setup(streamCompletion, { toolExecutor: createBrowserToolExecutor({ storage: store }) }), id = start(server), result = await turn(server, id);
+    assert.equal(result.status, 'completed'); assert.equal(requests, 3); assert.equal(result.adapterMetadata.checkpoint.metrics.length, 3);
+    assert.equal(new TextDecoder().decode(await store.read(encodeURIComponent(id) + '/phase-proof.txt')), 'Actual file created after intermediate commentary.');
+    assert.deepEqual(result.items.filter(item => item.type === 'agentMessage').map(item => item.phase), ['commentary', 'final_answer']);
+    assert.equal(result.items.find(item => item.type === 'mcpToolCall').status, 'completed');
+    const adapter = new ClassicChatAdapter({ appServer: server, models }), messages = Object.values(adapter.detail(server.getThread(id)).mapping).map(row => row.message).filter(Boolean);
+    assert.equal(messages.find(message => message.content?.parts?.[0] === 'I will create the actual neutral file.').channel, 'commentary');
+    assert.equal(messages.find(message => message.content?.parts?.[0] === 'The actual file is ready.').channel, 'final');
+  } finally { globalThis.fetch = previous; }
+});
+
+test('three consecutive actual commentary-only Responses stop as an unfinished manual checkpoint and release the next input', async () => {
+  const { streamCompletion } = await import('../runtime.js'); const previous = globalThis.fetch; let requests = 0;
+  globalThis.fetch = async (_url, options) => {
+    const payload = JSON.parse(options.body); requests++; assert.equal(payload.model, 'gpt-6.1-sol'); assert.equal(payload.reasoning.effort, 'high');
+    const final = requests > 3, text = final ? 'A separate valid final reply.' : 'Intermediate neutral update ' + requests;
+    return new Response('data: ' + JSON.stringify({ type: 'response.completed', response: { id: 'bounded-phase-' + requests, model: payload.model, reasoning: payload.reasoning, status: 'completed', output: [{ id: 'phase-item-' + requests, type: 'message', role: 'assistant', phase: final ? 'final_answer' : 'commentary', content: [{ type: 'output_text', text }] }] } }) + '\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
+  };
+  try {
+    const server = setup(streamCompletion, { toolExecutor: createBrowserToolExecutor({ storage: workspace() }) }), id = start(server), result = await turn(server, id);
+    assert.equal(result.status, 'failed'); assert.equal(requests, 3); assert.equal(result.adapterMetadata.lastFailure.code, 'COMMENTARY_WITHOUT_COMPLETION'); assert.equal(result.adapterMetadata.resumePolicy, 'manual'); assert.equal(result.adapterMetadata.resumable, true); assert.equal(result.adapterMetadata.checkpoint.commentaryOnlyRounds, 3); assert.equal(server.running.size, 0);
+    assert(result.items.filter(item => item.type === 'agentMessage').every(item => item.phase === 'commentary')); assert.equal(result.items.filter(item => item.type === 'mcpToolCall').length, 0);
+    const next = await turn(server, id, { clientUserMessageId: 'new-input-after-commentary-bound' }); assert.equal(next.status, 'completed'); assert.equal(requests, 4);
+  } finally { globalThis.fetch = previous; }
+});
+
+test('an actual final message without phase never inherits an earlier commentary phase or triggers another request', async () => {
+  const { streamCompletion } = await import('../runtime.js'); const previous = globalThis.fetch; let requests = 0;
+  globalThis.fetch = async (_url, options) => {
+    const payload = JSON.parse(options.body); requests++;
+    const output = [{ id: 'intermediate-in-response', type: 'message', role: 'assistant', phase: 'commentary', content: [{ type: 'output_text', text: 'Intermediate. ' }] }, { id: 'legacy-final-in-response', type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'Actual compatible final.' }] }];
+    return new Response('data: ' + JSON.stringify({ type: 'response.completed', response: { id: 'legacy-phase', model: payload.model, reasoning: payload.reasoning, status: 'completed', output } }) + '\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
+  };
+  try { const server = setup(streamCompletion, { toolExecutor: createBrowserToolExecutor({ storage: workspace() }) }), result = await turn(server, start(server)); assert.equal(result.status, 'completed'); assert.equal(requests, 1); assert.equal(result.items.find(item => item.type === 'agentMessage').phase, 'final_answer'); }
+  finally { globalThis.fetch = previous; }
+});
+
+
+test('commentary without a confirmed provider terminal never starts another model round', async () => {
+  let calls = 0; const server = setup(async () => { calls++; return { content: 'An unconfirmed intermediate update.', phase: 'commentary' }; });
+  const result = await turn(server, start(server)); assert.equal(result.status, 'failed'); assert.equal(calls, 1); assert.equal(result.adapterMetadata.resumePolicy, 'manual'); assert.equal(result.adapterMetadata.lastFailure.code, 'INCOMPLETE_RESPONSE_STREAM');
+});
+
+test('a Responses function item followed only by DONE never executes tools without response.completed', async () => {
+  const { streamCompletion } = await import('../runtime.js'); const previous = globalThis.fetch, store = workspace(); let requests = 0;
+  globalThis.fetch = async () => {
+    requests++; const event = { type: 'response.output_item.done', output_index: 0, item: { id: 'unconfirmed-call', type: 'function_call', call_id: 'unconfirmed-file', name: 'create_file', arguments: JSON.stringify({ name: 'must-not-exist.txt', content: 'Not confirmed by the provider.' }) } };
+    return new Response('data: ' + JSON.stringify(event) + '\n\ndata: [DONE]\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
+  };
+  try { const server = setup(streamCompletion, { toolExecutor: createBrowserToolExecutor({ storage: store }) }), result = await turn(server, start(server)); assert.equal(result.status, 'failed'); assert.equal(requests, 1); assert.equal(store.files.size, 0); assert.equal(result.items.filter(item => item.type === 'mcpToolCall').length, 0); assert.equal(result.adapterMetadata.resumePolicy, 'manual'); }
+  finally { globalThis.fetch = previous; }
+});

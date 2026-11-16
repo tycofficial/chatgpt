@@ -1,5 +1,5 @@
 import test from 'node:test';import assert from 'node:assert/strict';
-import {createPreferredHostTransport,createReplayDeltaGate} from '../src/native-client/preferred-host-transport.mjs';
+import {createPreferredHostTransport,createReplayDeltaGate,cancelTurnHostRequests} from '../src/native-client/preferred-host-transport.mjs';
 const admin={id:'site-admin',role:'administrator',planType:'pro',membershipSource:'site-administrator'};
 const payload=()=>({model:'fixture-model',input:[{role:'user',content:'Neutral relay fixture'}],stream:true,store:false,reasoning:{effort:'high'}});
 const json=(body,status=200)=>new Response(JSON.stringify(body),{status,headers:{'Content-Type':'application/json'}});
@@ -8,9 +8,9 @@ function fixture(extra={}){
  const state={account:admin,offline:false,quota:false,networkFail:false,dropAdmission:false,dropped:false,posts:0,api:0,deletes:0,polls:[],jobs:new Map(),diagnostics:[],events:[{seq:0,data:{type:'headers',status:200,contentType:'text/event-stream'}},{seq:1,data:{type:'data',text:'data: {"type":"response.completed","response":{"output_text":"fixture complete"}}\n\n'}},{seq:2,data:{type:'end'}}],jobStatus:'complete',...extra};
  const fetch=async(input,options)=>{
   const u=new URL(input);assert.equal(u.origin,'https://fixture-relay.example');assert.equal(options.headers.Authorization,'Bearer fixture-site-session');
-  if(u.pathname==='/bridge/status')return json({online:!state.offline,profile:{authenticated:true,models:[{slug:'fixture-model'}],quota:state.quota?{state:'request-paused',errorCode:'subscription_sharing_usage_limit_exceeded',remaining:null}:null}});
+  if(u.pathname==='/bridge/status')return json({online:!state.offline,protocolVersion:4,profile:{authenticated:true,capabilities:{protocolVersion:4,maxConcurrentJobs:3,cancelInference:true},models:[{slug:'fixture-model'}],quota:state.quota?{state:'request-paused',errorCode:'subscription_sharing_usage_limit_exceeded',remaining:null}:null}});
   if(u.pathname==='/jobs'){state.posts++;const data=JSON.parse(options.body);if(state.raceOffline)return json({error:{code:'BRIDGE_OFFLINE',message:'Fixture offline before admission'}},409);const previous=state.jobs.get(data.id);if(previous)assert.deepEqual(previous,data.payload);else state.jobs.set(data.id,data.payload);if(state.malformedAdmission&&state.posts===1)return new Response('invalid fixture JSON',{status:202});if(state.alwaysDropAdmission||state.dropAdmission&&!state.dropped){state.dropped=true;throw Error('Fixture lost admission acknowledgement');}if(state.holdAdmission)await state.holdAdmission;return json({id:data.id,status:'queued',reattached:!!previous},202);}
-  if(options.method==='DELETE'){state.deletes++;state.jobStatus='cancelled';return json({cancelled:true});}
+  if(options.method==='DELETE'){state.deletes++;if(state.holdDelete)await state.holdDelete;if(state.terminalDelete)return json({cancelled:false,alreadyTerminal:true,status:state.terminalDelete});state.jobStatus='cancelled';return json({cancelled:true});}
   const after=Number(u.searchParams.get('after'));state.polls.push(after);
   if(state.networkFail)throw Error('Fixture poll network unavailable');
   if(state.eventResponse)return state.eventResponse(after);
@@ -75,4 +75,19 @@ test('malformed success acknowledgement remains an uncertain admission and retri
 
 test('changing to a Free identity cannot read or restart an accepted administrator job through API fallback',async()=>{
  const f=fixture(),cp={};await(await f.router.request(payload(),{checkpoint:cp})).text();f.state.account={id:'site-user:fixture',role:'user',planType:'free'};await assert.rejects(f.router.resume(cp),{code:'SITE_ADMIN_AUTH_REQUIRED'});assert.equal(f.state.api,0);assert.equal(f.state.posts,1);
+});
+
+
+test('simultaneous signal/explicit cancellation shares exactly one HTTP DELETE',async()=>{
+ let release;const held=new Promise(resolve=>release=resolve),f=fixture({holdDelete:held}),cp={route:'host',jobId:uuid,ownerId:'site-admin',accepted:true,state:'streaming'};
+ const first=f.router.cancel(cp),second=f.router.cancel(cp);assert.equal(first,second);while(f.state.deletes===0)await new Promise(resolve=>setTimeout(resolve,1));assert.equal(f.state.deletes,1);release();assert.equal((await first).cancelled,true);await second;assert.equal(f.state.deletes,1);
+});
+test('logout coordinator awaits the deduplicated host stop before discarding the verified site bearer',async()=>{
+ let release;const held=new Promise(resolve=>release=resolve),f=fixture({holdDelete:held}),cp={route:'host',jobId:uuid,ownerId:'site-admin',accepted:true,state:'streaming'},turn={adapterMetadata:{checkpoint:{inFlight:{transport:cp}}}};
+ const signalStop=f.router.cancel(cp);let cleared=false;
+ const logout=(async()=>{const results=await cancelTurnHostRequests(f.router,[turn,turn]);assert.equal(results.length,1);assert.equal(results[0].status,'fulfilled');f.state.account=null;cleared=true;})();
+ while(f.state.deletes===0)await new Promise(resolve=>setTimeout(resolve,1));assert.equal(cleared,false);assert.equal(f.state.deletes,1);release();await Promise.all([logout,signalStop]);assert.equal(cleared,true);assert.equal(cp.state,'cancelled');
+});
+test('cancellation racing a completed response preserves its actual terminal state',async()=>{
+ const f=fixture({terminalDelete:'complete'}),cp={route:'host',jobId:uuid,ownerId:'site-admin',accepted:true,state:'streaming'};const result=await f.router.cancel(cp);assert.equal(result.cancelled,false);assert.equal(result.alreadyTerminal,true);assert.equal(cp.state,'complete');assert.equal(cp.cancelRequested,false);
 });

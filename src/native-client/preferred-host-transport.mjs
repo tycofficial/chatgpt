@@ -31,7 +31,7 @@ export function createPreferredHostTransport({
   const base = new URL(baseURL);
   if (base.protocol !== 'https:' && !(base.protocol === 'http:' && base.hostname === '127.0.0.1')) throw Error('The public relay must use HTTPS');
   if (typeof fetchImpl !== 'function' || typeof getSiteAccount !== 'function' || typeof getSiteSessionToken !== 'function') throw Error('Verified site identity and fetch functions are required');
-  const active = new Map();
+  const active = new Map(), cancellations = new Map();
   const diagnostic = (type, extra = {}) => onDiagnostic({ type, ...extra });
   const persist = async (checkpoint, save) => { checkpoint.updatedAt = now(); await save?.(checkpoint); };
   const assertOwner = checkpoint => {
@@ -54,16 +54,23 @@ export function createPreferredHostTransport({
     await persist(checkpoint, onCheckpoint);
     return { detached: true, jobId: checkpoint.jobId ?? null };
   }
-  async function cancel(checkpoint, { onCheckpoint } = {}) {
+  async function cancelOnce(checkpoint, { onCheckpoint } = {}) {
     if (!checkpoint.jobId || checkpoint.route !== 'host') return { cancelled: false, jobId: null };
     if (terminal.has(checkpoint.state)) return { cancelled: false, jobId: checkpoint.jobId, alreadyTerminal: true };
     assertOwner(checkpoint); checkpoint.cancelRequested = true; checkpoint.state = 'cancel-requested'; await persist(checkpoint, onCheckpoint);
-    let confirmed = false;
-    try { const data = await remote('/jobs/' + checkpoint.jobId, { method: 'DELETE' }); confirmed = data.cancelled === true; }
+    let confirmed = false, terminalResult = null;
+    try { const data = await remote('/jobs/' + checkpoint.jobId, { method: 'DELETE' }); confirmed = data.cancelled === true; if (data.alreadyTerminal && terminal.has(data.status)) terminalResult = data.status; }
     catch (error) { if (error.status !== 404) { diagnostic('host-cancel-pending', { jobId: checkpoint.jobId, code: error.code || null }); throw error; } }
     if (confirmed) checkpoint.state = 'cancelled';
+    else if (terminalResult) { checkpoint.state = terminalResult; checkpoint.cancelRequested = false; }
     await persist(checkpoint, onCheckpoint); active.get(checkpoint.jobId)?.controller.abort(abortError('The user cancelled the relay job.'));
-    return { cancelled: confirmed, jobId: checkpoint.jobId };
+    return { cancelled: confirmed, alreadyTerminal: Boolean(terminalResult), status: checkpoint.state, jobId: checkpoint.jobId };
+  }
+  function cancel(checkpoint, options = {}) {
+    if (!checkpoint?.jobId) return Promise.resolve({ cancelled: false, jobId: null });
+    if (cancellations.has(checkpoint.jobId)) return cancellations.get(checkpoint.jobId);
+    const operation = cancelOnce(checkpoint, options).finally(() => { if (cancellations.get(checkpoint.jobId) === operation) cancellations.delete(checkpoint.jobId); });
+    cancellations.set(checkpoint.jobId, operation); return operation;
   }
   async function fallback(payload, checkpoint, options, reason) {
     const run = options.fallbackResponses ?? fallbackResponses;
@@ -165,7 +172,7 @@ export function createPreferredHostTransport({
         if (snapshot.status === 'cancelled') { checkpoint.state = 'cancelled'; await persist(checkpoint, options.onCheckpoint); throw abortError('The relay job was cancelled.'); }
         if (terminal.has(snapshot.status) && sawEnd) { checkpoint.state = snapshot.status; checkpoint.error = snapshot.error ?? null; await persist(checkpoint, options.onCheckpoint); finish(); return; }
         if (terminal.has(snapshot.status) && snapshot.events.length < 100) throw new PreferredHostError(snapshot.status === 'failed' ? 'HOST_JOB_FAILED' : 'HOST_INCOMPLETE_EVENTS', snapshot.error || 'The terminal job did not contain a complete response event sequence.', { requiresTransportResume: snapshot.status !== 'failed', jobId: checkpoint.jobId });
-        checkpoint.state = 'streaming'; await persist(checkpoint, options.onCheckpoint); await sleep(snapshot.events.length >= 100 ? 0 : pollIntervalMs, local.signal);
+        if (checkpoint.state !== 'streaming') { checkpoint.state = 'streaming'; await persist(checkpoint, options.onCheckpoint); } await sleep(snapshot.events.length >= 100 ? 0 : pollIntervalMs, local.signal);
       }
     })().catch(error => { if (!terminal.has(checkpoint.state) && !checkpoint.cancelRequested && checkpoint.state !== 'detached') checkpoint.state = 'interrupted'; if (error?.name !== 'AbortError' && checkpoint.accepted && !terminal.has(checkpoint.state)) { error.requiresTransportResume = true; error.jobId ??= checkpoint.jobId; } persist(checkpoint, options.onCheckpoint).catch(() => {}); fail(error); });
     await ready;
@@ -188,6 +195,9 @@ export function createPreferredHostTransport({
     options.signal?.throwIfAborted();
     if (!host.online || host.profile?.authenticated !== true) return fallback(payload, checkpoint, options, 'host-offline');
     if (host.profile.quota?.state === 'request-paused') throw new PreferredHostError('SUBSCRIPTION_QUOTA_EXHAUSTED', 'ChatGPT plan requests are paused by an actual reported usage-limit error. Check ChatGPT Settings → Usage.', { status: 429, quota: clone(host.profile.quota), usageUrl: 'https://chatgpt.com/settings/usage' });
+    const required = Math.max(1, Math.min(3, options.requiredConcurrency ?? 1));
+    const capacity = host.profile.capabilities;
+    if (host.protocolVersion !== 4 || capacity?.protocolVersion !== 4 || capacity.cancelInference !== true || capacity.maxConcurrentJobs < required) throw new PreferredHostError('HOST_CAPABILITY_UNAVAILABLE', 'The online bridge needs protocol4, actual cancellation, and the required parallel capacity. Update its local program; no API billing was started.', { status: 409 });
     if (!host.profile.models?.some(model => model.slug === payload.model)) throw new PreferredHostError('SUBSCRIPTION_MODEL_UNAVAILABLE', 'The online account does not offer the selected model; API billing was not started.', { status: 400 });
     checkpoint.jobId ??= uuid(); checkpoint.state = 'prepared';
     const fallbackResult = await admit(payload, checkpoint, options); return fallbackResult || open(checkpoint, options);
@@ -201,4 +211,42 @@ export function createPreferredHostTransport({
     return open(checkpoint, options);
   }
   return { request, resume, cancel, detach, status };
+}
+
+export const isHostCheckpoint = value => value?.route === 'host' && Boolean(value.jobId);
+export function createPreferredCompletion({ runtimeCompletion, preferredTransport, enabled = () => false }) {
+  return async options => {
+    const context = options.transportContext;
+    if (!context || !enabled() && !isHostCheckpoint(context.checkpoint)) return runtimeCompletion(options);
+    const cp = context.checkpoint ??= {};
+    const save = () => context.onCheckpoint?.(cp);
+    const hostOptions = { checkpoint: cp, onCheckpoint: save, signal: options.signal, getAbortMode: context.getAbortMode, requiredConcurrency: context.requiredConcurrency ?? 1, requestId: context.requestId };
+    const originalDelta = options.onDelta ?? (() => {});
+    const replay = context.reattach && isHostCheckpoint(cp);
+    const onDelta = replay ? createReplayDeltaGate(context.savedPartial, originalDelta) : originalDelta;
+    try {
+      const result = await runtimeCompletion({ ...options, settings: { ...options.settings, apiTransport: 'responses' }, onDelta, responsesTransport: (payload, { signal, fallbackResponses }) => {
+        const requestOptions = { ...hostOptions, signal, fallbackResponses };
+        return replay ? preferredTransport.resume(cp, requestOptions) : preferredTransport.request(payload, requestOptions);
+      } });
+      if (['stop','tool_calls','length'].includes(result.finish_reason)) { cp.consumerFinished = true; cp.consumerStatus = result.finish_reason === 'length' ? 'incomplete' : 'complete'; if (!cp.cancelRequested && cp.state !== 'cancelled') cp.state = result.finish_reason === 'length' ? 'failed' : 'complete'; } await save(); return result;
+    } catch (error) {
+      const providerTerminal = error?.code && !String(error.code).startsWith('HOST_') && error.code !== 'SITE_ADMIN_AUTH_REQUIRED' && (error.retryable === false || [400,401,402,403,404,422,429].includes(error.status));
+      if (isHostCheckpoint(cp) && providerTerminal && !options.signal?.aborted) { cp.consumerFinished = true; cp.consumerStatus = 'failed'; cp.consumerError = { code: error.code, providerCode: error.providerCode ?? null, requestId: error.requestId ?? null, param: error.param ?? null, status: error.status ?? null, message: String(error.message) }; cp.state = 'failed'; error.requiresTransportResume = false; }
+      else if (isHostCheckpoint(cp) && !cp.consumerFinished && !cp.cancelRequested && cp.state !== 'cancelled' && !['HOST_PAYLOAD_CHANGED','HOST_REPLAY_DIVERGED','HOST_CHECKPOINT_REQUIRED','HOST_INVALID_JOB_ID'].includes(error?.code)) { error.requiresTransportResume = true; error.retryable = false; }
+      await save(); throw error;
+    }
+  };
+}
+
+export function turnHostCheckpoints(turn) {
+  const cp = turn?.adapterMetadata?.checkpoint, found = [];
+  if (isHostCheckpoint(cp?.inFlight?.transport)) found.push(cp.inFlight.transport);
+  for (const call of cp?.ultra?.calls || []) for (const worker of call.workers || []) for (const round of worker.rounds || []) if (isHostCheckpoint(round.transport)) found.push(round.transport);
+  return [...new Map(found.map(value => [value.jobId, value])).values()];
+}
+
+export async function cancelTurnHostRequests(preferredTransport, turns, { onCheckpoint } = {}) {
+  const checkpoints = [...new Map(turns.flatMap(turnHostCheckpoints).map(checkpoint => [checkpoint.jobId, checkpoint])).values()];
+  return Promise.allSettled(checkpoints.map(checkpoint => preferredTransport.cancel(checkpoint, { onCheckpoint })));
 }

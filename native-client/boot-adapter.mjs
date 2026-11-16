@@ -2,23 +2,24 @@
  * Loads the public original component graph with explicit local host services.
  * Private original backend credentials are never used by this entry point.
  */
-import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter } from './service-boundary.mjs?v=7a172eaaf0f3c282';
-import * as mapLibreRenderer from './map-vendor/maplibre-gl.mjs?v=7a172eaaf0f3c282';
-import { createLocalMapProvider } from './local-map-provider.mjs?v=7a172eaaf0f3c282';
-import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs?v=7a172eaaf0f3c282';
-import { getPrototypeLocalSession, getPrototypeLocalAuth, isPrototypeLocalSession, getPrototypeLocalAuthGeneration, clearPrototypeLocalSession } from './local-identity.mjs?v=7a172eaaf0f3c282';
-import { createLocalHostSettingsClass } from './local-host-settings.mjs?v=7a172eaaf0f3c282';
-import { createLocalWorkPolicy } from './local-work-policy.mjs?v=7a172eaaf0f3c282';
-import { hasModelSelectionAccess, getSiteLoginUrl } from './site-account.mjs?v=7a172eaaf0f3c282';
-import { createNativeModelSelectionPolicy, createNativeThinkingEntryPolicy } from './local-model-selection-policy.mjs?v=7a172eaaf0f3c282';
-import { createLocalHostClaimsReader } from './local-token-identity.mjs?v=7a172eaaf0f3c282';
+import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter, localFilesService } from './service-boundary.mjs?v=533b5cd1fed6f95d';
+import * as mapLibreRenderer from './map-vendor/maplibre-gl.mjs?v=533b5cd1fed6f95d';
+import { createLocalMapProvider } from './local-map-provider.mjs?v=533b5cd1fed6f95d';
+import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs?v=533b5cd1fed6f95d';
+import { getPrototypeLocalSession, getPrototypeLocalAuth, isPrototypeLocalSession, getPrototypeLocalAuthGeneration, clearPrototypeLocalSession } from './local-identity.mjs?v=533b5cd1fed6f95d';
+import { createLocalHostSettingsClass } from './local-host-settings.mjs?v=533b5cd1fed6f95d';
+import { createLocalWorkPolicy } from './local-work-policy.mjs?v=533b5cd1fed6f95d';
+import { hasModelSelectionAccess, getSiteLoginUrl } from './site-account.mjs?v=533b5cd1fed6f95d';
+import { createNativeModelSelectionPolicy, createNativeThinkingEntryPolicy } from './local-model-selection-policy.mjs?v=533b5cd1fed6f95d';
+import { createLocalHostClaimsReader } from './local-token-identity.mjs?v=533b5cd1fed6f95d';
+import { wrapNativeFileUploadClass } from './local-native-upload.mjs?v=533b5cd1fed6f95d';
 
 const boundary = installNetworkBoundary();
 globalThis.__originalClientProbe = boundary.diagnostics;
 installSyntheticDocumentState();
 if (globalThis.__CHATGPT_REPLICA_ENV__) window.__reactRouterContext.basename = globalThis.__CHATGPT_REPLICA_ENV__.basePath.replace(/\/$/, '') || '/';
 
-const plan = await (await fetch(new URL('./entry-plan.json?v=7a172eaaf0f3c282', import.meta.url))).json();
+const plan = await (await fetch(new URL('./entry-plan.json?v=533b5cd1fed6f95d', import.meta.url))).json();
 const { __webpack_require__: requireOriginal } = await import(plan.runtime);
 // One mechanical entry transform defers its terminal hxQI invocation and
 // rebases its relative imports. All original factories and chunks are retained.
@@ -74,6 +75,9 @@ function overrideExports(moduleId, overrides, options, wrappers = {}) {
   }, options);
 }
 
+// Keep native upload behavior while local tickets store their real bytes.
+overrideExports('GDNt', {}, { deferred: true }, { b: NativeWebFetch => wrapNativeFileUploadClass(NativeWebFetch, localFilesService) });
+
 // Only the map renderer/style provider changes. The original s2JQ React map
 // and all its surrounding controls retain their captured implementation.
 const localMapProvider = createLocalMapProvider({ renderer: mapLibreRenderer, diagnostics: boundary.diagnostics });
@@ -90,6 +94,34 @@ adaptFactory('ztxE', factory => function(module, exports, require) {
     };
   } });
   return factory.call(this, module, exports, scopedRequire);
+});
+
+// cKRc's original first-party discovery expects cloud/desktop onboarding.
+// Only a verified ready site-local Codex provider uses its settled branch.
+overrideExports('cKRc', {}, { deferred: true }, {
+  d: atom => localCodexAdapter.adaptBrowserDiscoveryAtom(atom, requireOriginal),
+});
+
+// The site supplies a real text/tool executor over browser-origin storage.
+// Retain native permissions/workspace/config checks and unsupported OS errors.
+overrideExports('ckTT', {}, { deferred: true }, {
+  a: capability => localCodexAdapter.createBrowserExecutionCapability(capability),
+});
+overrideExports('bVzl', {}, { deferred: true }, {
+  a: host => localCodexAdapter.getBrowserOriginHost(host),
+});
+overrideExports('mYel', {}, { deferred: true }, {
+  a: HostService => localCodexAdapter.createBrowserExecutionHosts(HostService),
+});
+overrideExports('OVto', {}, { deferred: true }, {
+  a: ProjectCatalog => localCodexAdapter.createBrowserProjectCatalog(ProjectCatalog),
+});
+overrideExports('o4oB', {}, { deferred: true }, {
+  b: atom => localCodexAdapter.adaptBrowserWorkspaceSelectionAtom(atom, requireOriginal),
+});
+overrideExports('HSUP', {}, { deferred: true }, {
+  a: atom => localCodexAdapter.adaptBrowserWorkspaceResolverAtom(atom, requireOriginal),
+  b: atom => localCodexAdapter.adaptBrowserWorkspaceResolverAtom(atom, requireOriginal),
 });
 
 // jiwy is the native provider-capability boundary. Keep its other permissions,
@@ -132,8 +164,13 @@ if (plan.mountMode === 'client') adaptFactory('CE87', factory => function(module
 
 // EAKz.a remains the original class: initialization, pending requests,
 // notification dispatch and reconciliation all retain their original code.
+const codexContextRpc = localCodexAdapter.createRpcFacade({
+  getRequestContext: (method, params) => localCodexAdapter.getBrowserRequestContext(method, params, {
+    sidebarProductMode: globalThis.history?.state?.usr?.sidebarProductMode ?? globalThis.history?.state?.sidebarProductMode,
+  }),
+});
 overrideExports('EAKz', {
-  b: async () => new LocalAppServerSocket(boundary.diagnostics),
+  b: async () => new LocalAppServerSocket(boundary.diagnostics, codexContextRpc),
 });
 
 // Preserve the original host class/RpcTarget inheritance and all public setting
@@ -206,6 +243,12 @@ boundary.diagnostics.push({ type: 'auth-state-engine', source: useOriginalAuth ?
 // QdUF's internal eh/ey closures keep the official hostname assumptions.
 // Route both public login functions through the same local account boundary.
 let siteLoginRedirecting = false;
+function getSiteAuthPageUrl(name) {
+  if (name !== 'login' && name !== 'signup') return new URL('/auth/' + name, location.origin);
+  const target = new URL(getSiteLoginUrl(), location.href);
+  if (name === 'signup') target.pathname = target.pathname.replace(/\/login\/?$/, '/signup');
+  return target;
+}
 function isSiteLoginPage() {
   const target = new URL(getSiteLoginUrl(), location.href);
   const path = location.pathname.replace(/\/+$/, '') || '/';
@@ -227,7 +270,7 @@ function maybeRedirectToSiteLogin() {
 }
 
 overrideExports('QdUF', {
-  getBrowserAuthPageUrl: name => name === 'login' ? new URL(getSiteLoginUrl(), location.href) : new URL('/auth/' + name, location.origin),
+  getBrowserAuthPageUrl: getSiteAuthPageUrl,
   redirectToBrowserChatGptLogin: redirectToSiteLogin,
   maybeRedirectToBrowserChatGptLogin: maybeRedirectToSiteLogin,
   ...(!useOriginalAuth ? {

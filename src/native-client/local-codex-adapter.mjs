@@ -74,6 +74,7 @@ export function createLocalCodexAdapter({
       ? [...new Set(executor.tools.map(toolName).filter(Boolean))] : [];
     return {
       identity, local,
+      modelSelectionVerified: declared?.modelSelection === true,
       configuredTextProvider: local && declared?.executionSource === 'local-app-server' && declared.textConversations === true && declared.modelSelection !== false,
       toolExecution: executable && declared?.toolExecution !== false,
       filesystem: executable && !!executor.storage && declared?.filesystem !== false,
@@ -147,6 +148,178 @@ export function createLocalCodexAdapter({
     });
   }
 
+  /**
+   * The original cloud-onboarding discovery state is not a local provider
+   * entitlement. A verified, ready local Codex provider uses the original
+   * settled discovery branch, retaining its native navigation/components.
+   */
+  const discoverySource = Object.freeze({
+    source: 'site-local-codex-provider', discoveryMode: 'configured-local-provider',
+    officialCloudEntitlement: false, officialDesktopUsageClaimed: false,
+  });
+  function resolveBrowserDiscovery(originalValue, { inputs, browserCapability } = {}) {
+    const current = state();
+    if (!current.local || !current.configuredTextProvider || !current.modelSelectionVerified ||
+        !object(inputs) || inputs.authLoading || inputs.accountLoading ||
+        inputs.accountId !== current.identity.accountId ||
+        inputs.authenticatedAccountId !== current.identity.accountId ||
+        inputs.userId !== current.identity.userId ||
+        !object(browserCapability) || browserCapability.isLoading ||
+        browserCapability.isError || browserCapability.isCapable !== true) return originalValue;
+    return false;
+  }
+  function createBrowserDiscoveryAtom(originalAtom, { createDerivedAtom, scope, inputsAtom, browserCapabilityAtom } = {}) {
+    if (!originalAtom || typeof createDerivedAtom !== 'function' || !scope || !inputsAtom || !browserCapabilityAtom) {
+      throw new TypeError('Original discovery, capability and identity atoms are required');
+    }
+    const request = Object.freeze({ name: 'codex.browser' });
+    return createDerivedAtom(scope, ({ get }) => resolveBrowserDiscovery(get(originalAtom), {
+      inputs: get(inputsAtom), browserCapability: get(browserCapabilityAtom, request),
+    }));
+  }
+  function adaptBrowserDiscoveryAtom(originalAtom, requireOriginal) {
+    if (typeof requireOriginal !== 'function') throw new TypeError('Original module require is required');
+    return createBrowserDiscoveryAtom(originalAtom, {
+      createDerivedAtom: requireOriginal('BolX').c, scope: requireOriginal('OWtl').a,
+      inputsAtom: requireOriginal('Cslg').m, browserCapabilityAtom: requireOriginal('StMt').a,
+    });
+  }
+
+  /** ckTT.a is the original local-target availability seam, not an OS claim. */
+  function supportsBrowserOriginExecution() {
+    const current = state();
+    return typeof appServer.dispatch === 'function' && current.local && current.modelSelectionVerified && current.configuredTextProvider &&
+      current.toolExecution && current.filesystem;
+  }
+  function createBrowserExecutionCapability(originalCapability) {
+    if (typeof originalCapability !== 'function') throw new TypeError('The original local execution capability is required');
+    return function browserOriginExecutionCapability(...args) {
+      return supportsBrowserOriginExecution() || originalCapability.apply(this, args);
+    };
+  }
+  function getBrowserOriginHost(originalHost) {
+    if (!object(originalHost) || originalHost.id !== 'local' || originalHost.kind !== 'local' || !supportsBrowserOriginExecution()) return originalHost;
+    return Object.freeze({ ...originalHost, display_name: '浏览器工作区',
+      adapter_source: 'site-local-codex-provider', filesystem_scope: 'browser-origin-workspace',
+      os_shell_available: false, repository_worktree_available: false,
+    });
+  }
+
+  /**
+   * OVto.a is the original read-only native project catalog service. Its empty
+   * browser catalog has no active directory, so the original missing-workspace
+   * guard correctly rejects a local Codex task. Expose the actual origin-local
+   * /mnt/data mount through that same catalog; never manufacture a repository.
+   */
+  const workspaceCreatedAt = new Map();
+  async function getBrowserOriginWorkspaceProject() {
+    const current = state(), executor = appServer.toolExecutor;
+    if (!supportsBrowserOriginExecution() || typeof executor?.storage?.list !== 'function' ||
+        typeof executor.getWorkspacePrefix !== 'function') return null;
+    const { accountId, userId } = current.identity;
+    // Opening the real OPFS/IDB store must succeed before declaring a directory.
+    // The virtual /mnt/data mount is scoped again to each thread by the executor.
+    await executor.storage.list(executor.getWorkspacePrefix('codex-browser-workspace'));
+    const next = state();
+    if (!supportsBrowserOriginExecution() || next.identity?.accountId !== accountId || next.identity?.userId !== userId) {
+      throw new DOMException('The browser workspace identity changed', 'AbortError');
+    }
+    const id = 'site-browser-workspace:' + accountId;
+    if (!workspaceCreatedAt.has(id)) workspaceCreatedAt.set(id, Date.now());
+    const createdAt = workspaceCreatedAt.get(id);
+    return Object.freeze({ id, name: '浏览器工作区', rootPaths: ['/mnt/data'], createdAt, updatedAt: createdAt,
+      adapter_source: 'site-local-codex-provider', filesystem_scope: 'browser-origin-workspace' });
+  }
+  function createBrowserProjectCatalog(OriginalProjectCatalog) {
+    if (typeof OriginalProjectCatalog !== 'function') throw new TypeError('The original OVto project catalog class is required');
+    return class BrowserOriginProjectCatalog extends OriginalProjectCatalog {
+      async readLocalProjects(...args) {
+        const originalProjects = await super.readLocalProjects(...args);
+        if (object(originalProjects) && Object.keys(originalProjects).length) return originalProjects;
+        const project = await getBrowserOriginWorkspaceProject();
+        return project ? { [project.id]: project } : originalProjects;
+      }
+
+    };
+  }
+  /** Supply the selected local provider directory to the native route context.
+   * The browser coding Home intentionally suppresses its legacy global project
+   * selection. This adapter restores only the user's exact site-local mount;
+   * it never supplies a directory before selection or changes submit policy.
+   */
+  const projectContextDiagnostics = new Set();
+  function resolveBrowserWorkspaceSelection(originalSelection, { inputs, routeKind, selection, projects, selectionPending = false, projectsPending = false } = {}) {
+    const current = state();
+    const expectedId = current.identity?.accountId ? 'site-browser-workspace:' + current.identity.accountId : null, candidate = expectedId ? projects?.[expectedId] : null;
+    const diagnostic = { type: 'local-codex-project-context', original: originalSelection === null ? 'null' : typeof originalSelection,
+      routeKind: ['home','local-thread','client-local-thread','other'].includes(routeKind) ? routeKind : 'unknown',
+      executionReady: supportsBrowserOriginExecution(), identityMatches: !!current.identity && !!inputs && inputs.accountId === current.identity.accountId && inputs.authenticatedAccountId === current.identity.accountId && inputs.userId === current.identity.userId,
+      identityPending: !!(inputs?.authLoading || inputs?.accountLoading), selectionPending: !!selectionPending, projectsPending: !!projectsPending,
+      localSelection: selection?.type === 'local', exactSelection: !!expectedId && selection?.projectId === expectedId,
+      catalogCount: object(projects) ? Object.keys(projects).length : 0,
+      exactDirectory: !!candidate && candidate.id === expectedId && Array.isArray(candidate.rootPaths) && candidate.rootPaths.length === 1 && candidate.rootPaths[0] === '/mnt/data' };
+    const diagnosticKey = JSON.stringify(diagnostic);
+    if (projectContextDiagnostics.size < 40 && !projectContextDiagnostics.has(diagnosticKey)) { projectContextDiagnostics.add(diagnosticKey); diagnostics.push(diagnostic); }
+    if (originalSelection !== null) return originalSelection;
+    if (!supportsBrowserOriginExecution() || routeKind !== 'home' || selectionPending || projectsPending ||
+        !object(inputs) || inputs.authLoading || inputs.accountLoading ||
+        inputs.accountId !== current.identity.accountId || inputs.authenticatedAccountId !== current.identity.accountId ||
+        inputs.userId !== current.identity.userId || selection?.type !== 'local') return originalSelection;
+    const id = 'site-browser-workspace:' + current.identity.accountId, project = projects?.[id];
+    if (selection.projectId !== id || !object(project) || project.id !== id ||
+        !Array.isArray(project.rootPaths) || project.rootPaths.length !== 1 || project.rootPaths[0] !== '/mnt/data') return originalSelection;
+    return selection;
+  }
+  function adaptBrowserWorkspaceSelectionAtom(originalAtom, requireOriginal) {
+    if (!originalAtom || typeof requireOriginal !== 'function') throw new TypeError('The original route project atom and module require are required');
+    const { c: derive } = requireOriginal('BolX'), scope = requireOriginal('tSEg').a;
+    const { c: read, d: query } = requireOriginal('PFP1'), keys = requireOriginal('I07G').kc, inputsAtom = requireOriginal('Cslg').m;
+    return derive(scope, ({ get, scope: route }) => resolveBrowserWorkspaceSelection(get(originalAtom), {
+      routeKind: route.value.routeKind, inputs: get(inputsAtom),
+      selection: read(get, keys.SELECTED_PROJECT), projects: read(get, keys.LOCAL_PROJECTS),
+      selectionPending: get(query, keys.SELECTED_PROJECT).isPending, projectsPending: get(query, keys.LOCAL_PROJECTS).isPending,
+    }));
+  }
+  /** HSUP.a/b are the native host workspace resolvers, not submit policy.
+   * Feed the user's provider directory into their existing scoped-project input
+   * when the browser Home has no native project picker callback of its own.
+   */
+  function adaptBrowserWorkspaceResolverAtom(originalAtom, requireOriginal) {
+    if (!originalAtom || typeof requireOriginal !== 'function') throw new TypeError('The original HSUP workspace resolver is required');
+    const atoms = requireOriginal('BolX'), composerScope = requireOriginal('Sd8U').a;
+    const routeKindAtom = atoms.c(requireOriginal('tSEg').a, ({ scope }) => scope.value.routeKind);
+    const { c: read, d: query } = requireOriginal('PFP1'), keys = requireOriginal('I07G').kc, inputsAtom = requireOriginal('Cslg').m;
+    const requests = new WeakMap();
+    return atoms.d(composerScope, (request, { get, scope }) => {
+      const diagnostic = { type: 'local-codex-workspace-resolver', composerKind: ['new','local','chatgpt','cloud','other'].includes(scope.value.kind) ? scope.value.kind : 'unknown',
+        scoped: request?.useScopedProject === true, projectUndefined: request?.selectedProject === undefined, projectNull: request?.selectedProject === null,
+        cwdUndefined: request?.defaultCwd === undefined, cwdNull: request?.defaultCwd === null,
+        existingRootAbsent: request?.existingWorkspaceRoot == null, remoteProjectAbsent: request?.homeRemoteProject == null };
+      const diagnosticKey = JSON.stringify(diagnostic);
+      if (projectContextDiagnostics.size < 40 && !projectContextDiagnostics.has(diagnosticKey)) { projectContextDiagnostics.add(diagnosticKey); diagnostics.push(diagnostic); }
+      if (scope.value.kind !== 'new' || !object(request) || request.useScopedProject === true ||
+          request.defaultCwd != null || request.existingWorkspaceRoot != null || request.homeRemoteProject != null) return get(originalAtom, request);
+      const selection = resolveBrowserWorkspaceSelection(null, {
+        inputs: get(inputsAtom), routeKind: get(routeKindAtom),
+        selection: read(get, keys.SELECTED_PROJECT), projects: read(get, keys.LOCAL_PROJECTS),
+        selectionPending: get(query, keys.SELECTED_PROJECT).isPending, projectsPending: get(query, keys.LOCAL_PROJECTS).isPending,
+      });
+      if (!selection || request.selectedProject != null && (request.selectedProject.type !== 'local' || request.selectedProject.projectId !== selection.projectId)) return get(originalAtom, request);
+      let cached = requests.get(request);
+      if (!cached || cached.projectId !== selection.projectId) {
+        cached = { projectId: selection.projectId, value: { ...request, selectedProject: request.selectedProject ?? selection, useScopedProject: true } };
+        requests.set(request, cached);
+      }
+      return get(originalAtom, cached.value);
+    });
+  }
+  function createBrowserExecutionHosts(OriginalExecutionHosts) {
+    if (typeof OriginalExecutionHosts !== 'function') throw new TypeError('The original mYel execution-host service class is required');
+    return class BrowserOriginExecutionHosts extends OriginalExecutionHosts {
+      constructor(host, ...args) { super(getBrowserOriginHost(host), ...args); }
+    };
+  }
+
   function featureGateEntries({ includeHashAliases = true } = {}) {
     const current = state();
     if (!current.local) return {};
@@ -187,6 +360,16 @@ export function createLocalCodexAdapter({
     return statements.join('\n');
   }
 
+  /** Read only the original native navigation context for a new user task.
+   * The same transport also carries ephemeral text-generation work; those and
+   * explicit origins are never relabelled. Runtime requests keep their own IDs.
+   */
+  function getBrowserRequestContext(method, params, { sidebarProductMode } = {}) {
+    if (method !== 'thread/start' || !object(params) || params.ephemeral === true ||
+        params.conversationOrigin != null || sidebarProductMode !== 'codex' || params.cwd !== '/mnt/data' ||
+        !supportsBrowserOriginExecution()) return {};
+    return { productMode: 'codex', executionSource: 'local-app-server' };
+  }
   /**
    * Keep synchronous {result,afterReply} and the same server/history instance.
    * Only an explicitly scoped NEW Codex thread gets local origin metadata.
@@ -194,7 +377,8 @@ export function createLocalCodexAdapter({
    */
   function dispatch(method, params = {}, requestContext = {}) {
     let forwarded = params;
-    if (method === 'thread/start' && requestContext?.productMode === 'codex' && object(params)) {
+    if (method === 'thread/start' && requestContext?.productMode === 'codex' && object(params) &&
+        params.ephemeral !== true && params.conversationOrigin == null && params.cwd === '/mnt/data' && supportsBrowserOriginExecution()) {
       const metadata = object(params.responsesapiClientMetadata) ? params.responsesapiClientMetadata : {};
       forwarded = {
         ...params,
@@ -222,9 +406,13 @@ export function createLocalCodexAdapter({
   }
 
   return Object.freeze({
-    dispatch, subscribe: listener => appServer.subscribe(listener), createRpcFacade,
+    dispatch, subscribe: listener => appServer.subscribe(listener), createRpcFacade, getBrowserRequestContext,
     executionCapabilities, resolveBrowserCapability,
     createBrowserCapabilityAtom, adaptBrowserCapabilityAtom,
+    resolveBrowserDiscovery, createBrowserDiscoveryAtom, adaptBrowserDiscoveryAtom, discoverySource,
+    supportsBrowserOriginExecution, createBrowserExecutionCapability, getBrowserOriginHost,
+    getBrowserOriginWorkspaceProject, createBrowserProjectCatalog, createBrowserExecutionHosts,
+    resolveBrowserWorkspaceSelection, adaptBrowserWorkspaceSelectionAtom, adaptBrowserWorkspaceResolverAtom,
     featureGateEntries, mergeConfiguration, providerInstructions,
     modelIds: Object.freeze([...modelIds]), detailMode: CODEX_DETAIL_MODE,
   });
