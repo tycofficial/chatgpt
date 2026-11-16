@@ -4,12 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node scripts/serve.mjs",
-    "start": "node scripts/serve.mjs",
+    "dev": "node scripts/serve-native-client.mjs",
+    "start": "node scripts/serve-native-client.mjs",
     "check": "node --check app.js && node --check runtime.js && node --check python-worker.js && node --check storage.js && node --check conversation.js && node --check web.js",
     "test": "node --test tests/*.test.mjs",
     "vendor": "node scripts/vendor.mjs",
-    "release:prepare": "node scripts/prepare-release.mjs",
+    "release:prepare": "node scripts/build-native-client.mjs --activate",
+    "native:check": "node scripts/check-native-client.mjs",
     "reference:export": "node --use-env-proxy scripts/export-reference.mjs"
   },
   "dependencies": {

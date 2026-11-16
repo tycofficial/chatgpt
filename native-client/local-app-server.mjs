@@ -1,0 +1,392 @@
+/** Local, text-only implementation of the original app-server wire protocol. */
+export class RpcError extends Error {
+  constructor(code, message, data) { super(message); this.name = 'RpcError'; this.code = code; if (data !== undefined) this.data = data; }
+}
+const copy = value => structuredClone(value);
+const object = value => value && typeof value === 'object' && !Array.isArray(value);
+const idle = () => ({ type: 'idle' });
+const active = () => ({ type: 'active', activeFlags: [] });
+const errorShape = message => ({ message, codexErrorInfo: null, additionalDetails: null, misalignment: null });
+const defaultCollaboration = model => ({ mode: 'default', settings: { model, reasoning_effort: null, developer_instructions: null } });
+
+export class LocalAppServer {
+  constructor({ storage, streamCompletion, readSettings, models, catalog, diagnostics = [], now = Date.now, uuid = () => crypto.randomUUID() }) {
+    this.storage = storage;
+    this.streamCompletion = streamCompletion;
+    this.readSettings = readSettings;
+    this.models = models;
+    this.catalog = catalog;
+    this.diagnostics = diagnostics;
+    this.now = now;
+    this.uuid = uuid;
+    this.storageKey = 'cg-original-app-server:v1';
+    this.threads = new Map();
+    this.running = new Map();
+    this.listeners = new Set();
+    this.loadError = null;
+    this.restore();
+  }
+  subscribe(listener) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
+  notify(method, params) {
+    const event = { method, params: copy(params) };
+    for (const listener of this.listeners) {
+      try { listener(event); }
+      catch (error) { this.diagnostics.push({ type: 'local-protocol-listener-error', message: String(error?.message ?? error) }); }
+    }
+  }
+  restore() {
+    let changed = false;
+    try {
+      const serialized = this.storage?.getItem(this.storageKey);
+      if (!serialized) return;
+      const state = JSON.parse(serialized);
+      if (state.schemaVersion !== 1 || !Array.isArray(state.threads)) throw Error('Unsupported local conversation storage');
+      for (const thread of state.threads) {
+        if (!object(thread) || typeof thread.id !== 'string' || !Array.isArray(thread.turns)) throw Error('Invalid local conversation storage');
+        for (const turn of thread.turns) if (turn.status === 'inProgress') {
+          turn.status = 'interrupted';
+          turn.error = null;
+          turn.completedAt = Math.floor(this.now() / 1000);
+          turn.durationMs = Math.max(0, this.now() - (turn.adapterMetadata?.startedAtMs ?? this.now()));
+          turn.adapterMetadata = { ...turn.adapterMetadata, interruption: 'page-reload-no-cloud-continuation' };
+          changed = true;
+        }
+        thread.status = idle();
+        this.threads.set(thread.id, thread);
+      }
+      if (changed) this.persist();
+    } catch (error) {
+      this.loadError = new RpcError(-32000, `Local conversation storage could not be loaded: ${error.message}`);
+      this.diagnostics.push({ type: 'local-history-storage-error', message: this.loadError.message });
+    }
+  }
+  persist() {
+    if (this.loadError) throw this.loadError;
+    if (!this.storage) return;
+    try {
+      this.storage.setItem(this.storageKey, JSON.stringify({ schemaVersion: 1, threads: [...this.threads.values()].filter(thread => !thread.ephemeral) }));
+    } catch (error) { throw new RpcError(-32000, `Local conversation history could not be saved: ${error.message}`); }
+  }
+  getThread(id) {
+    if (typeof id !== 'string' || !this.threads.has(id)) throw new RpcError(-32001, 'thread_not_found');
+    return this.threads.get(id);
+  }
+  selection(params, previous = {}) {
+    const model = params.model ?? params.collaborationMode?.settings?.model ?? previous.model ?? this.readSettings().model;
+    const catalog = this.models.getRpcModelList().data.find(entry => entry.model === model);
+    if (!catalog) throw new RpcError(-32602, `The local adapter does not offer model ${String(model)}`);
+    const supplied = params.effort ?? params.reasoningEffort ?? params.config?.model_reasoning_effort ?? params.collaborationMode?.settings?.reasoning_effort;
+    const effort = supplied ?? previous.reasoningEffort ?? catalog.defaultReasoningEffort;
+    if (!catalog.supportedReasoningEfforts.some(choice => choice.reasoningEffort === effort)) throw new RpcError(-32602, `The local adapter does not support effort ${String(effort)} for ${model}`);
+    if (params.serviceTier != null && !['standard', 'default', 'fast', 'priority'].includes(params.serviceTier)) throw new RpcError(-32602, `The local text adapter does not implement service tier ${String(params.serviceTier)}`);
+    const tier = params.serviceTier ?? previous.serviceTier ?? null;
+    const explicitMode = params.selectionMode ?? params.modelSelection?.selectionMode ?? params.responsesapiClientMetadata?.selectionMode;
+    return {
+      model, reasoningEffort: effort, serviceTier: ['fast', 'priority'].includes(tier) ? 'fast' : null,
+      selectionMode: ['auto', 'pinned', 'manual', 'default'].includes(explicitMode) ? explicitMode : previous.adapterMetadata?.selectionMode ?? 'unspecified',
+      curatedPresetMatch: this.catalog.WORK_PRESETS.some(choice => choice.model === model && choice.effort === effort),
+    };
+  }
+  textInput(params) {
+    if (!Array.isArray(params.input) || !params.input.length) throw new RpcError(-32602, 'A nonempty text input array is required');
+    for (const item of params.input) if (!object(item) || item.type !== 'text' || typeof item.text !== 'string') throw new RpcError(-32601, 'This local adapter currently supports text input only; files, images and tool input are not implemented');
+    if (!params.input.some(item => item.text.trim())) throw new RpcError(-32602, 'Text input must not be empty');
+    return copy(params.input);
+  }
+  snapshot(thread, includeTurns = true) { const result = copy(thread); if (!includeTurns) result.turns = []; return result; }
+  startResponse(thread) {
+    return {
+      thread: this.snapshot(thread), model: thread.model, modelProvider: thread.modelProvider,
+      serviceTier: thread.serviceTier ?? null, cwd: thread.cwd, approvalPolicy: thread.approvalPolicy, approvalsReviewer: 'user',
+      sandbox: { type: 'readOnly', networkAccess: false },
+      reasoningEffort: thread.reasoningEffort,
+      collaborationMode: copy(thread.collaborationMode),
+    };
+  }
+  pagination(rows, params, prefix) {
+    let start = 0;
+    if (params.cursor != null) {
+      const match = new RegExp(`^${prefix}:(\\d+)$`).exec(params.cursor);
+      if (!match || Number(match[1]) > rows.length) throw new RpcError(-32602, 'Invalid local history cursor');
+      start = Number(match[1]);
+    }
+    if (params.limit != null && (!Number.isSafeInteger(params.limit) || params.limit < 1)) throw new RpcError(-32602, 'History limit must be a positive integer');
+    const end = Math.min(rows.length, start + Math.min(params.limit ?? 100, 200));
+    return { data: copy(rows.slice(start, end)), nextCursor: end < rows.length ? `${prefix}:${end}` : null };
+  }
+  dispatch(method, params = {}) {
+    if (params == null) params = {};
+    if (!object(params)) throw new RpcError(-32602, 'RPC params must be an object');
+    if (this.loadError && method !== 'initialize' && method !== 'model/list') throw this.loadError;
+    switch (method) {
+      case 'initialize': return { result: { userAgent: 'local-original-client-text-adapter', adapterCapabilities: { textGeneration: true, toolExecution: false, filesystem: false, cloudEnvironment: false } } };
+      case 'initialized': return { result: {} };
+      case 'model/list': return { result: this.models.getRpcModelList(params) };
+      case 'thread/list': {
+        let rows = [...this.threads.values()].filter(thread => !thread.ephemeral && !!thread.archived === !!params.archived);
+        if (Array.isArray(params.modelProviders) && params.modelProviders.length) rows = rows.filter(thread => params.modelProviders.includes(thread.modelProvider));
+        if (Array.isArray(params.originators) && params.originators.length) rows = rows.filter(thread => params.originators.includes(thread.originator));
+        if (Array.isArray(params.sourceKinds) && params.sourceKinds.length) rows = rows.filter(thread => params.sourceKinds.includes(thread.source));
+        if (params.parentThreadId != null) rows = rows.filter(thread => thread.parentThreadId === params.parentThreadId);
+        if (params.ancestorThreadId != null) rows = rows.filter(thread => {
+          const seen = new Set(); let parent = thread.parentThreadId;
+          while (parent && !seen.has(parent)) { if (parent === params.ancestorThreadId) return true; seen.add(parent); parent = this.threads.get(parent)?.parentThreadId; }
+          return false;
+        });
+        const query = String(params.searchTerm ?? params.query ?? '').toLowerCase();
+        if (query) rows = rows.filter(thread => `${thread.name ?? ''}\n${thread.preview ?? ''}`.toLowerCase().includes(query));
+        const sortField = params.sortKey === 'created_at' ? 'createdAt' : params.sortKey === 'updated_at' ? 'updatedAt' : 'recencyAt';
+        rows.sort((a, b) => ((a[sortField] ?? a.updatedAt) - (b[sortField] ?? b.updatedAt)) * (params.sortDirection === 'asc' ? 1 : -1));
+        return { result: this.pagination(rows.map(thread => this.snapshot(thread, false)), params, 'local-threads') };
+      }
+      case 'thread/loaded/list': return { result: { data: [...this.threads.keys()], nextCursor: null } };
+      case 'thread/start': {
+        if (params.dynamicTools?.length) throw new RpcError(-32601, 'Dynamic tool registration is not implemented by the local text adapter');
+        const selected = this.selection(params), timestamp = Math.floor(this.now() / 1000), id = this.uuid();
+        const thread = {
+          id, sessionId: id, name: null, preview: '', ephemeral: params.ephemeral === true,
+          model: selected.model, reasoningEffort: selected.reasoningEffort, serviceTier: selected.serviceTier, modelProvider: 'local-openai-compatible',
+          createdAt: timestamp, updatedAt: timestamp, recencyAt: timestamp, status: idle(), archived: false,
+          path: null, cwd: typeof params.cwd === 'string' ? params.cwd : '/', cliVersion: '0.0.0',
+          source: 'appServer', originator: 'local-original-client-adapter', threadSource: params.threadSource ?? 'user',
+          mode: params.mode ?? 'default', threadStartKind: params.threadStartKind ?? 'default', historyMode: null,
+          parentThreadId: params.parentThreadId ?? null, forkedFromId: null, gitInfo: null, environments: [], turns: [],
+          approvalPolicy: params.approvalPolicy ?? 'never',
+          collaborationMode: copy(params.collaborationMode ?? defaultCollaboration(selected.model)),
+          adapterMetadata: { source: 'local-original-client-adapter', conversationOrigin: params.conversationOrigin ?? 'tpp', selectionMode: selected.selectionMode, curatedPresetMatch: selected.curatedPresetMatch, instructions: this.instructions(params), clientMetadata: copy(params.responsesapiClientMetadata ?? null) },
+        };
+        thread.collaborationMode.settings = { ...thread.collaborationMode.settings, model: selected.model, reasoning_effort: selected.reasoningEffort };
+        this.threads.set(id, thread);
+        try { this.persist(); } catch (error) { this.threads.delete(id); throw error; }
+        return { result: this.startResponse(thread), afterReply: () => this.notify('thread/started', { thread: this.snapshot(thread, false) }) };
+      }
+      case 'thread/read': return { result: { thread: this.snapshot(this.getThread(params.threadId), params.includeTurns === true) } };
+      case 'thread/resume': {
+        const thread = this.getThread(params.threadId), selected = this.selection(params, thread);
+        this.updateSelection(thread, selected, params);
+        this.persist();
+        return { result: this.startResponse(thread) };
+      }
+      case 'thread/turns/list': {
+        const thread = this.getThread(params.threadId), turns = [...thread.turns];
+        if (params.sortDirection !== 'asc') turns.reverse();
+        return { result: this.pagination(turns, params, 'local-turns') };
+      }
+      case 'thread/settings/update': {
+        const thread = this.getThread(params.threadId), selected = this.selection(params, thread);
+        this.updateSelection(thread, selected, params);
+        this.persist();
+        const threadSettings = this.settingsSnapshot(thread);
+        return { result: {}, afterReply: () => this.notify('thread/settings/updated', { threadId: thread.id, threadSettings }) };
+      }
+      case 'turn/start':
+      case 'turn/addUserMessage': return this.startTurn(params, method === 'turn/addUserMessage');
+      case 'turn/interrupt': {
+        const thread = this.getThread(params.threadId), running = this.running.get(thread.id);
+        if (running && params.turnId != null && running.turn.id !== params.turnId) throw new RpcError(-32602, 'The requested turn is not the active turn');
+        if (!running && params.turnId != null && !thread.turns.some(turn => turn.id === params.turnId)) throw new RpcError(-32001, 'turn_not_found');
+        return { result: {}, afterReply: () => { if (running) this.interrupt(thread.id); } };
+      }
+      case 'thread/stop': {
+        this.getThread(params.threadId);
+        return { result: {}, afterReply: () => this.interrupt(params.threadId) };
+      }
+      case 'thread/unsubscribe': this.getThread(params.threadId); return { result: {} };
+      default: throw new RpcError(-32601, `Local adapter is not implemented for ${method}`);
+    }
+  }
+  instructions(params) {
+    return [...new Set([params.baseInstructions, params.developerInstructions, params.config?.developer_instructions, params.collaborationMode?.settings?.developer_instructions].filter(value => typeof value === 'string' && value.trim()))];
+  }
+  updateSelection(thread, selected, params) {
+    thread.model = selected.model;
+    thread.reasoningEffort = selected.reasoningEffort;
+    thread.serviceTier = selected.serviceTier;
+    if (params.cwd != null) thread.cwd = params.cwd;
+    if (params.collaborationMode) thread.collaborationMode = copy(params.collaborationMode);
+    thread.collaborationMode.settings = { ...thread.collaborationMode.settings, model: selected.model, reasoning_effort: selected.reasoningEffort };
+    thread.adapterMetadata = { ...thread.adapterMetadata, selectionMode: selected.selectionMode, curatedPresetMatch: selected.curatedPresetMatch };
+  }
+  settingsSnapshot(thread) {
+    return { model: thread.model, modelProvider: thread.modelProvider, effort: thread.reasoningEffort, serviceTier: thread.serviceTier ?? null, cwd: thread.cwd, approvalPolicy: thread.approvalPolicy, approvalsReviewer: 'user', sandboxPolicy: { type: 'readOnly', networkAccess: false }, personality: null, collaborationMode: copy(thread.collaborationMode), disabledPluginIds: [] };
+  }
+  startTurn(params, admission) {
+    const thread = this.getThread(params.threadId), input = this.textInput(params), selected = this.selection(params, thread);
+    if (params.outputSchema != null) throw new RpcError(-32601, 'Structured-output schema execution is not implemented by this local text adapter');
+    const fingerprint = JSON.stringify([input, selected.model, selected.reasoningEffort, selected.serviceTier]);
+    const duplicate = params.clientUserMessageId && thread.turns.find(turn => turn.clientUserMessageId === params.clientUserMessageId);
+    if (duplicate) {
+      if (duplicate.adapterMetadata.fingerprint !== fingerprint) throw new RpcError(-32602, 'A client user-message ID cannot be reused with different input or model settings');
+      return { result: { turn: copy(duplicate), ...(admission ? { clientUserMessageId: params.clientUserMessageId, admissionOutcome: 'duplicate', serverUserMessageId: duplicate.items[0].id } : {}) } };
+    }
+    if (this.running.has(thread.id)) throw new RpcError(-32000, 'A turn is already running in this local thread; queueing and steering are not implemented');
+    const startedAtMs = this.now(), id = this.uuid(), userItem = { type: 'userMessage', id: this.uuid(), content: input, ...(params.clientUserMessageId ? { clientId: params.clientUserMessageId } : {}) };
+    const turn = {
+      id, status: 'inProgress', items: [userItem], error: null,
+      startedAt: Math.floor(startedAtMs / 1000), completedAt: null, durationMs: null,
+      model: selected.model, reasoningEffort: selected.reasoningEffort, serviceTier: selected.serviceTier,
+      clientUserMessageId: params.clientUserMessageId ?? null,
+      adapterMetadata: { startedAtMs, fingerprint, selectionMode: selected.selectionMode, curatedPresetMatch: selected.curatedPresetMatch, clientMetadata: copy(params.responsesapiClientMetadata ?? null), instructions: this.instructions(params) },
+    };
+    const previous = copy(thread);
+    this.updateSelection(thread, selected, params);
+    thread.turns.push(turn);
+    thread.status = active();
+    thread.updatedAt = thread.recencyAt = turn.startedAt;
+    const prompt = input.map(item => item.text).join('\n');
+    if (!thread.preview) thread.preview = prompt.slice(0, 240);
+    const named = !thread.name;
+    if (named) thread.name = prompt.trim().split('\n')[0].slice(0, 80);
+    try { this.persist(); } catch (error) { this.threads.set(thread.id, previous); throw error; }
+    const running = { thread, turn, controller: new AbortController(), terminal: false, assistant: null, reasoning: null, lastSavedAt: startedAtMs };
+    this.running.set(thread.id, running);
+    return {
+      result: { turn: copy(turn), ...(admission ? { clientUserMessageId: params.clientUserMessageId ?? null, admissionOutcome: 'started', serverUserMessageId: userItem.id } : {}) },
+      afterReply: () => {
+        if (running.terminal) return;
+        this.notify('thread/status/changed', { threadId: thread.id, status: thread.status });
+        if (named) this.notify('thread/name/updated', { threadId: thread.id, threadName: thread.name });
+        this.notify('turn/started', { threadId: thread.id, turn: copy(turn) });
+        this.notify('item/started', { threadId: thread.id, turnId: id, item: userItem });
+        this.notify('item/completed', { threadId: thread.id, turnId: id, item: userItem });
+        this.runTurn(running).catch(error => this.diagnostics.push({ type: 'local-turn-finalization-error', message: String(error?.message ?? error) }));
+      },
+    };
+  }
+  messages(thread, turn) {
+    const instructions = [...new Set([this.readSettings().customInstructions, ...thread.adapterMetadata.instructions, ...turn.adapterMetadata.instructions].filter(value => typeof value === 'string' && value.trim()))];
+    const messages = instructions.length ? [{ role: 'system', content: instructions.join('\n\n') }] : [];
+    for (const entry of thread.turns) {
+      for (const item of entry.items) {
+        if (item.type === 'userMessage') messages.push({ role: 'user', content: item.content.map(part => part.text).join('\n') });
+        if (item.type === 'agentMessage' && item.text) messages.push({ role: 'assistant', content: item.text, ...(entry.adapterMetadata.gatewayResponseItems ? { response_items: copy(entry.adapterMetadata.gatewayResponseItems) } : {}) });
+      }
+      if (entry.id === turn.id) break;
+    }
+    return messages;
+  }
+  append(running, text, reasoning) {
+    if (running.terminal) return;
+    const { thread, turn } = running;
+    if (reasoning) {
+      if (!running.reasoning) {
+        running.reasoning = { type: 'reasoning', id: this.uuid(), summary: [''], content: [] };
+        turn.items.push(running.reasoning);
+        this.notify('item/started', { threadId: thread.id, turnId: turn.id, item: running.reasoning });
+      }
+      const old = running.reasoning.summary[0];
+      if (!reasoning.startsWith(old)) throw Error('Gateway replaced an already streamed reasoning summary');
+      const delta = reasoning.slice(old.length);
+      if (delta) {
+        running.reasoning.summary[0] = reasoning;
+        this.notify('item/reasoning/summaryTextDelta', { threadId: thread.id, turnId: turn.id, itemId: running.reasoning.id, summaryIndex: 0, delta });
+      }
+    }
+    if (text) {
+      if (!running.assistant) {
+        if (running.reasoning && !running.reasoningComplete) { this.notify('item/completed', { threadId: thread.id, turnId: turn.id, item: running.reasoning }); running.reasoningComplete = true; }
+        running.assistant = { type: 'agentMessage', id: this.uuid(), text: '', phase: 'final_answer' };
+        turn.items.push(running.assistant);
+        this.notify('item/started', { threadId: thread.id, turnId: turn.id, item: running.assistant });
+      }
+      const old = running.assistant.text;
+      if (!text.startsWith(old)) throw Error('Gateway replaced already streamed assistant text');
+      const delta = text.slice(old.length);
+      if (delta) {
+        running.assistant.text = text;
+        this.notify('item/agentMessage/delta', { threadId: thread.id, turnId: turn.id, itemId: running.assistant.id, delta });
+      }
+    }
+    if (this.now() - running.lastSavedAt >= 250) { this.persist(); running.lastSavedAt = this.now(); }
+  }
+  async runTurn(running) {
+    const { thread, turn, controller } = running;
+    try {
+      const settings = { ...this.readSettings(), model: turn.model, reasoningEffort: turn.reasoningEffort, autoPython: false, ...(turn.serviceTier === 'fast' ? { apiTransport: 'responses', serviceTier: 'priority' } : {}) };
+      const result = await this.streamCompletion({ settings, messages: this.messages(thread, turn), tools: [], signal: controller.signal, onDelta: (_delta, assembled) => this.append(running, assembled.content ?? '', assembled.reasoning ?? '') });
+      if (running.terminal) return;
+      this.append(running, result.content ?? '', result.reasoning ?? '');
+      if (result.tool_calls?.length) throw Error('The gateway requested a tool, but tool execution is not implemented by this local adapter');
+      if (!result.content) throw Error('The gateway returned no assistant text');
+      if (result.finish_reason === 'length') throw Error('The gateway stopped before completing the assistant response (length limit)');
+      if (result.finish_reason !== 'stop') throw Error(`The gateway did not confirm a completed text response (${result.finish_reason ?? 'missing completion signal'})`);
+      if (result.usage) turn.adapterMetadata.gatewayUsage = copy(result.usage);
+      if (result.actual_reasoning) turn.adapterMetadata.actualReasoning = copy(result.actual_reasoning);
+      if (result.response_items) turn.adapterMetadata.gatewayResponseItems = copy(result.response_items);
+      this.finish(running, 'completed', null);
+    } catch (error) {
+      if (running.terminal) return;
+      if (controller.signal.aborted || error?.name === 'AbortError') this.finish(running, 'interrupted', null);
+      else {
+        const key = this.readSettings().apiKey;
+        const message = String(error?.message ?? error).replaceAll(key || '\u0000NO_KEY\u0000', '[redacted]');
+        this.finish(running, 'failed', errorShape(message));
+      }
+    }
+  }
+  finish(running, status, error) {
+    if (running.terminal) return;
+    const { thread, turn } = running;
+    turn.status = status;
+    turn.error = error;
+    turn.completedAt = Math.floor(this.now() / 1000);
+    turn.durationMs = Math.max(0, this.now() - turn.adapterMetadata.startedAtMs);
+    thread.updatedAt = thread.recencyAt = turn.completedAt;
+    thread.status = idle();
+    try { this.persist(); }
+    catch (storageError) { turn.status = 'failed'; turn.error = errorShape(storageError.message); }
+    running.terminal = true;
+    this.running.delete(thread.id);
+    if (running.reasoning && !running.reasoningComplete) this.notify('item/completed', { threadId: thread.id, turnId: turn.id, item: running.reasoning });
+    if (running.assistant) this.notify('item/completed', { threadId: thread.id, turnId: turn.id, item: running.assistant });
+    if (turn.error) this.notify('error', { threadId: thread.id, turnId: turn.id, error: turn.error, willRetry: false });
+    this.notify('turn/completed', { threadId: thread.id, turn: copy(turn) });
+    this.notify('thread/status/changed', { threadId: thread.id, status: thread.status });
+  }
+  interrupt(threadId) {
+    const running = this.running.get(threadId);
+    if (!running) return;
+    running.controller.abort(new DOMException('Turn interrupted locally', 'AbortError'));
+    this.finish(running, 'interrupted', null);
+  }
+  interruptAll() { for (const threadId of this.running.keys()) this.interrupt(threadId); }
+}
+
+/** EAKz's existing protocol consumer remains unchanged. */
+export class LocalProtocolSocket extends EventTarget {
+  readyState = 0;
+  authenticatedPrincipal = { accountId: 'local-prototype', userId: 'local-prototype' };
+  onopen = null; onmessage = null; onclose = null; onerror = null;
+  constructor(server, diagnostics = []) {
+    super(); this.server = server; this.diagnostics = diagnostics;
+    this.unsubscribe = server.subscribe(event => { if (this.readyState === 1) this.deliver('message', new MessageEvent('message', { data: JSON.stringify(event) })); });
+    setTimeout(() => { if (this.readyState !== 0) return; this.readyState = 1; this.deliver('open', new Event('open')); }, 0);
+  }
+  deliver(type, event) {
+    this.dispatchEvent(event);
+    try { this[`on${type}`]?.(event); }
+    catch (error) { this.diagnostics.push({ type: 'local-protocol-client-error', message: String(error?.message ?? error) }); }
+  }
+  send(serialized) {
+    if (this.readyState !== 1) throw new DOMException('Local socket is not open', 'InvalidStateError');
+    let message;
+    try { message = JSON.parse(serialized); }
+    catch { this.reply({ id: null, error: { code: -32700, message: 'Invalid JSON-RPC message' } }); return; }
+    if (!object(message) || typeof message.method !== 'string') return;
+    const params = object(message.params) ? message.params : {}, safeModel = typeof params.model === 'string' && /^[a-zA-Z0-9._:-]{1,80}$/.test(params.model) ? params.model : undefined;
+    const effort = params.effort ?? params.reasoningEffort ?? params.reasoning_effort;
+    this.diagnostics.push({ type: 'rpc', method: message.method, paramKeys: Object.keys(params), ...(safeModel ? { model: safeModel } : {}), ...(['none', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'].includes(effort) ? { effort } : {}) });
+    queueMicrotask(() => {
+      if (this.readyState !== 1) return;
+      try {
+        const transaction = this.server.dispatch(message.method, message.params);
+        if (message.id != null) this.reply({ id: message.id, result: transaction.result });
+        if (transaction.afterReply) setTimeout(transaction.afterReply, 0);
+      } catch (error) {
+        if (message.id != null) this.reply({ id: message.id, error: { code: error.code ?? error.rpcCode ?? -32603, message: error.message, ...(error.data === undefined ? {} : { data: error.data }) } });
+      }
+    });
+  }
+  reply(message) { if (this.readyState === 1) this.deliver('message', new MessageEvent('message', { data: JSON.stringify(message) })); }
+  close() { if (this.readyState === 3) return; this.readyState = 3; this.unsubscribe(); this.deliver('close', new Event('close')); }
+}

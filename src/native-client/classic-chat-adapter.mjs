@@ -1,0 +1,176 @@
+/** Original classic Chat REST/SSE shapes over the same real local thread engine. */
+import { FRONTEND_TO_RAW_EFFORT } from './model-catalog-adapter.mjs';
+export class ClassicChatAdapter {
+  constructor({ appServer, models, now = Date.now, uuid = () => crypto.randomUUID(), onConversationChange = () => {} }) { this.server = appServer; this.models = models; this.now = now; this.uuid = uuid; this.onConversationChange = onConversationChange; }
+  json(body, status = 200) { return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }); }
+  summary(thread) {
+    return { id: thread.id, title: thread.name || 'New chat', create_time: new Date(thread.createdAt * 1000).toISOString(), update_time: new Date(thread.updatedAt * 1000).toISOString(), conversation_origin: thread.adapterMetadata.conversationOrigin ?? null, gizmo_id: null, is_archived: !!thread.archived, is_starred: !!thread.adapterMetadata.isStarred };
+  }
+  message(thread, turn, item, role) {
+    const text = role === 'user' ? item.content.map(part => part.text).join('\n') : item.text;
+    const frontendSlug = thread.adapterMetadata?.classicModelSlugs?.[turn.id] ?? thread.adapterMetadata?.frontendModelSlug ?? turn.model;
+    const done = turn.status === 'completed', terminal = ['completed', 'failed', 'interrupted'].includes(turn.status);
+    return {
+      id: role === 'user' ? item.clientId ?? item.id : item.id,
+      author: { role, name: null, metadata: {} },
+      create_time: turn.startedAt, update_time: turn.completedAt ?? this.now() / 1000,
+      content: { content_type: 'text', parts: [text] },
+      status: role === 'user' || done ? 'finished_successfully' : terminal ? 'finished_partial_completion' : 'in_progress',
+      end_turn: role === 'assistant' && terminal,
+      weight: 1, recipient: 'all', channel: role === 'assistant' ? 'final' : null,
+      metadata: { model_slug: frontendSlug, thinking_effort: FRONTEND_TO_RAW_EFFORT[turn.reasoningEffort], adapter_api_model: turn.model, is_complete: role === 'user' || terminal, ...(done && role === 'assistant' ? { finish_details: { type: 'stop', stop_tokens: [] } } : {}), adapter_source: 'local-original-client-adapter' },
+    };
+  }
+  detail(thread) {
+    const root = thread.adapterMetadata.classicRootId ?? `local-root-${thread.id}`, mapping = { [root]: { id: root, message: null, parent: null, children: [] } };
+    let parent = root;
+    for (const turn of thread.turns) for (const item of turn.items) {
+      if (!['userMessage', 'agentMessage'].includes(item.type)) continue;
+      const message = this.message(thread, turn, item, item.type === 'userMessage' ? 'user' : 'assistant');
+      mapping[message.id] = { id: message.id, message, parent, children: [] };
+      mapping[parent].children.push(message.id);
+      parent = message.id;
+    }
+    return {
+      title: thread.name || 'New chat', create_time: thread.createdAt, update_time: thread.updatedAt,
+      mapping, moderation_results: [], current_node: parent, conversation_id: thread.id,
+      is_archived: !!thread.archived, is_starred: !!thread.adapterMetadata.isStarred,
+      default_model_slug: thread.adapterMetadata.frontendModelSlug ?? thread.model, gizmo_id: null, plugin_ids: null, safe_urls: [], blocked_urls: [],
+      conversation_template_id: null, async_status: null,
+      adapter_source: 'local-original-client-adapter',
+    };
+  }
+  list(url) {
+    let threads = [...this.server.threads.values()].filter(thread => !thread.ephemeral && !!thread.archived === (url.searchParams.get('is_archived') === 'true'));
+    const origin = url.searchParams.get('conversation_origin'), excluded = url.searchParams.get('exclude_conversation_origin');
+    if (origin) threads = threads.filter(thread => thread.adapterMetadata.conversationOrigin === origin);
+    if (excluded) threads = threads.filter(thread => thread.adapterMetadata.conversationOrigin !== excluded);
+    if (url.searchParams.get('is_starred') === 'true') threads = threads.filter(thread => thread.adapterMetadata.isStarred);
+    threads.sort((a, b) => b.updatedAt - a.updatedAt);
+    const offset = Math.max(0, Number(url.searchParams.get('offset') || 0) || 0), limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit') || 20) || 20));
+    return this.json({ items: threads.slice(offset, offset + limit).map(thread => this.summary(thread)), total: threads.length, offset, limit, has_missing_conversations: false });
+  }
+  pinned(url) {
+    const requested = url.searchParams.get('item_type');
+    if (requested && requested !== 'conversation') return this.json([]);
+    return this.json([...this.server.threads.values()].filter(thread => thread.adapterMetadata.pinnedAt).map(thread => ({ item_type: 'conversation', pinned_at: thread.adapterMetadata.pinnedAt, item: { conversation: this.summary(thread) } })));
+  }
+  async handle(request, pathname) {
+    const url = new URL(request.url), method = request.method;
+    if (method === 'GET' && pathname === '/conversations') return this.list(url);
+    if (method === 'GET' && pathname === '/pins') return this.pinned(url);
+    if (method === 'GET' && pathname === '/gizmos/snorlax/sidebar') return this.json({ cursor: null, items: [] });
+    if (method === 'GET' && pathname === '/gizmos/bootstrap') return this.json({ gizmos: [], cursor: null });
+    if (method === 'POST' && pathname === '/conversation/init') return this.json({});
+    if (method === 'POST' && pathname === '/f/conversation/prepare') return this.json({ adapter_source: 'local-preflight-no-external-conduit' });
+    if (method === 'POST' && ['/sentinel/chat-requirements', '/sentinel/chat-requirements/prepare', '/sentinel/chat-requirements/finalize'].includes(pathname)) {
+      return this.json({ token: 'local-prototype-requirements-not-valid-at-openai', force_login: false, proofofwork: { required: false }, turnstile: { required: false }, adapter_source: 'local-protocol-only-no-original-service-access' });
+    }
+    if (method === 'GET' && /^\/conversation\/[^/]+$/.test(pathname)) return this.json(this.detail(this.server.getThread(decodeURIComponent(pathname.split('/')[2]))));
+    if (method === 'GET' && /^\/conversation\/[^/]+\/stream_status$/.test(pathname)) {
+      const thread = this.server.getThread(decodeURIComponent(pathname.split('/')[2]));
+      return this.json({ conversation_id: thread.id, is_streaming: this.server.running.has(thread.id) });
+    }
+    if (method === 'PATCH' && /^\/conversation\/[^/]+$/.test(pathname)) {
+      const thread = this.server.getThread(decodeURIComponent(pathname.split('/')[2])), body = await request.json();
+      if (typeof body.title === 'string') thread.name = body.title.trim().slice(0, 200) || thread.name;
+      if (typeof body.is_archived === 'boolean') thread.archived = body.is_archived;
+      if (typeof body.is_starred === 'boolean') thread.adapterMetadata.isStarred = body.is_starred;
+      if (Object.hasOwn(body, 'is_visible') && body.is_visible === false) {
+        this.server.interrupt(thread.id); this.server.threads.delete(thread.id);
+      }
+      this.server.persist();
+      this.onConversationChange('conversation-history-update', { conversation_id: thread.id, update_type: body.is_visible === false ? 'conversation-deleted' : body.is_archived === true ? 'conversation-archived' : 'local-conversation-updated' });
+      return this.json({ success: true });
+    }
+    if (['POST', 'DELETE'].includes(method) && /^\/pins\/conversation\/[^/]+$/.test(pathname)) {
+      const thread = this.server.getThread(decodeURIComponent(pathname.split('/')[3]));
+      thread.adapterMetadata.pinnedAt = method === 'POST' ? new Date(this.now()).toISOString() : null;
+      this.server.persist();
+      this.onConversationChange('conversation-history-update', { conversation_id: thread.id, update_type: method === 'POST' ? 'conversation-pinned' : 'conversation-unpinned' });
+      return this.json({});
+    }
+    if (method === 'POST' && pathname === '/stop_conversation') {
+      const body = await request.json(); this.server.getThread(body.conversation_id); this.server.interrupt(body.conversation_id);
+      return this.json({});
+    }
+    if (method === 'POST' && ['/f/conversation', '/conversation'].includes(pathname)) return this.stream(request, await request.json());
+    return null;
+  }
+  stream(request, body) {
+    if (!['next', undefined].includes(body.action)) return this.json({ error: { message: `Classic Chat action ${body.action} is not implemented`, code: 'LOCAL_ADAPTER_UNIMPLEMENTED' } }, 501);
+    const messages = body.messages;
+    if (!Array.isArray(messages) || messages.length !== 1 || typeof messages[0]?.id !== 'string' || !messages[0].id || messages[0]?.author?.role !== 'user' || messages[0]?.content?.content_type !== 'text' || !Array.isArray(messages[0].content.parts) || messages[0].content.parts.some(part => typeof part !== 'string')) return this.json({ error: { message: 'This adapter accepts one text user message; multimodal and tool inputs are not implemented', code: 'LOCAL_TEXT_ONLY' } }, 400);
+    const incoming = messages[0], defaultModel = this.models.getRpcModelList().data.find(model => model.isDefault)?.model;
+    const model = body.model === 'auto' ? defaultModel : body.model;
+    const rawEffort = body.thinking_effort ?? body.reasoning_effort;
+    const rawMap = { zero: 'none', min: 'low', standard: 'medium', extended: 'high', xhigh: 'xhigh', max: 'max', ultra: 'ultra' };
+    const effort = rawEffort == null ? undefined : rawMap[rawEffort] ?? rawEffort;
+    let thread;
+    if (body.conversation_id) thread = this.server.getThread(body.conversation_id);
+    else {
+      const transaction = this.server.dispatch('thread/start', { model, effort, serviceTier: body.service_tier ?? body.serviceTier, ephemeral: body.history_and_training_disabled === true, selectionMode: body.selectionMode });
+      thread = this.server.getThread(transaction.result.thread.id);
+      thread.adapterMetadata.classicRootId = body.parent_message_id ?? this.uuid();
+      thread.adapterMetadata.conversationOrigin = body.conversation_origin ?? null;
+      this.server.persist();
+      transaction.afterReply?.();
+    }
+    const transaction = this.server.dispatch('turn/start', {
+      threadId: thread.id, input: incoming.content.parts.map(text => ({ type: 'text', text, text_elements: [] })),
+      clientUserMessageId: incoming.id, model, effort, serviceTier: body.service_tier ?? body.serviceTier,
+      selectionMode: body.selectionMode,
+      responsesapiClientMetadata: { ...body.responsesapi_client_metadata, requestedModel: body.model, adapterOrigin: 'classic-chat-rest' },
+    });
+    const turnId = transaction.result.turn.id;
+    const frontendSlug = body.model ?? thread.adapterMetadata.frontendModelSlug ?? transaction.result.turn.model;
+    thread.adapterMetadata.classicModelSlugs ??= {};
+    if (!Object.hasOwn(thread.adapterMetadata.classicModelSlugs, turnId)) {
+      thread.adapterMetadata.classicModelSlugs[turnId] = frontendSlug;
+      thread.adapterMetadata.frontendModelSlug = frontendSlug;
+      this.server.persist();
+    }
+    let remove = () => {}, removeAbort = () => {}, closed = false;
+    const interruptOwn = () => { if (this.server.running.get(thread.id)?.turn.id === turnId) this.server.interrupt(thread.id); };
+    const stream = new ReadableStream({
+      start: controller => {
+        const emit = payload => { if (!closed) controller.enqueue(new TextEncoder().encode(`data: ${typeof payload === 'string' ? payload : JSON.stringify(payload)}\n\n`)); };
+        const close = () => { if (closed) return; closed = true; remove(); removeAbort(); controller.close(); };
+        const abort = () => { interruptOwn(); close(); };
+        const assistant = () => this.server.getThread(thread.id).turns.find(turn => turn.id === turnId)?.items.find(item => item.type === 'agentMessage');
+        const finishStream = turn => {
+          if (turn.status === 'completed') {
+            const item = assistant();
+            if (item) emit({ conversation_id: thread.id, message: this.message(thread, turn, item, 'assistant') });
+            emit({ type: 'message_stream_complete', conversation_id: thread.id });
+            emit({ type: 'main_stream_complete', conversation_id: thread.id, turn_exchange_id: turnId });
+            emit('[DONE]');
+          } else emit({ error: turn.error?.message ?? 'The local turn was interrupted', error_code: turn.status === 'interrupted' ? 'local_turn_interrupted' : 'local_gateway_error', can_retry: false, error_reason: turn.status });
+          close();
+        };
+        remove = this.server.subscribe(event => {
+          const params = event.params;
+          if (params.threadId !== thread.id || (params.turnId != null && params.turnId !== turnId) || (params.turn && params.turn.id !== turnId)) return;
+          const turn = this.server.getThread(thread.id).turns.find(entry => entry.id === turnId);
+          if (event.method === 'item/agentMessage/delta' || event.method === 'item/started' && params.item.type === 'agentMessage') {
+            const item = assistant();
+            if (item) emit({ conversation_id: thread.id, message: this.message(thread, turn, item, 'assistant') });
+          }
+          if (event.method === 'turn/completed') finishStream(params.turn);
+        });
+        request.signal?.addEventListener('abort', abort, { once: true });
+        removeAbort = () => request.signal?.removeEventListener('abort', abort);
+        const userItem = this.server.getThread(thread.id).turns.find(turn => turn.id === turnId).items.find(item => item.type === 'userMessage');
+        emit({ type: 'input_message', conversation_id: thread.id, input_message: this.message(thread, transaction.result.turn, userItem, 'user') });
+        if (request.signal?.aborted) abort();
+        else if (transaction.afterReply) setTimeout(transaction.afterReply, 0);
+        else {
+          const existing = this.server.getThread(thread.id).turns.find(turn => turn.id === turnId);
+          if (existing.status !== 'inProgress') queueMicrotask(() => finishStream(existing));
+        }
+      },
+      cancel: () => { closed = true; remove(); removeAbort(); interruptOwn(); },
+    });
+    return new Response(stream, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'X-Local-Adapter': 'original-classic-chat-rest' } });
+  }
+}
