@@ -1,7 +1,8 @@
 /** Original classic Chat REST/SSE shapes over the same real local thread engine. */
 import { FRONTEND_TO_RAW_EFFORT } from './model-catalog-adapter.mjs';
+import { turnHostCheckpoints } from './preferred-host-transport.mjs';
 export class ClassicChatAdapter {
-  constructor({ appServer, models, now = Date.now, uuid = () => crypto.randomUUID(), onConversationChange = () => {}, heartbeatMs = 10000 }) { this.server = appServer; this.models = models; this.now = now; this.uuid = uuid; this.onConversationChange = onConversationChange; this.heartbeatMs = heartbeatMs; }
+  constructor({ appServer, models, now = Date.now, uuid = () => crypto.randomUUID(), onConversationChange = () => {}, heartbeatMs = 10000 }) { this.server = appServer; this.models = models; this.now = now; this.uuid = uuid; this.onConversationChange = onConversationChange; this.heartbeatMs = heartbeatMs; this.mutationQueue = Promise.resolve(); }
   json(body, status = 200) { return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }); }
   summary(thread) {
     return { id: thread.id, title: thread.name || 'New chat', create_time: new Date(thread.createdAt * 1000).toISOString(), update_time: new Date(thread.updatedAt * 1000).toISOString(), conversation_origin: thread.adapterMetadata.conversationOrigin ?? null, gizmo_id: null, is_archived: !!thread.archived, is_starred: !!thread.adapterMetadata.isStarred };
@@ -69,9 +70,84 @@ export class ClassicChatAdapter {
     if (requested && requested !== 'conversation') return this.json([]);
     return this.json([...this.server.threads.values()].filter(thread => thread.adapterMetadata.pinnedAt).map(thread => ({ item_type: 'conversation', pinned_at: thread.adapterMetadata.pinnedAt, item: { conversation: this.summary(thread) } })));
   }
+  /** REST bulk controls address Chat/Work records, never separate RPC/Dot storage. */
+  bulkMutationTargets() {
+    return [...this.server.threads.values()].filter(thread => !thread.ephemeral &&
+      typeof thread.adapterMetadata?.classicRootId === 'string' && thread.adapterMetadata.classicRootId.length > 0 &&
+      (thread.adapterMetadata.conversationOrigin == null || thread.adapterMetadata.conversationOrigin === 'tpp'));
+  }
+  async stopDeletedThreads(threads) {
+    // Controller abort is real; durable host cancellation must also be confirmed.
+    for (const thread of threads) if (this.server.running.has(thread.id)) this.server.interrupt(thread.id, { reason: 'user' });
+    const pending = turn => turnHostCheckpoints(turn).filter(checkpoint => !['complete', 'failed', 'cancelled'].includes(checkpoint.state));
+    const operations = [];
+    for (const thread of threads) for (const turn of thread.turns) if (pending(turn).length) {
+      if (typeof this.server.onIdleTurnInterrupt !== 'function') throw Object.assign(Error('The durable inference job cannot be cancelled by this local host; the conversation was retained.'), { status: 503, code: 'HOST_CANCELLATION_UNAVAILABLE' });
+      operations.push((async () => {
+        await this.server.onIdleTurnInterrupt({ threadId: thread.id, turn, reason: 'user' });
+        if (pending(turn).length) throw Object.assign(Error('The host did not confirm cancellation; the conversation was retained.'), { status: 503, code: 'HOST_CANCELLATION_UNCONFIRMED' });
+      })());
+    }
+    const outcomes = await Promise.allSettled(operations), failed = outcomes.find(result => result.status === 'rejected');
+    if (failed) throw failed.reason;
+  }
+  mutateConversations(ids, body) {
+    const operation = this.mutationQueue.then(async () => {
+      const threads = [...new Set(ids)].map(id => this.server.threads.get(id)).filter(Boolean), deleting = body.is_visible === false;
+      if (deleting) await this.stopDeletedThreads(threads);
+      // Preserve object identity: an archived live runner still holds this thread.
+      const previous = threads.map(thread => ({ thread, name: thread.name, archived: thread.archived,
+        starred: thread.adapterMetadata.isStarred, hadStarred: Object.hasOwn(thread.adapterMetadata, 'isStarred') }));
+      for (const thread of threads) {
+        if (typeof body.title === 'string') thread.name = body.title.trim().slice(0, 200) || thread.name;
+        if (typeof body.is_archived === 'boolean') thread.archived = body.is_archived;
+        if (typeof body.is_starred === 'boolean') thread.adapterMetadata.isStarred = body.is_starred;
+        if (deleting) this.server.threads.delete(thread.id);
+      }
+      try { this.server.persist(); }
+      catch (cause) {
+        for (const row of previous) {
+          row.thread.name = row.name; row.thread.archived = row.archived;
+          if (row.hadStarred) row.thread.adapterMetadata.isStarred = row.starred; else delete row.thread.adapterMetadata.isStarred;
+          if (deleting) this.server.threads.set(row.thread.id, row.thread);
+        }
+        try { this.server.persist(); } catch { /* Browser setItem is atomic; memory is also restored. */ }
+        throw Object.assign(Error('The conversation change could not be saved. Its records were restored; any already confirmed task cancellation remains stopped.'), { status: /quota|storage.*full/i.test(cause.message) ? 507 : 503, code: 'CONVERSATION_MUTATION_NOT_SAVED', cause });
+      }
+      for (const row of previous) {
+        const thread = row.thread;
+        try {
+          this.onConversationChange('conversation-history-update', { conversation_id: thread.id,
+            update_type: deleting ? 'conversation-deleted' : body.is_archived === true ? 'conversation-archived' : 'local-conversation-updated' });
+        } catch (error) { this.server.diagnostics?.push({ type: 'local-conversation-mutation-notification-error', message: String(error?.message ?? error) }); }
+        // The native RPC manager has its own cached alias of these shared records.
+        // Its source handlers consume these exact commit notifications (mg6y).
+        if (deleting) this.server.notify('thread/deleted', { threadId: thread.id });
+        else {
+          if (row.archived !== thread.archived) this.server.notify(thread.archived ? 'thread/archived' : 'thread/unarchived', { threadId: thread.id });
+          if (row.name !== thread.name) this.server.notify('thread/name/updated', { threadId: thread.id, threadName: thread.name });
+        }
+      }
+      return threads.length;
+    });
+    this.mutationQueue = operation.catch(() => {}); return operation;
+  }
+  async mutationResponse(ids, body, { bulk = false } = {}) {
+    try {
+      const affected = await this.mutateConversations(ids, body);
+      return this.json({ success: true, ...(bulk ? { affected_count: affected, adapter_scope: 'current-account-classic-chat-and-work' } : {}) });
+    } catch (error) { return this.json({ error: { code: error.code ?? 'CONVERSATION_MUTATION_FAILED', message: error.message } }, error.status ?? 503); }
+  }
   async handle(request, pathname) {
     const url = new URL(request.url), method = request.method;
     if (method === 'GET' && pathname === '/conversations') return this.list(url);
+    if (method === 'PATCH' && pathname === '/conversations') {
+      if (url.search) return this.json({ error: { code: 'INVALID_CONVERSATION_MUTATION', message: 'This bulk control does not accept query filters' } }, 400);
+      let body; try { body = await request.json(); } catch { return this.json({ error: { code: 'INVALID_CONVERSATION_MUTATION', message: 'A valid JSON mutation body is required' } }, 400); }
+      const keys = body && typeof body === 'object' && !Array.isArray(body) ? Object.keys(body) : [];
+      if (keys.length !== 1 || !(keys[0] === 'is_archived' && body.is_archived === true || keys[0] === 'is_visible' && body.is_visible === false)) return this.json({ error: { code: 'INVALID_CONVERSATION_MUTATION', message: 'Bulk controls support exactly archive-all or delete-all' } }, 400);
+      return this.mutationResponse(this.bulkMutationTargets().map(thread => thread.id), body, { bulk: true });
+    }
     if (method === 'GET' && pathname === '/pins') return this.pinned(url);
     if (method === 'GET' && pathname === '/gizmos/snorlax/sidebar') return this.json({ cursor: null, items: [] });
     if (method === 'GET' && pathname === '/gizmos/bootstrap') return this.json({ gizmos: [], cursor: null });
@@ -87,16 +163,12 @@ export class ClassicChatAdapter {
       return this.json({ status: this.server.running.has(thread.id) ? 'IS_STREAMING' : last?.status === 'completed' ? 'COMPLETE' : last?.adapterMetadata?.resumable && last?.adapterMetadata?.resumePolicy !== 'manual' ? 'FAILURE' : 'UNAVAILABLE' });
     }
     if (method === 'PATCH' && /^\/conversation\/[^/]+$/.test(pathname)) {
-      const thread = this.server.getThread(decodeURIComponent(pathname.split('/')[2])), body = await request.json();
-      if (typeof body.title === 'string') thread.name = body.title.trim().slice(0, 200) || thread.name;
-      if (typeof body.is_archived === 'boolean') thread.archived = body.is_archived;
-      if (typeof body.is_starred === 'boolean') thread.adapterMetadata.isStarred = body.is_starred;
-      if (Object.hasOwn(body, 'is_visible') && body.is_visible === false) {
-        this.server.interrupt(thread.id); this.server.threads.delete(thread.id);
-      }
-      this.server.persist();
-      this.onConversationChange('conversation-history-update', { conversation_id: thread.id, update_type: body.is_visible === false ? 'conversation-deleted' : body.is_archived === true ? 'conversation-archived' : 'local-conversation-updated' });
-      return this.json({ success: true });
+      const thread = this.server.getThread(decodeURIComponent(pathname.split('/')[2]));
+      let body; try { body = await request.json(); } catch { return this.json({ error: { code: 'INVALID_CONVERSATION_MUTATION', message: 'A valid JSON mutation body is required' } }, 400); }
+      if (!body || typeof body !== 'object' || Array.isArray(body) || !Object.keys(body).length || Object.entries(body).some(([key, value]) => !(
+        key === 'title' && typeof value === 'string' || ['is_archived', 'is_starred'].includes(key) && typeof value === 'boolean' || key === 'is_visible' && value === false
+      ))) return this.json({ error: { code: 'INVALID_CONVERSATION_MUTATION', message: 'This conversation mutation contains unsupported fields or values' } }, 400);
+      return this.mutationResponse([thread.id], body);
     }
     if (['POST', 'DELETE'].includes(method) && /^\/pins\/conversation\/[^/]+$/.test(pathname)) {
       const thread = this.server.getThread(decodeURIComponent(pathname.split('/')[3]));

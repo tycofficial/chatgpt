@@ -12,7 +12,7 @@
  * aVy5 async/131573.a965ef0d42.js:523279-547256 (local submission hook).
  * EAKz retains its original protocol/state reconciliation over LocalProtocolSocket.
  */
-import { WORK_MODEL_IDS } from '../model-catalog.js?v=533b5cd1fed6f95d';
+import { WORK_MODEL_IDS } from '../model-catalog.js?v=5bac67b918069c58';
 export const CODEX_DETAIL_MODE = 'STEPS_COMMANDS';
 export const WORK_DETAIL_MODE = 'STEPS_PROSE';
 export const CODEX_BROWSER_UI_GATES = Object.freeze(['3999836663', '4019944087', '515412992']);
@@ -228,7 +228,7 @@ export function createLocalCodexAdapter({
     if (!workspaceCreatedAt.has(id)) workspaceCreatedAt.set(id, Date.now());
     const createdAt = workspaceCreatedAt.get(id);
     return Object.freeze({ id, name: '浏览器工作区', rootPaths: ['/mnt/data'], createdAt, updatedAt: createdAt,
-      adapter_source: 'site-local-codex-provider', filesystem_scope: 'browser-origin-workspace' });
+      adapter_source: 'site-local-codex-provider', adapter_provider_default: true, filesystem_scope: 'browser-origin-workspace' });
   }
   function createBrowserProjectCatalog(OriginalProjectCatalog) {
     if (typeof OriginalProjectCatalog !== 'function') throw new TypeError('The original OVto project catalog class is required');
@@ -239,12 +239,22 @@ export function createLocalCodexAdapter({
         const project = await getBrowserOriginWorkspaceProject();
         return project ? { [project.id]: project } : originalProjects;
       }
-
+      async readSelection(...args) {
+        const originalSelection = await super.readSelection(...args);
+        // YAwS.e preserves missing(undefined) versus an explicit user clear(null).
+        // A real provider can choose its default working directory on first use.
+        if (originalSelection !== undefined) return originalSelection;
+        const projects = await this.readLocalProjects(), expected = await getBrowserOriginWorkspaceProject();
+        const project = expected && object(projects) ? projects[expected.id] : null;
+        return expected && object(projects) && Object.keys(projects).length === 1 && object(project) && project.id === expected.id &&
+          Array.isArray(project.rootPaths) && project.rootPaths.length === 1 && project.rootPaths[0] === '/mnt/data'
+          ? { type: 'local', projectId: expected.id } : originalSelection;
+      }
     };
   }
   /** Supply the selected local provider directory to the native route context.
    * The browser coding Home intentionally suppresses its legacy global project
-   * selection. This adapter restores only the user's exact site-local mount;
+   * selection. This adapter restores only the host-selected site-local mount;
    * it never supplies a directory before selection or changes submit policy.
    */
   const projectContextDiagnostics = new Set();
@@ -281,7 +291,7 @@ export function createLocalCodexAdapter({
     }));
   }
   /** HSUP.a/b are the native host workspace resolvers, not submit policy.
-   * Feed the user's provider directory into their existing scoped-project input
+   * Feed the selected provider directory into their existing scoped-project input
    * when the browser Home has no native project picker callback of its own.
    */
   function adaptBrowserWorkspaceResolverAtom(originalAtom, requireOriginal) {

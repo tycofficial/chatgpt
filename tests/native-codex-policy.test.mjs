@@ -74,7 +74,7 @@ test('the native project catalog exposes only the actual scoped browser mount af
  const projects=await service.readLocalProjects(),values=Object.values(projects);assert.equal(values.length,1);
  const project=values[0];assert.equal(project.id,'site-browser-workspace:'+identity.accountId);assert.equal(project.name,'浏览器工作区');assert.deepEqual([...project.rootPaths],['/mnt/data']);assert.equal(project.filesystem_scope,'browser-origin-workspace');assert.ok(Number.isFinite(project.createdAt));assert.equal(project.git,undefined);
  assert.equal(reads[0],'fixture-account--codex-browser-workspace');
- assert.equal(await service.readSelection(),undefined); // A published directory never silently selects itself.
+ const selection=await service.readSelection();assert.equal(selection.type,'local');assert.equal(selection.projectId,project.id);assert.equal(project.adapter_provider_default,true);
 });
 test('native existing projects and an explicit selection or clearing are preserved',async()=>{
  const {adapter}=workspaceFixture(),existing={fixture:{id:'fixture',name:'Existing',rootPaths:['/existing'],createdAt:1,updatedAt:1}};
@@ -151,4 +151,21 @@ test('the scoped socket facade keeps one real server, preserves Work/resume/ephe
  const tagged=calls.at(-1).params;assert.equal(tagged.conversationOrigin,'codex');assert.equal(tagged.responsesapiClientMetadata.localProductSurface,'codex');assert.match(tagged.developerInstructions,/browser storage/);assert.equal(request.conversationOrigin,undefined);
  for(const [method,params] of [['turn/start',{threadId:'old-work',model:'gpt-6-luna'}],['thread/resume',{threadId:'old-work',cwd:'/mnt/data'}],['thread/start',{...request,conversationOrigin:'tpp'}],['thread/start',{...request,ephemeral:true}]]){facade.dispatch(method,params);assert.equal(calls.at(-1).params,params);}
  const listener=()=>{};assert.equal(facade.subscribe(listener),listener);assert.equal(calls.at(-1).subscribe,listener);
+});
+
+test('the provider default preserves explicit clearing without opening storage, and refuses different or multiple roots',async()=>{
+ const {adapter,appServer,reads}=workspaceFixture(),id='site-browser-workspace:'+identity.accountId;
+ class Cleared {async readLocalProjects(){throw Error('Must not query cleared selection');}async readSelection(){return null;}}
+ assert.equal(await new (adapter.createBrowserProjectCatalog(Cleared))().readSelection(),null);assert.equal(reads.length,0);
+ for(const projects of [{[id]:{id,rootPaths:['/different']}},{[id]:{id,rootPaths:['/mnt/data']},other:{id:'other',rootPaths:['/other']}}]){
+  class Existing {async readLocalProjects(){return projects;}async readSelection(){return undefined;}}
+  assert.equal(await new (adapter.createBrowserProjectCatalog(Existing))().readSelection(),undefined);
+ }
+ appServer.toolExecutor.storage.list=async()=>{throw Error('fixture real storage failure');};
+ class Empty {async readLocalProjects(){return{};}async readSelection(){return undefined;}}
+ await assert.rejects(new (adapter.createBrowserProjectCatalog(Empty))().readSelection(),/fixture real storage failure/);
+});
+test('Free, guests and expired local identities never receive an initial provider default selection',async()=>{
+ class Empty {async readLocalProjects(){return{};}async readSelection(){return undefined;}}
+ for(const patch of [{modelSelection:false},{local:false},{identity:null}]){const {adapter,reads}=workspaceFixture(patch);assert.equal(await new (adapter.createBrowserProjectCatalog(Empty))().readSelection(),undefined);assert.equal(reads.length,0);}
 });
