@@ -22,24 +22,32 @@ export const WORK_PRESETS = Object.freeze([
 export const WORK_MODEL_LABELS=Object.freeze({'gpt-6-luna':'GPT-6 Luna','gpt-6.1-sol':'GPT-6.1 Sol','gpt-6-astra':'GPT-6 Astra'});
 // Exact public locale IDs: composer.mode.local.reasoning.{none,low,medium,
 // high,xhigh,max}.label (low uses .low.label.v2). These are original labels.
-export const WORK_EFFORT_LABELS=Object.freeze({none:'无',low:'轻度',medium:'中',high:'高',xhigh:'极高',max:'Max'});
+export const WORK_EFFORT_LABELS=Object.freeze({none:'无',low:'轻度',medium:'中',high:'高',xhigh:'极高',max:'Max',ultra:'Ultra'});
 export const WORK_DEFAULT_OPTION=Object.freeze({
   id:'auto',label:'默认',description:'推荐模型集',resetLabel:'重置为默认',
   labelId:'composer.modelPicker.default.label',descriptionId:'composer.modelPicker.default.description',resetLabelId:'composer.modelPicker.resetToDefault',
 });
 
-// Adapter capability evidence, matching runtime.allowedReasoningEfforts. These
+// API efforts match runtime.allowedReasoningEfforts; Ultra separately declares
+// a site orchestration mode. These
 // are NOT a captured first-party per-model thinking_efforts response. The
 // original TFzY protocol uses thinking_efforts/short_label/full_label; TWUU.d
 // uses supportedReasoningEfforts. A host may narrow these API-supported lists.
 export const WORK_PINNED_EFFORTS=Object.freeze({
   'gpt-6-luna':Object.freeze(['none','low','medium','high','xhigh','max']),
-  'gpt-6.1-sol':Object.freeze(['low','medium','high','xhigh','max']),
-  'gpt-6-astra':Object.freeze(['low','medium','high','xhigh','max']),
+  'gpt-6.1-sol':Object.freeze(['low','medium','high','xhigh','max','ultra']),
+  'gpt-6-astra':Object.freeze(['low','medium','high','xhigh','max','ultra']),
+});
+// Ultra is a site execution mode; it is never a provider reasoning_effort enum.
+// The runner must execute genuine parallel delegation with the same base family.
+export const SITE_ULTRA_ORCHESTRATION=Object.freeze({
+  effort:'ultra',mode:'parallel-agents',baseReasoningEffort:'max',
+  models:Object.freeze(['gpt-6.1-sol','gpt-6-astra']),providerReasoningEffort:false,
 });
 export const WORK_CATALOG_PROVENANCE=Object.freeze({
   auto:'signed-in-first-party-six-position-capture',
-  pinned:'adapter-api-capability',
+  pinned:'adapter-api-capability-plus-explicit-site-orchestration',
+  ultra:'site-parallel-agent-orchestration-not-provider-reasoning-enum',
   originalManualMembershipCaptured:false,
   labels:'public-original-zh-CN-locale',
   defaultOption:'dU23 + composer.modelPicker.default.label/description',

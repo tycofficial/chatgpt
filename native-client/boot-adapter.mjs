@@ -1,22 +1,24 @@
 /**
- * Isolated first-boot scaffold. Never imported by the production application.
- * Loads the original component graph; changes only declared service boundaries.
- * It has not been run against the original bundles.
+ * Loads the public original component graph with explicit local host services.
+ * Private original backend credentials are never used by this entry point.
  */
-import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities } from './service-boundary.mjs?v=78e7bc02bd4001a6';
-import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs?v=78e7bc02bd4001a6';
-import { getPrototypeLocalAuth, isPrototypeLocalSession, getPrototypeLocalAuthGeneration, clearPrototypeLocalSession } from './local-identity.mjs?v=78e7bc02bd4001a6';
-import { createLocalHostSettingsClass } from './local-host-settings.mjs?v=78e7bc02bd4001a6';
-import { createLocalWorkPolicy } from './local-work-policy.mjs?v=78e7bc02bd4001a6';
-import { hasModelSelectionAccess, getSiteLoginUrl } from './site-account.mjs?v=78e7bc02bd4001a6';
-import { createNativeModelSelectionPolicy } from './local-model-selection-policy.mjs?v=78e7bc02bd4001a6';
+import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter } from './service-boundary.mjs?v=0e54443bf396616d';
+import * as mapLibreRenderer from './map-vendor/maplibre-gl.mjs?v=0e54443bf396616d';
+import { createLocalMapProvider } from './local-map-provider.mjs?v=0e54443bf396616d';
+import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs?v=0e54443bf396616d';
+import { getPrototypeLocalSession, getPrototypeLocalAuth, isPrototypeLocalSession, getPrototypeLocalAuthGeneration, clearPrototypeLocalSession } from './local-identity.mjs?v=0e54443bf396616d';
+import { createLocalHostSettingsClass } from './local-host-settings.mjs?v=0e54443bf396616d';
+import { createLocalWorkPolicy } from './local-work-policy.mjs?v=0e54443bf396616d';
+import { hasModelSelectionAccess, getSiteLoginUrl } from './site-account.mjs?v=0e54443bf396616d';
+import { createNativeModelSelectionPolicy, createNativeThinkingEntryPolicy } from './local-model-selection-policy.mjs?v=0e54443bf396616d';
+import { createLocalHostClaimsReader } from './local-token-identity.mjs?v=0e54443bf396616d';
 
 const boundary = installNetworkBoundary();
 globalThis.__originalClientProbe = boundary.diagnostics;
 installSyntheticDocumentState();
 if (globalThis.__CHATGPT_REPLICA_ENV__) window.__reactRouterContext.basename = globalThis.__CHATGPT_REPLICA_ENV__.basePath.replace(/\/$/, '') || '/';
 
-const plan = await (await fetch(new URL('./entry-plan.json?v=78e7bc02bd4001a6', import.meta.url))).json();
+const plan = await (await fetch(new URL('./entry-plan.json?v=0e54443bf396616d', import.meta.url))).json();
 const { __webpack_require__: requireOriginal } = await import(plan.runtime);
 // One mechanical entry transform defers its terminal hxQI invocation and
 // rebases its relative imports. All original factories and chunks are retained.
@@ -37,15 +39,15 @@ requireOriginal.m = new Proxy(requireOriginal.m, {
   },
 });
 
-function adaptFactory(moduleId, transform) {
+function adaptFactory(moduleId, transform, { deferred = false } = {}) {
   if (requireOriginal.c[moduleId]) throw Error(`Adapter installed too late: ${moduleId}`);
   transforms.set(moduleId, transform);
-  if (!requireOriginal.m[moduleId]) throw Error(`Original boundary module is absent: ${moduleId}`);
-  requireOriginal.m[moduleId] = requireOriginal.m[moduleId];
+  if (!requireOriginal.m[moduleId]) { if (!deferred) throw Error(`Original boundary module is absent: ${moduleId}`); }
+  else requireOriginal.m[moduleId] = requireOriginal.m[moduleId];
 }
 
 /** Substitute exports before their factory is instantiated, leaving its code intact. */
-function overrideExports(moduleId, overrides) {
+function overrideExports(moduleId, overrides, options, wrappers = {}) {
   adaptFactory(moduleId, factory => function(module, exports, require) {
     const scopedRequire = new Proxy(require, {
       get(target, key, receiver) {
@@ -54,6 +56,12 @@ function overrideExports(moduleId, overrides) {
           if (destination !== exports) return require.d(destination, getters, values);
           const nextGetters = { ...getters };
           const nextValues = { ...values };
+          for (const [name, wrap] of Object.entries(wrappers)) {
+            const readOriginal = getters?.[name] ?? (() => values?.[name]);
+            let wrapped;
+            nextGetters[name] = () => wrapped ??= wrap(readOriginal());
+            delete nextValues[name];
+          }
           for (const [name, value] of Object.entries(overrides)) {
             delete nextGetters[name];
             nextValues[name] = value;
@@ -63,8 +71,47 @@ function overrideExports(moduleId, overrides) {
       },
     });
     return factory.call(this, module, exports, scopedRequire);
-  });
+  }, options);
 }
+
+// Only the map renderer/style provider changes. The original s2JQ React map
+// and all its surrounding controls retain their captured implementation.
+const localMapProvider = createLocalMapProvider({ renderer: mapLibreRenderer, diagnostics: boundary.diagnostics });
+localMapProvider.configureRenderer();
+adaptFactory('FxuF', () => function(module) { module.exports = localMapProvider.renderer; }, { deferred: true });
+overrideExports('eS9I', { a: localMapProvider.createStyle(), b: localMapProvider.createStyle(), c: localMapProvider.configureRenderer }, { deferred: true });
+
+adaptFactory('ztxE', factory => function(module, exports, require) {
+  const scopedRequire = new Proxy(require, { get(target, key, receiver) {
+    if (key !== 'd') return Reflect.get(target, key, receiver);
+    return (destination, getters, values) => {
+      if (destination === exports && values?.a) values = { ...values, a: localCodexAdapter.adaptBrowserCapabilityAtom(values.a, require) };
+      return require.d(destination, getters, values);
+    };
+  } });
+  return factory.call(this, module, exports, scopedRequire);
+});
+
+// jiwy is the native provider-capability boundary. Keep its other permissions,
+// including computer/Slack access, and supply only the real local Dot service.
+adaptFactory('jiwy', factory => function(module, exports, require) {
+  const scopedRequire = new Proxy(require, { get(target, key, receiver) {
+    if (key !== 'd') return Reflect.get(target, key, receiver);
+    return (destination, getters, values) => {
+      if (destination !== exports) return require.d(destination, getters, values);
+      const original = { ...values };
+      for (const [name, read] of Object.entries(getters || {})) Object.defineProperty(original, name, { get: read, enumerable: true, configurable: true });
+      let adapted;
+      const nextGetters = { ...getters }, nextValues = { ...values };
+      for (const name of ['a','c','d','f','b','i']) {
+        nextGetters[name] = () => (adapted ??= localDotAdapter.adaptCapabilityAtoms(original, require))[name];
+        delete nextValues[name];
+      }
+      return require.d(destination, nextGetters, nextValues);
+    };
+  } });
+  return factory.call(this, module, exports, scopedRequire);
+}, { deferred: true });
 
 // A clean document contains no private server-rendered state. Use the original
 // React DOM renderer at the document root for this first proof; its entire
@@ -120,9 +167,8 @@ adaptFactory('dbUr', factory => function(module, exports, require) {
   return factory.call(this, module, exports, scopedRequire);
 });
 
-// Site policy uses the source picker's own disabled prop. It disables the
-// original trigger, open callback and model shortcut without replacing its UI.
-// The merged-picker layer stays enabled, preserving Chat/Work.
+// Site policy keeps the original Pro controller and hides it for Free.
+// Separate Chat/Work mode controls remain owned by the original parent.
 adaptFactory('pPWr', factory => function(module, exports, require) {
   let PolicyPicker;
   const scopedRequire = new Proxy(require, {
@@ -141,13 +187,49 @@ adaptFactory('pPWr', factory => function(module, exports, require) {
   return factory.call(this, module, exports, scopedRequire);
 });
 
+overrideExports('IBeT', {}, undefined, {
+  a: OriginalPicker => createNativeModelSelectionPolicy(OriginalPicker, requireOriginal('zd8w').createElement, hasModelSelectionAccess),
+});
+
+// Free keeps the source's original + menu Think item without a model controller.
+// i8cy's eligibility and system-hint state remain native; this selects its
+// existing menu-only branch, also used by the original narrow/coarse layout.
+overrideExports('i8cy', {}, undefined, {
+  a: originalHook => createNativeThinkingEntryPolicy(originalHook, hasModelSelectionAccess),
+});
+
 // The explicit ?localSession=1 switch supplies an unmistakably local identity.
 // Default is signed out. No Google/OpenAI login or captured credential is used.
 // The original auth state machine is the default; originalAuth=0 is a comparison-only local shim.
 const useOriginalAuth = new URL(location.href).searchParams.get('originalAuth') !== '0';
 boundary.diagnostics.push({ type: 'auth-state-engine', source: useOriginalAuth ? 'original-QdUF-with-local-bootstrap' : 'declared-local-auth-getters' });
+// QdUF's internal eh/ey closures keep the official hostname assumptions.
+// Route both public login functions through the same local account boundary.
+let siteLoginRedirecting = false;
+function isSiteLoginPage() {
+  const target = new URL(getSiteLoginUrl(), location.href);
+  const path = location.pathname.replace(/\/+$/, '') || '/';
+  const login = target.pathname.replace(/\/+$/, '') || '/';
+  return path === login || path === login.replace(/\/login$/, '/auth/login');
+}
+function redirectToSiteLogin() {
+  if (siteLoginRedirecting || isSiteLoginPage()) return;
+  const target = new URL(getSiteLoginUrl(), location.href);
+  if (target.origin !== location.origin) throw Error('Site login must use the current origin');
+  target.searchParams.set('next', location.pathname + location.search + location.hash);
+  siteLoginRedirecting = true;
+  location.assign(target.href);
+}
+function maybeRedirectToSiteLogin() {
+  if (isPrototypeLocalSession() || siteLoginRedirecting || isSiteLoginPage()) return false;
+  redirectToSiteLogin();
+  return true;
+}
+
 overrideExports('QdUF', {
   getBrowserAuthPageUrl: name => name === 'login' ? new URL(getSiteLoginUrl(), location.href) : new URL('/auth/' + name, location.origin),
+  redirectToBrowserChatGptLogin: redirectToSiteLogin,
+  maybeRedirectToBrowserChatGptLogin: maybeRedirectToSiteLogin,
   ...(!useOriginalAuth ? {
   loadBrowserChatGptAuth: async () => getPrototypeLocalAuth(),
   getOrLoadBrowserChatGptAuth: () => getPrototypeLocalAuth(),
@@ -163,10 +245,12 @@ overrideExports('QdUF', {
   recoverBrowserChatGptAuth: async () => ({ auth: getPrototypeLocalAuth(), recovery: 'reused_current_session' }),
   clearBrowserAuth: clearPrototypeLocalSession,
   markBrowserChatGptSignedOut: clearPrototypeLocalSession,
-  maybeRedirectToBrowserChatGptLogin: () => false,
   maybeRedirectToBrowserChatGptLogout: () => false,
-  redirectToBrowserChatGptLogin: () => boundary.diagnostics.push({ type: 'unavailable', service: 'login' }),
   } : {}),
+}, undefined, {
+  readChatGptTokenClaims: originalReader => createLocalHostClaimsReader(originalReader, {
+    getSession: getPrototypeLocalSession, getAuth: getPrototypeLocalAuth, isLocalSession: isPrototypeLocalSession,
+  }),
 });
 
 // Browser-saved HTML omits the initial module bootstrap. Reconstitute the exact

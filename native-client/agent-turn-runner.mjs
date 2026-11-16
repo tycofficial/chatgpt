@@ -21,11 +21,29 @@ export async function runAgentTurn(server, running) {
   const { thread, turn, controller } = running, signal = controller.signal;
   const meta = turn.adapterMetadata;
   const cp = meta.checkpoint ??= { schemaVersion: 1, state: 'model', rounds: 0, transcript: [{ role: 'user', content: turn.items.find(item => item.type === 'userMessage').content.map(part => part.text).join('\n') }], pendingCalls: [], completedCalls: {}, metrics: [], interruptedAttempts: [] };
-  const executor = server.toolExecutor;
+  let executor = server.toolExecutor;
   const save = () => checkpoint(server, running);
   const errorText = error => String(error?.message || error).replaceAll(server.readSettings().apiKey || '\0NO_KEY\0', '[redacted]');
   const notify = (method, extra) => server.notify(method, { threadId: thread.id, turnId: turn.id, ...extra });
+  const executionSettings = () => {
+    server.assertExecutionAllowed(turn);
+    const settings = { ...server.readSettings(), model: turn.model, reasoningEffort: turn.reasoningEffort === 'ultra' ? 'max' : turn.reasoningEffort, autoPython: false };
+    if (executor?.tools?.length) settings.apiTransport = server.agentOptions.toolTransport ?? 'responses';
+    const priority = turn.serviceTier === 'fast' && server.agentOptions.verifiedPriority === true;
+    settings.fastMode = priority; settings.serviceTier = priority ? 'priority' : undefined;
+    if (priority) settings.apiTransport = 'responses';
+    meta.serviceTierExecution = { uiServiceTier: turn.serviceTier ?? null, apiServiceTier: priority ? 'priority' : null, verifiedPriority: priority };
+    return settings;
+  };
   try {
+    meta.requestedEffort = turn.reasoningEffort;
+    meta.productExecutionMode = turn.reasoningEffort === 'ultra' ? 'ultra' : 'standard';
+    meta.underlyingApiEffort = turn.reasoningEffort === 'ultra' ? 'max' : turn.reasoningEffort;
+    if (turn.reasoningEffort === 'ultra') {
+      if (server.agentOptions.ultraOrchestration !== true) throw Object.assign(Error('Site Ultra orchestration is not enabled in this deployment. No provider request was submitted.'), { code: 'ULTRA_ORCHESTRATION_NOT_ENABLED', retryable: false });
+      const { createUltraToolExecutor } = await import('./site-ultra-orchestrator.mjs?v=0e54443bf396616d');
+      executor = createUltraToolExecutor({ baseExecutor: executor, streamCompletion: options => server.streamCompletion(options), turn, checkpoint: cp, save, getSettings: executionSettings, getContext: () => [...server.messages(thread, turn, { omitCurrent: true }), ...cp.transcript], now: server.now, redact: errorText });
+    }
     // A partial response is genuine saved output, not a completed tool call.
     if (cp.partialResponse) {
       const partial = cp.partialResponse;
@@ -39,6 +57,7 @@ export async function runAgentTurn(server, running) {
     let roundsThisRun = 0, retries = 0;
     while (!running.terminal) {
       signal.throwIfAborted();
+      server.assertExecutionAllowed(turn);
       for (const record of cp.pendingCalls) {
         signal.throwIfAborted();
         if (cp.completedCalls[record.call.id]) { record.state = 'completed'; record.output = cp.completedCalls[record.call.id].output; continue; }
@@ -48,36 +67,35 @@ export async function runAgentTurn(server, running) {
           record.itemId = item.id; try { item.arguments = JSON.parse(record.call.function.arguments || '{}'); } catch { item.arguments = { raw: record.call.function.arguments }; }
           turn.items.push(item); notify('item/started', { item });
         }
-        let output;
+        let output, fatalToolError;
         if (record.state === 'uncertain' || record.state === 'running') {
-          output = toolError('The previous page closed while this tool was running. Completion is unknown; it has not been executed again. Inspect saved files before deciding whether a new call is necessary.');
+          output = await executor?.recoverCall?.(record.call) ?? toolError('The previous page closed while this tool was running. Completion is unknown; it has not been executed again. Inspect saved files before deciding whether a new call is necessary.');
         } else {
           record.state = 'running'; cp.state = 'tool'; await save(); const started = server.now();
           try {
             if (!executor?.execute || !executor.tools?.some(tool => tool.function?.name === record.call.function.name)) throw Error('Tool is not available: ' + record.call.function.name);
             output = await executor.execute(record.call, { threadId: thread.id, turnId: turn.id, signal, onStatus: status => { record.lastStatus = String(status); }, onTaskStatus: async state => { cp.taskState = state; await save(); } });
             if (!output || !Array.isArray(output.content)) throw Error('Tool executor returned an invalid MCP result');
-          } catch (error) { if (signal.aborted) { record.state = 'uncertain'; throw error; } output = toolError(errorText(error)); }
+          } catch (error) { if (signal.aborted) { record.state = 'uncertain'; throw error; } output = error.mcpResult ?? toolError(errorText(error)); if (error.providerFailure) fatalToolError = error; }
           item.durationMs = Math.max(0, server.now() - started);
         }
         record.output = clone(output); record.state = 'completed';
         item.status = output.isError ? 'failed' : 'completed'; item.result = clone(output); item.error = null;
         cp.completedCalls[record.call.id] = { name: record.call.function.name, arguments: record.call.function.arguments, output: clone(output) };
         await save(); notify('item/completed', { item });
+        if (fatalToolError) throw fatalToolError;
       }
       if (cp.pendingCalls.length) {
         for (const record of cp.pendingCalls) cp.transcript.push({ role: 'tool', tool_call_id: record.call.id, content: JSON.stringify(record.output ?? cp.completedCalls[record.call.id].output) });
         cp.pendingCalls = []; cp.state = 'model'; await save();
       }
       if (++roundsThisRun > maxRounds) { cp.state = 'yielded'; meta.resumable = true; meta.resumePolicy = 'automatic'; await save(); server.finish(running, 'interrupted', { message: 'Execution checkpoint saved; continue this task to run the next batch.', codexErrorInfo: null, additionalDetails: null, misalignment: null }); return; }
-      const settings = { ...server.readSettings(), model: turn.model, reasoningEffort: turn.reasoningEffort, autoPython: false };
-      if (executor?.tools?.length) settings.apiTransport = server.agentOptions.toolTransport ?? 'responses';
-      // Priority is not inferred from a UI speed label or enabled without a verified provider capability.
-      if (turn.serviceTier === 'fast') { if (server.agentOptions.verifiedPriority !== true) throw Error('Priority transport has not been verified for this gateway'); settings.apiTransport = 'responses'; settings.serviceTier = 'priority'; }
+      const settings = executionSettings();
       const tools = executor?.tools || [], instruction = tools.length ? [{ role: 'system', content: 'Execute requested work using the available real tools instead of only announcing a plan. For a multi-step job, persist running progress with task_status and mark complete only after the deliverables exist. Continue correcting actual tool errors. Python runs in a browser Pyodide environment, not a hosted shell; only workspace files persist after reload. Never claim unexecuted shell, network or file operations. Return real artifact download URLs supplied by tools.' }] : [];
+      if (turn.reasoningEffort === 'ultra') instruction.push({ role: 'system', content: 'This is the site-provided Ultra execution mode. Use delegate_tasks for independent analysis when it benefits the task; it runs1–3 real parallel workers from the same selected family at API max effort. Inspect their actual results and reconcile differences. You own the real file/Python tools and final synthesis. This is application orchestration, not OpenAI private Ultra infrastructure. Never claim a worker or tool succeeded when its result reports failure.' });
       const messages = [...instruction, ...server.messages(thread, turn, { omitCurrent: true }), ...clone(cp.transcript)];
       running.assistant = null; running.assistantComplete = false; running.reasoning = null; running.reasoningComplete = false;
-      const metric = { sequence: ++cp.rounds, model: turn.model, effort: turn.reasoningEffort, startedAt: server.now(), firstOutputAt: null, transport: settings.apiTransport || 'chat/completions' }; cp.metrics.push(metric); cp.state = 'model';
+      const metric = { sequence: ++cp.rounds, model: turn.model, effort: turn.reasoningEffort, underlyingApiEffort: settings.reasoningEffort, productExecutionMode: meta.productExecutionMode, startedAt: server.now(), firstOutputAt: null, transport: settings.apiTransport || 'chat/completions' }; cp.metrics.push(metric); cp.state = 'model';
       await save();
       metric.requestSentAt = server.now();
       let result;

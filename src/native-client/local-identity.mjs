@@ -1,8 +1,11 @@
 /** Explicit prototype-local identity; never a Google/OpenAI authentication. */
 import { getSiteAccount } from './site-account.mjs';
-export const LOCAL_ACCOUNT_ID = '00000000-0000-4000-8000-000000000001';
-export const LOCAL_USER_ID = 'user-local-prototype';
-export const LOCAL_ACCOUNT_USER_ID = 'local-prototype-account-owner';
+const siteAccount = getSiteAccount();
+const registeredSiteUser = siteAccount?.role === 'user' && siteAccount.planType === 'free' ? siteAccount : null;
+const administrator = siteAccount?.role === 'administrator' && siteAccount.planType === 'pro' ? siteAccount : null;
+export const LOCAL_ACCOUNT_ID = registeredSiteUser?.accountId ?? '00000000-0000-4000-8000-000000000001';
+export const LOCAL_USER_ID = registeredSiteUser?.id ?? 'user-local-prototype';
+export const LOCAL_ACCOUNT_USER_ID = registeredSiteUser?.id ?? 'local-prototype-account-owner';
 const toggleKey = 'original-client-prototype-local-session';
 let enabled = false;
 let option;
@@ -13,13 +16,12 @@ try {
   if (option !== '1' && option !== '0') enabled = globalThis.sessionStorage.getItem(toggleKey) === '1';
 } catch {}
 let generation = 1;
-const administrator = getSiteAccount();
-if (administrator) enabled = true;
+if (siteAccount) enabled = true;
 const marker = 'local-prototype-not-an-openai-token';
 const account = { id: LOCAL_ACCOUNT_ID, userId: LOCAL_ACCOUNT_USER_ID, planType: 'free', structure: 'personal', workspaceType: null, organizationId: null, computeResidency: null, isFedrampCompliantWorkspace: false, isDelinquent: false };
 const user = { id: LOCAL_USER_ID, name: '本地原型', email: 'local-prototype@example.invalid', created: Math.floor(Date.now() / 1000), is_test_user: false };
 const context = { locale: 'zh-CN', deviceId: 'local-prototype' };
-if (administrator) { account.planType = 'pro'; user.name = administrator.username; user.email = administrator.username.toLowerCase() + '@local.invalid'; user.created = Math.floor(administrator.createdAt / 1000); }
+if (siteAccount) { account.planType = siteAccount.planType; user.name = siteAccount.username; user.email = administrator ? administrator.username.toLowerCase() + '@local.invalid' : undefined; user.created = Math.floor(siteAccount.createdAt / 1000); }
 const session = { accessToken: marker, sessionToken: 'site-account-reference:' + LOCAL_USER_ID, authProvider: 'local-username-password', account, user, statsigContext: context, adapterIdentity: 'prototype-local-only' };
 const snapshot = {
   accessToken: marker, accountId: LOCAL_ACCOUNT_ID, accountUserId: LOCAL_ACCOUNT_USER_ID,
@@ -28,12 +30,15 @@ const snapshot = {
   source: 'localAdapter', targetingAccount: account, targetingRequest: context,
   adapterIdentity: 'prototype-local-only', googleAuthenticated: false, openaiAuthenticated: false,
 };
-export const isPrototypeLocalSession = () => enabled;
-export const getPrototypeLocalSession = () => enabled ? session : null;
-export const getPrototypeLocalAuth = () => enabled ? snapshot : null;
+const isActive = () => enabled && (!siteAccount || getSiteAccount()?.id === siteAccount.id);
+export const isPrototypeLocalSession = isActive;
+/** Admin keeps existing storage; registered and guest accounts never read it. */
+export function getLocalAccountStorageKey(key) { return administrator ? key : registeredSiteUser ? key + ':account:' + LOCAL_ACCOUNT_ID : key + ':guest'; }
+export const getPrototypeLocalSession = () => isActive() ? session : null;
+export const getPrototypeLocalAuth = () => isActive() ? snapshot : null;
 export const getPrototypeLocalAuthGeneration = () => generation;
 export function getPrototypeCurrentUser() {
-  return enabled ? { id: user.id, created: user.created, email: user.email, name: user.name, first_name: user.name, email_domain_type: null, phone_number: null, picture: null } : null;
+  return isActive() ? { id: user.id, created: user.created, email: user.email, name: user.name, first_name: user.name, email_domain_type: null, phone_number: null, picture: null } : null;
 }
 export function clearPrototypeLocalSession({ reload = true } = {}) {
   enabled = false; generation++;
@@ -55,7 +60,7 @@ export function getLocalSignedOutUrl() {
   return url.href;
 }
 export function getLocalAccountCheck() {
-  if (!enabled) return { account_ordering: [], accounts: {} };
+  if (!isActive()) return { account_ordering: [], accounts: {} };
   return {
     account_ordering: [LOCAL_ACCOUNT_ID],
     accounts: {
@@ -101,8 +106,8 @@ export function getLocalWhamAccounts() {
 }
 export function getPrototypeStatsigUser() {
   return {
-    userID: enabled ? LOCAL_USER_ID : 'local-prototype-anonymous',
+    userID: isActive() ? LOCAL_USER_ID : 'local-prototype-anonymous',
     appVersion: 'local-original-probe', locale: 'zh-CN',
-    customIDs: { stableID: 'local-prototype', ...(enabled ? { account_id: LOCAL_ACCOUNT_ID, account_user_id: LOCAL_ACCOUNT_USER_ID } : {}) },
+    customIDs: { stableID: 'local-prototype', ...(isActive() ? { account_id: LOCAL_ACCOUNT_ID, account_user_id: LOCAL_ACCOUNT_USER_ID } : {}) },
   };
 }

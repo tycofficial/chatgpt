@@ -25,7 +25,7 @@ export class ClassicChatAdapter {
   projectItem(thread, turn, item) {
     if (item.type === 'userMessage' || item.type === 'agentMessage') return [this.message(thread, turn, item, item.type === 'userMessage' ? 'user' : 'assistant')];
     if (item.type !== 'mcpToolCall') return [];
-    const finished = item.status !== 'inProgress', base = { create_time: turn.startedAt, update_time: this.now() / 1000, weight: 1, metadata: { model_slug: thread.adapterMetadata.frontendModelSlug ?? turn.model, thinking_effort: FRONTEND_TO_RAW_EFFORT[turn.reasoningEffort], adapter_source: 'browser-workspace-mcp', mcp_tool_call: { server: item.server, tool: item.tool, status: item.status } } };
+    const finished = item.status !== 'inProgress', base = { create_time: turn.startedAt, update_time: this.now() / 1000, weight: 1, metadata: { model_slug: thread.adapterMetadata?.classicModelSlugs?.[turn.id] ?? thread.adapterMetadata.frontendModelSlug ?? turn.model, thinking_effort: FRONTEND_TO_RAW_EFFORT[turn.reasoningEffort], adapter_source: 'browser-workspace-mcp', mcp_tool_call: { server: item.server, tool: item.tool, status: item.status } } };
     const call = { ...base, id: item.id + '-call', author: { role: 'assistant', name: null, metadata: {} }, recipient: item.tool, channel: 'commentary', content: { content_type: 'code', language: item.tool === 'python' ? 'python' : 'json', text: item.tool === 'python' ? item.arguments.code || '' : JSON.stringify(item.arguments, null, 2) }, status: finished ? 'finished_successfully' : 'in_progress', end_turn: false };
     if (!finished) return [call];
     const output = item.result || { content: [{ type: 'text', text: item.error?.message || 'Tool execution was interrupted' }], isError: true };
@@ -142,11 +142,12 @@ export class ClassicChatAdapter {
     const transaction = this.server.dispatch('turn/start', {
       threadId: thread.id, input: incoming.content.parts.map(text => ({ type: 'text', text, text_elements: [] })),
       clientUserMessageId: incoming.id, model, effort, serviceTier: body.service_tier ?? body.serviceTier,
-      selectionMode: body.selectionMode,
+      selectionMode: body.selectionMode, systemHints: Array.isArray(body.system_hints) ? body.system_hints : [],
       responsesapiClientMetadata: { ...body.responsesapi_client_metadata, requestedModel: body.model, adapterOrigin: 'classic-chat-rest' },
     });
     const turnId = transaction.result.turn.id;
-    const frontendSlug = body.model ?? thread.adapterMetadata.frontendModelSlug ?? transaction.result.turn.model;
+    const restricted = transaction.result.turn.adapterMetadata.executionPolicy === 'free-luna-low-or-explicit-medium';
+    const frontendSlug = restricted && body.model !== 'auto' ? transaction.result.turn.model : body.model ?? thread.adapterMetadata.frontendModelSlug ?? transaction.result.turn.model;
     thread.adapterMetadata.classicModelSlugs ??= {};
     if (!Object.hasOwn(thread.adapterMetadata.classicModelSlugs, turnId)) {
       thread.adapterMetadata.classicModelSlugs[turnId] = frontendSlug;

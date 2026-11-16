@@ -1,0 +1,14 @@
+node_modules/
+state/
+*.log
+.env*
+*.credentials*
+*.tokens*
+credentials/
+accounts.json
+host.json
+pairing.json
+ui.json
+usage-pauses.json
+jobs/
+locks/

@@ -1,5 +1,5 @@
 /** Original app-server protocol over real, resumable local execution. */
-import { runAgentTurn } from './agent-turn-runner.mjs?v=78e7bc02bd4001a6';
+import { runAgentTurn } from './agent-turn-runner.mjs?v=0e54443bf396616d';
 export class RpcError extends Error {
   constructor(code, message, data) { super(message); this.name = 'RpcError'; this.code = code; if (data !== undefined) this.data = data; }
 }
@@ -11,11 +11,12 @@ const errorShape = message => ({ message, codexErrorInfo: null, additionalDetail
 const defaultCollaboration = model => ({ mode: 'default', settings: { model, reasoning_effort: null, developer_instructions: null } });
 
 export class LocalAppServer {
-  constructor({ storage, streamCompletion, readSettings, models, catalog, diagnostics = [], now = Date.now, uuid = () => crypto.randomUUID(), toolExecutor = null, checkpointStore = null, agentOptions = {} }) {
+  constructor({ storage, streamCompletion, readSettings, models, catalog, diagnostics = [], now = Date.now, uuid = () => crypto.randomUUID(), toolExecutor = null, checkpointStore = null, agentOptions = {}, getExecutionPolicy = null }) {
     this.storage = storage;
     this.toolExecutor = toolExecutor;
     this.checkpointStore = checkpointStore;
     this.agentOptions = agentOptions;
+    this.getExecutionPolicy = getExecutionPolicy ?? (() => ({ modelSelection: false, fixedModel: 'gpt-6-luna', defaultEffort: 'low', allowedEfforts: ['low', 'medium'] }));
     this.streamCompletion = streamCompletion;
     this.readSettings = readSettings;
     this.models = models;
@@ -76,18 +77,28 @@ export class LocalAppServer {
     if (typeof id !== 'string' || !this.threads.has(id)) throw new RpcError(-32001, 'thread_not_found');
     return this.threads.get(id);
   }
+  executionPolicy() {
+    let policy; try { policy = this.getExecutionPolicy(); } catch { throw new RpcError(-32003, 'The account execution policy could not be verified'); }
+    return policy?.modelSelection === true ? { modelSelection: true } : { modelSelection: false, fixedModel: 'gpt-6-luna', defaultEffort: 'low', allowedEfforts: ['low', 'medium'] };
+  }
+  assertExecutionAllowed(turn) {
+    const policy = this.executionPolicy();
+    if (!policy.modelSelection && (turn.model !== policy.fixedModel || !policy.allowedEfforts.includes(turn.reasoningEffort))) throw new RpcError(-32003, 'This saved turn requires model access unavailable to this account. Send a new message using the Free model instead.');
+    return policy;
+  }
   selection(params, previous = {}) {
-    const model = params.model ?? params.collaborationMode?.settings?.model ?? previous.model ?? this.readSettings().model;
+    const policy = this.executionPolicy();
+    const model = policy.modelSelection ? params.model ?? params.collaborationMode?.settings?.model ?? previous.model ?? this.readSettings().model : policy.fixedModel;
     const catalog = this.models.getRpcModelList().data.find(entry => entry.model === model);
     if (!catalog) throw new RpcError(-32602, `The local adapter does not offer model ${String(model)}`);
     const supplied = params.effort ?? params.reasoningEffort ?? params.config?.model_reasoning_effort ?? params.collaborationMode?.settings?.reasoning_effort;
-    const effort = supplied ?? previous.reasoningEffort ?? catalog.defaultReasoningEffort;
+    const effort = policy.modelSelection ? supplied ?? previous.reasoningEffort ?? catalog.defaultReasoningEffort : supplied === 'medium' || Array.isArray(params.systemHints) && params.systemHints.includes('reason') ? 'medium' : policy.defaultEffort;
     if (!catalog.supportedReasoningEfforts.some(choice => choice.reasoningEffort === effort)) throw new RpcError(-32602, `The local adapter does not support effort ${String(effort)} for ${model}`);
     if (params.serviceTier != null && !['standard', 'default', 'fast', 'priority'].includes(params.serviceTier)) throw new RpcError(-32602, `The local text adapter does not implement service tier ${String(params.serviceTier)}`);
     const tier = params.serviceTier ?? previous.serviceTier ?? null;
     const explicitMode = params.selectionMode ?? params.modelSelection?.selectionMode ?? params.responsesapiClientMetadata?.selectionMode;
     return {
-      model, reasoningEffort: effort, serviceTier: ['fast', 'priority'].includes(tier) ? 'fast' : null,
+      model, reasoningEffort: effort, executionPolicy: policy.modelSelection ? 'verified-model-selection' : 'free-luna-low-or-explicit-medium', serviceTier: ['fast', 'priority'].includes(tier) ? 'fast' : null,
       selectionMode: ['auto', 'pinned', 'manual', 'default'].includes(explicitMode) ? explicitMode : previous.adapterMetadata?.selectionMode ?? 'unspecified',
       curatedPresetMatch: this.catalog.WORK_PRESETS.some(choice => choice.model === model && choice.effort === effort),
     };
@@ -208,10 +219,11 @@ export class LocalAppServer {
     thread.model = selected.model;
     thread.reasoningEffort = selected.reasoningEffort;
     thread.serviceTier = selected.serviceTier;
+    thread.uiServiceTier = selected.serviceTier;
     if (params.cwd != null) thread.cwd = params.cwd;
     if (params.collaborationMode) thread.collaborationMode = copy(params.collaborationMode);
     thread.collaborationMode.settings = { ...thread.collaborationMode.settings, model: selected.model, reasoning_effort: selected.reasoningEffort };
-    thread.adapterMetadata = { ...thread.adapterMetadata, selectionMode: selected.selectionMode, curatedPresetMatch: selected.curatedPresetMatch };
+    thread.adapterMetadata = { ...thread.adapterMetadata, executionPolicy: selected.executionPolicy, selectionMode: selected.selectionMode, curatedPresetMatch: selected.curatedPresetMatch };
   }
   settingsSnapshot(thread) {
     return { model: thread.model, modelProvider: thread.modelProvider, effort: thread.reasoningEffort, serviceTier: thread.serviceTier ?? null, cwd: thread.cwd, approvalPolicy: thread.approvalPolicy, approvalsReviewer: 'user', sandboxPolicy: { type: 'readOnly', networkAccess: false }, personality: null, collaborationMode: copy(thread.collaborationMode), disabledPluginIds: [] };
@@ -233,7 +245,7 @@ export class LocalAppServer {
       startedAt: Math.floor(startedAtMs / 1000), completedAt: null, durationMs: null,
       model: selected.model, reasoningEffort: selected.reasoningEffort, serviceTier: selected.serviceTier,
       clientUserMessageId: params.clientUserMessageId ?? null,
-      adapterMetadata: { startedAtMs, fingerprint, selectionMode: selected.selectionMode, curatedPresetMatch: selected.curatedPresetMatch, clientMetadata: copy(params.responsesapiClientMetadata ?? null), instructions: this.instructions(params) },
+      adapterMetadata: { startedAtMs, fingerprint, executionPolicy: selected.executionPolicy, selectionMode: selected.selectionMode, curatedPresetMatch: selected.curatedPresetMatch, clientMetadata: copy(params.responsesapiClientMetadata ?? null), instructions: this.instructions(params) },
     };
     const previous = copy(thread);
     this.updateSelection(thread, selected, params);
@@ -315,6 +327,7 @@ export class LocalAppServer {
     if (!turn) throw new RpcError(-32001, 'turn_not_found');
     if (this.running.has(thread.id)) return { result: { turn: copy(this.running.get(thread.id).turn) } };
     if (turn.status === 'completed') return { result: { turn: copy(turn) } };
+    this.assertExecutionAllowed(turn);
     if (!turn.adapterMetadata?.checkpoint) throw new RpcError(-32602, 'No resumable execution checkpoint exists');
     if (params.model && params.model !== turn.model) throw new RpcError(-32602, 'Resume preserves the original turn model');
     turn.status = 'inProgress'; turn.error = null; turn.completedAt = null; turn.durationMs = null; thread.status = active();

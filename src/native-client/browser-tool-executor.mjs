@@ -36,7 +36,7 @@ export class BrowserWorkspaceStore {
 }
 const definition = (name, description, properties, required) => ({ type: 'function', function: { name, description, parameters: { type: 'object', properties, required, additionalProperties: false } } });
 const string = { type: 'string' };
-export function createBrowserToolExecutor({ PythonRuntime, PYTHON_TOOL, storage = new BrowserWorkspaceStore(), pythonOptions = {} } = {}) {
+export function createBrowserToolExecutor({ PythonRuntime, PYTHON_TOOL, storage = new BrowserWorkspaceStore(), pythonOptions = {}, getWorkspaceNamespace = () => null } = {}) {
   const runtimes = new Map();
   const tools = [
     ...(PythonRuntime && PYTHON_TOOL ? [PYTHON_TOOL] : []),
@@ -46,30 +46,31 @@ export function createBrowserToolExecutor({ PythonRuntime, PYTHON_TOOL, storage 
     definition('delete_file', 'Delete a named file from this conversation workspace.', { path: string }, ['path']),
     definition('task_status', 'Persist progress of a multi-step task. Use running while deliverables remain; complete only when finished. This does not itself execute other tools.', { status: { type: 'string', enum: ['running', 'complete'] }, summary: string }, ['status', 'summary']),
   ];
-  const namespace = id => encodeURIComponent(String(id));
-  const url = (threadId, path) => { const base = globalThis.__CHATGPT_REPLICA_ENV__?.basePath || '/'; return `${base}__local_artifacts/${namespace(threadId)}/${path.split('/').map(encodeURIComponent).join('/')}`; };
-  const artifact = (threadId, name, size) => ({ name, path: '/mnt/data/' + name, mime: mime(name), size, url: url(threadId, name) });
+  const owner = () => { const value = getWorkspaceNamespace(); if (value == null) return null; if (typeof value !== 'string' || !/^[a-z0-9_-]{1,128}$/i.test(value)) throw Error('Invalid account workspace namespace'); return value; };
+  const namespace = id => { const scope = owner(), thread = encodeURIComponent(String(id)); return scope == null ? thread : 'account-' + scope + '--' + thread; };
+  const url = (threadId, path, prefix = namespace(threadId)) => { const base = globalThis.__CHATGPT_REPLICA_ENV__?.basePath || '/'; return `${base}__local_artifacts/${prefix}/${path.split('/').map(encodeURIComponent).join('/')}`; };
+  const artifact = (threadId, name, size, prefix) => ({ name, path: '/mnt/data/' + name, mime: mime(name), size, url: url(threadId, name, prefix) });
   const result = (data, isError = false) => ({ content: [{ type: 'text', text: JSON.stringify(data) }, ...(data.files || (data.file ? [data.file] : [])).map(file => ({ type: 'resource_link', uri: globalThis.location ? new URL(file.url, location.origin).href : file.url, name: file.name, mimeType: file.mime }))], structuredContent: data, isError });
   return {
     tools, storage, capabilitySource: 'browser-origin-local-tools',
     async execute(call, { threadId, signal, onStatus = () => {}, onTaskStatus = () => {} }) {
       signal?.throwIfAborted(); const name = call.function.name, args = JSON.parse(call.function.arguments || '{}'), prefix = namespace(threadId);
       if (name === 'task_status') { if (!['running', 'complete'].includes(args.status)) throw Error('Invalid task status'); await onTaskStatus({ status: args.status, summary: String(args.summary || '') }); return result({ status: args.status, summary: args.summary }); }
-      if (name === 'list_files') return result({ files: (await storage.list(prefix)).map(f => artifact(threadId, f.name, f.size)) });
-      if (name === 'create_file' || name === 'write_file') { const path = workspacePath(args.name ?? args.path); if (typeof args.content !== 'string') throw Error('File content must be text'); const bytes = encoder.encode(args.content); await storage.write(prefix + '/' + path, bytes); return result({ file: artifact(threadId, path, bytes.length) }); }
+      if (name === 'list_files') return result({ files: (await storage.list(prefix)).map(f => artifact(threadId, f.name, f.size, prefix)) });
+      if (name === 'create_file' || name === 'write_file') { const path = workspacePath(args.name ?? args.path); if (typeof args.content !== 'string') throw Error('File content must be text'); const bytes = encoder.encode(args.content); await storage.write(prefix + '/' + path, bytes); return result({ file: artifact(threadId, path, bytes.length, prefix) }); }
       if (name === 'read_file') { const path = workspacePath(args.path), bytes = await storage.read(prefix + '/' + path), text = decoder.decode(bytes), offset = Math.max(0, Number(args.offset) || 0), length = Math.min(50000, Math.max(1, Number(args.length) || 30000)); return result({ path: '/mnt/data/' + path, content: text.slice(offset, offset + length), offset, totalCharacters: text.length, truncated: offset + length < text.length }); }
       if (name === 'delete_file') { const path = workspacePath(args.path); await storage.remove(prefix + '/' + path); return result({ path: '/mnt/data/' + path, deleted: true }); }
       if (name !== 'python' || !PythonRuntime) throw Error('Tool is not available: ' + name);
       if (typeof args.code !== 'string') throw Error('Python code must be text');
-      let runtime = runtimes.get(threadId); if (!runtime) { runtime = new PythonRuntime(pythonOptions); runtimes.set(threadId, runtime); }
+      let runtime = runtimes.get(prefix); if (!runtime) { runtime = new PythonRuntime(pythonOptions); runtimes.set(prefix, runtime); }
       const stop = () => runtime.terminate(new DOMException('Python execution interrupted', 'AbortError'));
       signal?.addEventListener('abort', stop, { once: true });
       try {
         const files = await Promise.all((await storage.list(prefix)).map(async f => ({ name: f.name, bytes: await storage.read(prefix + '/' + f.name) })));
         signal?.throwIfAborted(); const output = await runtime.run(args.code, files, onStatus); signal?.throwIfAborted(); const generated = [];
-        for (const file of output.files || []) { const path = workspacePath(file.name); let bytes = file.bytes; if (!bytes && file.dataUrl) { const encoded = file.dataUrl.split(',')[1]; bytes = Uint8Array.from(atob(encoded), c => c.charCodeAt(0)); } if (!bytes) throw Error('Python returned a file without bytes'); await storage.write(prefix + '/' + path, bytes); generated.push(artifact(threadId, path, bytes.length)); }
+        for (const file of output.files || []) { const path = workspacePath(file.name); let bytes = file.bytes; if (!bytes && file.dataUrl) { const encoded = file.dataUrl.split(',')[1]; bytes = Uint8Array.from(atob(encoded), c => c.charCodeAt(0)); } if (!bytes) throw Error('Python returned a file without bytes'); await storage.write(prefix + '/' + path, bytes); generated.push(artifact(threadId, path, bytes.length, prefix)); }
         const bounded = {};
-        for (const key of ['stdout', 'stderr', 'result']) { const text = String(output[key] || ''); bounded[key] = text.slice(0, 32000); if (text.length > 32000) { const name = '.logs/' + String(call.id || Date.now()).replace(/[^a-z0-9_-]/gi, '_') + '-' + key + '.txt', bytes = encoder.encode(text); await storage.write(prefix + '/' + name, bytes); generated.push(artifact(threadId, name, bytes.length)); bounded[key + '_truncated'] = true; } }
+        for (const key of ['stdout', 'stderr', 'result']) { const text = String(output[key] || ''); bounded[key] = text.slice(0, 32000); if (text.length > 32000) { const name = '.logs/' + String(call.id || Date.now()).replace(/[^a-z0-9_-]/gi, '_') + '-' + key + '.txt', bytes = encoder.encode(text); await storage.write(prefix + '/' + name, bytes); generated.push(artifact(threadId, name, bytes.length, prefix)); bounded[key + '_truncated'] = true; } }
         return result({ ...bounded, files: generated, ...(output.error ? { error: output.error } : {}), executionEnvironment: 'browser-pyodide' }, output.ok === false || Boolean(output.error));
       } finally { signal?.removeEventListener('abort', stop); }
     },
@@ -77,7 +78,10 @@ export function createBrowserToolExecutor({ PythonRuntime, PYTHON_TOOL, storage 
     async getArtifact(threadId, path) { const bytes = await storage.read(namespace(threadId) + '/' + workspacePath(path)); return new Blob([bytes], { type: mime(path) }); },
     async handleArtifactRequest(request, pathname = new URL(request.url).pathname) {
       const match = /^\/__local_artifacts\/([^/]+)\/(.+)$/.exec(pathname); if (!match || request.method !== 'GET') return null;
-      try { const path = workspacePath(match[2].split('/').map(decodeURIComponent).join('/')), blob = await this.getArtifact(decodeURIComponent(match[1]), path); return new Response(blob, { headers: { 'Content-Type': blob.type, 'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(path.split('/').at(-1))}`, 'Cache-Control': 'private, no-store' } }); } catch (error) { return new Response(JSON.stringify({ error: error.message }), { status: 404, headers: { 'Content-Type': 'application/json' } }); }
+      try {
+        const key = decodeURIComponent(match[1]), scope = owner();
+        if (!/^[a-z0-9_-]+$/i.test(key) || (scope == null ? key.startsWith('account-') : !key.startsWith('account-' + scope + '--'))) throw Error('Artifact belongs to another account workspace');
+        const path = workspacePath(match[2].split('/').map(decodeURIComponent).join('/')), blob = new Blob([await storage.read(key + '/' + path)], { type: mime(path) }); return new Response(blob, { headers: { 'Content-Type': blob.type, 'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(path.split('/').at(-1))}`, 'Cache-Control': 'private, no-store' } }); } catch (error) { return new Response(JSON.stringify({ error: error.message }), { status: 404, headers: { 'Content-Type': 'application/json' } }); }
     },
     dispose(threadId) { if (threadId) { runtimes.get(threadId)?.terminate(); runtimes.delete(threadId); } else { for (const runtime of runtimes.values()) runtime.terminate(); runtimes.clear(); } },
   };

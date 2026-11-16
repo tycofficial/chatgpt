@@ -3,14 +3,18 @@ import { createModelCatalogAdapter } from './model-catalog-adapter.mjs';
 import { DEFAULT_SETTINGS } from './config.js';
 import { streamCompletion, PythonRuntime, PYTHON_TOOL } from './runtime.js';
 import { LocalAppServer, LocalProtocolSocket } from './local-app-server.mjs';
-import { getPrototypeLocalSession, getPrototypeLocalAuth, getLocalAccountCheck, getLocalOptimizedAccount, getLocalWhamAccounts, getPrototypeCurrentUser, isPrototypeLocalSession, clearPrototypeLocalSession, getLocalSignedOutUrl } from './local-identity.mjs';
+import { getPrototypeLocalSession, getPrototypeLocalAuth, getLocalAccountCheck, getLocalOptimizedAccount, getLocalWhamAccounts, getPrototypeCurrentUser, isPrototypeLocalSession, clearPrototypeLocalSession, getLocalSignedOutUrl, getLocalAccountStorageKey } from './local-identity.mjs';
 import { getPrototypeConfiguration } from './local-configuration.mjs';
 import { ClassicChatAdapter } from './classic-chat-adapter.mjs';
 import { LocalConversationPubSub } from './local-pubsub.mjs';
 import { readLocalUserPreferences, updateLocalUserPreference, acknowledgeLocalAnnouncement } from './local-user-preferences.mjs';
 import { createBrowserToolExecutor } from './browser-tool-executor.mjs';
 import { createLocalPricingAdapter } from './local-pricing.mjs';
-import { SITE_ACCOUNT_SERVICE, getSiteAccount, logoutSiteAccount } from './site-account.mjs';
+import { SITE_ACCOUNT_SERVICE, getSiteAccount, hasModelSelectionAccess, logoutSiteAccount } from './site-account.mjs';
+import { createLocalCodexAdapter } from './local-codex-adapter.mjs';
+import { isOpenStreetMapTileRequest, fetchOpenStreetMapTile } from './local-map-provider.mjs';
+import { createLocalDiscoveryAdapter } from './local-discovery.mjs';
+import { createLocalDotAdapter } from './local-dot-adapter.mjs';
 
 export const localModelAdapter = createModelCatalogAdapter(modelCatalog);
 export const localProtocolDiagnostics = [];
@@ -20,12 +24,15 @@ localProtocolDiagnostics.push = function (...events) {
   if (size > 500) this.splice(0, size - 500);
   return this.length;
 };
-export const localToolExecutor = createBrowserToolExecutor({ PythonRuntime, PYTHON_TOOL });
+export const localToolExecutor = createBrowserToolExecutor({ PythonRuntime, PYTHON_TOOL,
+  getWorkspaceNamespace: () => hasModelSelectionAccess() ? null : getSiteAccount()?.accountId ?? 'guest',
+});
 export const localPricingAdapter = createLocalPricingAdapter({ diagnostics: localProtocolDiagnostics, readMembership: () => getSiteAccount() });
+export const localDiscoveryAdapter = createLocalDiscoveryAdapter({ storage: { getItem: key => globalThis.localStorage.getItem(key), setItem: (key, value) => globalThis.localStorage.setItem(key, value) }, getAccountId: () => getPrototypeLocalAuth()?.accountId ?? null, diagnostics: localProtocolDiagnostics });
 export const localAppServer = new LocalAppServer({
   storage: {
-    getItem: key => globalThis.localStorage.getItem(key),
-    setItem: (key, value) => globalThis.localStorage.setItem(key, value),
+    getItem: key => globalThis.localStorage.getItem(getLocalAccountStorageKey(key)),
+    setItem: (key, value) => globalThis.localStorage.setItem(getLocalAccountStorageKey(key), value),
   },
   streamCompletion,
   readSettings: () => ({ ...DEFAULT_SETTINGS }),
@@ -33,14 +40,21 @@ export const localAppServer = new LocalAppServer({
   catalog: modelCatalog,
   diagnostics: localProtocolDiagnostics,
   toolExecutor: localToolExecutor,
-  agentOptions: { toolTransport: 'responses', verifiedPriority: false },
+  agentOptions: { toolTransport: 'responses', verifiedPriority: false, ultraOrchestration: true },
+  getExecutionPolicy: () => ({ modelSelection: hasModelSelectionAccess() }),
 });
 export const localConversationPubSub = new LocalConversationPubSub(localAppServer);
+export const localDotAdapter = createLocalDotAdapter({
+  storage: { getItem: key => globalThis.localStorage.getItem(key), setItem: (key, value) => globalThis.localStorage.setItem(key, value) },
+  appServer: localAppServer, getIdentity: getPrototypeLocalAuth, isLocalSession: isPrototypeLocalSession,
+  readSettings: () => ({ ...DEFAULT_SETTINGS }), getCapabilities: getLocalExecutionCapabilities, diagnostics: localProtocolDiagnostics,
+});
 export const localClassicChatAdapter = new ClassicChatAdapter({ appServer: localAppServer, models: localModelAdapter, onConversationChange: (type, payload) => localConversationPubSub.publish(type, payload) });
+export const localCodexAdapter = createLocalCodexAdapter({ appServer: localAppServer, models: localModelAdapter, readSettings: () => ({ ...DEFAULT_SETTINGS }), getIdentity: getPrototypeLocalAuth, isLocalSession: isPrototypeLocalSession, getCapabilities: getLocalExecutionCapabilities, diagnostics: localProtocolDiagnostics });
 export function getLocalExecutionCapabilities() {
   return { executionSource: 'local-app-server',
     textConversations: Boolean(DEFAULT_SETTINGS.apiBase && DEFAULT_SETTINGS.apiKey && typeof streamCompletion === 'function' && typeof localAppServer.dispatch === 'function' && modelCatalog.WORK_MODEL_IDS.length),
-    openaiCloudEntitlement: false, filesystem: true, tools: localToolExecutor.tools.map(tool => tool.function.name), filesystemScope: 'browser-origin-workspace', pythonEnvironment: 'pyodide-webassembly' };
+    openaiCloudEntitlement: false, modelSelection: hasModelSelectionAccess(), filesystem: true, tools: localToolExecutor.tools.map(tool => tool.function.name), filesystemScope: 'browser-origin-workspace', pythonEnvironment: 'pyodide-webassembly' };
 }
 
 /** Only local assets/adapters and the explicitly configured gateway can run. */
@@ -60,7 +74,8 @@ export function installNetworkBoundary() {
     const request = new Request(input, init);
     const url = new URL(request.url, location.href);
     const local = url.origin === location.origin;
-    if (url.origin === SITE_ACCOUNT_SERVICE && /^\/(?:auth\/(?:login|session|logout)|bridge\/status|usage|jobs(?:\/[^/]+(?:\/events)?)?)$/.test(url.pathname)) return originalFetch(new Request(request, { credentials: 'omit', redirect: 'error' }));
+    if (isOpenStreetMapTileRequest(request)) return fetchOpenStreetMapTile(originalFetch, request);
+    if (url.origin === SITE_ACCOUNT_SERVICE && /^\/(?:auth\/(?:login|register|session|logout)|bridge\/status|usage|jobs(?:\/[^/]+(?:\/events)?)?)$/.test(url.pathname)) return originalFetch(new Request(request, { credentials: 'omit', redirect: 'error' }));
     // Consume analytics locally; never forward captured telemetry to its vendor.
     if (isTelemetry(url)) return response({ success: true });
     if (local && (/^\/cdn\//.test(url.pathname) || /^\/__prototype\//.test(url.pathname))) {
@@ -93,6 +108,10 @@ export function installNetworkBoundary() {
     if (request.method === 'GET' && /^\/(?:__codex-api\/|backend-api\/)?accounts\/optimized\/check\/?$/.test(url.pathname)) return response(getLocalOptimizedAccount() ?? { error: 'Local session is disabled' }, isPrototypeLocalSession() ? 200 : 401);
     if (request.method === 'GET' && /^\/(?:__codex-api\/|backend-api\/)?wham\/accounts\/check\/?$/.test(url.pathname)) return response(getLocalWhamAccounts());
     if (request.method === 'GET' && /^\/(?:__codex-api\/|backend-api\/)?settings\/user\/?$/.test(url.pathname)) return response(readLocalUserPreferences());
+    if (request.method === 'GET' && /^\/(?:__codex-api\/|backend-api\/)?system_hints\/?$/.test(url.pathname)) {
+      const hints = url.searchParams.get('mode') === 'basic' ? [{ system_hint: 'reason', name: '思考一下', action_label: '思考一下', aliases: [], required_features: [], required_models: [], required_conversation_modes: [], allow_in_temporary_chat: true, requires_personalization: false, surfaces: ['chat'], description: '' }] : [];
+      return response({ system_hints: hints });
+    }
     if (request.method === 'PATCH' && /^\/(?:__codex-api\/|backend-api\/)?settings\/account_user_setting\/?$/.test(url.pathname)) {
       let value = url.searchParams.get('value');
       try { value = JSON.parse(value); } catch {}
@@ -103,7 +122,7 @@ export function installNetworkBoundary() {
     if (request.method === 'POST' && /\/v1\/initialize\/?$/.test(url.pathname)) {
       let requestedUser;
       try { requestedUser = (await request.clone().json()).user; } catch {}
-      return response(getPrototypeConfiguration(requestedUser));
+      return response(localCodexAdapter.mergeConfiguration(getPrototypeConfiguration(requestedUser)));
     }
     if (request.method === 'GET' && /^\/(?:__codex-api\/|backend-api\/)?(?:tpp\/)?models\/?$/.test(url.pathname)) {
       diagnostics.push({ type: 'local-adapter', service: 'models', source: 'model-catalog.js', capabilitySource: modelCatalog.WORK_CATALOG_PROVENANCE.pinned });
@@ -118,8 +137,12 @@ export function installNetworkBoundary() {
     try {
       const artifact = await localToolExecutor.handleArtifactRequest(request, adapterPath);
       if (artifact) return artifact;
+      const dot = await localDotAdapter.handle(request, adapterPath);
+      if (dot) return dot;
       const pricing = await localPricingAdapter.handle(request, adapterPath);
       if (pricing) return pricing;
+      const discovery = await localDiscoveryAdapter.handle(request, adapterPath);
+      if (discovery) return discovery;
       const classic = await localClassicChatAdapter.handle(request, adapterPath);
       if (classic) return classic;
     } catch (error) {
@@ -144,17 +167,19 @@ export function installNetworkBoundary() {
   const originalOpen = window.open.bind(window);
   window.open = (url, ...rest) => {
     const target = new URL(url ?? 'about:blank', location.href);
-    if (target.origin !== location.origin) {
+    if (!['http:', 'https:', 'about:'].includes(target.protocol)) {
       diagnostics.push({ type: 'navigation-unavailable', origin: target.origin });
       return null;
     }
-    return originalOpen(target.href, ...rest);
+    const opened = originalOpen(target.href, ...rest);
+    if (opened && target.origin !== location.origin) try { opened.opener = null; } catch {}
+    return opened;
   };
   document.addEventListener('click', event => {
     const link = event.target instanceof Element && event.target.closest('a[href]');
     if (!link) return;
     const url = new URL(link.href, location.href);
-    if (url.origin !== location.origin) {
+    if (!['http:', 'https:'].includes(url.protocol)) {
       event.preventDefault();
       event.stopPropagation();
       diagnostics.push({ type: 'navigation-unavailable', origin: url.origin });

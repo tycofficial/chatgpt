@@ -334,7 +334,9 @@ export class PythonRuntime {
   constructor({ timeout = 120000 } = {}) { this.timeout = timeout; this.worker = null; this.pending = new Map(); this.serial = Promise.resolve(); this.nextId = 1; this.generation = 0; }
   ensureWorker() {
     if (this.worker) return;
-    this.worker = new Worker(new URL('./python-worker.js', import.meta.url), { type: 'module' });
+    const workerURL = new URL('./python-worker.js', import.meta.url);
+    workerURL.search = new URL(import.meta.url).search;
+    this.worker = new Worker(workerURL, { type: 'module' });
     this.worker.onmessage = ({ data }) => {
       const job = this.pending.get(data.id);
       if (!job) return;

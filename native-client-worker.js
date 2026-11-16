@@ -1,9 +1,9 @@
-import {BrowserWorkspaceStore,workspacePath} from './native-client/browser-tool-executor.mjs?v=78e7bc02bd4001a6';
+import {BrowserWorkspaceStore,workspacePath} from './native-client/browser-tool-executor.mjs?v=0e54443bf396616d';
 const workspace=new BrowserWorkspaceStore();
 const SOURCE_BUILD="ef0c3fb941611420d8683bf88f61acf1a8ac6b19";
 const BASE=new URL('./',self.location.href).pathname;
 const CACHE='chatgpt-original-assets-'+SOURCE_BUILD;
-const SHELL_CACHE='chatgpt-native-shell-78e7bc02bd4001a6';
+const SHELL_CACHE='chatgpt-native-shell-0e54443bf396616d';
 self.addEventListener('install',event=>event.waitUntil(self.skipWaiting()));
 self.addEventListener('activate',event=>event.waitUntil(self.clients.claim()));
 function mirror(url){
@@ -24,9 +24,9 @@ self.addEventListener('fetch',event=>{
    return new Response(bytes,{headers:{'Content-Type':types[name.split('.').at(-1)]||'application/octet-stream','Content-Disposition':"attachment; filename*=UTF-8''"+encodeURIComponent(name.split('/').at(-1)),'Cache-Control':'private,no-store','X-Content-Type-Options':'nosniff'}});
   }catch{return new Response('File not found in this browser workspace',{status:404});}})());return;
  }
- if(event.request.mode==='navigate'&&requested.origin===self.location.origin&&requested.pathname.startsWith(BASE)){
+ if(event.request.mode==='navigate'&&requested.origin===self.location.origin&&requested.pathname.startsWith(BASE)&&!requested.pathname.startsWith(BASE+'_orbit-renderer/')){
   event.respondWith((async()=>{const cache=await caches.open(SHELL_CACHE),key=new URL(BASE+'index.html',self.location.origin).href;
-   try{let page=await fetch(event.request);if(page.status===404)page=await fetch(key,{cache:'no-store'});if(page.ok)await cache.put(key,page.clone());return page;}
+   try{let page=await fetch(event.request,{cache:'no-store'});if(page.status===404)page=await fetch(key,{cache:'no-store'});if(page.ok)await cache.put(key,page.clone());return page;}
    catch(error){const saved=await cache.match(key);if(saved)return saved;throw error;}
   })());return;
  }

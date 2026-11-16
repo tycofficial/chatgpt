@@ -15,6 +15,8 @@ export function createModelCatalogAdapter(catalog) {
   const curated = catalog.getWorkSelectionCatalog({ selectionMode: 'auto' });
   const manual = new Map(ids.map(model => [model, catalog.getWorkSelectionCatalog({ model, selectionMode: 'pinned' })]));
   const selection = catalog.normalizeWorkSelection({});
+  // Chat is a frontend alias for the base API model, without Work orchestration.
+  const chatManual = manual.get(selection.model).filter(choice => choice.effort !== 'ultra');
   const modelLabel = model => catalog.WORK_MODEL_LABELS[model];
   const rawEffort = effort => {
     const raw = FRONTEND_TO_RAW_EFFORT[effort];
@@ -31,8 +33,9 @@ export function createModelCatalogAdapter(catalog) {
     manualCapabilitySource: catalog.WORK_CATALOG_PROVENANCE.pinned,
     originalManualMembershipCaptured: false,
     originalPrivateMetadata: false,
+    siteUltraOrchestration: catalog.SITE_ULTRA_ORCHESTRATION,
     frontendChatAlias: { slug: 'auto', apiModel: selection.model, meaning: 'frontend selection alias, not an additional gateway model' },
-    description: 'Curated presets come from the explicit six-position capture. Per-model manual efforts come from adapter API capabilities; they are not a captured original account response.',
+    description: 'Curated presets come from the explicit six-position capture. Per-model manual efforts combine API capabilities with explicit site Ultra orchestration; they are not a captured original account response.',
   });
   function preset(choice) {
     return {
@@ -40,7 +43,8 @@ export function createModelCatalogAdapter(catalog) {
       thinking_effort: rawEffort(choice.effort),
       lane: choice.effort === 'none' ? 'instant' : 'thinking',
       title: choice.label,
-      selected_display_title: choice.displayLabel,
+      selected_display_title: choice.label,
+      selected_display_version: choice.model === 'auto' ? 'ChatGPT' : modelLabel(choice.model),
       preset_type: 'available',
     };
   }
@@ -68,7 +72,7 @@ export function createModelCatalogAdapter(catalog) {
         tagline: null,
         title: modelLabel(model),
       }))],
-      models: [{ slug: 'auto', title: 'ChatGPT', description: null, configurable_thinking_effort: true, default_thinking_effort: rawEffort(selection.effort), thinking_efforts: manual.get(selection.model).map(choice => ({ thinking_effort: rawEffort(choice.effort), short_label: choice.label, full_label: choice.label })), is_work_mode_model: false, enabled_tools: [], tags: [] }, ...ids.map(model => ({
+      models: [{ slug: 'auto', title: 'ChatGPT', description: null, configurable_thinking_effort: true, default_thinking_effort: rawEffort(selection.effort), thinking_efforts: chatManual.map(choice => ({ thinking_effort: rawEffort(choice.effort), short_label: choice.label, full_label: choice.label })), is_work_mode_model: false, enabled_tools: [], tags: [] }, ...ids.map(model => ({
         slug: model,
         title: modelLabel(model),
         description: null,
@@ -89,7 +93,7 @@ export function createModelCatalogAdapter(catalog) {
         ...ids.map(model => version(model, modelLabel(model), [model], manual.get(model))),
         // Source iLYI chooses Chat from isWorkModeModel=false; its original
         // picker needs a version radio to select this frontend alias again.
-        version('auto', 'ChatGPT', ['auto'], manual.get(selection.model).map(choice => ({ ...choice, model: 'auto', displayLabel: `ChatGPT ${choice.label}` }))),
+        version('auto', 'ChatGPT', ['auto'], chatManual.map(choice => ({ ...choice, model: 'auto', displayLabel: `ChatGPT ${choice.label}` }))),
       ],
       slider_settings: curated.map(choice => ({ model_slug: choice.model, thinking_effort: rawEffort(choice.effort) })),
       workspace_model_policy: null,
@@ -128,7 +132,7 @@ export function createModelCatalogAdapter(catalog) {
         hidden: false,
         isDefault: model === selection.model,
         defaultReasoningEffort: defaults.get(model),
-        supportedReasoningEfforts: manual.get(model).map(choice => ({ reasoningEffort: choice.effort, description: '' })),
+        supportedReasoningEfforts: manual.get(model).map(choice => ({ reasoningEffort: choice.effort, description: '', ...(choice.effort === 'ultra' ? { adapterExecutionMode: catalog.SITE_ULTRA_ORCHESTRATION } : {}) })),
         inputModalities: ['text'],
         adapterCapabilitySource: catalog.WORK_CATALOG_PROVENANCE.pinned,
       })),

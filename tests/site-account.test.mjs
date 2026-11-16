@@ -1,0 +1,57 @@
+
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import vm from 'node:vm';
+const source=fs.readFileSync(new URL('../src/native-client/site-account.mjs',import.meta.url),'utf8');
+const names=['getSiteAccount','hasModelSelectionAccess','getSiteSessionToken','getSiteAccountError','initializeSiteAccount','loginSiteAccount','registerSiteAccount','logoutSiteAccount','getSiteLoginUrl','safeSiteReturnUrl'];
+// Execute the actual module in an isolated VM; only ESM export keywords change.
+// No real browser storage, password, token, account service, or network is used.
+const fixtureToken='c'.repeat(64),key='chatgpt-site-admin-session:v1',now=1800000000000;
+const user=()=>({id:'site-admin',username:'TYC',name:'TYC',role:'administrator',planType:'pro',membershipSource:'site-administrator',createdAt:now-10000,officialSubscriptionVerified:false});
+function fixture(cached,{failWrites=false}={}){
+ let clock=now,handler=async()=>({user:user()}),calls=[];
+ const values=new Map(cached===undefined?[]:[[key,typeof cached==='string'?cached:JSON.stringify(cached)]]);
+ const localStorage={getItem:k=>values.get(k)??null,setItem:(k,v)=>{if(failWrites)throw Error('Fixture storage unavailable');values.set(k,v);},removeItem:k=>values.delete(k)};
+ const context=vm.createContext({URL,AbortController,Response,setTimeout,clearTimeout,Date:class extends Date{static now(){return clock;}},localStorage,sessionStorage:{setItem(){}},location:{origin:'https://tycofficial.github.io',href:'https://tycofficial.github.io/chatgpt/'},__CHATGPT_REPLICA_ENV__:{basePath:'/chatgpt/'},fetch:async(url,options)=>{calls.push({path:new URL(url).pathname,method:options.method,authorizationPresent:typeof options.headers.Authorization==='string'});const result=await handler(url,options);return new Response(JSON.stringify(result.body??result),{status:result.status??200,headers:{'Content-Type':'application/json'}});}});
+ const executable=source.replace(/^export\s+/gm,'')+'\nglobalThis.fixtureExports={'+names.join(',')+'};';
+ new vm.Script(executable,{filename:'site-account.mjs (isolated fixture)'}).runInContext(context);
+ return{api:context.fixtureExports,values,calls,setHandler:f=>handler=f,setClock:value=>clock=value};
+}
+const record=(extra={})=>({token:fixtureToken,expiresAt:now+60000,user:{...user(),username:'UNTRUSTED_CACHE',canSelectModels:true},...extra});
+function assertFree(f){assert.equal(f.api.getSiteAccount(),null);assert.equal(f.api.hasModelSelectionAccess(),false);assert.equal(f.api.getSiteSessionToken(),null);}
+test('no session stays Free and never contacts the account service',async()=>{const f=fixture();assertFree(f);assert.equal(await f.api.initializeSiteAccount(),null);assert.equal(f.calls.length,0);});
+test('invalid or expired cached sessions are removed without granting permissions',async t=>{
+ for(const [label,cached]of [['malformed','{'],['missing-token',{expiresAt:now+100}],['invalid-token',record({token:'fixture-not-a-token'})],['expired',record({expiresAt:now})],['missing-expiry',record({expiresAt:undefined})],['string-expiry',record({expiresAt:String(now+1000)})]]){
+  await t.test(label,async()=>{const f=fixture(cached);assertFree(f);await f.api.initializeSiteAccount();assertFree(f);assert.equal(f.values.has(key),false);assert.equal(f.calls.length,0);});
+ }
+});
+test('forged cached administrator fields never bypass server validation',async()=>{const f=fixture(record());f.setHandler(async()=>({status:401,body:{error:{code:'UNAUTHORIZED',message:'Fixture rejected'}}}));await f.api.initializeSiteAccount();assertFree(f);assert.equal(f.values.has(key),false);assert.equal(f.calls[0].path,'/auth/session');});
+test('only the server user becomes the immutable verified identity',async()=>{const f=fixture(record());await f.api.initializeSiteAccount();assert.equal(f.api.getSiteAccount().username,'TYC');assert.equal(f.api.hasModelSelectionAccess(),true);assert.equal(f.api.getSiteSessionToken(),fixtureToken);assert.equal('canSelectModels'in f.api.getSiteAccount(),false);assert.throws(()=>{f.api.getSiteAccount().planType='free';},/read only|Cannot assign/);});
+test('session responses with invalid permission or identity fields fail closed',async t=>{
+ for(const [label,change]of [['free',{planType:'free'}],['non-admin',{role:'member'}],['wrong-id',{id:'claimed-admin'}],['missing-time',{createdAt:undefined}],['wrong-source',{membershipSource:'browser-cache'}],['official-claim',{officialSubscriptionVerified:true}]]){
+  await t.test(label,async()=>{const f=fixture(record());f.setHandler(async()=>({user:{...user(),...change}}));await f.api.initializeSiteAccount();assertFree(f);assert.equal(f.values.has(key),false);});
+ }
+});
+test('revalidation immediately revokes old Pro and failure clears its cached token',async()=>{const f=fixture(record());await f.api.initializeSiteAccount();let release;f.setHandler(()=>new Promise(resolve=>release=resolve));const pending=f.api.initializeSiteAccount();assertFree(f);release({status:401,body:{error:{message:'Fixture expired'}}});await pending;assertFree(f);assert.equal(f.values.has(key),false);});
+test('network validation failure cannot retain previously verified Pro',async()=>{const f=fixture(record());await f.api.initializeSiteAccount();f.setHandler(async()=>{throw Error('Fixture network unavailable');});await f.api.initializeSiteAccount();assertFree(f);assert.equal(f.values.has(key),false);});
+test('expiry is checked by permission and token getters without another initialization',async()=>{const f=fixture(record());await f.api.initializeSiteAccount();f.setClock(now+60001);assertFree(f);assert.equal(f.values.has(key),false);});
+test('an optional authoritative session expiry can shorten a remembered expiry',async()=>{const f=fixture(record());f.setHandler(async()=>({user:user(),expiresAt:now+1000}));await f.api.initializeSiteAccount();f.setClock(now+1001);assertFree(f);});
+test('logout wins a race against an outstanding session verification',async()=>{const f=fixture(record());let release;f.setHandler(url=>new URL(url).pathname==='/auth/session'?new Promise(resolve=>release=resolve):Promise.resolve({ok:true}));const pending=f.api.initializeSiteAccount();await f.api.logoutSiteAccount();release({user:user()});await pending;assertFree(f);assert.equal(f.values.has(key),false);});
+test('login validates token, plan, role and future millisecond expiry',async t=>{
+ const valid={token:fixtureToken,expiresAt:now+60000,user:user()};
+ for(const [label,change]of [['token',{token:'fixture-invalid'}],['expired',{expiresAt:now}],['missing-expiry',{expiresAt:undefined}],['string-expiry',{expiresAt:String(now+60000)}],['free-plan',{user:{...user(),planType:'free'}}],['member',{user:{...user(),role:'member'}}]]){
+  await t.test(label,async()=>{const f=fixture();f.setHandler(async()=>({...valid,...change}));await assert.rejects(f.api.loginSiteAccount('fixture-user','fixture-input'));assertFree(f);assert.equal(f.values.has(key),false);});
+ }
+});
+test('a successful login uses the verified server account and persists its issued expiry',async()=>{const f=fixture();f.setHandler(async()=>({token:fixtureToken,expiresAt:now+60000,user:user()}));await f.api.loginSiteAccount('fixture-user','fixture-input');assert.equal(f.api.hasModelSelectionAccess(),true);assert.equal(JSON.parse(f.values.get(key)).expiresAt,now+60000);});
+test('logout wins a race against an outstanding login response',async()=>{const f=fixture();let release;f.setHandler(()=>new Promise(resolve=>release=resolve));const pending=f.api.loginSiteAccount('fixture-user','fixture-input');await f.api.logoutSiteAccount();release({token:fixtureToken,expiresAt:now+60000,user:user()});await assert.rejects(pending,/取消/);assertFree(f);assert.equal(f.values.has(key),false);});
+test('a storage failure cannot leave an unpersisted privileged identity',async()=>{const f=fixture(record(),{failWrites:true});await f.api.initializeSiteAccount();assertFree(f);assert.equal(f.values.has(key),false);});
+test('return URLs remain within the repository and discard old auth flags',()=>{const f=fixture();assert.equal(f.api.safeSiteReturnUrl('https://example.invalid/x').pathname,'/chatgpt/');const u=f.api.safeSiteReturnUrl('/chatgpt/c/fixture?localSession=1&draft=1&refresh_account=1#tail');assert.equal(u.pathname,'/chatgpt/c/fixture');assert.equal(u.search,'?draft=1');assert.equal(u.hash,'#tail');});
+
+const freeAccount=()=>({id:'site-user:66666666-6666-4666-8666-666666666666',accountId:'66666666-6666-4666-8666-666666666666',username:'Fixture Free',name:'Fixture Free',role:'user',planType:'free',membershipSource:'site-registration',createdAt:now-10000,officialSubscriptionVerified:false});
+test('verified registered Free DTO is accepted without model selection access',async()=>{const f=fixture(record());f.setHandler(async()=>({user:freeAccount(),expiresAt:now+30000}));await f.api.initializeSiteAccount();assert.equal(f.api.getSiteAccount().role,'user');assert.equal(f.api.getSiteAccount().planType,'free');assert.equal(f.api.hasModelSelectionAccess(),false);assert.equal(f.api.getSiteSessionToken(),fixtureToken);assert.equal(f.api.getSiteAccount().accountId,freeAccount().accountId);});
+test('registered Free login is validated by the server and stays Free',async()=>{const f=fixture();f.setHandler(async()=>({token:fixtureToken,expiresAt:now+60000,user:freeAccount()}));await f.api.loginSiteAccount('fixture-user','fixture-input');assert.equal(f.api.hasModelSelectionAccess(),false);assert.equal(f.api.getSiteAccount().membershipSource,'site-registration');});
+test('registration uses the real endpoint and accepts only the strict Free DTO',async()=>{const f=fixture();f.setHandler(async()=>({token:fixtureToken,expiresAt:now+60000,user:freeAccount()}));await f.api.registerSiteAccount('fixture-user','fixture-input');assert.equal(f.calls[0].path,'/auth/register');assert.equal(f.api.getSiteAccount().planType,'free');assert.equal(f.api.hasModelSelectionAccess(),false);});
+test('registration cannot accept an administrator response',async()=>{const f=fixture();f.setHandler(async()=>({token:fixtureToken,expiresAt:now+60000,user:user()}));await assert.rejects(f.api.registerSiteAccount('fixture-user','fixture-input'));assertFree(f);});
+test('malformed or escalated Free DTOs fail closed',async t=>{for(const change of [{planType:'pro'},{role:'administrator'},{membershipSource:'site-administrator'},{accountId:'invalid'},{id:'site-user:other'},{officialSubscriptionVerified:true}])await t.test(JSON.stringify(change),async()=>{const f=fixture(record());f.setHandler(async()=>({user:{...freeAccount(),...change}}));await f.api.initializeSiteAccount();assertFree(f);assert.equal(f.values.has(key),false);});});
