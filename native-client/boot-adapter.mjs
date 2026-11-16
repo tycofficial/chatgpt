@@ -2,24 +2,24 @@
  * Loads the public original component graph with explicit local host services.
  * Private original backend credentials are never used by this entry point.
  */
-import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter, localFilesService } from './service-boundary.mjs?v=b88858afb5156217';
-import * as mapLibreRenderer from './map-vendor/maplibre-gl.mjs?v=b88858afb5156217';
-import { createLocalMapProvider } from './local-map-provider.mjs?v=b88858afb5156217';
-import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs?v=b88858afb5156217';
-import { getPrototypeLocalSession, getPrototypeLocalAuth, isPrototypeLocalSession, getPrototypeLocalAuthGeneration, clearPrototypeLocalSession } from './local-identity.mjs?v=b88858afb5156217';
-import { createLocalHostSettingsClass } from './local-host-settings.mjs?v=b88858afb5156217';
-import { createLocalWorkPolicy } from './local-work-policy.mjs?v=b88858afb5156217';
-import { hasModelSelectionAccess, getSiteLoginUrl } from './site-account.mjs?v=b88858afb5156217';
-import { createNativeModelSelectionPolicy, createNativeThinkingEntryPolicy } from './local-model-selection-policy.mjs?v=b88858afb5156217';
-import { createLocalHostClaimsReader } from './local-token-identity.mjs?v=b88858afb5156217';
-import { wrapNativeFileUploadClass } from './local-native-upload.mjs?v=b88858afb5156217';
+import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter, localFilesService, localLibraryService, localLibraryByteTransport } from './service-boundary.mjs?v=3b90ea6eb4e00062';
+import * as mapLibreRenderer from './map-vendor/maplibre-gl.mjs?v=3b90ea6eb4e00062';
+import { createLocalMapProvider } from './local-map-provider.mjs?v=3b90ea6eb4e00062';
+import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs?v=3b90ea6eb4e00062';
+import { getPrototypeLocalSession, getPrototypeLocalAuth, isPrototypeLocalSession, getPrototypeLocalAuthGeneration, clearPrototypeLocalSession } from './local-identity.mjs?v=3b90ea6eb4e00062';
+import { createLocalHostSettingsClass } from './local-host-settings.mjs?v=3b90ea6eb4e00062';
+import { createLocalWorkPolicy } from './local-work-policy.mjs?v=3b90ea6eb4e00062';
+import { hasModelSelectionAccess, getSiteLoginUrl } from './site-account.mjs?v=3b90ea6eb4e00062';
+import { createNativeModelSelectionPolicy, createNativeThinkingEntryPolicy } from './local-model-selection-policy.mjs?v=3b90ea6eb4e00062';
+import { createLocalHostClaimsReader } from './local-token-identity.mjs?v=3b90ea6eb4e00062';
+import { wrapNativeFileUploadClass } from './local-native-upload.mjs?v=3b90ea6eb4e00062';
 
 const boundary = installNetworkBoundary();
 globalThis.__originalClientProbe = boundary.diagnostics;
 installSyntheticDocumentState();
 if (globalThis.__CHATGPT_REPLICA_ENV__) window.__reactRouterContext.basename = globalThis.__CHATGPT_REPLICA_ENV__.basePath.replace(/\/$/, '') || '/';
 
-const plan = await (await fetch(new URL('./entry-plan.json?v=b88858afb5156217', import.meta.url))).json();
+const plan = await (await fetch(new URL('./entry-plan.json?v=3b90ea6eb4e00062', import.meta.url))).json();
 const { __webpack_require__: requireOriginal } = await import(plan.runtime);
 // One mechanical entry transform defers its terminal hxQI invocation and
 // rebases its relative imports. All original factories and chunks are retained.
@@ -76,7 +76,23 @@ function overrideExports(moduleId, overrides, options, wrappers = {}) {
 }
 
 // Keep native upload behavior while local tickets store their real bytes.
-overrideExports('GDNt', {}, { deferred: true }, { b: NativeWebFetch => wrapNativeFileUploadClass(NativeWebFetch, localFilesService) });
+overrideExports('GDNt', {}, { deferred: true }, { b: NativeWebFetch => wrapNativeFileUploadClass(NativeWebFetch, localFilesService, undefined, localLibraryByteTransport) });
+
+// The native download flow also serves this browser's verified local files.
+// Preserve its URL validation for every URL outside this provider's registry.
+overrideExports('GfAi', {}, { deferred: true }, {
+  b: validateURL => function (value, ...args) {
+    if (typeof value === 'string' && localLibraryService.ownsObjectURL(value.trim())) return value.trim();
+    return validateURL.call(this, value, ...args);
+  },
+});
+
+// Retain the original viewer/worker version pair under this site's asset base.
+// A Worker entry must be directly available from the deployed project path.
+const nativePdfWorker = new URL('./artifact-assets/pdf.worker.min.f6ffbd8da0.mjs', import.meta.url);
+const nativeAssetVersion = new URL(import.meta.url).searchParams.get('v');
+if (nativeAssetVersion) nativePdfWorker.searchParams.set('v', nativeAssetVersion);
+overrideExports('uvgn', { a: nativePdfWorker.toString() }, { deferred: true });
 
 // Only the map renderer/style provider changes. The original s2JQ React map
 // and all its surrounding controls retain their captured implementation.

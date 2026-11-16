@@ -4,12 +4,13 @@ import { DEFAULT_SETTINGS } from './config.js';
 import { streamCompletion, PythonRuntime, PYTHON_TOOL } from './runtime.js';
 import { LocalAppServer, LocalProtocolSocket } from './local-app-server.mjs';
 import { getPrototypeLocalSession, getPrototypeLocalAuth, getLocalAccountCheck, getLocalOptimizedAccount, getLocalWhamAccounts, getPrototypeCurrentUser, isPrototypeLocalSession, clearPrototypeLocalSession, getLocalSignedOutUrl, getLocalAccountStorageKey } from './local-identity.mjs';
-import { getPrototypeConfiguration } from './local-configuration.mjs';
+import { getPrototypeConfiguration, setLocalLibraryAvailability } from './local-configuration.mjs';
 import { ClassicChatAdapter } from './classic-chat-adapter.mjs';
 import { LocalConversationPubSub } from './local-pubsub.mjs';
 import { readLocalUserPreferences, updateLocalUserPreference, acknowledgeLocalAnnouncement } from './local-user-preferences.mjs';
 import { createBrowserToolExecutor } from './browser-tool-executor.mjs';
 import { createLocalFilesService } from './local-files-service.mjs';
+import { createLocalLibraryService } from './local-library-service.mjs';
 import { createLocalInputPreparer } from './local-input-preparation.mjs';
 import { createLocalPricingAdapter } from './local-pricing.mjs';
 import { SITE_ACCOUNT_SERVICE, getSiteAccount, getSiteSessionToken, hasModelSelectionAccess, logoutSiteAccount } from './site-account.mjs';
@@ -43,6 +44,18 @@ export const localFilesService = createLocalFilesService({ storage: localToolExe
   getAccountId: () => getPrototypeLocalAuth()?.accountId ?? null,
   getWorkspacePrefix: localToolExecutor.getWorkspacePrefix, diagnostics: localProtocolDiagnostics,
 });
+export const localLibraryService = createLocalLibraryService({ files: localFilesService,
+  metadataStorage: { getItem: key => globalThis.localStorage.getItem(key), setItem: (key, value) => globalThis.localStorage.setItem(key, value) },
+  getAccountId: () => getPrototypeLocalAuth()?.accountId ?? null, diagnostics: localProtocolDiagnostics,
+});
+export const localLibraryByteTransport = Object.freeze({
+  ownsObjectURL: value => localLibraryService.ownsObjectURL(value),
+  fetch: (value, options) => globalThis.fetch(value, options),
+});
+setLocalLibraryAvailability(() => localLibraryService.source.nativeNodeListing === true
+  && localLibraryService.source.rawFileListing === true && localLibraryService.source.localFolders === true
+  && localLibraryService.source.permanentDelete === true);
+globalThis.addEventListener('pagehide', () => localLibraryService.dispose());
 export const localPricingAdapter = createLocalPricingAdapter({ diagnostics: localProtocolDiagnostics, readMembership: () => getSiteAccount() });
 export const localDiscoveryAdapter = createLocalDiscoveryAdapter({ storage: { getItem: key => globalThis.localStorage.getItem(key), setItem: (key, value) => globalThis.localStorage.setItem(key, value) }, getAccountId: () => getPrototypeLocalAuth()?.accountId ?? null, diagnostics: localProtocolDiagnostics });
 export const localMapsService = createLocalMapsService({ storage: { getItem: key => globalThis.localStorage.getItem(key), setItem: (key, value) => globalThis.localStorage.setItem(key, value) }, getAccountId: () => getPrototypeLocalAuth()?.accountId ?? null, diagnostics: localProtocolDiagnostics });
@@ -93,6 +106,10 @@ export function installNetworkBoundary() {
     const request = new Request(input, init);
     const url = new URL(request.url, location.href);
     const local = url.origin === location.origin;
+    if (url.protocol === 'blob:' && ['GET', 'HEAD'].includes(request.method) && localLibraryService.ownsObjectURL(url.href)) {
+      const headers = new Headers(request.headers); headers.delete('Authorization'); headers.delete('Cookie');
+      return originalFetch(new Request(request, { headers, credentials: 'omit' }));
+    }
     if (isOpenStreetMapTileRequest(request)) return fetchOpenStreetMapTile(originalFetch, request);
     if (url.origin === SITE_ACCOUNT_SERVICE && /^\/(?:auth\/(?:login|register|session|logout)|bridge\/status|usage|jobs(?:\/[^/]+(?:\/events)?)?)$/.test(url.pathname)) return originalFetch(new Request(request, { credentials: 'omit', redirect: 'error' }));
     // Consume analytics locally; never forward captured telemetry to its vendor.
@@ -119,6 +136,7 @@ export function installNetworkBoundary() {
       localAppServer.interruptAll({ reason: 'logout' });
       const stopResults = await cancelTurnHostRequests(localPreferredHostTransport, [...localAppServer.threads.values()].flatMap(thread => thread.turns), { onCheckpoint: () => localAppServer.persist() });
       for (const result of stopResults) if (result.status === 'rejected') diagnostics.push({ type: 'local-signout-host-cancel-unconfirmed', code: result.reason?.code ?? null });
+      localLibraryService.dispose();
       await logoutSiteAccount();
       clearPrototypeLocalSession({ reload: false });
       return response({ url: target });
@@ -166,6 +184,8 @@ export function installNetworkBoundary() {
       if (pricing) return pricing;
       const discovery = await localDiscoveryAdapter.handle(request, adapterPath);
       if (discovery) return discovery;
+      const library = await localLibraryService.handle(request, adapterPath);
+      if (library) return library;
       const files = await localFilesService.handle(request, adapterPath);
       if (files) return files;
       const classic = await localClassicChatAdapter.handle(request, adapterPath);

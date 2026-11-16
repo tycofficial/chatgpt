@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "package": {
+    "name": "@xmldom/xmldom",
+    "version": "0.8.15",
+    "license": "MIT",
+    "source": "https://github.com/xmldom/xmldom/tree/0.8.15"
+  },
+  "build": {
+    "name": "esbuild",
+    "version": "0.28.2",
+    "platform": "browser",
+    "format": "esm",
+    "target": "es2022"
+  },
+  "files": [
+    {
+      "file": "xml-dom.mjs",
+      "bytes": 155647,
+      "sha256": "10f7ec7bc44018ddbf245e288fef791beceea23459e554f3bde8a0f0f2b97281"
+    },
+    {
+      "file": "LICENSE-xmldom.txt",
+      "bytes": 1298,
+      "sha256": "4da724fc305d81606b245b324d4d2586916b9d248b23d82183df753ace0fdf71"
+    }
+  ],
+  "inputs": [
+    {
+      "name": "lib/conventions.js",
+      "bytes": 7352,
+      "sha256": "9ceee011f51db3a4581029a7dce1e9bf1fa5c37ad928b63c3625dda9a907fd55"
+    },
+    {
+      "name": "lib/dom.js",
+      "bytes": 79146,
+      "sha256": "eae57ba1588b8c025a71cdbb31edd0a87a4d14c1cb00e19155b2cdba44f7548b"
+    },
+    {
+      "name": "lib/entities.js",
+      "bytes": 44465,
+      "sha256": "332cda4081c610fdadc0266867ee5ed9f945c99d471ea7234ec61ba00cbf0e40"
+    },
+    {
+      "name": "lib/sax.js",
+      "bytes": 20949,
+      "sha256": "b2592fbf6993b04576c7ffbd78d63cecdf6495ff1f7a43c2516a0482e69736e9"
+    },
+    {
+      "name": "lib/dom-parser.js",
+      "bytes": 10312,
+      "sha256": "03915c54c4bf44cfee38807af253abaabb022c27652918e8a233fae2d92fe1d2"
+    },
+    {
+      "name": "lib/index.js",
+      "bytes": 173,
+      "sha256": "9deb4e9d6d730a51c1c2b05238f8684d01e87f72b9861ba2adcad537ffc56586"
+    },
+    {
+      "name": "package.json",
+      "bytes": 1907,
+      "sha256": "35aecb16da42bf3843ed197db638dff79d178fc23783bfae77070fcfa4d0ae94"
+    },
+    {
+      "name": "office-xml-vendor-entry.mjs",
+      "bytes": 326,
+      "sha256": "f10314ea043fcdcca41556a23ac260a803232856744fa3ef10a2f9f7603b25ea"
+    }
+  ]
+}

@@ -1,4 +1,7 @@
-/** PDF.js 5.7.284 / Mammoth 1.13.0 text extraction in a dedicated worker. */
+/** Isolated PDF/DOCX and verified OOXML saved-text extraction. */
+import { readOfficeZipParts } from './local-ooxml-container.mjs';
+import { extractXlsxParts } from './local-xlsx-extraction.mjs';
+import { extractPptxParts } from './local-pptx-extraction.mjs';
 const PDF_VERSION = '5.7.284';
 const MAMMOTH_VERSION = '1.13.0';
 const DEFAULT_LIMITS = Object.freeze({ maxPages: 150, maxCharacters: 1000000, maxZipEntries: 5000, maxUncompressedBytes: 64 * 1024 * 1024 });
@@ -109,81 +112,9 @@ async function extractPdf(bytes, limits) {
     else if (task) await task.destroy().catch(() => {});
   }
 }
-let crcTable;
-function crcUpdate(value, bytes) {
-  crcTable ??= Uint32Array.from({ length: 256 }, (_, index) => {
-    let result = index;
-    for (let bit = 0; bit < 8; bit++) result = result & 1 ? 0xedb88320 ^ result >>> 1 : result >>> 1;
-    return result >>> 0;
-  });
-  for (const byte of bytes) value = crcTable[(value ^ byte) & 255] ^ value >>> 8;
-  return value >>> 0;
-}
-function zipEntries(bytes, limits) {
-  if (bytes.length < 22) throw fail('The DOCX ZIP container is incomplete');
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  let end = -1;
-  for (let offset = bytes.length - 22; offset >= Math.max(0, bytes.length - 65557); offset--) {
-    if (view.getUint32(offset, true) === 0x06054b50 && offset + 22 + view.getUint16(offset + 20, true) === bytes.length) { end = offset; break; }
-  }
-  if (end < 0) {
-    if (view.getUint32(0, true) === 0x04034b50) throw fail('The DOCX ZIP container is truncated or has no valid directory', 'file_corrupted', 422);
-    throw fail('The DOCX container is not a supported ZIP document. Encrypted/legacy Word containers must be unlocked or converted', 'unhandled_mime_type', 415);
-  }
-  const entries = view.getUint16(end + 10, true), countOnDisk = view.getUint16(end + 8, true), directorySize = view.getUint32(end + 12, true), directoryOffset = view.getUint32(end + 16, true);
-  if (entries === 65535 || directorySize === 0xffffffff || directoryOffset === 0xffffffff) throw fail('ZIP64 DOCX documents are outside this local parser limit', 'document_container_limit', 413);
-  if (view.getUint16(end + 4, true) || view.getUint16(end + 6, true) || entries !== countOnDisk || !entries || entries > limits.maxZipEntries || directoryOffset + directorySize > end) throw fail('The DOCX ZIP directory is invalid or exceeds the configured entry limit', 'document_container_limit', 413);
-  let offset = directoryOffset, uncompressed = 0;
-  const result = [], names = new Set();
-  for (let index = 0; index < entries; index++) {
-    if (offset + 46 > bytes.length || view.getUint32(offset, true) !== 0x02014b50) throw fail('The DOCX ZIP directory is damaged');
-    const flags = view.getUint16(offset + 8, true), method = view.getUint16(offset + 10, true), compressedSize = view.getUint32(offset + 20, true), size = view.getUint32(offset + 24, true), nameSize = view.getUint16(offset + 28, true), extraSize = view.getUint16(offset + 30, true), commentSize = view.getUint16(offset + 32, true), localOffset = view.getUint32(offset + 42, true);
-    if (flags & 1) throw fail('This DOCX is encrypted. Unlock it before uploading', 'document_password_required', 422);
-    if (![0, 8].includes(method)) throw fail('This DOCX uses an unsupported ZIP compression method', 'unhandled_mime_type', 415);
-    if (offset + 46 + nameSize + extraSize + commentSize > directoryOffset + directorySize || localOffset + 30 > directoryOffset || view.getUint32(localOffset, true) !== 0x04034b50) throw fail('The DOCX ZIP entry is damaged');
-    const name = new TextDecoder().decode(bytes.subarray(offset + 46, offset + 46 + nameSize));
-    if (!name || name.includes('\0') || name.includes('\\') || name.startsWith('/') || name.split('/').some(part => part === '..') || names.has(name)) throw fail('The DOCX has an invalid or duplicate ZIP path');
-    if (/vbaProject\.bin$/i.test(name)) throw fail('Macro-enabled Word documents are not a supported DOCX format', 'unhandled_mime_type', 415);
-    names.add(name);
-    const dataOffset = localOffset + 30 + view.getUint16(localOffset + 26, true) + view.getUint16(localOffset + 28, true);
-    if (dataOffset + compressedSize > directoryOffset || view.getUint16(localOffset + 8, true) !== method) throw fail('The DOCX compressed entry is truncated');
-    uncompressed += size;
-    if (uncompressed > limits.maxUncompressedBytes) throw fail('The DOCX expands beyond the configured local document limit', 'document_container_limit', 413);
-    result.push({ name, method, size, compressedSize, crc: view.getUint32(offset + 16, true), dataOffset });
-    offset += 46 + nameSize + extraSize + commentSize;
-  }
-  if (offset !== directoryOffset + directorySize || !names.has('[Content_Types].xml') || !names.has('word/document.xml')) throw fail('The ZIP file does not contain a complete DOCX document');
-  return result;
-}
-async function verifyZipEntries(bytes, entries, limits) {
-  let total = 0;
-  for (const entry of entries) {
-    let crc = 0xffffffff, size = 0;
-    const accept = chunk => {
-      size += chunk.length; total += chunk.length;
-      if (size > entry.size || total > limits.maxUncompressedBytes) throw fail('The DOCX actual expanded bytes exceed its directory or local limit', 'document_container_limit', 413);
-      crc = crcUpdate(crc, chunk);
-    };
-    const compressed = bytes.subarray(entry.dataOffset, entry.dataOffset + entry.compressedSize);
-    if (entry.method === 0) accept(compressed);
-    else {
-      if (typeof DecompressionStream !== 'function') throw fail('This browser has no bounded DOCX decompression stream', 'document_parser_unavailable', 503);
-      let reader;
-      try {
-        reader = new Blob([compressed]).stream().pipeThrough(new DecompressionStream('deflate-raw')).getReader();
-        for (;;) { const next = await reader.read(); if (next.done) break; accept(next.value); }
-      } catch (error) {
-        await reader?.cancel().catch(() => {});
-        if (error?.code) throw error;
-        throw fail('A DOCX compressed entry could not be decoded', 'file_corrupted', 422);
-      } finally { reader?.releaseLock(); }
-    }
-    if (size !== entry.size || ((crc ^ 0xffffffff) >>> 0) !== entry.crc) throw fail('A DOCX entry failed its expanded-size/CRC check', 'file_corrupted', 422);
-  }
-}
 async function extractDocx(bytes, limits) {
-  const entries = zipEntries(bytes, limits);
-  await verifyZipEntries(bytes, entries, limits);
+  const parts = await readOfficeZipParts(bytes, limits);
+  if (!parts.has('[Content_Types].xml') || !parts.has('word/document.xml')) throw fail('The ZIP file does not contain a complete DOCX document');
   const mammoth = await loadMammoth();
   let result;
   try { result = await mammoth.extractRawText({ arrayBuffer: bytes.slice().buffer }, { externalFileAccess: false }); }
@@ -201,7 +132,11 @@ export async function extractDocumentBytes({ bytes, format, limits } = {}) {
   const configured = limitsOf(limits);
   if (format === 'pdf') return extractPdf(data, configured);
   if (format === 'docx') return extractDocx(data, configured);
-  throw fail('Only PDF and DOCX text extraction is connected', 'unhandled_mime_type', 415);
+  if (format === 'xlsx' || format === 'pptx') {
+    const parts = await readOfficeZipParts(data, configured);
+    return format === 'xlsx' ? extractXlsxParts(parts, { limits: configured }) : extractPptxParts(parts, { limits: configured });
+  }
+  throw fail('Only PDF, DOCX, XLSX and PPTX text extraction is connected', 'unhandled_mime_type', 415);
 }
 if (typeof globalThis.document === 'undefined' && typeof globalThis.addEventListener === 'function' && typeof globalThis.postMessage === 'function') {
   let busy = false;

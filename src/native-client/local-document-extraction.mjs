@@ -1,6 +1,7 @@
 /** Isolated document CPU transport. Only a copied buffer is transferred. */
 const fail = (message, code, status = 422) => Object.assign(new Error(message), { code, status });
 const abortError = () => new DOMException('Document extraction cancelled', 'AbortError');
+const PARSER_VERSIONS = Object.freeze({ pdf: ['pdfjs-dist', '5.7.284'], docx: ['mammoth', '1.13.0'], xlsx: ['site-ooxml-spreadsheetml', '1.0.0'], pptx: ['site-ooxml-presentationml', '1.0.0'] });
 export function documentWorkerURL(base = import.meta.url) {
   const url = new URL('./document-text-worker.mjs', base), version = new URL(base).searchParams.get('v');
   if (version) url.searchParams.set('v', version);
@@ -22,7 +23,8 @@ export function createLocalDocumentExtractor({
   }
   function validResult(value, format) {
     const maxCharacters = limits.maxCharacters ?? 1000000;
-    if (!value || value.format !== format || typeof value.text !== 'string' || !value.text.trim() || value.text.length > maxCharacters || typeof value.partial !== 'boolean' || typeof value.truncated !== 'boolean' || value.ocr !== false || !Array.isArray(value.reasons) || value.reasons.some(reason => typeof reason !== 'string') || !value.parser || value.parser.name !== (format === 'pdf' ? 'pdfjs-dist' : 'mammoth') || value.parser.version !== (format === 'pdf' ? '5.7.284' : '1.13.0')) throw fail('The dedicated parser returned an invalid result; the file was not marked ready', 'document_worker_protocol_error', 502);
+    const expected = PARSER_VERSIONS[format];
+    if (!value || value.format !== format || typeof value.text !== 'string' || !value.text.trim() || value.text.length > maxCharacters || typeof value.partial !== 'boolean' || typeof value.truncated !== 'boolean' || value.ocr !== false || !Array.isArray(value.reasons) || value.reasons.some(reason => typeof reason !== 'string') || !value.parser || value.parser.name !== expected[0] || value.parser.version !== expected[1] || (format === 'xlsx' || format === 'pptx') && (value.parser.xml?.name !== '@xmldom/xmldom' || value.parser.xml?.version !== '0.8.15')) throw fail('The dedicated parser returned an invalid result; the file was not marked ready', 'document_worker_protocol_error', 502);
     return value;
   }
   function pump() {
@@ -54,7 +56,7 @@ export function createLocalDocumentExtractor({
   }
   function extract(bytes, { format, signal } = {}) {
     if (closed) return Promise.reject(fail('The document parser was closed', 'document_parser_unavailable', 503));
-    if (!['pdf','docx'].includes(format)) return Promise.reject(fail('Only PDF and DOCX parsing is connected', 'unhandled_mime_type', 415));
+    if (!Object.hasOwn(PARSER_VERSIONS, format)) return Promise.reject(fail('Only PDF, DOCX, XLSX and PPTX parsing is connected', 'unhandled_mime_type', 415));
     if (!(bytes instanceof Uint8Array) || !bytes.length || bytes.length > maxInputBytes) return Promise.reject(fail('The real document bytes are missing or exceed the parser limit', 'file_too_large', 413));
     if (signal?.aborted) return Promise.reject(abortError());
     if (queue.filter(job => !job.done).length >= maxQueued && running >= maxConcurrent) return Promise.reject(fail('The local document worker queue is full', 'document_parser_busy', 503));
@@ -83,5 +85,5 @@ export function createLocalDocumentExtractor({
     for (const job of [...jobs]) job.finish(abortError());
     queue.length = 0;
   }
-  return Object.freeze({ extract, close, limits: Object.freeze({ ...limits }), source: Object.freeze({ dedicatedWorker: true, timeoutMs, maxConcurrent, pinnedPdfVersion: '5.7.284', pinnedMammothVersion: '1.13.0' }) });
+  return Object.freeze({ extract, close, limits: Object.freeze({ ...limits }), source: Object.freeze({ dedicatedWorker: true, timeoutMs, maxConcurrent, pinnedPdfVersion: '5.7.284', pinnedMammothVersion: '1.13.0', pinnedOfficeXmlVersion: '0.8.15', xlsx: 'saved-cells-and-formula-caches-only', pptx: 'slide-text-only' }) });
 }

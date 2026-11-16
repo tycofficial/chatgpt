@@ -1,0 +1,18 @@
+{
+  "format": "exact-original-native-pdf-worker-v1",
+  "asset": "pdf.worker.min.f6ffbd8da0.mjs",
+  "sourceURL": "https://chatgpt.com/cdn/assets/pdf.worker.min.f6ffbd8da0.mjs",
+  "sourceFile": "original-client/public/chatgpt.com/cdn/assets/pdf.worker.min.f6ffbd8da0.mjs",
+  "sourceBuild": "ef0c3fb941611420d8683bf88f61acf1a8ac6b19",
+  "bytes": 1030853,
+  "sha256": "0129ae2bb6bdab3ecba915a6608d99a02990a7e66f41602cd1106e9fe49466b3",
+  "gitBlob": "c9d84197c49ed349dae9052ecb1296b3a56dce5d",
+  "license": "Apache-2.0",
+  "licenseFile": "pdf.worker.min.f6ffbd8da0.mjs.LICENSE.txt",
+  "policy": "Unmodified original native PDF viewer Worker. Its uvgn URL export is rebased to this deployed module directory; the original viewer and worker version pair are retained.",
+  "nativePdfjsVersion": "5.4.296",
+  "nativePdfjsBuild": "f56dc8601",
+  "fullApacheLicense": "../document-vendor/LICENSE-pdfjs-dist.txt",
+  "licenseSourceURL": "https://chatgpt.com/cdn/assets/pdf.worker.min.f6ffbd8da0.mjs.LICENSE.txt",
+  "licenseSHA256": "e2cee414b83b5912f41609bd79d8fc5561de11473ca7b63b88aa72e4c9ca7397"
+}

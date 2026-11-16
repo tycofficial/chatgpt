@@ -2,7 +2,7 @@
  * Loads the public original component graph with explicit local host services.
  * Private original backend credentials are never used by this entry point.
  */
-import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter, localFilesService } from './service-boundary.mjs';
+import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter, localFilesService, localLibraryService, localLibraryByteTransport } from './service-boundary.mjs';
 import * as mapLibreRenderer from './map-vendor/maplibre-gl.mjs';
 import { createLocalMapProvider } from './local-map-provider.mjs';
 import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs';
@@ -75,7 +75,23 @@ function overrideExports(moduleId, overrides, options, wrappers = {}) {
 }
 
 // Keep native upload behavior while local tickets store their real bytes.
-overrideExports('GDNt', {}, { deferred: true }, { b: NativeWebFetch => wrapNativeFileUploadClass(NativeWebFetch, localFilesService) });
+overrideExports('GDNt', {}, { deferred: true }, { b: NativeWebFetch => wrapNativeFileUploadClass(NativeWebFetch, localFilesService, undefined, localLibraryByteTransport) });
+
+// The native download flow also serves this browser's verified local files.
+// Preserve its URL validation for every URL outside this provider's registry.
+overrideExports('GfAi', {}, { deferred: true }, {
+  b: validateURL => function (value, ...args) {
+    if (typeof value === 'string' && localLibraryService.ownsObjectURL(value.trim())) return value.trim();
+    return validateURL.call(this, value, ...args);
+  },
+});
+
+// Retain the original viewer/worker version pair under this site's asset base.
+// A Worker entry must be directly available from the deployed project path.
+const nativePdfWorker = new URL('./artifact-assets/pdf.worker.min.f6ffbd8da0.mjs', import.meta.url);
+const nativeAssetVersion = new URL(import.meta.url).searchParams.get('v');
+if (nativeAssetVersion) nativePdfWorker.searchParams.set('v', nativeAssetVersion);
+overrideExports('uvgn', { a: nativePdfWorker.toString() }, { deferred: true });
 
 // Only the map renderer/style provider changes. The original s2JQ React map
 // and all its surrounding controls retain their captured implementation.

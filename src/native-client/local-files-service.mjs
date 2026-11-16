@@ -46,17 +46,18 @@ function nameOf(value) {
   if (typeof value !== 'string' || !value.trim() || value.length > 255 || /[\u0000-\u001f\u007f/\\]/.test(value) || value === '.' || value === '..') throw issue('Invalid upload filename', 400, 'file_rejected');
   return value;
 }
+const DOCUMENT_MIME = Object.freeze({ pdf: 'application/pdf', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' });
 function documentFormatOf(name, mime = '') {
   const extension = name.split('.').at(-1).toLowerCase(), type = mime.split(';')[0].trim().toLowerCase();
-  if (extension === 'pdf' || type === 'application/pdf' || type === 'application/x-pdf') return 'pdf';
-  if (extension === 'docx' || type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') return 'docx';
-  return null;
+  if (Object.hasOwn(DOCUMENT_MIME, extension)) return extension;
+  if (type === 'application/x-pdf') return 'pdf';
+  return Object.entries(DOCUMENT_MIME).find(([, value]) => value === type)?.[0] ?? null;
 }
 function kindOf(name, mime = '') {
   const extension = name.split('.').at(-1).toLowerCase(), type = mime.split(';')[0].trim().toLowerCase();
-  if (['doc', 'docm', 'ppt', 'pptx', 'pptm', 'xls', 'xlsx', 'xlsm', 'odt', 'ods', 'odp'].includes(extension)) throw issue('Excel, PowerPoint and legacy Office text extraction are not connected', 415, 'unhandled_mime_type');
+  if (['doc', 'docm', 'ppt', 'pptm', 'xls', 'xlsm', 'xlsb', 'odt', 'ods', 'odp'].includes(extension)) throw issue('Legacy, macro-enabled and other unsupported Office formats must be converted to DOCX, XLSX or PPTX', 415, 'unhandled_mime_type');
   if (documentFormatOf(name, mime)) return 'document';
-  if (/(?:officedocument|msword|ms-excel|ms-powerpoint)/.test(type)) throw issue('Only PDF and DOCX document text extraction is connected; Excel, PowerPoint and legacy Office are unsupported', 415, 'unhandled_mime_type');
+  if (/(?:officedocument|msword|ms-excel|ms-powerpoint)/.test(type)) throw issue('Only PDF, DOCX, XLSX and PPTX document extraction is connected; other Office formats are unsupported', 415, 'unhandled_mime_type');
   if (type.startsWith('image/') || ['png', 'jpg', 'jpeg', 'webp', 'gif', 'avif', 'heic', 'heif'].includes(extension)) return 'image';
   if (type.startsWith('text/') || ['txt', 'md', 'markdown', 'csv', 'tsv', 'json', 'jsonl', 'log', 'yaml', 'yml', 'xml', 'html', 'css', 'js', 'mjs', 'cjs', 'ts', 'tsx', 'jsx', 'py', 'sql', 'sh', 'bat', 'ps1', 'ini', 'toml', 'rst', 'tex'].includes(extension)) return 'text';
   return 'unknown';
@@ -166,9 +167,9 @@ export function createLocalFilesService({
     if (raw == null) return { version: 1, files: {} };
     let result;
     try { result = JSON.parse(raw); } catch { throw issue('Local file metadata is damaged; existing bytes were preserved', 500, 'file_corrupted'); }
-    if (!object(result) || result.version !== 1 || !object(result.files) || Object.entries(result.files).some(([key, row]) => !FILE_ID.test(key) || row?.fileId !== key || row.owner !== id || !TICKET.test(row.ticket) || !Number.isSafeInteger(row.size) || row.size < 1 || typeof row.namespace !== 'string' || !row.namespace || row.namespace === '.' || row.namespace === '..' || /[/\\\u0000-\u001f]/.test(row.namespace) || !['payload.txt','image.png','image.jpg','image.webp','image.bin','document.pdf','document.docx'].includes(row.storageName) || !['pending','stored','ready','error','cancelled'].includes(row.status))) throw issue('Local file metadata has an invalid format; existing bytes were preserved', 500, 'file_corrupted');
+    if (!object(result) || result.version !== 1 || !object(result.files) || Object.entries(result.files).some(([key, row]) => !FILE_ID.test(key) || row?.fileId !== key || row.owner !== id || !TICKET.test(row.ticket) || !Number.isSafeInteger(row.size) || row.size < 1 || typeof row.namespace !== 'string' || !row.namespace || row.namespace === '.' || row.namespace === '..' || /[/\\\u0000-\u001f]/.test(row.namespace) || !['payload.txt','image.png','image.jpg','image.webp','image.bin','document.pdf','document.docx','document.xlsx','document.pptx'].includes(row.storageName) || !['pending','stored','ready','error','cancelled'].includes(row.status))) throw issue('Local file metadata has an invalid format; existing bytes were preserved', 500, 'file_corrupted');
     for (const row of Object.values(result.files)) {
-      if (row.kind === 'document' && !['pdf','docx'].includes(row.documentFormat)) throw issue('The document format metadata is damaged', 500, 'file_corrupted');
+      if (row.kind === 'document' && !Object.hasOwn(DOCUMENT_MIME, row.documentFormat)) throw issue('The document format metadata is damaged', 500, 'file_corrupted');
       const text = row.extraction;
       if (text && (text.textStorageName !== 'extracted.txt' || !Number.isSafeInteger(text.textSize) || text.textSize < 1 || !/^[0-9a-f]{64}$/.test(text.textSHA256 ?? '') || text.sourceSHA256 !== row.sha256 || typeof text.partial !== 'boolean' || typeof text.truncated !== 'boolean')) throw issue('The document text sidecar metadata is damaged', 500, 'file_corrupted');
       if (row.kind === 'document' && row.status === 'ready' && !text) throw issue('Ready document text metadata is missing', 500, 'file_corrupted');
@@ -359,10 +360,13 @@ export function createLocalFilesService({
     return bytes;
   }
   function sidecarText(result) {
-    const summary = { format: result.format, parser: result.parser, scope: result.format === 'pdf' ? 'PDF text layer only' : 'DOCX body text only', ocr: false, partial: result.partial, truncated: result.truncated, reasons: result.reasons, totalPages: result.totalPages, processedPages: result.processedPages, pagesWithoutText: result.pagesWithoutText, warnings: result.warnings };
+    const summary = extractionSummary(result);
     return '[Local document text extraction]\n' + JSON.stringify(summary) + '\n' +
-      (result.partial || result.truncated ? 'This extraction is partial. Unprocessed pages, omitted content or text beyond the extraction limit were not examined.\n' : '') +
+      (result.partial || result.truncated ? 'This extraction is partial. Unprocessed pages, sheets/cells, omitted content or text beyond the extraction limit were not examined.\n' : '') +
       'Images and scanned text were not transcribed. The original document bytes are retained separately.\n\n' + result.text;
+  }
+  function extractionSummary(result) {
+    return { format: result.format, parser: result.parser, scope: ({ pdf: 'PDF text layer only', docx: 'DOCX body text only', xlsx: 'Saved XLSX worksheet cells/formula caches only; no calculation, date timezone conversion, chart interpretation or external refresh', pptx: 'PPTX slide text only; no visual layout, chart interpretation, speaker notes or OCR' })[result.format], ocr: false, partial: result.partial, truncated: result.truncated, reasons: result.reasons, totalPages: result.totalPages, processedPages: result.processedPages, pagesWithoutText: result.pagesWithoutText, hiddenPages: result.hiddenPages, totalSheets: result.totalSheets, processedSheets: result.processedSheets, processedCells: result.processedCells, emittedCells: result.emittedCells, formulaCells: result.formulaCells, missingFormulaCaches: result.missingFormulaCaches, hiddenSheets: result.hiddenSheets, dateSystem: result.dateSystem, formulaEvaluation: result.formulaEvaluation, externalDataRefreshed: result.externalDataRefreshed, numberFormatsRendered: result.numberFormatsRendered, unsupportedParts: result.unsupportedParts, warnings: result.warnings };
   }
   async function processFile(fileId, signal) {
     const id = owner();
@@ -396,8 +400,8 @@ export function createLocalFilesService({
           // Detect deleted/changed source bytes while the isolated CPU task ran.
           await readBytes(id, row, controller.signal);
           details = {
-            kind: 'document', mimeType: row.documentFormat === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            extraction: { format: parsed.format, parser: parsed.parser, textStorageName: 'extracted.txt', textSize: textBytes.length, textSHA256, sourceSHA256: row.sha256, extractedCharacters: parsed.text.length, textCharacters: content.length, partial: parsed.partial, truncated: parsed.truncated, reasons: parsed.reasons, ocr: false, totalPages: parsed.totalPages, processedPages: parsed.processedPages, pagesWithoutText: parsed.pagesWithoutText, warnings: parsed.warnings },
+            kind: 'document', mimeType: DOCUMENT_MIME[row.documentFormat],
+            extraction: { ...extractionSummary(parsed), textStorageName: 'extracted.txt', textSize: textBytes.length, textSHA256, sourceSHA256: row.sha256, extractedCharacters: parsed.text.length, textCharacters: content.length },
           };
         } else {
           const decoded = decodeText(bytes);
@@ -443,6 +447,61 @@ export function createLocalFilesService({
       try { await storage.remove(key); } catch (cause) { if (!notFound(cause)) throw issue('The upload was cancelled but its bytes or extracted text could not be removed', 503, 'local_storage_unavailable'); }
     }
     return { cancelled: true, fileId };
+  }
+  /** Account-owned metadata only. Library presentation/trash lives elsewhere. */
+  async function listFiles({ signal } = {}) {
+    const id = owner(); cancellation(signal);
+    const rows = Object.values(state(id).files).map(row => {
+      try { nameOf(row.fileName); } catch { throw issue('Local file display metadata is damaged', 500, 'file_corrupted'); }
+      if (typeof row.mimeType !== 'string' || !row.mimeType || row.mimeType.length > 512 || /[\u0000-\u001f\u007f]/.test(row.mimeType) || !['text','image','document','unknown'].includes(row.kind) || !Number.isSafeInteger(row.createdAt) || row.createdAt < 0 || row.processedAt != null && (!Number.isSafeInteger(row.processedAt) || row.processedAt < 0) || row.sha256 != null && !/^[0-9a-f]{64}$/.test(row.sha256) || ['stored','ready'].includes(row.status) && row.sha256 == null) throw issue('Local file catalog metadata is damaged', 500, 'file_corrupted');
+      for (const key of ['width','height']) if (row[key] != null && (!Number.isInteger(row[key]) || row[key] < 1 || row[key] > 16384)) throw issue('Local image dimensions are damaged', 500, 'file_corrupted');
+      return { fileId: row.fileId, fileName: row.fileName, mimeType: row.mimeType, size: row.size, kind: row.kind, status: row.status, sha256: row.sha256 ?? null, createdAt: row.createdAt, processedAt: row.processedAt ?? null, ...(row.width == null ? {} : { width: row.width }), ...(row.height == null ? {} : { height: row.height }) };
+    });
+    cancellation(signal); assertOwner(id);
+    return rows;
+  }
+  /** Only remove metadata after both actual owned upload paths are absent. */
+  async function permanentDeleteFile(fileId, { signal } = {}) {
+    const id = owner(); cancellation(signal);
+    if (typeof fileId !== 'string' || !FILE_ID.test(fileId)) throw issue('This local file was not found', 404, 'file_not_found');
+    // Wait for this provider's in-flight upload/parser. Unlike cancelUpload,
+    // permanent deletion never marks the record cancelled before IO succeeds.
+    return serialize(fileId, async () => {
+      const stop = () => { cancellation(signal); assertOwner(id); };
+      stop();
+      const row = state(id).files[fileId];
+      if (!row) throw issue('This local file was not found for the current account', 404, 'file_not_found');
+      const keys = [storageKey(row), ...(row.kind === 'document' ? [row.namespace + '/extracted.txt'] : [])];
+      const confirmMissing = async key => {
+        stop();
+        try { await storage.read(key); }
+        catch (cause) {
+          stop();
+          if (notFound(cause)) return;
+          throw issue('The browser could not verify permanent file deletion; retry is available', 503, 'local_storage_unavailable');
+        }
+        stop();
+        throw issue('File bytes remain after the deletion attempt; retry is available', 503, 'local_storage_unavailable');
+      };
+      for (const key of keys) {
+        stop();
+        try { await storage.remove(key); }
+        catch (cause) {
+          stop();
+          if (!notFound(cause)) throw issue('The browser could not remove the owned file bytes; retry is available', 503, 'local_storage_unavailable');
+        }
+        stop();
+        await confirmMissing(key);
+      }
+      for (const key of keys) await confirmMissing(key);
+      stop();
+      const current = state(id), latest = current.files[fileId];
+      if (!latest || latest.ticket !== row.ticket || latest.namespace !== row.namespace || latest.storageName !== row.storageName) throw issue('Local file ownership changed during deletion', 409, 'permission_error');
+      delete current.files[fileId];
+      save(id, current);
+      note('bytes-permanently-deleted', { fileId });
+      return { deleted: true, fileId };
+    });
   }
   async function handle(request, canonicalPath) {
     const incoming = new URL(request.url), path = (canonicalPath ?? incoming.pathname).replace(/^\/(?:backend-api|__codex-api)(?=\/)/, '');
@@ -592,5 +651,5 @@ export function createLocalFilesService({
     }
     return { input: inputs, files, textFiles, attachments, adapter_source: LOCAL_FILES_SOURCE };
   }
-  return Object.freeze({ handle, upload, isLocalUploadURL, ownsUploadURL, readFile, cancelUpload, materializeForThread, resolveUserInputImage, resolveChatAttachments, source: Object.freeze({ provider: LOCAL_FILES_SOURCE, capturedAccountFiles: false, pdfParsing: true, docxParsing: true, legacyOfficeParsing: false, documentScope: 'PDF text layer / DOCX body; no OCR', maxFileBytes, maxTotalBytes }) });
+  return Object.freeze({ handle, upload, isLocalUploadURL, ownsUploadURL, readFile, cancelUpload, listFiles, permanentDeleteFile, materializeForThread, resolveUserInputImage, resolveChatAttachments, source: Object.freeze({ provider: LOCAL_FILES_SOURCE, capturedAccountFiles: false, pdfParsing: true, docxParsing: true, xlsxParsing: true, pptxParsing: true, legacyOfficeParsing: false, documentScope: 'PDF text layer / DOCX body / XLSX saved cells and caches / PPTX slide text; no OCR, spreadsheet calculation or external refresh', maxFileBytes, maxTotalBytes }) });
 }

@@ -115,7 +115,7 @@ test('owner change, remote image and unsupported media fail before any provider 
   assert.equal(remote.status, 'failed'); assert.equal(remote.adapterMetadata.lastFailure.code, 'unsupported_image_source'); assert.equal(remote.adapterMetadata.resumePolicy, 'manual'); assert.equal(modelCalls, 0);
   const thread = [...env.server.threads.values()][0]; assert.equal(env.server.running.has(thread.id), false);
   assert.match(await send(env, { conversation_id: thread.id, parts: ['A separate valid neutral follow-up.'] }), /message_stream_complete/); assert.equal(modelCalls, 1);
-  const unsupported = await env.files.handle(new Request('https://local.fixture/files', { method: 'POST', body: JSON.stringify({ file_name: 'neutral.xlsx', file_size: 10, mime_type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }) }), '/files'); assert.equal(unsupported.status, 415);
+  const unsupported = await env.files.handle(new Request('https://local.fixture/files', { method: 'POST', body: JSON.stringify({ file_name: 'neutral.xls', file_size: 10, mime_type: 'application/vnd.ms-excel' }) }), '/files'); assert.equal(unsupported.status, 415);
 });
 
 test('pagehide resumes prepared input without rereading bytes or replacing an accepted host round', async () => {

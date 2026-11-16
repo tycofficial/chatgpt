@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 const source=fs.readFileSync(new URL('../src/native-client/boot-adapter.mjs',import.meta.url),'utf8');
-const a=source.indexOf('function overrideExports('),b=source.indexOf('// Only the map renderer',a);
+const a=source.indexOf('function overrideExports('),b=source.indexOf('// Keep native upload behavior',a);
 assert(a>=0&&b>a);
 function run({getter=false,options,wrap=false}={}){
  let capturedOptions,transformed;

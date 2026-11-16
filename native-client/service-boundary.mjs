@@ -1,24 +1,25 @@
-import * as modelCatalog from '../model-catalog.js?v=b88858afb5156217';
-import { createModelCatalogAdapter } from './model-catalog-adapter.mjs?v=b88858afb5156217';
-import { DEFAULT_SETTINGS } from '../config.js?v=b88858afb5156217';
-import { streamCompletion, PythonRuntime, PYTHON_TOOL } from '../runtime.js?v=b88858afb5156217';
-import { LocalAppServer, LocalProtocolSocket } from './local-app-server.mjs?v=b88858afb5156217';
-import { getPrototypeLocalSession, getPrototypeLocalAuth, getLocalAccountCheck, getLocalOptimizedAccount, getLocalWhamAccounts, getPrototypeCurrentUser, isPrototypeLocalSession, clearPrototypeLocalSession, getLocalSignedOutUrl, getLocalAccountStorageKey } from './local-identity.mjs?v=b88858afb5156217';
-import { getPrototypeConfiguration } from './local-configuration.mjs?v=b88858afb5156217';
-import { ClassicChatAdapter } from './classic-chat-adapter.mjs?v=b88858afb5156217';
-import { LocalConversationPubSub } from './local-pubsub.mjs?v=b88858afb5156217';
-import { readLocalUserPreferences, updateLocalUserPreference, acknowledgeLocalAnnouncement } from './local-user-preferences.mjs?v=b88858afb5156217';
-import { createBrowserToolExecutor } from './browser-tool-executor.mjs?v=b88858afb5156217';
-import { createLocalFilesService } from './local-files-service.mjs?v=b88858afb5156217';
-import { createLocalInputPreparer } from './local-input-preparation.mjs?v=b88858afb5156217';
-import { createLocalPricingAdapter } from './local-pricing.mjs?v=b88858afb5156217';
-import { SITE_ACCOUNT_SERVICE, getSiteAccount, getSiteSessionToken, hasModelSelectionAccess, logoutSiteAccount } from './site-account.mjs?v=b88858afb5156217';
-import { createLocalCodexAdapter } from './local-codex-adapter.mjs?v=b88858afb5156217';
-import { isOpenStreetMapTileRequest, fetchOpenStreetMapTile } from './local-map-provider.mjs?v=b88858afb5156217';
-import { createLocalDiscoveryAdapter } from './local-discovery.mjs?v=b88858afb5156217';
-import { createLocalDotAdapter } from './local-dot-adapter.mjs?v=b88858afb5156217';
-import { createLocalMapsService } from './local-maps-service.mjs?v=b88858afb5156217';
-import { createPreferredHostTransport, createPreferredCompletion, turnHostCheckpoints, cancelTurnHostRequests } from './preferred-host-transport.mjs?v=b88858afb5156217';
+import * as modelCatalog from '../model-catalog.js?v=3b90ea6eb4e00062';
+import { createModelCatalogAdapter } from './model-catalog-adapter.mjs?v=3b90ea6eb4e00062';
+import { DEFAULT_SETTINGS } from '../config.js?v=3b90ea6eb4e00062';
+import { streamCompletion, PythonRuntime, PYTHON_TOOL } from '../runtime.js?v=3b90ea6eb4e00062';
+import { LocalAppServer, LocalProtocolSocket } from './local-app-server.mjs?v=3b90ea6eb4e00062';
+import { getPrototypeLocalSession, getPrototypeLocalAuth, getLocalAccountCheck, getLocalOptimizedAccount, getLocalWhamAccounts, getPrototypeCurrentUser, isPrototypeLocalSession, clearPrototypeLocalSession, getLocalSignedOutUrl, getLocalAccountStorageKey } from './local-identity.mjs?v=3b90ea6eb4e00062';
+import { getPrototypeConfiguration, setLocalLibraryAvailability } from './local-configuration.mjs?v=3b90ea6eb4e00062';
+import { ClassicChatAdapter } from './classic-chat-adapter.mjs?v=3b90ea6eb4e00062';
+import { LocalConversationPubSub } from './local-pubsub.mjs?v=3b90ea6eb4e00062';
+import { readLocalUserPreferences, updateLocalUserPreference, acknowledgeLocalAnnouncement } from './local-user-preferences.mjs?v=3b90ea6eb4e00062';
+import { createBrowserToolExecutor } from './browser-tool-executor.mjs?v=3b90ea6eb4e00062';
+import { createLocalFilesService } from './local-files-service.mjs?v=3b90ea6eb4e00062';
+import { createLocalLibraryService } from './local-library-service.mjs?v=3b90ea6eb4e00062';
+import { createLocalInputPreparer } from './local-input-preparation.mjs?v=3b90ea6eb4e00062';
+import { createLocalPricingAdapter } from './local-pricing.mjs?v=3b90ea6eb4e00062';
+import { SITE_ACCOUNT_SERVICE, getSiteAccount, getSiteSessionToken, hasModelSelectionAccess, logoutSiteAccount } from './site-account.mjs?v=3b90ea6eb4e00062';
+import { createLocalCodexAdapter } from './local-codex-adapter.mjs?v=3b90ea6eb4e00062';
+import { isOpenStreetMapTileRequest, fetchOpenStreetMapTile } from './local-map-provider.mjs?v=3b90ea6eb4e00062';
+import { createLocalDiscoveryAdapter } from './local-discovery.mjs?v=3b90ea6eb4e00062';
+import { createLocalDotAdapter } from './local-dot-adapter.mjs?v=3b90ea6eb4e00062';
+import { createLocalMapsService } from './local-maps-service.mjs?v=3b90ea6eb4e00062';
+import { createPreferredHostTransport, createPreferredCompletion, turnHostCheckpoints, cancelTurnHostRequests } from './preferred-host-transport.mjs?v=3b90ea6eb4e00062';
 
 export const localModelAdapter = createModelCatalogAdapter(modelCatalog);
 export const localProtocolDiagnostics = [];
@@ -43,6 +44,18 @@ export const localFilesService = createLocalFilesService({ storage: localToolExe
   getAccountId: () => getPrototypeLocalAuth()?.accountId ?? null,
   getWorkspacePrefix: localToolExecutor.getWorkspacePrefix, diagnostics: localProtocolDiagnostics,
 });
+export const localLibraryService = createLocalLibraryService({ files: localFilesService,
+  metadataStorage: { getItem: key => globalThis.localStorage.getItem(key), setItem: (key, value) => globalThis.localStorage.setItem(key, value) },
+  getAccountId: () => getPrototypeLocalAuth()?.accountId ?? null, diagnostics: localProtocolDiagnostics,
+});
+export const localLibraryByteTransport = Object.freeze({
+  ownsObjectURL: value => localLibraryService.ownsObjectURL(value),
+  fetch: (value, options) => globalThis.fetch(value, options),
+});
+setLocalLibraryAvailability(() => localLibraryService.source.nativeNodeListing === true
+  && localLibraryService.source.rawFileListing === true && localLibraryService.source.localFolders === true
+  && localLibraryService.source.permanentDelete === true);
+globalThis.addEventListener('pagehide', () => localLibraryService.dispose());
 export const localPricingAdapter = createLocalPricingAdapter({ diagnostics: localProtocolDiagnostics, readMembership: () => getSiteAccount() });
 export const localDiscoveryAdapter = createLocalDiscoveryAdapter({ storage: { getItem: key => globalThis.localStorage.getItem(key), setItem: (key, value) => globalThis.localStorage.setItem(key, value) }, getAccountId: () => getPrototypeLocalAuth()?.accountId ?? null, diagnostics: localProtocolDiagnostics });
 export const localMapsService = createLocalMapsService({ storage: { getItem: key => globalThis.localStorage.getItem(key), setItem: (key, value) => globalThis.localStorage.setItem(key, value) }, getAccountId: () => getPrototypeLocalAuth()?.accountId ?? null, diagnostics: localProtocolDiagnostics });
@@ -99,6 +112,10 @@ export function installNetworkBoundary() {
       const headers = new Headers(request.headers); headers.delete('Authorization'); headers.delete('Cookie');
       return originalFetch(new Request(request, {headers,credentials:'omit'}));
     }
+    if (url.protocol === 'blob:' && ['GET', 'HEAD'].includes(request.method) && localLibraryService.ownsObjectURL(url.href)) {
+      const headers = new Headers(request.headers); headers.delete('Authorization'); headers.delete('Cookie');
+      return originalFetch(new Request(request, { headers, credentials: 'omit' }));
+    }
     if (isOpenStreetMapTileRequest(request)) return fetchOpenStreetMapTile(originalFetch, request);
     if (url.origin === SITE_ACCOUNT_SERVICE && /^\/(?:auth\/(?:login|register|session|logout)|bridge\/status|usage|jobs(?:\/[^/]+(?:\/events)?)?)$/.test(url.pathname)) return originalFetch(new Request(request, { credentials: 'omit', redirect: 'error' }));
     // Consume analytics locally; never forward captured telemetry to its vendor.
@@ -127,6 +144,7 @@ export function installNetworkBoundary() {
       localAppServer.interruptAll({ reason: 'logout' });
       const stopResults = await cancelTurnHostRequests(localPreferredHostTransport, [...localAppServer.threads.values()].flatMap(thread => thread.turns), { onCheckpoint: () => localAppServer.persist() });
       for (const result of stopResults) if (result.status === 'rejected') diagnostics.push({ type: 'local-signout-host-cancel-unconfirmed', code: result.reason?.code ?? null });
+      localLibraryService.dispose();
       await logoutSiteAccount();
       clearPrototypeLocalSession({ reload: false });
       return response({ url: target });
@@ -174,6 +192,8 @@ export function installNetworkBoundary() {
       if (pricing) return pricing;
       const discovery = await localDiscoveryAdapter.handle(request, adapterPath);
       if (discovery) return discovery;
+      const library = await localLibraryService.handle(request, adapterPath);
+      if (library) return library;
       const files = await localFilesService.handle(request, adapterPath);
       if (files) return files;
       const classic = await localClassicChatAdapter.handle(request, adapterPath);
