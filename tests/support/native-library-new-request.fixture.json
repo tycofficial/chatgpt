@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "description": "Actual intact native Library New > Document > Send request from fresh neutral owner. No real model/network/user account.",
+  "sourceProofSHA256": "fd14c3d13d8a10c417241efa1213e2bf5650d00d21e2c3d16bac3ab5c556880e",
+  "request": {
+    "turn_attribution": {
+      "turn_trigger": "composer"
+    },
+    "action": "next",
+    "model": "auto",
+    "parent_message_id": "client-created-root",
+    "timezone": "Asia/Shanghai",
+    "timezone_offset_min": -480,
+    "is_do_not_remember": false,
+    "client_contextual_info": {
+      "app_name": "chatgpt.com",
+      "app_surface": "codex_browser",
+      "has_web_push_capabilities": false,
+      "web_push_notification_permission": "unsupported"
+    },
+    "local_function_names": [
+      "local.continue_in_work"
+    ],
+    "messages": [
+      {
+        "author": {
+          "metadata": {},
+          "name": null,
+          "role": "user"
+        },
+        "channel": null,
+        "content": {
+          "content_type": "text",
+          "parts": [
+            "使用 [@Documents](plugin://documents@openai-primary-runtime) 创建一个新文档。先问我它应该是什么主题。"
+          ]
+        },
+        "create_time": 1794864110.856,
+        "end_turn": null,
+        "id": "0db2c020-eee8-4869-9cd4-3f1fbc9fb8ff",
+        "metadata": {
+          "automation_creation_attribution": {
+            "origin": "conversation",
+            "flow_id": "0db2c020-eee8-4869-9cd4-3f1fbc9fb8ff"
+          },
+          "serialization_metadata": {
+            "render_format": "markdown"
+          }
+        },
+        "recipient": "all",
+        "status": "finished_successfully",
+        "update_time": null,
+        "weight": 1
+      },
+      {
+        "author": {
+          "role": "system"
+        },
+        "content": {
+          "content_type": "text",
+          "parts": [
+            "The user started this task from ChatGPT Library to create a file. Use the available Library skill or Library access method to save each completed user-facing document, spreadsheet, presentation, or PDF to their ChatGPT Library. Create one Library file for each new deliverable. If the same deliverable is edited later, preserve its Library file identity and update the existing file instead of creating a duplicate."
+          ]
+        },
+        "id": "c623b990-4ce2-4bc9-b000-350bee2c1748",
+        "metadata": {
+          "is_visually_hidden_from_conversation": true
+        }
+      }
+    ],
+    "supported_encodings": [
+      "v1"
+    ],
+    "genui_state_snapshots": [],
+    "client_prepare_state": "none"
+  }
+}

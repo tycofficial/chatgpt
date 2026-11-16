@@ -1,0 +1,204 @@
+{
+  "schemaVersion": 1,
+  "description": "Self-generated neutral single-user Classic checkpoint from the exact pre-context core. No account, provider token, private source content, or network request.",
+  "sourceServerSHA256": "4f5907e51ca7da7796e28919e645fcd867f8020fa50d881073eedcec726ca1fe",
+  "threadId": "legacy-neutral-1",
+  "turnId": "legacy-neutral-2",
+  "user": {
+    "id": "legacy-classic",
+    "author": {
+      "role": "user",
+      "metadata": {
+        "fixture": true
+      }
+    },
+    "content": {
+      "content_type": "text",
+      "parts": [
+        "Neutral visible request."
+      ]
+    },
+    "metadata": {
+      "serialization_metadata": {
+        "render_format": "markdown"
+      },
+      "neutral": true
+    },
+    "create_time": 1700000000
+  },
+  "storage": {
+    "schemaVersion": 1,
+    "threads": [
+      {
+        "id": "legacy-neutral-1",
+        "sessionId": "legacy-neutral-1",
+        "name": "Neutral visible request.",
+        "preview": "Neutral visible request.",
+        "ephemeral": false,
+        "model": "gpt-6.1-sol",
+        "reasoningEffort": "high",
+        "serviceTier": null,
+        "modelProvider": "local-openai-compatible",
+        "createdAt": 1700000000,
+        "updatedAt": 1700000000,
+        "recencyAt": 1700000000,
+        "status": {
+          "type": "idle"
+        },
+        "archived": false,
+        "path": null,
+        "cwd": "/",
+        "cliVersion": "0.0.0",
+        "source": "appServer",
+        "originator": "local-original-client-adapter",
+        "threadSource": "user",
+        "mode": "default",
+        "threadStartKind": "default",
+        "historyMode": null,
+        "parentThreadId": null,
+        "forkedFromId": null,
+        "gitInfo": null,
+        "environments": [],
+        "turns": [
+          {
+            "id": "legacy-neutral-2",
+            "status": "completed",
+            "items": [
+              {
+                "type": "userMessage",
+                "id": "legacy-neutral-3",
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "Neutral visible request.",
+                    "text_elements": []
+                  }
+                ],
+                "clientId": "legacy-classic"
+              },
+              {
+                "type": "agentMessage",
+                "id": "legacy-neutral-4",
+                "text": "Neutral genuine legacy reply.",
+                "phase": "final_answer"
+              }
+            ],
+            "error": null,
+            "startedAt": 1700000000,
+            "completedAt": 1700000000,
+            "durationMs": 0,
+            "model": "gpt-6.1-sol",
+            "reasoningEffort": "high",
+            "serviceTier": null,
+            "clientUserMessageId": "legacy-classic",
+            "adapterMetadata": {
+              "startedAtMs": 1700000000000,
+              "fingerprint": "[[{\"type\":\"text\",\"text\":\"Neutral visible request.\",\"text_elements\":[]}],\"gpt-6.1-sol\",\"high\",null]",
+              "executionPolicy": "verified-model-selection",
+              "selectionMode": "unspecified",
+              "curatedPresetMatch": false,
+              "clientMetadata": null,
+              "instructions": [],
+              "classicUserMessage": {
+                "content": {
+                  "content_type": "text",
+                  "parts": [
+                    "Neutral visible request."
+                  ]
+                },
+                "metadata": {
+                  "serialization_metadata": {
+                    "render_format": "markdown"
+                  },
+                  "neutral": true
+                },
+                "author": {
+                  "role": "user"
+                }
+              },
+              "checkpoint": {
+                "schemaVersion": 1,
+                "state": "completed",
+                "rounds": 1,
+                "transcript": [
+                  {
+                    "role": "user",
+                    "content": "Neutral visible request."
+                  },
+                  {
+                    "role": "assistant",
+                    "content": "Neutral genuine legacy reply."
+                  }
+                ],
+                "pendingCalls": [],
+                "completedCalls": {},
+                "metrics": [
+                  {
+                    "sequence": 1,
+                    "model": "gpt-6.1-sol",
+                    "effort": "high",
+                    "underlyingApiEffort": "high",
+                    "productExecutionMode": "standard",
+                    "startedAt": 1700000000000,
+                    "firstOutputAt": null,
+                    "transport": "chat/completions",
+                    "transportCheckpoint": {},
+                    "requestSentAt": 1700000000000,
+                    "endedAt": 1700000000000,
+                    "totalMs": 0,
+                    "ttftMs": null,
+                    "finishReason": "stop"
+                  }
+                ],
+                "interruptedAttempts": [],
+                "preparedInput": {
+                  "source": "original-text-input",
+                  "files": [],
+                  "images": []
+                },
+                "inFlight": null,
+                "networkFailures": 0,
+                "hostFailures": 0,
+                "nextResumeAt": null,
+                "partialResponse": null,
+                "commentaryOnlyRounds": 0
+              },
+              "materializedFiles": [],
+              "requestedEffort": "high",
+              "productExecutionMode": "standard",
+              "underlyingApiEffort": "high",
+              "serviceTierExecution": {
+                "uiServiceTier": null,
+                "apiServiceTier": null,
+                "verifiedPriority": false
+              },
+              "completedItemIds": [
+                "legacy-neutral-4"
+              ],
+              "resumable": false
+            }
+          }
+        ],
+        "approvalPolicy": "never",
+        "collaborationMode": {
+          "mode": "default",
+          "settings": {
+            "model": "gpt-6.1-sol",
+            "reasoning_effort": "high",
+            "developer_instructions": null
+          }
+        },
+        "adapterMetadata": {
+          "source": "local-original-client-adapter",
+          "conversationOrigin": "tpp",
+          "selectionMode": "unspecified",
+          "curatedPresetMatch": false,
+          "instructions": [],
+          "clientMetadata": null,
+          "executionPolicy": "verified-model-selection"
+        },
+        "uiServiceTier": null
+      }
+    ]
+  }
+}

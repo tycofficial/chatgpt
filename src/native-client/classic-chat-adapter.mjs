@@ -1,6 +1,9 @@
 /** Original classic Chat REST/SSE shapes over the same real local thread engine. */
 import { FRONTEND_TO_RAW_EFFORT } from './model-catalog-adapter.mjs';
 import { turnHostCheckpoints } from './preferred-host-transport.mjs';
+
+import { parseClassicInputMessages } from './classic-input-messages.mjs';
+export { parseClassicInputMessages, CLASSIC_CONTEXT_LIMITS } from './classic-input-messages.mjs';
 export class ClassicChatAdapter {
   constructor({ appServer, models, now = Date.now, uuid = () => crypto.randomUUID(), onConversationChange = () => {}, heartbeatMs = 10000 }) { this.server = appServer; this.models = models; this.now = now; this.uuid = uuid; this.onConversationChange = onConversationChange; this.heartbeatMs = heartbeatMs; this.mutationQueue = Promise.resolve(); }
   json(body, status = 200) { return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }); }
@@ -24,8 +27,17 @@ export class ClassicChatAdapter {
       metadata: { ...(original?.metadata ? structuredClone(original.metadata) : {}), model_slug: frontendSlug, thinking_effort: FRONTEND_TO_RAW_EFFORT[turn.reasoningEffort], adapter_api_model: turn.model, is_complete: role === 'user' || Boolean(itemDone), ...(done && role === 'assistant' ? { finish_details: { type: 'stop', stop_tokens: [] } } : {}), adapter_source: 'local-original-client-adapter' },
     };
   }
+  originalInputMessages(thread, turn, item) {
+    const records = turn.adapterMetadata?.classicInputMessages;
+    if (!records) return [this.message(thread, turn, item, 'user')];
+    return records.map(record => record.author.role === 'user' ? this.message(thread, turn, item, 'user') : {
+      create_time: turn.startedAt, update_time: null, status: 'finished_successfully', end_turn: null, recipient: 'all', channel: null, weight: 0,
+      ...structuredClone(record),
+    });
+  }
   projectItem(thread, turn, item) {
-    if (item.type === 'userMessage' || item.type === 'agentMessage') return [this.message(thread, turn, item, item.type === 'userMessage' ? 'user' : 'assistant')];
+    if (item.type === 'userMessage') return this.originalInputMessages(thread, turn, item);
+    if (item.type === 'agentMessage') return [this.message(thread, turn, item, 'assistant')];
     if (item.type !== 'mcpToolCall') return [];
     const finished = item.status !== 'inProgress', base = { create_time: turn.startedAt, update_time: this.now() / 1000, weight: 1, metadata: { model_slug: thread.adapterMetadata?.classicModelSlugs?.[turn.id] ?? thread.adapterMetadata.frontendModelSlug ?? turn.model, thinking_effort: FRONTEND_TO_RAW_EFFORT[turn.reasoningEffort], adapter_source: 'browser-workspace-mcp', mcp_tool_call: { server: item.server, tool: item.tool, status: item.status } } };
     const call = { ...base, id: item.id + '-call', author: { role: 'assistant', name: null, metadata: {} }, recipient: item.tool, channel: 'commentary', content: { content_type: 'code', language: item.tool === 'python' ? 'python' : 'json', text: item.tool === 'python' ? item.arguments.code || '' : JSON.stringify(item.arguments, null, 2) }, status: finished ? 'finished_successfully' : 'in_progress', end_turn: false };
@@ -195,9 +207,11 @@ export class ClassicChatAdapter {
   stream(request, body) {
     if (body.action === 'continue') { const thread = this.server.getThread(body.conversation_id); return this.attachStream(request, thread, this.server.dispatch('turn/resume', { threadId: thread.id })); }
     if (!['next', undefined].includes(body.action)) return this.json({ error: { message: `Classic Chat action ${body.action} is not implemented`, code: 'LOCAL_ADAPTER_UNIMPLEMENTED' } }, 501);
-    const messages = body.messages;
-    if (!Array.isArray(messages) || messages.length !== 1 || typeof messages[0]?.id !== 'string' || !messages[0].id || messages[0]?.author?.role !== 'user' || !['text', 'multimodal_text'].includes(messages[0]?.content?.content_type) || !Array.isArray(messages[0].content.parts) || messages[0].content.parts.some(part => typeof part !== 'string' && !(part?.content_type === 'image_asset_pointer' && typeof part.asset_pointer === 'string'))) return this.json({ error: { message: 'This adapter accepts one original text or image user message with local attachment metadata', code: 'LOCAL_INPUT_UNSUPPORTED' } }, 400);
-    const incoming = messages[0], defaultModel = this.models.getRpcModelList().data.find(model => model.isDefault)?.model;
+    let parsed;
+    try { parsed = parseClassicInputMessages(body.messages); }
+    catch (error) { return this.json({ error: { message: error.message, code: error.code ?? 'LOCAL_INPUT_UNSUPPORTED' } }, error.status ?? 400); }
+    if (typeof body.parent_message_id === 'string' && parsed.originalMessages.some(message => message.id === body.parent_message_id)) return this.json({ error: { message: 'An input message ID cannot also be its conversation parent', code: 'LOCAL_INPUT_UNSUPPORTED' } }, 400);
+    const incoming = parsed.incoming, defaultModel = this.models.getRpcModelList().data.find(model => model.isDefault)?.model;
     const model = body.model === 'auto' ? defaultModel : body.model;
     const rawEffort = body.thinking_effort ?? body.reasoning_effort;
     const rawMap = { zero: 'none', min: 'low', standard: 'medium', extended: 'high', xhigh: 'xhigh', max: 'max', ultra: 'ultra' };
@@ -214,7 +228,8 @@ export class ClassicChatAdapter {
     }
     const transaction = this.server.dispatch('turn/start', {
       threadId: thread.id, input: incoming.content.parts.map(part => typeof part === 'string' ? { type: 'text', text: part, text_elements: [] } : { type: 'image', url: part.asset_pointer }),
-      classicUserMessage: { content: structuredClone(incoming.content), metadata: structuredClone(incoming.metadata ?? {}), author: { role: 'user' } },
+      classicUserMessage: structuredClone(incoming),
+      classicInputMessages: parsed.originalMessages,
       clientUserMessageId: incoming.id, model, effort, serviceTier: body.service_tier ?? body.serviceTier,
       selectionMode: body.selectionMode, systemHints: Array.isArray(body.system_hints) ? body.system_hints : [],
       responsesapiClientMetadata: { ...body.responsesapi_client_metadata, requestedModel: body.model, adapterOrigin: 'classic-chat-rest' },
@@ -266,7 +281,9 @@ export class ClassicChatAdapter {
         request.signal?.addEventListener('abort', abort, { once: true });
         removeAbort = () => request.signal?.removeEventListener('abort', abort);
         const userItem = this.server.getThread(thread.id).turns.find(turn => turn.id === turnId).items.find(item => item.type === 'userMessage');
-        emit({ type: 'input_message', conversation_id: thread.id, input_message: this.message(thread, transaction.result.turn, userItem, 'user') });
+        for (const message of this.originalInputMessages(thread, transaction.result.turn, userItem)) emit(message.author.role === 'user'
+          ? { type: 'input_message', conversation_id: thread.id, input_message: message }
+          : { conversation_id: thread.id, message });
         const current = this.server.getThread(thread.id).turns.find(value => value.id === turnId);
         for (const item of current.items) if (item.type !== 'userMessage') for (const message of this.projectItem(thread, current, item)) emit({ conversation_id: thread.id, message });
         if (transaction.afterReply) setTimeout(transaction.afterReply, 0);

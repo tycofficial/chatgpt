@@ -1,5 +1,6 @@
 /** Resumable API/tool loop. Original frontend receives its existing item lifecycle. */
 import { isHostCheckpoint } from './preferred-host-transport.mjs';
+import { parseClassicInputMessages } from './classic-input-messages.mjs';
 const clone = value => structuredClone(value);
 const CONTINUE = 'Continue the unfinished response from the saved text, without repeating it. Preserve the requested task, model and reasoning effort. Do not claim any tool succeeded unless its recorded output confirms it.';
 const compactUsage = usage => Object.fromEntries(['input_tokens', 'output_tokens', 'total_tokens', 'prompt_tokens', 'completion_tokens', 'input_tokens_details', 'output_tokens_details', 'prompt_tokens_details', 'completion_tokens_details'].filter(key => usage[key] !== undefined).map(key => [key, clone(usage[key])]));
@@ -44,6 +45,8 @@ export async function runAgentTurn(server, running) {
   try {
     // Validate bytes before creating a provider/host job; saved inputs replay verbatim.
     if (!cp.transcript.length) {
+      const classic = meta.classicInputMessages === undefined ? null : parseClassicInputMessages(meta.classicInputMessages);
+      if (classic && JSON.stringify(meta.classicUserMessage) !== JSON.stringify(classic.incoming)) throw Object.assign(Error('Saved Classic input records do not match the original user message'), { code: 'INVALID_CLASSIC_INPUT', retryable: false });
       const input = turn.items.find(item => item.type === 'userMessage').content;
       const prepared = typeof server.prepareUserInput === 'function'
         ? await server.prepareUserInput({ input: clone(input), threadId: thread.id, turnId: turn.id, thread, turn, signal })
@@ -51,7 +54,9 @@ export async function runAgentTurn(server, running) {
       signal.throwIfAborted(); server.assertExecutionAllowed(turn);
       if (typeof prepared?.content !== 'string' && !Array.isArray(prepared?.content)) throw Object.assign(Error('The local input resolver returned invalid provider content'), { code: 'INVALID_PREPARED_INPUT', retryable: false });
       const previousInput = { transcript: cp.transcript, preparedInput: cp.preparedInput, materializedFiles: meta.materializedFiles };
-      cp.transcript = [{ role: 'user', content: clone(prepared.content) }];
+      cp.transcript = classic ? classic.originalMessages.map(message => message.author.role === 'user'
+        ? { role: 'user', content: clone(prepared.content) }
+        : { role: 'system', content: message.content.parts.join('\n') }) : [{ role: 'user', content: clone(prepared.content) }];
       cp.preparedInput = { source: prepared.source, files: clone(prepared.files ?? []), images: clone(prepared.images ?? []) };
       meta.materializedFiles = clone(prepared.files ?? []);
       try { await save(); delete meta.inputPreparationFailure; }

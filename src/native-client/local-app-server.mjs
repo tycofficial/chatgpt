@@ -1,5 +1,6 @@
 /** Original app-server protocol over real, resumable local execution. */
 import { runAgentTurn } from './agent-turn-runner.mjs';
+import { parseClassicInputMessages } from './classic-input-messages.mjs';
 export class RpcError extends Error {
   constructor(code, message, data) { super(message); this.name = 'RpcError'; this.code = code; if (data !== undefined) this.data = data; }
 }
@@ -234,18 +235,55 @@ export class LocalAppServer {
   settingsSnapshot(thread) {
     return { model: thread.model, modelProvider: thread.modelProvider, effort: thread.reasoningEffort, serviceTier: thread.serviceTier ?? null, cwd: thread.cwd, approvalPolicy: thread.approvalPolicy, approvalsReviewer: 'user', sandboxPolicy: { type: 'readOnly', networkAccess: false }, personality: null, collaborationMode: copy(thread.collaborationMode), disabledPluginIds: [] };
   }
+  classicInput(params) {
+    if (params.classicInputMessages === undefined) return null;
+    let parsed;
+    try { parsed = parseClassicInputMessages(params.classicInputMessages); }
+    catch (error) { throw new RpcError(-32602, error.message, { adapterCode: error.code ?? 'LOCAL_INPUT_UNSUPPORTED' }); }
+    if (params.clientUserMessageId != null && params.clientUserMessageId !== parsed.incoming.id) throw new RpcError(-32602, 'The Classic user-message ID does not match its original input record');
+    if (params.classicUserMessage != null && JSON.stringify(params.classicUserMessage) !== JSON.stringify(parsed.incoming)) throw new RpcError(-32602, 'The Classic user-message record does not match its original input records');
+    const expected = parsed.incoming.content.parts.map(part => typeof part === 'string' ? { type: 'text', text: part } : { type: 'image', url: part.asset_pointer });
+    if (!Array.isArray(params.input) || params.input.length !== expected.length || expected.some((part, index) => {
+      const actual = params.input[index];
+      return !object(actual) || actual.type !== part.type || (part.type === 'text' ? actual.text !== part.text : actual.url !== part.url);
+    })) throw new RpcError(-32602, 'The RPC user input does not match its original Classic content');
+    return parsed;
+  }
+  assertClassicMessageIdsAvailable(thread, messages) {
+    const occupied = new Set();
+    occupied.add(thread.adapterMetadata?.classicRootId ?? ('local-root-' + thread.id));
+    for (const turn of thread.turns) {
+      for (const record of turn.adapterMetadata?.classicInputMessages ?? []) if (typeof record?.id === 'string') occupied.add(record.id);
+      for (const id of [turn.clientUserMessageId, turn.adapterMetadata?.classicUserMessage?.id]) if (typeof id === 'string') occupied.add(id);
+      for (const item of turn.items ?? []) {
+        for (const id of [item.id, item.clientId]) if (typeof id === 'string') occupied.add(id);
+        if (item.type === 'mcpToolCall' && typeof item.id === 'string') { occupied.add(item.id + '-call'); occupied.add(item.id + '-result'); }
+      }
+    }
+    if (messages.some(message => occupied.has(message.id))) throw new RpcError(-32602, 'An original Classic message ID is already used in this local conversation');
+  }
   startTurn(params, admission) {
+    const classic = this.classicInput(params);
+    if (classic) params = { ...params, clientUserMessageId: classic.incoming.id, classicUserMessage: classic.incoming };
     const thread = this.getThread(params.threadId), input = this.textInput(params), selected = this.selection(params, thread);
     if (params.outputSchema != null) throw new RpcError(-32601, 'Structured-output schema execution is not implemented by this local text adapter');
     const fingerprintParts = [input, selected.model, selected.reasoningEffort, selected.serviceTier];
     if (params.classicUserMessage?.metadata?.attachments?.length) fingerprintParts.push(params.classicUserMessage.metadata.attachments);
+    const legacyFingerprint = JSON.stringify(fingerprintParts);
+    if (classic) fingerprintParts.push({ classicInputMessages: classic.originalMessages });
     const fingerprint = JSON.stringify(fingerprintParts);
     const duplicate = params.clientUserMessageId && thread.turns.find(turn => turn.clientUserMessageId === params.clientUserMessageId);
     if (duplicate) {
-      if (duplicate.adapterMetadata.fingerprint !== fingerprint) throw new RpcError(-32602, 'A client user-message ID cannot be reused with different input or model settings');
+      const original = duplicate.adapterMetadata.classicUserMessage;
+      const legacyUser = classic ? { content: classic.incoming.content, metadata: classic.incoming.metadata ?? {}, author: { role: 'user' } } : null;
+      const legacyClassicRetry = classic && classic.hiddenCount === 0 && duplicate.adapterMetadata.classicInputMessages == null &&
+        duplicate.adapterMetadata.fingerprint === legacyFingerprint && original &&
+        (JSON.stringify(original) === JSON.stringify(classic.incoming) || JSON.stringify(original) === JSON.stringify(legacyUser));
+      if (duplicate.adapterMetadata.fingerprint !== fingerprint && !legacyClassicRetry) throw new RpcError(-32602, 'A client user-message ID cannot be reused with different input, Classic records or model settings');
       if (duplicate.status !== 'completed' && duplicate.adapterMetadata?.resumable && duplicate.adapterMetadata?.checkpoint) return this.resumeTurn({ threadId: thread.id, turnId: duplicate.id });
       return { result: { turn: copy(duplicate), ...(admission ? { clientUserMessageId: params.clientUserMessageId, admissionOutcome: 'duplicate', serverUserMessageId: duplicate.items[0].id } : {}) } };
     }
+    if (classic) this.assertClassicMessageIdsAvailable(thread, classic.originalMessages);
     if (this.running.has(thread.id)) throw new RpcError(-32000, 'A turn is already running in this local thread; queueing and steering are not implemented');
     const startedAtMs = this.now(), id = this.uuid(), userItem = { type: 'userMessage', id: this.uuid(), content: input, ...(params.clientUserMessageId ? { clientId: params.clientUserMessageId } : {}) };
     const turn = {
@@ -253,7 +291,7 @@ export class LocalAppServer {
       startedAt: Math.floor(startedAtMs / 1000), completedAt: null, durationMs: null,
       model: selected.model, reasoningEffort: selected.reasoningEffort, serviceTier: selected.serviceTier,
       clientUserMessageId: params.clientUserMessageId ?? null,
-      adapterMetadata: { startedAtMs, fingerprint, executionPolicy: selected.executionPolicy, selectionMode: selected.selectionMode, curatedPresetMatch: selected.curatedPresetMatch, clientMetadata: copy(params.responsesapiClientMetadata ?? null), instructions: this.instructions(params), ...(params.classicUserMessage ? { classicUserMessage: copy(params.classicUserMessage) } : {}) },
+      adapterMetadata: { startedAtMs, fingerprint, executionPolicy: selected.executionPolicy, selectionMode: selected.selectionMode, curatedPresetMatch: selected.curatedPresetMatch, clientMetadata: copy(params.responsesapiClientMetadata ?? null), instructions: this.instructions(params), ...(params.classicUserMessage ? { classicUserMessage: copy(params.classicUserMessage) } : {}), ...(classic ? { classicInputMessages: copy(classic.originalMessages) } : {}) },
     };
     const previous = copy(thread);
     this.updateSelection(thread, selected, params);
