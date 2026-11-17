@@ -25,18 +25,31 @@ function prefixView(thread, context) {
 const isBoundary = (text, offset) => offset === 0 || offset === text.length || !(text.charCodeAt(offset) >= 0xdc00 && text.charCodeAt(offset) <= 0xdfff && text.charCodeAt(offset - 1) >= 0xd800 && text.charCodeAt(offset - 1) <= 0xdbff);
 function linksFromAST(ast, text, maxNodes, maxLinks) {
   if (!object(ast) || ast.type !== 'root') throw Error('AST_INVALID');
-  const pending = [ast], seen = new Set(), links = [];
+  const pending = [ast], seen = new Set(), links = [], definitions = new Map(), referenceLinks = [];
+  const addLink = (node, uri) => {
+    const start = node.position?.start?.offset, end = node.position?.end?.offset;
+    if (typeof uri !== 'string' || !uri || uri.length > 8192 || !Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end <= start || end > text.length || !isBoundary(text, start) || !isBoundary(text, end)) throw Error('AST_INVALID');
+    if (!/^sandbox:/i.test(uri)) links.push({ uri, start, end, text: text.slice(start, end) });
+    if (links.length > maxLinks) throw Error('LINK_LIMIT');
+  };
   for (let index = 0; index < pending.length; index++) {
     if (pending.length > maxNodes) throw Error('AST_LIMIT');
     const node = pending[index];
     if (!object(node) || seen.has(node)) throw Error('AST_INVALID');
     seen.add(node);
-    if (['code', 'inlineCode', 'html', 'image', 'imageReference', 'definition', 'linkReference'].includes(node.type)) continue;
+    if (['code', 'inlineCode', 'html', 'image', 'imageReference'].includes(node.type)) continue;
+    if (node.type === 'definition') {
+      // Native identifiers are already normalized. Count every definition before
+      // inspecting its URL so an owned later URL cannot displace an earlier one.
+      if (typeof node.identifier === 'string' && node.identifier) definitions.set(node.identifier, definitions.has(node.identifier) ? null : node);
+      continue;
+    }
+    if (node.type === 'linkReference') {
+      if (['full', 'collapsed', 'shortcut'].includes(node.referenceType) && typeof node.identifier === 'string' && node.identifier) referenceLinks.push(node);
+      continue;
+    }
     if (node.type === 'link') {
-      const start = node.position?.start?.offset, end = node.position?.end?.offset;
-      if (typeof node.url !== 'string' || !node.url || node.url.length > 8192 || !Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start < 0 || end <= start || end > text.length || !isBoundary(text, start) || !isBoundary(text, end)) throw Error('AST_INVALID');
-      if (!/^sandbox:/i.test(node.url)) links.push({ uri: node.url, start, end, text: text.slice(start, end) });
-      if (links.length > maxLinks) throw Error('LINK_LIMIT');
+      addLink(node, node.url);
       continue;
     }
     if ('children' in node) {
@@ -44,6 +57,11 @@ function linksFromAST(ast, text, maxNodes, maxLinks) {
       if (pending.length + node.children.length > maxNodes) throw Error('AST_LIMIT');
       pending.push(...node.children);
     }
+  }
+  for (const node of referenceLinks) {
+    const definition = definitions.get(node.identifier);
+    if (!definition || typeof definition.url !== 'string' || !definition.url || definition.url.length > 8192) continue;
+    addLink(node, definition.url);
   }
   links.sort((a, b) => a.start - b.start || a.end - b.end);
   const result = [];

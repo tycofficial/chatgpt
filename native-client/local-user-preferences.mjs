@@ -1,6 +1,6 @@
 /** Source g2p6 GET/PATCH shapes backed by real browser-local preferences. */
-import { getLocalAccountStorageKey, isPrototypeLocalSession } from './local-identity.mjs?v=2389b4a65e4ee133';
-import { getSiteAccount } from './site-account.mjs?v=2389b4a65e4ee133';
+import { getLocalAccountStorageKey, isPrototypeLocalSession } from './local-identity.mjs?v=cb3222cb661f11da';
+import { getSiteAccount } from './site-account.mjs?v=cb3222cb661f11da';
 
 const key = 'original-client-prototype-user-preferences:v1';
 // Identity namespaces belong to the booted account; switching accounts reloads
