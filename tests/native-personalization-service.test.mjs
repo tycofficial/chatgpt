@@ -71,15 +71,15 @@ test('two Free users and admin use independent durable owner records, with the a
   }
   assert.equal(JSON.parse(f.storage.getItem(USER_SYSTEM_MESSAGES_STORAGE_KEY)).record.traits_model_message, 'Admin neutral record');
 });
-test('unknown style catalog/impression routes and methods stay unimplemented instead of claiming an invented service', async () => {
+test('unknown base-style catalog/impression routes and methods stay unimplemented instead of claiming an invented service', async () => {
   const f = fixture('catalog');
-  for (const [method, endpoint] of [['GET', 'personality_types'], ['GET', 'personality_trait_types'], ['POST', 'personality_settings_impression'], ['POST', 'user_system_messages']]) {
+  for (const [method, endpoint] of [['GET', 'personality_types'], ['POST', 'personality_settings_impression'], ['POST', 'user_system_messages'], ['PATCH', 'personality_trait_types']]) {
     assert.equal(await f.service.handle(new Request('https://replica.example/' + endpoint, { method })), null);
   }
 });
 test('strict field/type validation rejects arrays, null, unknown personality keys and non-string text without touching storage', async () => {
   const f = fixture('validate'); await call(f, 'PATCH', { traits_model_message: 'Old neutral text' }); const before = f.storage.getItem(USER_SYSTEM_MESSAGES_STORAGE_KEY);
-  for (const value of [[], null, true, 'text', { personality_type_selection: 'guessed-key' }, { personality_traits: {} }, { enabled: 1 }, { name_user_message: null }, { other_user_message: false }, { traits_model_message: 7 }, { '__proto__': null, unsupported: true }]) {
+  for (const value of [[], null, true, 'text', { personality_type_selection: 'guessed-key' }, { personality_traits: [] }, { enabled: 1 }, { name_user_message: null }, { other_user_message: false }, { traits_model_message: 7 }, { '__proto__': null, unsupported: true }]) {
     const result = await call(f, 'PATCH', value); assert.equal(result.response.status, 400); assert.equal(f.storage.getItem(USER_SYSTEM_MESSAGES_STORAGE_KEY), before);
   }
 });

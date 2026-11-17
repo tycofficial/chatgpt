@@ -1,5 +1,5 @@
 /** Apply browser-local custom instructions only to original Classic Chat/Work. */
-import { USER_SYSTEM_MESSAGES_STORAGE_KEY } from './local-personalization-service.mjs?v=cb3222cb661f11da';
+import { USER_SYSTEM_MESSAGES_STORAGE_KEY } from './local-personalization-service.mjs?v=bc63582b1dbb7427';
 
 const identityFields = ['accountId', 'userId', 'accountUserId'];
 const copyIdentity = value => value && Object.fromEntries(identityFields.map(key => [key, value[key] ?? null]));
@@ -37,7 +37,9 @@ export function createPersonalizedSettingsReader({ readSettings, personalization
     const settings = { ...readSettings() };
     const surface = getClassicPersonalizationSurface(context);
     if (!surface || !getIdentity()) return settings;
-    const custom = personalization.getCustomInstructions({ surface });
+    const custom = typeof personalization.getRequestInstructions === 'function'
+      ? personalization.getRequestInstructions({ surface })
+      : personalization.getCustomInstructions({ surface });
     if (custom) settings.customInstructions = [settings.customInstructions, custom].filter(value => typeof value === 'string' && value.trim()).join('\n\n');
     return settings;
   };

@@ -37,7 +37,9 @@ export function createPersonalizedSettingsReader({ readSettings, personalization
     const settings = { ...readSettings() };
     const surface = getClassicPersonalizationSurface(context);
     if (!surface || !getIdentity()) return settings;
-    const custom = personalization.getCustomInstructions({ surface });
+    const custom = typeof personalization.getRequestInstructions === 'function'
+      ? personalization.getRequestInstructions({ surface })
+      : personalization.getCustomInstructions({ surface });
     if (custom) settings.customInstructions = [settings.customInstructions, custom].filter(value => typeof value === 'string' && value.trim()).join('\n\n');
     return settings;
   };
