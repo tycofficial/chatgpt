@@ -2,7 +2,7 @@
  * Loads the public original component graph with explicit local host services.
  * Private original backend credentials are never used by this entry point.
  */
-import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter, localFilesService, localLibraryService, localLibraryByteTransport, initializeLocalAccountHistory, setNativeAccountHistoryToaster } from './service-boundary.mjs';
+import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter, localFilesService, localLibraryService, localLibraryByteTransport, initializeLocalAccountHistory, setNativeAccountHistoryToaster, initializeLocalPublishedResources, registerNativeLibrarySource, notifyNativeLibrarySourceReady } from './service-boundary.mjs';
 import * as mapLibreRenderer from './map-vendor/maplibre-gl.mjs';
 import { createLocalMapProvider } from './local-map-provider.mjs';
 import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs';
@@ -19,6 +19,7 @@ globalThis.__originalClientProbe = boundary.diagnostics;
 // Restore the verified account's real durable history before native loaders
 // resolve a fresh-device conversation URL. Offline failures retain local data.
 await initializeLocalAccountHistory();
+await initializeLocalPublishedResources();
 installSyntheticDocumentState();
 
 const plan = await (await fetch('/__prototype/entry-plan.json')).json();
@@ -38,6 +39,7 @@ requireOriginal.m = new Proxy(requireOriginal.m, {
       factory = byId.get(id);
     }
     target[id] = factory;
+    if (id === 'fvOC') queueMicrotask(notifyNativeLibrarySourceReady);
     return true;
   },
 });
@@ -76,6 +78,20 @@ function overrideExports(moduleId, overrides, options, wrappers = {}) {
     return factory.call(this, module, exports, scopedRequire);
   }, options);
 }
+
+// Retain the original QueryProvider and its QueryClient. Observe the supplied
+// client at the host seam so actual completed publications use the same native
+// Library invalidation path as the original upload controller.
+const invalidateOriginalLibrary = (...args) => {
+  if (!requireOriginal.m.fvOC) throw Error('Original Library invalidator is not registered');
+  return requireOriginal('fvOC').a(...args);
+};
+overrideExports('BolX', {}, { deferred: true }, {
+  a: OriginalProvider => function NativeLibraryQueryProvider(props) {
+    registerNativeLibrarySource(props.queryClient, invalidateOriginalLibrary);
+    return requireOriginal('zd8w').createElement(OriginalProvider, props);
+  },
+});
 
 // Keep native upload behavior while local tickets store their real bytes.
 overrideExports('GDNt', {}, { deferred: true }, { b: NativeWebFetch => wrapNativeFileUploadClass(NativeWebFetch, localFilesService, undefined, localLibraryByteTransport) });

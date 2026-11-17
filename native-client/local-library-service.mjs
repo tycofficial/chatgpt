@@ -1,10 +1,12 @@
-/** Native Library service boundary backed only by this site's real uploads.
+/** Native Library service boundary backed by this site's real uploads and explicit generated publications.
  * TCFx/jU86: recommended POST returns raw files; nodes GET returns native nodes.
  * e7El: file soft_delete=true retains bytes; directory DELETE is permanent.
  * No original account inventory, mounted cloud provider, share URL or UI lives here.
  */
 export const LOCAL_LIBRARY_SOURCE = 'browser-origin-local-library';
 export const LOCAL_LIBRARY_ROOT_ID = 'libdir_site_root';
+// Explicit site-local discriminator, never a claim of an official cloud editor.
+export const LOCAL_GENERATED_ARTIFACT_TYPE = 'local_generated_file';
 const PREFIX = 'site-local-library:v1:';
 const FILE_ID = /^file_local_[0-9a-f]{32}$/;
 const DIRECTORY_ID = /^libdir_site_[0-9a-f]{32}$/;
@@ -69,6 +71,12 @@ export function createLocalLibraryService({
   if (typeof files?.listFiles !== 'function' || typeof files?.readFile !== 'function' || typeof metadataStorage?.getItem !== 'function' || typeof metadataStorage?.setItem !== 'function') throw new TypeError('A real account-scoped file catalog/read service and persistent Library storage are required');
   let pending = Promise.resolve(), lastOwner = null;
   const blobs = new Map();
+  const isGenerated = file => file.publication?.origin === 'generated';
+  const rawIdOf = file => file.rawFileId ?? file.fileId;
+  const modifiedAt = file => isGenerated(file) ? file.publication.updatedAt : file.processedAt ?? file.createdAt;
+  const sourceMatches = (file, source) => source == null || (source === 'generated') === isGenerated(file);
+  function revokeFileBlobs(fileId) { for (const [key, value] of blobs) if (value.logicalId === fileId) { try { revokeObjectURL(value.url); } catch {} blobs.delete(key); } }
+
   function dispose() { for (const value of blobs.values()) try { revokeObjectURL(value.url); } catch {} blobs.clear(); }
   function owner() {
     const id = getAccountId();
@@ -106,6 +114,10 @@ export function createLocalLibraryService({
       if (!object(row) || !FILE_ID.test(row.fileId ?? '') || typeof row.fileName !== 'string' || typeof row.mimeType !== 'string' || !Number.isSafeInteger(row.size) || row.size < 0 || !Number.isFinite(row.createdAt)) throw issue('真实文件元数据无效', 502, 'LOCAL_LIBRARY_FILE_CATALOG_INVALID');
       if (row.status !== 'ready') { if (includeUnready) result.set(row.fileId, copy(row)); continue; }
       if (!/^[0-9a-f]{64}$/.test(row.sha256 ?? '') || result.has(row.fileId)) throw issue('真实文件身份或摘要无效', 502, 'LOCAL_LIBRARY_FILE_CATALOG_INVALID');
+      if (row.publication != null) {
+        const p = row.publication;
+        if (!object(p) || p.origin !== 'generated' || !Number.isSafeInteger(p.revision) || p.revision < 1 || !Number.isSafeInteger(p.updatedAt) || p.updatedAt < 0 || !FILE_ID.test(row.rawFileId ?? '') || row.rawFileId === row.fileId) throw issue('生成文件版本元数据无效', 502, 'LOCAL_LIBRARY_FILE_CATALOG_INVALID');
+      } else if (row.rawFileId != null && row.rawFileId !== row.fileId) throw issue('上传文件身份与不可变原文件不一致', 502, 'LOCAL_LIBRARY_FILE_CATALOG_INVALID');
       result.set(row.fileId, copy(row));
     }
     return result;
@@ -125,9 +137,9 @@ export function createLocalLibraryService({
   }
   function rawFile(state, file) {
     const overlay = state.overrides[file.fileId] ?? {}, displayName = overlay.name ?? file.fileName;
-    return { id: file.fileId, file_id: file.fileId, file_name: displayName, file_extension: displayName.includes('.') ? displayName.split('.').at(-1) : '', mime_type: file.mimeType,
-      file_size_bytes: file.size, file_upload_time: iso(file.createdAt), record_creation_time: iso(file.createdAt), updated_at: iso(overlay.updatedAt ?? file.processedAt ?? file.createdAt),
-      library_artifact_type: null, library_file_category: fileCategory(file, displayName) === 'images' ? 'image' : 'other', state: 'ready', access_kind: 'owned', is_shared: false,
+    return { id: file.fileId, file_id: rawIdOf(file), file_name: displayName, file_extension: displayName.includes('.') ? displayName.split('.').at(-1) : '', mime_type: file.mimeType,
+      file_size_bytes: file.size, file_upload_time: iso(file.createdAt), record_creation_time: iso(file.createdAt), updated_at: iso(Math.max(overlay.updatedAt ?? 0, modifiedAt(file))),
+      library_artifact_type: isGenerated(file) ? LOCAL_GENERATED_ARTIFACT_TYPE : null, ...(isGenerated(file) ? { adapter_source: LOCAL_LIBRARY_SOURCE, adapter_publication: copy(file.publication) } : {}), library_file_category: fileCategory(file, displayName) === 'images' ? 'image' : 'other', state: 'ready', access_kind: 'owned', is_shared: false,
       directory_id: overlay.directoryId ?? null, trashed_at: overlay.trashedAt == null ? null : iso(overlay.trashedAt),
       ...(Number.isSafeInteger(file.width) ? { width: file.width } : {}), ...(Number.isSafeInteger(file.height) ? { height: file.height } : {}) };
   }
@@ -150,7 +162,7 @@ export function createLocalLibraryService({
   }
   function newId(prefix) { const value = String(uuid()).replaceAll('-', ''); if (!/^[0-9a-f]{32}$/.test(value)) throw issue('本地资料库无法分配有效标识', 503); return prefix + value; }
   async function page(id, state, records, values, criteria) {
-    const fingerprint = await hash(JSON.stringify([id, state.revision, { ...criteria, cursor: null }, [...records.values()].map(file => [file.fileId,file.sha256,file.fileName]).sort((a,b) => a[0].localeCompare(b[0]))]));
+    const fingerprint = await hash(JSON.stringify([id, state.revision, { ...criteria, cursor: null }, [...records.values()].map(file => [file.fileId,rawIdOf(file),file.sha256,file.fileName,file.mimeType,isGenerated(file) ? file.publication.revision : null,isGenerated(file) ? file.publication.updatedAt : null]).sort((a,b) => a[0].localeCompare(b[0]))]));
     let offset = 0;
     if (criteria.cursor !== null) {
       try { const v = JSON.parse(atob(criteria.cursor.replaceAll('-', '+').replaceAll('_', '/'))); if (v.v !== 1 || v.f !== fingerprint || !Number.isSafeInteger(v.o) || v.o < 0 || v.o > values.length) throw Error(); offset = v.o; }
@@ -163,11 +175,11 @@ export function createLocalLibraryService({
   async function browse(id, input, mode, signal) {
     const criteria = filters(input, mode), records = await list(id, signal), state = read(id); directory(state, criteria.parent);
     const match = file => { const overlay = state.overrides[file.fileId] ?? {}, displayName = overlay.name ?? file.fileName;
-      return ((overlay.trashedAt != null) === criteria.deleted) && criteria.source !== 'generated'
+      return ((overlay.trashedAt != null) === criteria.deleted) && sourceMatches(file, criteria.source)
         && (!criteria.categories.length || criteria.categories.includes(fileCategory(file, displayName)))
         && displayName.toLocaleLowerCase().includes(criteria.q.toLocaleLowerCase())
         && (mode !== 'nodes' || parentId(overlay.directoryId) === criteria.parent); };
-    let values = criteria.includeFiles ? [...records.values()].filter(match).sort((a,b) => (state.overrides[b.fileId]?.lastOpenedAt ?? b.createdAt) - (state.overrides[a.fileId]?.lastOpenedAt ?? a.createdAt) || a.fileId.localeCompare(b.fileId)).map(file => mode === 'nodes' ? nativeFile(state, file) : rawFile(state, file)) : [];
+    let values = criteria.includeFiles ? [...records.values()].filter(match).sort((a,b) => Math.max(state.overrides[b.fileId]?.lastOpenedAt ?? 0, isGenerated(b) ? modifiedAt(b) : b.createdAt) - Math.max(state.overrides[a.fileId]?.lastOpenedAt ?? 0, isGenerated(a) ? modifiedAt(a) : a.createdAt) || a.fileId.localeCompare(b.fileId)).map(file => mode === 'nodes' ? nativeFile(state, file) : rawFile(state, file)) : [];
     if (mode === 'nodes' && !criteria.deleted && !criteria.source && !criteria.categories.length) {
       const dirs = Object.values(state.directories).filter(row => row.parentId === criteria.parent && row.name.toLocaleLowerCase().includes(criteria.q.toLocaleLowerCase())).sort((a,b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id)).map(row => nativeDirectory(state, row, records)); values = [...dirs, ...values];
     }
@@ -175,25 +187,55 @@ export function createLocalLibraryService({
   }
   function favorite(state, fileId) { return Object.values(state.favorites).find(row => row.fileId === fileId) ?? null; }
   function favoriteDTO(row, raw) { return { favorite_id: row.id, target_ref: { type: 'library_file', library_file_id: row.fileId }, created_at: iso(row.createdAt), ...(raw ? { availability: 'available', retryable: false, item: raw } : {}) }; }
-  async function verifiedBytes(id, fileId, signal) {
-    check(id, signal); const value = await files.readFile(fileId, { signal }); check(id, signal);
-    const data = value?.bytes, bytes = data instanceof Uint8Array ? data : data instanceof ArrayBuffer ? new Uint8Array(data) : ArrayBuffer.isView(data) ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength) : null;
-    const record = value?.record;
-    if (!record || record.fileId !== fileId || !bytes || bytes.length !== record.size || !/^[0-9a-f]{64}$/.test(record.sha256 ?? '') || await hash(bytes) !== record.sha256) throw issue('文件大小或 SHA-256 校验失败，未返回下载内容', 409, 'LOCAL_LIBRARY_FILE_CORRUPTED');
-    check(id, signal); return { record, bytes };
+
+  function validateRawRecord(record, rawFileId) {
+    if (!object(record) || record.fileId !== rawFileId || !FILE_ID.test(rawFileId) || typeof record.fileName !== 'string' || typeof record.mimeType !== 'string' || !record.mimeType || !Number.isSafeInteger(record.size) || record.size < 0 || !/^[0-9a-f]{64}$/.test(record.sha256 ?? '')) throw issue('不可变原文件身份无效', 409, 'LOCAL_LIBRARY_FILE_CORRUPTED');
+    if (record.generated != null && (!object(record.generated) || !FILE_ID.test(record.generated.fileId ?? '') || record.generated.fileId === rawFileId || !Number.isSafeInteger(record.generated.revision) || record.generated.revision < 1)) throw issue('生成原文件关联无效', 409, 'LOCAL_LIBRARY_FILE_CORRUPTED');
   }
-  async function resource(id, fileId, kind, signal) {
-    const { record, bytes } = await verifiedBytes(id, fileId, signal), state = read(id), raw = rawFile(state, record);
-    if (kind === 'thumbnail' && record.kind !== 'image' && !record.mimeType.startsWith('image/')) return { thumbnail_url: null, adapter_source: LOCAL_LIBRARY_SOURCE };
-    let cached = blobs.get(fileId);
-    if (!cached || cached.sha256 !== record.sha256 || cached.owner !== id) {
-      if (cached) revokeObjectURL(cached.url);
+  async function verifiedBytes(id, fileId, signal, { allowRaw = false } = {}) {
+    check(id, signal); const records = await list(id, signal);
+    let snapshot = records.get(fileId);
+    if (!snapshot && allowRaw) snapshot = [...records.values()].find(file => rawIdOf(file) === fileId);
+    const rawFileId = snapshot ? rawIdOf(snapshot) : allowRaw ? fileId : null;
+    if (!rawFileId) throw issue('此文件不存在或不属于当前账户', 404, 'LOCAL_LIBRARY_FILE_NOT_FOUND');
+    const value = await files.readFile(rawFileId, { signal }); check(id, signal);
+    const record = value?.record, data = value?.bytes, bytes = data instanceof Uint8Array ? data : data instanceof ArrayBuffer ? new Uint8Array(data) : ArrayBuffer.isView(data) ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength) : null;
+    validateRawRecord(record, rawFileId);
+    if (!bytes || bytes.length !== record.size || await hash(bytes) !== record.sha256) throw issue('文件大小或 SHA-256 校验失败，未返回下载内容', 409, 'LOCAL_LIBRARY_FILE_CORRUPTED');
+    const logicalId = record.generated?.fileId ?? record.fileId;
+    if (snapshot) {
+      if (snapshot.fileId !== logicalId || rawIdOf(snapshot) !== rawFileId || snapshot.sha256 !== record.sha256 || snapshot.size !== record.size || snapshot.mimeType !== record.mimeType || snapshot.fileName !== record.fileName || isGenerated(snapshot) !== !!record.generated || isGenerated(snapshot) && snapshot.publication.revision !== record.generated.revision) throw issue('文件版本在读取时不一致，未返回其它版本内容', 409, 'LOCAL_LIBRARY_FILE_VERSION_MISMATCH');
+    } else {
+      if (record.generated && !records.has(logicalId)) throw issue('生成文件不再属于当前资料库', 404, 'LOCAL_LIBRARY_FILE_NOT_FOUND');
+      snapshot = { fileId: logicalId, rawFileId, fileName: record.fileName, mimeType: record.mimeType, size: record.size, sha256: record.sha256, kind: record.kind, createdAt: record.createdAt, processedAt: record.processedAt,
+        ...(record.generated ? { publication: { origin: 'generated', revision: record.generated.revision, updatedAt: record.processedAt ?? record.createdAt } } : {}) };
+    }
+    check(id, signal); return { record: snapshot, rawRecord: record, bytes, rawFileId, logicalId };
+  }
+  function blobResource(id, verified) {
+    const { record, bytes, rawFileId, logicalId } = verified, revision = record.publication?.revision ?? 0;
+    const cacheKey = JSON.stringify([id,logicalId,rawFileId,revision,record.sha256,record.mimeType]);
+    let cached = blobs.get(cacheKey);
+    if (!cached) {
       let url; try { url = createObjectURL(new Blob([bytes], { type: record.mimeType })); } catch { throw issue('浏览器无法创建真实文件下载资源', 503, 'LOCAL_LIBRARY_BLOB_UNAVAILABLE'); }
       if (typeof url !== 'string' || !url.startsWith('blob:')) throw issue('文件资源提供者没有返回有效的本地 Blob URL', 502, 'LOCAL_LIBRARY_BLOB_INVALID');
-      cached = { owner: id, sha256: record.sha256, url }; blobs.set(fileId, cached);
+      cached = { owner: id, logicalId, rawFileId, revision, sha256: record.sha256, mimeType: record.mimeType, url }; blobs.set(cacheKey, cached);
     }
-    check(id, signal);
+    return cached;
+  }
+  async function resource(id, fileId, kind, signal, options) {
+    const verified = await verifiedBytes(id, fileId, signal, options), { record } = verified, state = read(id), raw = rawFile(state, record);
+    if (kind === 'thumbnail' && record.kind !== 'image' && !record.mimeType.startsWith('image/')) return { thumbnail_url: null, adapter_source: LOCAL_LIBRARY_SOURCE };
+    const cached = blobResource(id, verified); check(id, signal);
     return { [kind === 'thumbnail' ? 'thumbnail_url' : kind === 'content_url' ? 'content_url' : 'download_url']: cached.url, file_name: raw.file_name, adapter_source: LOCAL_LIBRARY_SOURCE };
+  }
+  async function resolvePublishedResource(receipt, { signal } = {}) {
+    const id = owner(); check(id, signal);
+    if (!object(receipt) || receipt.committed !== true || !FILE_ID.test(receipt.fileId ?? '') || !FILE_ID.test(receipt.rawFileId ?? '') || receipt.fileId === receipt.rawFileId || !Number.isSafeInteger(receipt.revision) || receipt.revision < 1 || !/^[0-9a-f]{64}$/.test(receipt.sha256 ?? '') || !Number.isSafeInteger(receipt.size) || receipt.size < 0 || typeof receipt.fileName !== 'string' || typeof receipt.mimeType !== 'string' || !receipt.mimeType) throw issue('需要已提交的真实生成文件回执', 400, 'LOCAL_LIBRARY_PUBLICATION_RECEIPT_INVALID');
+    const verified = await verifiedBytes(id, receipt.rawFileId, signal, { allowRaw: true }), raw = verified.rawRecord;
+    if (verified.logicalId !== receipt.fileId || verified.rawFileId !== receipt.rawFileId || raw.generated?.revision !== receipt.revision || raw.sha256 !== receipt.sha256 || raw.size !== receipt.size || raw.mimeType !== receipt.mimeType || raw.fileName !== receipt.fileName) throw issue('生成回执与不可变原文件不一致', 409, 'LOCAL_LIBRARY_PUBLICATION_RECEIPT_MISMATCH');
+    const cached = blobResource(id, verified); check(id, signal);
+    return { uri: cached.url, name: receipt.fileName, mimeType: receipt.mimeType, rawFileId: receipt.rawFileId, revision: receipt.revision, sha256: receipt.sha256 };
   }
   async function deleteConfirmed(id, fileId, signal) {
     if (typeof files.permanentDeleteFile !== 'function') throw issue('永久删除文件尚未接通；文件和提取文本均已保留', 501, 'LOCAL_LIBRARY_PERMANENT_DELETE_UNAVAILABLE');
@@ -210,7 +252,7 @@ export function createLocalLibraryService({
       if (result?.deleted !== true) throw issue('真实文件服务未确认永久删除，资料库保留重试记录', 502, 'LOCAL_LIBRARY_DELETE_UNCONFIRMED');
       const after = read(id); delete after.deletions[fileId]; delete after.overrides[fileId];
       for (const [favoriteId,row] of Object.entries(after.favorites)) if (row.fileId === fileId) delete after.favorites[favoriteId];
-      save(id, after, signal); const blob = blobs.get(fileId); if (blob) { revokeObjectURL(blob.url); blobs.delete(fileId); }
+      revokeFileBlobs(fileId); save(id, after, signal);
       return { success: true, adapter_source: LOCAL_LIBRARY_SOURCE };
     }
   }
@@ -226,9 +268,10 @@ export function createLocalLibraryService({
       // Native J0RG/vvmK/hrUs use the generic file-download service for real
       // file_local_ upload IDs. Preserve its DTO; no fake HTTP/first-party ID.
       if (sourceDownload && method === 'GET') {
-        const fileId = sourceDownload[1], result = await resource(id, fileId, 'download_url', signal), state = read(id);
-        const showTrashState = bool(incoming.searchParams.get('include_library_file_state')) && state.overrides[fileId]?.trashedAt != null;
-        return json({ status: 'success', ...result, ...(showTrashState ? { metadata: { library_file_state: { library_file_id: fileId, status: 'trashed' } } } : {}) });
+        const fileId = sourceDownload[1], result = await resource(id, fileId, 'download_url', signal, { allowRaw: true }), state = read(id);
+        const logicalId = [...blobs.values()].find(value => value.url === result.download_url)?.logicalId ?? fileId;
+        const showTrashState = bool(incoming.searchParams.get('include_library_file_state')) && state.overrides[logicalId]?.trashedAt != null;
+        return json({ status: 'success', ...result, ...(showTrashState ? { metadata: { library_file_state: { library_file_id: logicalId, status: 'trashed' } } } : {}) });
       }
       if (path === '/files/library' && method === 'POST') return json(await browse(id, await body(request), 'files', signal));
       if (path === '/files/library/nodes' && method === 'GET') return json(await browse(id, incoming.searchParams, 'nodes', signal));
@@ -267,7 +310,7 @@ export function createLocalLibraryService({
       }
       if (path === '/files/library/favorites' && method === 'GET') {
         const records = await list(id, signal), state = read(id), criteria = filters(incoming.searchParams, 'favorites');
-        const values = Object.values(state.favorites).filter(row => records.has(row.fileId) && state.overrides[row.fileId]?.trashedAt == null).sort((a,b) => b.createdAt - a.createdAt || a.id.localeCompare(b.id)).map(row => favoriteDTO(row, rawFile(state, records.get(row.fileId)))).filter(row => row.item.file_name.toLowerCase().includes(criteria.q.toLowerCase()) && (!criteria.categories.length || criteria.categories.includes(fileCategory(records.get(row.target_ref.library_file_id), row.item.file_name))) && criteria.source !== 'generated');
+        const values = Object.values(state.favorites).filter(row => records.has(row.fileId) && state.overrides[row.fileId]?.trashedAt == null).sort((a,b) => b.createdAt - a.createdAt || a.id.localeCompare(b.id)).map(row => favoriteDTO(row, rawFile(state, records.get(row.fileId)))).filter(row => row.item.file_name.toLowerCase().includes(criteria.q.toLowerCase()) && (!criteria.categories.length || criteria.categories.includes(fileCategory(records.get(row.target_ref.library_file_id), row.item.file_name))) && sourceMatches(records.get(row.target_ref.library_file_id), criteria.source));
         const output = await page(id, state, records, values, criteria); check(id, signal); return json(output);
       }
       const favoriteMatch = /^\/files\/library\/favorites\/(libfav_site_[0-9a-f]{32})$/.exec(path);
@@ -285,7 +328,7 @@ export function createLocalLibraryService({
       }));
       if (path === '/files/library/files/delete-batch' && method === 'POST') {
         const input = await body(request); if (!Array.isArray(input.files) || input.files.length < 1 || input.files.length > 100 || input.files.some(row => !FILE_ID.test(row?.library_file_id))) throw issue('批量文件引用无效');
-        return json(await mutate(id, signal, (state, records) => ({ files: input.files.map(target => { const fileId = target.library_file_id; if (!records.has(fileId) || target.file_id != null && target.file_id !== fileId) return { library_file_id: fileId, success: false }; if (state.overrides[fileId]?.trashedAt == null) patch(state, fileId, { trashedAt: now(), updatedAt: now() }); return { library_file_id: fileId, success: true }; }) })));
+        return json(await mutate(id, signal, (state, records) => ({ files: input.files.map(target => { const fileId = target.library_file_id; if (!records.has(fileId) || target.file_id != null && target.file_id !== rawIdOf(records.get(fileId))) return { library_file_id: fileId, success: false }; if (state.overrides[fileId]?.trashedAt == null) patch(state, fileId, { trashedAt: now(), updatedAt: now() }); return { library_file_id: fileId, success: true }; }) })));
       }
       const fileMatch = /^\/files\/library\/files\/(file_local_[0-9a-f]{32})(?:\/(node|content_url|download_url|thumbnail|content|download|restore|move|opened))?$/.exec(path);
       if (fileMatch) {
@@ -304,7 +347,7 @@ export function createLocalLibraryService({
         if (method === 'POST' && action === 'restore') return json(await mutate(id, signal, (state, records) => { find(records, fileId); const prior = state.overrides[fileId] ?? {}, target = prior.directoryId && state.directories[prior.directoryId] ? prior.directoryId : null; patch(state, fileId, { trashedAt: null, directoryId: target, updatedAt: now() }); return { success: true }; }));
         if (method === 'POST' && action === 'opened') return json(await mutate(id, signal, (state, records) => { find(records, fileId); patch(state, fileId, { lastOpenedAt: now() }); return { success: true }; }));
         if (method === 'DELETE' && action === undefined) {
-          if (incoming.searchParams.has('file_id') && incoming.searchParams.get('file_id') !== fileId) throw issue('真实文件身份不一致', 404, 'LOCAL_LIBRARY_FILE_NOT_FOUND');
+          if (incoming.searchParams.has('file_id')) { const records = await list(id, signal), file = find(records, fileId); if (incoming.searchParams.get('file_id') !== rawIdOf(file)) throw issue('真实文件版本已更改，请重新加载资料库', 409, 'LOCAL_LIBRARY_FILE_VERSION_MISMATCH'); }
           if (!bool(incoming.searchParams.get('soft_delete'), true)) return json(await permanentlyDelete(id, fileId, signal));
           return json(await mutate(id, signal, (state, records) => { find(records, fileId); if (!state.overrides[fileId]?.trashedAt) patch(state, fileId, { trashedAt: now(), updatedAt: now() }); return { success: true }; }));
         }
@@ -313,5 +356,5 @@ export function createLocalLibraryService({
       throw issue('此资料库服务操作尚未接通；原文件未更改', 501, 'LOCAL_LIBRARY_OPERATION_UNSUPPORTED');
     } catch (cause) { if (getAccountId() !== lastOwner) { dispose(); lastOwner = getAccountId(); } diagnostics.push({ type: 'local-library-error', method, path, code: cause?.code ?? cause?.name, status: cause?.status ?? 500 }); return failure(cause); }
   }
-  return Object.freeze({ handle, dispose, ownsObjectURL, source: Object.freeze({ provider: LOCAL_LIBRARY_SOURCE, capturedAccountFiles: false, openaiCloud: false, rawFileListing: true, nativeNodeListing: true, localFolders: true, localFavorites: true, localTrash: true, permanentDelete: typeof files.permanentDeleteFile === 'function', rawBytesVerifiedBySHA256: true }) });
+  return Object.freeze({ handle, dispose, ownsObjectURL, resolvePublishedResource, source: Object.freeze({ provider: LOCAL_LIBRARY_SOURCE, capturedAccountFiles: false, openaiCloud: false, rawFileListing: true, nativeNodeListing: true, localFolders: true, localFavorites: true, localTrash: true, permanentDelete: typeof files.permanentDeleteFile === 'function', rawBytesVerifiedBySHA256: true, generatedFileProjection: true, immutablePublishedResources: true, generatedArtifactDiscriminator: LOCAL_GENERATED_ARTIFACT_TYPE }) });
 }

@@ -27,10 +27,30 @@ function environment(initialSite, shared, { query = '', localFlag = null } = {})
   const context = vm.createContext({ URL, Event, localStorage, sessionStorage: { getItem: key => session.get(key) ?? null, setItem: (key, value) => session.set(key, value) }, location: { href: 'https://neutral.invalid/chatgpt/' + query }, getSiteAccount: () => site, createLocalFilesService, createLocalLibraryService, createPersonalizationIdentityProvider, localProtocolDiagnostics: [] });
   const executable = identitySource.replace(/^import .*;\r?\n/gm, '').replace(/^export\s+/gm, '').replaceAll('import.meta.url', JSON.stringify(new URL('../src/native-client/local-identity.mjs', import.meta.url).href));
   vm.runInContext(executable + '\nglobalThis.identityAPI={getPrototypeLocalAuth,clearPrototypeLocalSession};', context);
-  context.localToolExecutor = createBrowserToolExecutor({ storage: shared.raw, getWorkspaceNamespace: () => site?.role === 'administrator' ? null : site?.accountId ?? 'guest' });
+  context.localWorkspaceExecutor = createBrowserToolExecutor({ storage: shared.raw, getWorkspaceNamespace: () => site?.role === 'administrator' ? null : site?.accountId ?? 'guest' });
+  context.localAppServer = { threads: new Map() };
   vm.runInContext(identities + '\n' + fileOwner + '\n' + constructors, context);
-  return { files: context.localFilesService, library: context.localLibraryService, identity: context.identityAPI, setSite: value => site = value };
+  return { files: context.localFilesService, library: context.localLibraryService, identity: context.identityAPI, workspace: context.localWorkspaceExecutor, server: context.localAppServer, setSite: value => site = value };
 }
+
+test('the actual publication boundary admits only the verified boot account own non-temporary thread workspace', async () => {
+  for (const site of [admin, free]) {
+    const env = environment(site, { metadata: new Map(), raw: store() });
+    env.server.threads.set('owned-publication-thread', { id: 'owned-publication-thread', ephemeral: false });
+    env.server.threads.set('temporary-publication-thread', { id: 'temporary-publication-thread', ephemeral: true });
+    await env.workspace.execute({ id: 'neutral-create', function: { name: 'create_file', arguments: JSON.stringify({ name: 'neutral-owned.md', content: 'Actual verified account deliverable.' }) } }, { threadId: 'owned-publication-thread' });
+    const receipt = await env.files.publishGeneratedFile({ requestId: 'neutral-owned-publication', threadId: 'owned-publication-thread', path: '/mnt/data/neutral-owned.md' });
+    assert.equal(receipt.committed, true); assert.notEqual(receipt.fileId, receipt.rawFileId);
+    assert.equal(new TextDecoder().decode((await env.files.readFile(receipt.rawFileId)).bytes), 'Actual verified account deliverable.');
+    await assert.rejects(env.files.publishGeneratedFile({ requestId: 'neutral-missing-thread', threadId: 'foreign-thread-not-in-server', path: '/mnt/data/neutral-owned.md' }), error => error.status === 404);
+    await assert.rejects(env.files.publishGeneratedFile({ requestId: 'neutral-temporary-thread', threadId: 'temporary-publication-thread', path: '/mnt/data/neutral-owned.md' }), error => error.code === 'publication_ephemeral');
+    env.setSite(null);
+    await assert.rejects(env.files.publishGeneratedFile({ requestId: 'neutral-after-logout', threadId: 'owned-publication-thread', path: '/mnt/data/neutral-owned.md' }), error => error.status === 401);
+  }
+  const guest = environment(null, { metadata: new Map(), raw: store() }, { query: '?localSession=1' });
+  guest.server.threads.set('owned-publication-thread', { id: 'owned-publication-thread', ephemeral: false });
+  await assert.rejects(guest.files.publishGeneratedFile({ requestId: 'neutral-guest-publication', threadId: 'owned-publication-thread', path: '/mnt/data/neutral-owned.md' }), error => error.status === 401);
+});
 const request = (path, body) => new Request('https://neutral.invalid/chatgpt/__codex-api' + path, body === undefined ? undefined : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
 async function list(env) { const response = await env.library.handle(request('/files/library', { limit: 50, categories: [], trashed_only: false }), '/files/library'); return { response, body: await response.json() }; }
 async function upload(env) {

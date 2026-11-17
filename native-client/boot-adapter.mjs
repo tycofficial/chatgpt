@@ -2,27 +2,28 @@
  * Loads the public original component graph with explicit local host services.
  * Private original backend credentials are never used by this entry point.
  */
-import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter, localFilesService, localLibraryService, localLibraryByteTransport, initializeLocalAccountHistory, setNativeAccountHistoryToaster } from './service-boundary.mjs?v=990e0c77c1b1bedb';
-import * as mapLibreRenderer from './map-vendor/maplibre-gl.mjs?v=990e0c77c1b1bedb';
-import { createLocalMapProvider } from './local-map-provider.mjs?v=990e0c77c1b1bedb';
-import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs?v=990e0c77c1b1bedb';
-import { getPrototypeLocalSession, getPrototypeLocalAuth, isPrototypeLocalSession, getPrototypeLocalAuthGeneration, clearPrototypeLocalSession } from './local-identity.mjs?v=990e0c77c1b1bedb';
-import { createLocalHostSettingsClass } from './local-host-settings.mjs?v=990e0c77c1b1bedb';
-import { createLocalWorkPolicy } from './local-work-policy.mjs?v=990e0c77c1b1bedb';
-import { hasModelSelectionAccess, getSiteLoginUrl } from './site-account.mjs?v=990e0c77c1b1bedb';
-import { createNativeModelSelectionPolicy, createNativeThinkingEntryPolicy } from './local-model-selection-policy.mjs?v=990e0c77c1b1bedb';
-import { createLocalHostClaimsReader } from './local-token-identity.mjs?v=990e0c77c1b1bedb';
-import { wrapNativeFileUploadClass } from './local-native-upload.mjs?v=990e0c77c1b1bedb';
+import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter, localFilesService, localLibraryService, localLibraryByteTransport, initializeLocalAccountHistory, setNativeAccountHistoryToaster, initializeLocalPublishedResources, registerNativeLibrarySource, notifyNativeLibrarySourceReady } from './service-boundary.mjs?v=af4b4c8d85347af9';
+import * as mapLibreRenderer from './map-vendor/maplibre-gl.mjs?v=af4b4c8d85347af9';
+import { createLocalMapProvider } from './local-map-provider.mjs?v=af4b4c8d85347af9';
+import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs?v=af4b4c8d85347af9';
+import { getPrototypeLocalSession, getPrototypeLocalAuth, isPrototypeLocalSession, getPrototypeLocalAuthGeneration, clearPrototypeLocalSession } from './local-identity.mjs?v=af4b4c8d85347af9';
+import { createLocalHostSettingsClass } from './local-host-settings.mjs?v=af4b4c8d85347af9';
+import { createLocalWorkPolicy } from './local-work-policy.mjs?v=af4b4c8d85347af9';
+import { hasModelSelectionAccess, getSiteLoginUrl } from './site-account.mjs?v=af4b4c8d85347af9';
+import { createNativeModelSelectionPolicy, createNativeThinkingEntryPolicy } from './local-model-selection-policy.mjs?v=af4b4c8d85347af9';
+import { createLocalHostClaimsReader } from './local-token-identity.mjs?v=af4b4c8d85347af9';
+import { wrapNativeFileUploadClass } from './local-native-upload.mjs?v=af4b4c8d85347af9';
 
 const boundary = installNetworkBoundary();
 globalThis.__originalClientProbe = boundary.diagnostics;
 // Restore the verified account's real durable history before native loaders
 // resolve a fresh-device conversation URL. Offline failures retain local data.
 await initializeLocalAccountHistory();
+await initializeLocalPublishedResources();
 installSyntheticDocumentState();
 if (globalThis.__CHATGPT_REPLICA_ENV__) window.__reactRouterContext.basename = globalThis.__CHATGPT_REPLICA_ENV__.basePath.replace(/\/$/, '') || '/';
 
-const plan = await (await fetch(new URL('./entry-plan.json?v=990e0c77c1b1bedb', import.meta.url))).json();
+const plan = await (await fetch(new URL('./entry-plan.json?v=af4b4c8d85347af9', import.meta.url))).json();
 const { __webpack_require__: requireOriginal } = await import(plan.runtime);
 // One mechanical entry transform defers its terminal hxQI invocation and
 // rebases its relative imports. All original factories and chunks are retained.
@@ -39,6 +40,7 @@ requireOriginal.m = new Proxy(requireOriginal.m, {
       factory = byId.get(id);
     }
     target[id] = factory;
+    if (id === 'fvOC') queueMicrotask(notifyNativeLibrarySourceReady);
     return true;
   },
 });
@@ -77,6 +79,20 @@ function overrideExports(moduleId, overrides, options, wrappers = {}) {
     return factory.call(this, module, exports, scopedRequire);
   }, options);
 }
+
+// Retain the original QueryProvider and its QueryClient. Observe the supplied
+// client at the host seam so actual completed publications use the same native
+// Library invalidation path as the original upload controller.
+const invalidateOriginalLibrary = (...args) => {
+  if (!requireOriginal.m.fvOC) throw Error('Original Library invalidator is not registered');
+  return requireOriginal('fvOC').a(...args);
+};
+overrideExports('BolX', {}, { deferred: true }, {
+  a: OriginalProvider => function NativeLibraryQueryProvider(props) {
+    registerNativeLibrarySource(props.queryClient, invalidateOriginalLibrary);
+    return requireOriginal('zd8w').createElement(OriginalProvider, props);
+  },
+});
 
 // Keep native upload behavior while local tickets store their real bytes.
 overrideExports('GDNt', {}, { deferred: true }, { b: NativeWebFetch => wrapNativeFileUploadClass(NativeWebFetch, localFilesService, undefined, localLibraryByteTransport) });

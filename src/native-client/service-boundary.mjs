@@ -13,6 +13,9 @@ import { createPersonalizationIdentityProvider, createPersonalizedSettingsReader
 import { createBrowserToolExecutor } from './browser-tool-executor.mjs';
 import { createLocalFilesService } from './local-files-service.mjs';
 import { createLocalLibraryService } from './local-library-service.mjs';
+import { createLibraryPublishingExecutor, normalizePublicationReceipt } from './local-library-publisher.mjs';
+import { createPublishedResourceRehydrator } from './published-resource-rehydration.mjs';
+import { createNativeLibraryRefresh } from './native-library-refresh.mjs';
 import { createLocalInputPreparer } from './local-input-preparation.mjs';
 import { createLocalPricingAdapter } from './local-pricing.mjs';
 import { SITE_ACCOUNT_SERVICE, getSiteAccount, getSiteSessionToken, hasModelSelectionAccess, logoutSiteAccount } from './site-account.mjs';
@@ -55,13 +58,20 @@ export const localPreferredHostTransport = createPreferredHostTransport({ baseUR
 export const localPreferredCompletion = createPreferredCompletion({ runtimeCompletion: streamCompletion, preferredTransport: localPreferredHostTransport,
   enabled: () => globalThis.__CHATGPT_REPLICA_ENV__?.preferredHostEnabled === true,
 });
-export const localToolExecutor = createBrowserToolExecutor({ PythonRuntime, PYTHON_TOOL,
+const localWorkspaceExecutor = createBrowserToolExecutor({ PythonRuntime, PYTHON_TOOL,
   getWorkspaceNamespace: () => hasModelSelectionAccess() ? null : getSiteAccount()?.accountId ?? 'guest',
 });
-export const localFilesService = createLocalFilesService({ storage: localToolExecutor.storage,
+export const localFilesService = createLocalFilesService({ storage: localWorkspaceExecutor.storage,
   metadataStorage: { getItem: key => globalThis.localStorage.getItem(key), setItem: (key, value) => globalThis.localStorage.setItem(key, value) },
   getAccountId: getOwnedFileAccountId,
-  getWorkspacePrefix: localToolExecutor.getWorkspacePrefix, diagnostics: localProtocolDiagnostics,
+  getWorkspacePrefix: localWorkspaceExecutor.getWorkspacePrefix, diagnostics: localProtocolDiagnostics,
+  getOwnedSourceWorkspace: ({ threadId, signal }) => {
+    signal?.throwIfAborted();
+    const accountId = getOwnedFileAccountId(), thread = localAppServer.threads.get(threadId);
+    if (!accountId || !thread) throw Object.assign(Error('The source conversation is unavailable for this verified account'), { status: 404, code: 'publication_source_unavailable' });
+    if (thread.ephemeral) throw Object.assign(Error('Temporary conversations cannot publish permanent Library files'), { status: 409, code: 'publication_ephemeral' });
+    return { accountId, threadId, prefix: localWorkspaceExecutor.getWorkspacePrefix(threadId) };
+  },
 });
 export const localLibraryService = createLocalLibraryService({ files: localFilesService,
   metadataStorage: { getItem: key => globalThis.localStorage.getItem(key), setItem: (key, value) => globalThis.localStorage.setItem(key, value) },
@@ -71,10 +81,38 @@ export const localLibraryByteTransport = Object.freeze({
   ownsObjectURL: value => localLibraryService.ownsObjectURL(value),
   fetch: (value, options) => globalThis.fetch(value, options),
 });
+let nativeLibraryClient = null, nativeLibraryInvalidator = null;
+const localNativeLibraryRefresh = createNativeLibraryRefresh({
+  getIdentity: getPersonalizationIdentity, getClient: () => nativeLibraryClient,
+  invalidate: (...args) => {
+    if (typeof nativeLibraryInvalidator !== 'function') throw Error('Original Library cache service is not ready');
+    return nativeLibraryInvalidator(...args);
+  },
+  onDiagnostic: event => localProtocolDiagnostics.push(event),
+});
+export function notifyNativeLibrarySourceReady() { void localNativeLibraryRefresh.notifyReady(); }
+export function registerNativeLibrarySource(client, invalidate) {
+  if (client === nativeLibraryClient && invalidate === nativeLibraryInvalidator) return;
+  nativeLibraryClient = client ?? null; nativeLibraryInvalidator = invalidate ?? null;
+  // Original provider renders only register identity. Native cache work runs
+  // outside render and only when an actual committed file made it dirty.
+  queueMicrotask(notifyNativeLibrarySourceReady);
+}
+export const localToolExecutor = createLibraryPublishingExecutor({
+  baseExecutor: localWorkspaceExecutor, getIdentity: getPersonalizationIdentity,
+  publishGeneratedFile: getPersonalizationIdentity() ? async (...args) => {
+    const receipt = await localFilesService.publishGeneratedFile(...args);
+    try { void localNativeLibraryRefresh.notifyCommitted(receipt).catch(() => localProtocolDiagnostics.push({ type: 'native-library-refresh-observer-error' })); }
+    catch { localProtocolDiagnostics.push({ type: 'native-library-refresh-observer-error' }); }
+    return receipt;
+  } : undefined,
+  resolvePublishedResource: (...args) => localLibraryService.resolvePublishedResource(...args),
+  ownsObjectURL: value => localLibraryService.ownsObjectURL(value),
+});
 setLocalLibraryAvailability(() => localLibraryService.source.nativeNodeListing === true
   && localLibraryService.source.rawFileListing === true && localLibraryService.source.localFolders === true
   && localLibraryService.source.permanentDelete === true);
-globalThis.addEventListener('pagehide', () => localLibraryService.dispose());
+globalThis.addEventListener('pagehide', () => { localLibraryService.dispose(); localNativeLibraryRefresh.dispose(); });
 export const localPricingAdapter = createLocalPricingAdapter({ diagnostics: localProtocolDiagnostics, readMembership: () => getSiteAccount() });
 export const localDiscoveryAdapter = createLocalDiscoveryAdapter({ storage: { getItem: key => globalThis.localStorage.getItem(key), setItem: (key, value) => globalThis.localStorage.setItem(key, value) }, getAccountId: () => getPrototypeLocalAuth()?.accountId ?? null, diagnostics: localProtocolDiagnostics });
 export const localMapsService = createLocalMapsService({ storage: { getItem: key => globalThis.localStorage.getItem(key), setItem: (key, value) => globalThis.localStorage.setItem(key, value) }, getAccountId: () => getPrototypeLocalAuth()?.accountId ?? null, diagnostics: localProtocolDiagnostics });
@@ -104,6 +142,45 @@ export const localAppServer = new LocalAppServer({
   onPersist: threads => localAccountHistory?.capture(threads),
 });
 export const localConversationPubSub = new LocalConversationPubSub(localAppServer);
+const localPublishedResourceRehydrator = getPersonalizationIdentity() ? createPublishedResourceRehydrator({
+  normalizeReceipt: normalizePublicationReceipt, getIdentity: getPersonalizationIdentity, projectThread: projectChatHistoryThread,
+  resolvePublishedResource: (...args) => localLibraryService.resolvePublishedResource(...args),
+  ownsObjectURL: value => localLibraryService.ownsObjectURL(value),
+  onDiagnostic: event => localProtocolDiagnostics.push(event),
+}) : null;
+const publicationRestorations = new Map();
+export function initializeLocalPublishedResources({ threadId = null, signal } = {}) {
+  if (!localPublishedResourceRehydrator) return Promise.resolve({ ok: true, signedOut: true });
+  const key = threadId ?? '*';
+  if (publicationRestorations.has(key)) return publicationRestorations.get(key);
+  const operation = (async () => {
+    const controller = new AbortController(), timeout = setTimeout(() => controller.abort(), 8000);
+    const abort = () => controller.abort(signal.reason);
+    if (signal?.aborted) abort(); else signal?.addEventListener('abort', abort, { once: true });
+    const waitForResources = promise => new Promise((resolve, reject) => {
+      const interrupted = () => reject(controller.signal.reason ?? new DOMException('Resource restoration interrupted', 'AbortError'));
+      if (controller.signal.aborted) { void Promise.resolve(promise).catch(() => {}); interrupted(); return; }
+      controller.signal.addEventListener('abort', interrupted, { once: true });
+      Promise.resolve(promise).then(value => { controller.signal.removeEventListener('abort', interrupted); resolve(value); }, error => { controller.signal.removeEventListener('abort', interrupted); reject(error); });
+    });
+    let targets = threadId ? [threadId] : [...localAppServer.threads.keys()], updatedCount = 0;
+    try {
+      for (let attempt = 0; attempt < 2 && targets.length; attempt++) {
+        const records = targets.map(id => localAppServer.threads.get(id)).filter(thread => thread && !thread.ephemeral && !localAppServer.running.has(thread.id));
+        const plan = await waitForResources(localPublishedResourceRehydrator.rehydrateHistory(records, { signal: controller.signal }));
+        controller.signal.throwIfAborted();
+        if (!plan.safeToApply || !getPersonalizationIdentity()) throw Error('Resource restoration no longer belongs to the verified account');
+        const applied = localAppServer.applyToolResultPresentation(plan.pairs, { projectThread: projectChatHistoryThread });
+        updatedCount += applied.updated.length; targets = applied.skipped;
+      }
+      return { ok: true, updatedCount, deferredCount: targets.length };
+    } catch (error) {
+      localProtocolDiagnostics.push({ type: 'local-publication-links-deferred', code: typeof error.code === 'string' ? error.code : 'LOCAL_LIBRARY_RESOURCE_RESTORE_DEFERRED' });
+      return { ok: false, updatedCount };
+    } finally { clearTimeout(timeout); signal?.removeEventListener('abort', abort); }
+  })().finally(() => publicationRestorations.delete(key));
+  publicationRestorations.set(key, operation); return operation;
+}
 const historyIdentity = getHistoryIdentity();
 if (historyIdentity) {
   historyFeedback = createNativeCloudSyncFeedback({
@@ -221,6 +298,7 @@ export function installNetworkBoundary() {
       const stopResults = await cancelTurnHostRequests(localPreferredHostTransport, [...localAppServer.threads.values()].flatMap(thread => thread.turns), { onCheckpoint: () => localAppServer.persist() });
       for (const result of stopResults) if (result.status === 'rejected') diagnostics.push({ type: 'local-signout-host-cancel-unconfirmed', code: result.reason?.code ?? null });
       await finishAccountHistoryBeforeLogout();
+      localNativeLibraryRefresh.dispose();
       localLibraryService.dispose();
       await logoutSiteAccount();
       clearPrototypeLocalSession({ reload: false });
@@ -275,6 +353,7 @@ export function installNetworkBoundary() {
       if (library) return library;
       const files = await localFilesService.handle(request, adapterPath);
       if (files) return files;
+      if (request.method === 'GET' && /^\/conversation\/[^/]+$/.test(adapterPath)) await initializeLocalPublishedResources({ threadId: decodeURIComponent(adapterPath.split('/')[2]), signal: request.signal });
       const classic = await localClassicChatAdapter.handle(request, adapterPath);
       if (classic) return classic;
     } catch (error) {

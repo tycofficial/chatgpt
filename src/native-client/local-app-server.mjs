@@ -134,6 +134,34 @@ export class LocalAppServer {
     for (const [id, thread] of before) if (!next.has(id) && !thread.ephemeral) changes.removed.push(id);
     return changes;
   }
+  /** Persist derived local resource URLs without replacing a newer/live turn.
+   * The trusted rehydrator supplies full before/after pairs; the public history
+   * projection must remain identical. This never acknowledges cloud state.
+   */
+  applyToolResultPresentation(pairs, { projectThread } = {}) {
+    if (this.loadError) throw this.loadError;
+    if (!Array.isArray(pairs) || pairs.length > 2000 || typeof projectThread !== 'function') throw new RpcError(-32602, 'Invalid local resource presentation update');
+    const stable = value => Array.isArray(value) ? value.map(stable) : object(value) ? Object.fromEntries(Object.keys(value).sort().map(key => [key, stable(value[key])])) : value;
+    const next = new Map(this.threads), seen = new Set(), updated = [], skipped = [];
+    for (const pair of pairs) {
+      const before = pair?.before, after = pair?.after;
+      if (!object(before) || !object(after) || typeof before.id !== 'string' || before.id !== after.id || seen.has(before.id) || before.ephemeral || after.ephemeral || !Array.isArray(before.turns) || !Array.isArray(after.turns)) throw new RpcError(-32602, 'Invalid local resource presentation pair');
+      seen.add(before.id);
+      const oldView = projectThread(before), newView = projectThread(after);
+      if (!oldView || !newView || JSON.stringify(stable(oldView)) !== JSON.stringify(stable(newView))) throw new RpcError(-32602, 'Resource presentation cannot change conversation history');
+      const current = this.threads.get(before.id);
+      if (!current || current.ephemeral || this.running.has(before.id) || JSON.stringify(current) !== JSON.stringify(before)) { skipped.push(before.id); continue; }
+      if (JSON.stringify(before) !== JSON.stringify(after)) { next.set(before.id, copy(after)); updated.push(before.id); }
+    }
+    if (updated.length) {
+      try { this.storage?.setItem(this.storageKey, JSON.stringify({ schemaVersion: 1, threads: [...next.values()].filter(thread => !thread.ephemeral) })); }
+      catch (error) { throw new RpcError(-32000, `Local resource presentation could not be saved: ${error.message}`); }
+      this.threads = next;
+    }
+    // Public text history is unchanged: do not enqueue an upload, broadcast an
+    // execution event, or change any private checkpoint/resume policy here.
+    return { updated, skipped };
+  }
   getThread(id) {
     if (typeof id !== 'string' || !this.threads.has(id)) throw new RpcError(-32001, 'thread_not_found');
     return this.threads.get(id);

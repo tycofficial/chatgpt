@@ -24,6 +24,8 @@ export function isLocalUploadURL(value, referenceURL = globalThis.location?.href
 const RECORD_PREFIX = 'site-local-files:v1:';
 const FILE_ID = /^file_local_[0-9a-f]{32}$/;
 const TICKET = /^[0-9a-f]{32}$/;
+const SHA256 = /^[0-9a-f]{64}$/;
+const MAX_PUBLICATION_OPERATIONS = 2048;
 // Match the actual shared BrowserWorkspaceStore transfer limit.
 const MAX_DEFAULT = 20 * 1024 * 1024;
 const copy = value => structuredClone(value);
@@ -149,6 +151,7 @@ export function createLocalFilesService({
   getWorkspacePrefix, diagnostics = [], now = Date.now, uuid = () => crypto.randomUUID(),
   maxFileBytes = MAX_DEFAULT, maxTotalBytes = 256 * 1024 * 1024,
   readStorageEstimate, ticketLifetimeMs = 60 * 60 * 1000, documentExtractor,
+  getOwnedSourceWorkspace, storageLocks = globalThis.navigator?.locks,
 } = {}) {
   if (typeof storage?.write !== 'function' || typeof storage?.read !== 'function' || typeof storage?.remove !== 'function' || typeof getWorkspacePrefix !== 'function') throw new TypeError('Real workspace read/write/remove storage and its namespace callback are required');
   const active = new Map(), locks = new Map();
@@ -164,28 +167,66 @@ export function createLocalFilesService({
   function state(id) {
     let raw;
     try { raw = metadataStorage.getItem(stateKey(id)); } catch { throw issue('Local file metadata storage is unavailable', 503, 'local_storage_unavailable'); }
-    if (raw == null) return { version: 1, files: {} };
+    if (raw == null) return { version: 1, files: {}, generatedFiles: {}, publicationOps: {} };
     let result;
     try { result = JSON.parse(raw); } catch { throw issue('Local file metadata is damaged; existing bytes were preserved', 500, 'file_corrupted'); }
-    if (!object(result) || result.version !== 1 || !object(result.files) || Object.entries(result.files).some(([key, row]) => !FILE_ID.test(key) || row?.fileId !== key || row.owner !== id || !TICKET.test(row.ticket) || !Number.isSafeInteger(row.size) || row.size < 1 || typeof row.namespace !== 'string' || !row.namespace || row.namespace === '.' || row.namespace === '..' || /[/\\\u0000-\u001f]/.test(row.namespace) || !['payload.txt','image.png','image.jpg','image.webp','image.bin','document.pdf','document.docx','document.xlsx','document.pptx'].includes(row.storageName) || !['pending','stored','ready','error','cancelled'].includes(row.status))) throw issue('Local file metadata has an invalid format; existing bytes were preserved', 500, 'file_corrupted');
+    if (!object(result) || result.version !== 1 || !object(result.files) || Object.entries(result.files).some(([key, row]) => !FILE_ID.test(key) || row?.fileId !== key || row.owner !== id || (!row.generated && !TICKET.test(row.ticket)) || !Number.isSafeInteger(row.size) || row.size < 1 || typeof row.namespace !== 'string' || !row.namespace || row.namespace === '.' || row.namespace === '..' || /[/\\\u0000-\u001f]/.test(row.namespace) || !['payload.txt','image.png','image.jpg','image.webp','image.bin','document.pdf','document.docx','document.xlsx','document.pptx'].includes(row.storageName) || !['pending','stored','ready','error','cancelled'].includes(row.status))) throw issue('Local file metadata has an invalid format; existing bytes were preserved', 500, 'file_corrupted');
+    result.generatedFiles ??= {}; result.publicationOps ??= {};
+    if (!object(result.generatedFiles) || !object(result.publicationOps) || Object.keys(result.publicationOps).length > MAX_PUBLICATION_OPERATIONS) throw issue('Local publication metadata is damaged; existing bytes were preserved', 500, 'file_corrupted');
     for (const row of Object.values(result.files)) {
+      if (row.generated != null && (!object(row.generated) || !FILE_ID.test(row.generated.fileId ?? '') || row.generated.fileId === row.fileId || !Number.isSafeInteger(row.generated.revision) || row.generated.revision < 1 || !SHA256.test(row.generated.operationKey ?? '') || row.ticket != null || row.uploadURL != null || row.byteTarget != null || row.status === 'cancelled')) throw issue('Generated raw-version metadata is damaged', 500, 'file_corrupted');
+      if (row.reservedTextBytes != null && (!row.generated || !Number.isSafeInteger(row.reservedTextBytes) || row.reservedTextBytes < 0 || row.reservedTextBytes > MAX_DEFAULT)) throw issue('Document text reservation metadata is damaged', 500, 'file_corrupted');
       if (row.kind === 'document' && !Object.hasOwn(DOCUMENT_MIME, row.documentFormat)) throw issue('The document format metadata is damaged', 500, 'file_corrupted');
       const text = row.extraction;
       if (text && (text.textStorageName !== 'extracted.txt' || !Number.isSafeInteger(text.textSize) || text.textSize < 1 || !/^[0-9a-f]{64}$/.test(text.textSHA256 ?? '') || text.sourceSHA256 !== row.sha256 || typeof text.partial !== 'boolean' || typeof text.truncated !== 'boolean')) throw issue('The document text sidecar metadata is damaged', 500, 'file_corrupted');
       if (row.kind === 'document' && row.status === 'ready' && !text) throw issue('Ready document text metadata is missing', 500, 'file_corrupted');
     }
+    for (const [fileId, row] of Object.entries(result.generatedFiles)) {
+      const raw = result.files[row?.rawFileId];
+      if (!FILE_ID.test(fileId) || row?.fileId !== fileId || !FILE_ID.test(row.rawFileId ?? '') || !Number.isSafeInteger(row.revision) || row.revision < 1 || !Number.isSafeInteger(row.createdAt) || !Number.isSafeInteger(row.updatedAt) || row.updatedAt < row.createdAt || !raw?.generated || raw.generated.fileId !== fileId || raw.generated.revision !== row.revision || raw.status !== 'ready') throw issue('The generated publication pointer is damaged', 500, 'file_corrupted');
+    }
+    for (const [operationKey, op] of Object.entries(result.publicationOps)) {
+      const raw = result.files[op?.rawFileId];
+      if (!SHA256.test(operationKey) || !object(op) || op.owner !== id || typeof op.operationId !== 'string' || !op.operationId || op.operationId.length > 256 || !SHA256.test(op.intentHash ?? '') || !SHA256.test(op.sourceSHA256 ?? '') || !FILE_ID.test(op.fileId ?? '') || !FILE_ID.test(op.rawFileId ?? '') || !Number.isSafeInteger(op.revision) || op.revision < 1 || !['staging','cleanup_pending','failed','committed','deleted'].includes(op.phase) || !Number.isSafeInteger(op.size) || op.size < 1 || !Number.isSafeInteger(op.createdAt) || (['staging','cleanup_pending','committed'].includes(op.phase) && (!raw?.generated || raw.generated.operationKey !== operationKey || raw.generated.fileId !== op.fileId))) throw issue('The durable publication journal is damaged', 500, 'file_corrupted');
+      if (op.phase === 'committed' && (!object(op.receipt) || op.receipt.committed !== true || op.receipt.fileId !== op.fileId || op.receipt.rawFileId !== op.rawFileId || op.receipt.revision !== op.revision || op.receipt.sha256 !== op.sourceSHA256)) throw issue('The saved publication receipt is damaged', 500, 'file_corrupted');
+    }
     return result;
   }
-  function save(id, value) {
+  function saveUnlocked(id, value) {
     assertOwner(id);
     try { metadataStorage.setItem(stateKey(id), JSON.stringify(value)); } catch { throw issue('Local file metadata could not be saved', 507, 'local_storage_write_failed'); }
   }
-  function update(id, fileId, transform) {
-    const current = state(id), row = current.files[fileId];
-    if (!row) throw issue('This local file was not found', 404, 'file_not_found');
-    current.files[fileId] = transform(copy(row));
-    save(id, current);
-    return copy(current.files[fileId]);
+  const sharedLocksAvailable = () => typeof storageLocks?.request === 'function';
+  function withSharedLock(name, signal, action) {
+    if (!sharedLocksAvailable()) throw issue('Shared browser storage locks are unavailable; generated files were not published', 503, 'publication_lock_unavailable');
+    // A promise-returning callback releases the real lock on both outcomes,
+    // including Node's standard LockManager host when an action throws.
+    return storageLocks.request(name, { mode: 'exclusive', ...(signal ? { signal } : {}) }, async () => action());
+  }
+  async function mutateState(id, transform, { signal } = {}) {
+    const action = () => {
+      cancellation(signal); assertOwner(id);
+      const current = state(id), result = transform(current);
+      if (result && typeof result.then === 'function') throw new TypeError('File metadata commits must be synchronous');
+      cancellation(signal); assertOwner(id); saveUnlocked(id, current);
+      return copy(result);
+    };
+    // Existing uploads remain available on old hosts. Mutable publication is
+    // unavailable there; when a shared lock adapter exists every writer uses it.
+    return sharedLocksAvailable() ? withSharedLock('chatgpt-local-files:' + encodeURIComponent(id), signal, action) : action();
+  }
+  async function update(id, fileId, transform, options) {
+    return mutateState(id, current => {
+      const row = current.files[fileId];
+      if (!row) throw issue('This local file was not found', 404, 'file_not_found');
+      current.files[fileId] = transform(copy(row), current);
+      return current.files[fileId];
+    }, options);
+  }
+  function usedBytes(files, excludeTextFor = null) {
+    return Object.values(files).filter(row => row.status !== 'cancelled' &&
+      (row.generated || row.status !== 'pending' || row.expiresAt > now()))
+      .reduce((total, row) => total + row.size + (row.fileId === excludeTextFor ? 0 : row.extraction?.textSize ?? row.reservedTextBytes ?? 0), 0);
   }
   function find(id, fileId) {
     const row = state(id).files[fileId];
@@ -210,11 +251,14 @@ export function createLocalFilesService({
     cancellation(signal); assertOwner(id);
     return bytes;
   }
-  async function serialize(fileId, action) {
-    const previous = locks.get(fileId) ?? Promise.resolve();
-    const current = previous.catch(() => {}).then(action);
-    locks.set(fileId, current);
-    try { return await current; } finally { if (locks.get(fileId) === current) locks.delete(fileId); }
+  async function serialize(id, fileId, action, { signal } = {}) {
+    const key = id + '\0' + fileId, previous = locks.get(key) ?? Promise.resolve();
+    const invoke = () => { cancellation(signal); assertOwner(id); return action(); };
+    const current = previous.catch(() => {}).then(() => sharedLocksAvailable()
+      ? withSharedLock('chatgpt-local-files:' + encodeURIComponent(id) + ':raw:' + fileId, signal, invoke)
+      : invoke());
+    locks.set(key, current);
+    try { return await current; } finally { if (locks.get(key) === current) locks.delete(key); }
   }
   async function create(body, request, path) {
     if (!object(body)) throw issue('A file-creation JSON object is required');
@@ -223,7 +267,7 @@ export function createLocalFilesService({
     if (size > maxFileBytes) throw issue('The file exceeds this local provider upload limit', 413, 'file_too_large');
     const mime = typeof body.mime_type === 'string' ? body.mime_type : typeof body.client_resolved_mime_type === 'string' ? body.client_resolved_mime_type : '';
     const kind = kindOf(name, mime), documentFormat = kind === 'document' ? documentFormatOf(name, mime) : null;
-    const current = state(id), reserved = Object.values(current.files).filter(row => row.status !== 'cancelled' && (row.status !== 'pending' || row.expiresAt > now())).reduce((sum, row) => sum + row.size + (row.extraction?.textSize ?? 0), 0);
+    const current = state(id), reserved = usedBytes(current.files);
     if (reserved + size > maxTotalBytes) throw issue('The configured local account file-storage quota is full', 507, 'over_user_quota');
     if (typeof readStorageEstimate === 'function') {
       const estimate = await readStorageEstimate();
@@ -240,11 +284,12 @@ export function createLocalFilesService({
     const imageExtension = /image\/png/i.test(mime) || /\.png$/i.test(name) ? 'png' : /image\/jpeg/i.test(mime) || /\.jpe?g$/i.test(name) ? 'jpg' : /image\/webp/i.test(mime) || /\.webp$/i.test(name) ? 'webp' : 'bin';
     const row = { fileId, owner: id, ticket: token, namespace, storageName: kind === 'document' ? 'document.' + documentFormat : kind === 'image' ? 'image.' + imageExtension : 'payload.txt', fileName: name, mimeType: mime || (kind === 'text' ? 'text/plain' : 'application/octet-stream'), kind, ...(documentFormat ? { documentFormat } : {}), size, status: 'pending', createdAt: now(), expiresAt: now() + ticketLifetimeMs, byteTarget, uploadURL: uploadURL.href, requestOrigin: incoming.origin, pathPrefix: urlPrefix };
     // Re-read after the optional real quota estimate; do not lose concurrent admissions.
-    const next = state(id);
-    const freshReserved = Object.values(next.files).filter(entry => entry.status !== 'cancelled' && (entry.status !== 'pending' || entry.expiresAt > now())).reduce((total, entry) => total + entry.size + (entry.extraction?.textSize ?? 0), 0);
-    if (freshReserved + size > maxTotalBytes) throw issue('The configured local account file-storage quota is full', 507, 'over_user_quota');
-    if (next.files[fileId]) throw issue('Duplicate local upload ID', 409);
-    next.files[fileId] = row; save(id, next);
+    await mutateState(id, next => {
+      if (usedBytes(next.files) + size > maxTotalBytes) throw issue('The configured local account file-storage quota is full', 507, 'over_user_quota');
+      if (next.files[fileId] || next.generatedFiles?.[fileId]) throw issue('Duplicate local upload ID', 409);
+      next.files[fileId] = row;
+    }, { signal: request.signal });
+    cancellation(request.signal); assertOwner(id);
     return { file_id: fileId, upload_url: uploadURL.href, upload_headers: {}, adapter_source: LOCAL_FILES_SOURCE, local_upload_limit_bytes: maxFileBytes };
   }
   function findTicket(id, token) {
@@ -279,7 +324,7 @@ export function createLocalFilesService({
   }
   async function storeUpload(row, bytes, signal) {
     const id = owner();
-    return serialize(row.fileId, async () => {
+    return serialize(id, row.fileId, async () => {
       const current = find(id, row.fileId);
       if (current.ticket !== row.ticket || current.byteTarget !== row.byteTarget) throw issue('Upload ticket changed', 409, 'permission_error');
       cancellation(signal);
@@ -305,22 +350,23 @@ export function createLocalFilesService({
         stop();
         if (!verified || verified.length !== bytes.length || await hash(verified) !== digest) throw issue('The stored upload failed SHA-256 verification', 409, 'file_corrupted');
         stop();
-        update(id, row.fileId, prior => {
+        await update(id, row.fileId, prior => {
           if (prior.status === 'cancelled') throw issue('Upload cancelled', 409, 'upload_cancelled');
           return { ...prior, status: 'stored', sha256: digest, storedAt: now() };
-        });
+        }, { signal: controller.signal });
+        stop();
         note('bytes-persisted', { fileId: row.fileId, bytes: bytes.length });
       } catch (cause) {
         if (signal?.aborted || controller.signal.aborted) {
           try { await storage.remove(storageKey(current)); } catch { note('cancel-cleanup-error', { fileId: row.fileId }); }
-          if (getAccountId() === id) try { update(id, row.fileId, prior => ({ ...prior, status: 'cancelled' })); } catch {}
+          if (getAccountId() === id) try { await update(id, row.fileId, prior => ({ ...prior, status: 'cancelled' })); } catch {}
           throw new DOMException('Upload cancelled', 'AbortError');
         }
         throw cause;
       } finally {
         active.delete(row.fileId); signal?.removeEventListener('abort', abort);
       }
-    });
+    }, { signal });
   }
   async function acceptBytes(request, path) {
     const id = owner(), incoming = new URL(request.url);
@@ -370,7 +416,7 @@ export function createLocalFilesService({
   }
   async function processFile(fileId, signal) {
     const id = owner();
-    return serialize(fileId, async () => {
+    return serialize(id, fileId, async () => {
       const row = find(id, fileId), bytes = await readBytes(id, row, signal);
       if (row.kind === 'document' && row.status === 'ready') { await readDocumentText(id, row, signal); return row; }
       const controller = new AbortController(), abort = () => controller.abort(signal?.reason);
@@ -387,8 +433,12 @@ export function createLocalFilesService({
           stop();
           const content = sidecarText(parsed), textBytes = new TextEncoder().encode(content), textSHA256 = await hash(textBytes);
           stop();
-          const occupied = Object.values(state(id).files).filter(file => file.status !== 'cancelled' && (file.status !== 'pending' || file.expiresAt > now())).reduce((total, file) => total + file.size + (file.fileId === fileId ? 0 : file.extraction?.textSize ?? 0), 0);
+          const occupied = usedBytes(state(id).files, fileId);
           if (occupied + textBytes.length > maxTotalBytes) throw issue('The configured local document text-storage quota is full', 507, 'over_user_quota');
+          if (row.generated) await update(id, fileId, (prior, current) => {
+            if (usedBytes(current.files, fileId) + textBytes.length > maxTotalBytes) throw issue('The configured local document text-storage quota is full', 507, 'over_user_quota');
+            return { ...prior, reservedTextBytes: textBytes.length };
+          }, { signal: controller.signal });
           try { wroteSidecar = true; await storage.write(row.namespace + '/extracted.txt', textBytes); }
           catch { throw issue('The real extracted document text could not be persisted', 507, 'local_storage_write_failed'); }
           stop();
@@ -412,24 +462,25 @@ export function createLocalFilesService({
         // Another document parse or raw-file admission may have completed while
         // this worker/sidecar write was pending. Never publish two ready records
         // whose combined real bytes exceed the configured account quota.
-        const ready = update(id, fileId, prior => {
+        const ready = await update(id, fileId, prior => {
           if (details.extraction) {
             const fresh = state(id);
-            const occupied = Object.values(fresh.files).filter(file => file.status !== 'cancelled' && (file.status !== 'pending' || file.expiresAt > now())).reduce((total, file) => total + file.size + (file.fileId === fileId ? 0 : file.extraction?.textSize ?? 0), 0);
+            const occupied = usedBytes(fresh.files, fileId);
             if (occupied + details.extraction.textSize > maxTotalBytes) throw issue('Concurrent file admissions filled the configured local document quota', 507, 'over_user_quota');
           }
-          return { ...prior, ...details, status: 'ready', processedAt: now(), processingError: undefined };
-        });
+          return { ...prior, ...details, status: 'ready', processedAt: now(), processingError: undefined, reservedTextBytes: undefined };
+        }, { signal: controller.signal });
         committed = true;
+        stop();
         note('processing-completed', { fileId, fileKind: ready.kind, bytes: ready.size });
         return ready;
       } catch (cause) {
-        if (wroteSidecar && !committed) try { await storage.remove(row.namespace + '/extracted.txt'); } catch { note('sidecar-cleanup-error', { fileId }); }
-        if (getAccountId() === id) try { update(id, fileId, prior => ({ ...prior, processingError: { code: cause?.name === 'AbortError' ? 'upload_cancelled' : cause?.code ?? 'document_parser_error', at: now() } })); } catch {}
+        if (wroteSidecar && !committed && (!row.generated || getAccountId() === id)) try { await storage.remove(row.namespace + '/extracted.txt'); } catch { note('sidecar-cleanup-error', { fileId }); }
+        if (getAccountId() === id) try { await update(id, fileId, prior => ({ ...prior, processingError: { code: cause?.name === 'AbortError' ? 'upload_cancelled' : cause?.code ?? 'document_parser_error', at: now() } })); } catch {}
         note('processing-error', { fileId, code: cause?.name === 'AbortError' ? 'upload_cancelled' : cause?.code ?? 'document_parser_error' });
         throw cause;
       } finally { active.delete(fileId); signal?.removeEventListener('abort', abort); }
-    });
+    }, { signal });
   }
   function downloadURL(row) {
     const prefix = row.pathPrefix.replace(/\/(?:backend-api|__codex-api)$/, '');
@@ -441,22 +492,34 @@ export function createLocalFilesService({
   }
   async function cancelUpload(fileId) {
     const id = owner(), row = find(id, fileId);
-    update(id, fileId, prior => ({ ...prior, status: 'cancelled' }));
+    if (row.generated) throw issue('Committed generated versions are deleted through their Library publication', 409, 'generated_version_owned');
+    await update(id, fileId, prior => ({ ...prior, status: 'cancelled' }));
     active.get(fileId)?.abort(new DOMException('Upload cancelled', 'AbortError'));
-    for (const key of [storageKey(row), ...(row.kind === 'document' ? [row.namespace + '/extracted.txt'] : [])]) {
-      try { await storage.remove(key); } catch (cause) { if (!notFound(cause)) throw issue('The upload was cancelled but its bytes or extracted text could not be removed', 503, 'local_storage_unavailable'); }
-    }
+    await serialize(id, fileId, async () => {
+      for (const key of [storageKey(row), ...(row.kind === 'document' ? [row.namespace + '/extracted.txt'] : [])]) {
+        assertOwner(id);
+        try { await storage.remove(key); } catch (cause) { if (!notFound(cause)) throw issue('The upload was cancelled but its bytes or extracted text could not be removed', 503, 'local_storage_unavailable'); }
+        assertOwner(id);
+      }
+    });
     return { cancelled: true, fileId };
   }
   /** Account-owned metadata only. Library presentation/trash lives elsewhere. */
   async function listFiles({ signal } = {}) {
     const id = owner(); cancellation(signal);
-    const rows = Object.values(state(id).files).map(row => {
+    const current = state(id);
+    const sanitize = row => {
       try { nameOf(row.fileName); } catch { throw issue('Local file display metadata is damaged', 500, 'file_corrupted'); }
-      if (typeof row.mimeType !== 'string' || !row.mimeType || row.mimeType.length > 512 || /[\u0000-\u001f\u007f]/.test(row.mimeType) || !['text','image','document','unknown'].includes(row.kind) || !Number.isSafeInteger(row.createdAt) || row.createdAt < 0 || row.processedAt != null && (!Number.isSafeInteger(row.processedAt) || row.processedAt < 0) || row.sha256 != null && !/^[0-9a-f]{64}$/.test(row.sha256) || ['stored','ready'].includes(row.status) && row.sha256 == null) throw issue('Local file catalog metadata is damaged', 500, 'file_corrupted');
+      if (typeof row.mimeType !== 'string' || !row.mimeType || row.mimeType.length > 512 || /[\u0000-\u001f\u007f]/.test(row.mimeType) || !['text','image','document','unknown'].includes(row.kind) || !Number.isSafeInteger(row.createdAt) || row.createdAt < 0 || row.processedAt != null && (!Number.isSafeInteger(row.processedAt) || row.processedAt < 0) || row.sha256 != null && !SHA256.test(row.sha256) || ['stored','ready'].includes(row.status) && row.sha256 == null) throw issue('Local file catalog metadata is damaged', 500, 'file_corrupted');
       for (const key of ['width','height']) if (row[key] != null && (!Number.isInteger(row[key]) || row[key] < 1 || row[key] > 16384)) throw issue('Local image dimensions are damaged', 500, 'file_corrupted');
       return { fileId: row.fileId, fileName: row.fileName, mimeType: row.mimeType, size: row.size, kind: row.kind, status: row.status, sha256: row.sha256 ?? null, createdAt: row.createdAt, processedAt: row.processedAt ?? null, ...(row.width == null ? {} : { width: row.width }), ...(row.height == null ? {} : { height: row.height }) };
-    });
+    };
+    const rows = [];
+    for (const raw of Object.values(current.files)) { const value = sanitize(raw); if (!raw.generated) rows.push(value); }
+    for (const logical of Object.values(current.generatedFiles)) {
+      const raw = current.files[logical.rawFileId];
+      rows.push({ ...sanitize(raw), fileId: logical.fileId, rawFileId: raw.fileId, status: logical.deleting ? 'deleting' : raw.status, createdAt: logical.createdAt, processedAt: logical.updatedAt, publication: { origin: 'generated', revision: logical.revision, updatedAt: logical.updatedAt } });
+    }
     cancellation(signal); assertOwner(id);
     return rows;
   }
@@ -464,9 +527,12 @@ export function createLocalFilesService({
   async function permanentDeleteFile(fileId, { signal } = {}) {
     const id = owner(); cancellation(signal);
     if (typeof fileId !== 'string' || !FILE_ID.test(fileId)) throw issue('This local file was not found', 404, 'file_not_found');
+    if (state(id).generatedFiles[fileId]) return permanentDeleteGenerated(id, fileId, { signal });
+    const selected = state(id).files[fileId];
+    if (selected?.generated) throw issue('Delete the stable Library publication to remove its immutable versions', 409, 'generated_version_owned');
     // Wait for this provider's in-flight upload/parser. Unlike cancelUpload,
     // permanent deletion never marks the record cancelled before IO succeeds.
-    return serialize(fileId, async () => {
+    return serialize(id, fileId, async () => {
       const stop = () => { cancellation(signal); assertOwner(id); };
       stop();
       const row = state(id).files[fileId];
@@ -495,14 +561,298 @@ export function createLocalFilesService({
       }
       for (const key of keys) await confirmMissing(key);
       stop();
-      const current = state(id), latest = current.files[fileId];
-      if (!latest || latest.ticket !== row.ticket || latest.namespace !== row.namespace || latest.storageName !== row.storageName) throw issue('Local file ownership changed during deletion', 409, 'permission_error');
-      delete current.files[fileId];
-      save(id, current);
+      await mutateState(id, current => {
+        const latest = current.files[fileId];
+        if (!latest || latest.ticket !== row.ticket || latest.namespace !== row.namespace || latest.storageName !== row.storageName) throw issue('Local file ownership changed during deletion', 409, 'permission_error');
+        delete current.files[fileId];
+      }, { signal });
       note('bytes-permanently-deleted', { fileId });
+      return { deleted: true, fileId };
+    }, { signal });
+  }
+
+  function publicationSpec(value) {
+    if (!object(value) || Object.keys(value).some(key => !['requestId','threadId','path','fileName','mimeType','fileId','expectedRevision','expectedRawFileId','expectedSourceSHA256'].includes(key))) throw issue('A supported generated-publication request is required');
+    if (typeof value.requestId !== 'string' || !value.requestId.trim() || value.requestId.length > 256 || /[\u0000-\u001f\u007f]/.test(value.requestId)) throw issue('A nonempty publication operation ID is required');
+    if (typeof value.threadId !== 'string' || !value.threadId || value.threadId.length > 256 || /[\u0000-\u001f\u007f]/.test(value.threadId)) throw issue('An owned source thread is required');
+    let path;
+    try { path = workspacePath(value.path); } catch (cause) { throw issue(cause.message, 400, 'file_rejected'); }
+    if (typeof value.path !== 'string' || path.length > 2048) throw issue('A bounded workspace source path is required');
+    const fileName = nameOf(value.fileName ?? path.split('/').at(-1)), mimeType = value.mimeType ?? '';
+    if (typeof mimeType !== 'string' || mimeType.length > 512 || /[\u0000-\u001f\u007f]/.test(mimeType)) throw issue('The generated MIME hint is invalid');
+    const fileId = value.fileId ?? null, expectedRevision = value.expectedRevision ?? null, expectedRawFileId = value.expectedRawFileId ?? null, expectedSourceSHA256 = value.expectedSourceSHA256 ?? null;
+    if (fileId !== null && (!FILE_ID.test(fileId) || !Number.isSafeInteger(expectedRevision) || expectedRevision < 1 || !FILE_ID.test(expectedRawFileId ?? ''))) throw issue('An update requires its logical file ID and exact expected revision/raw ID');
+    if (fileId === null && (expectedRevision !== null || expectedRawFileId !== null)) throw issue('A new publication must not claim an existing revision');
+    if (expectedSourceSHA256 !== null && !SHA256.test(expectedSourceSHA256)) throw issue('The expected source SHA-256 is invalid');
+    return { requestId: value.requestId, threadId: value.threadId, path, fileName, mimeType, fileId, expectedRevision, expectedRawFileId, expectedSourceSHA256 };
+  }
+  async function ownedPublicationSource(id, spec, signal) {
+    cancellation(signal); assertOwner(id);
+    const context = await getOwnedSourceWorkspace({ threadId: spec.threadId, signal });
+    cancellation(signal); assertOwner(id);
+    if (!object(context) || context.accountId !== id || context.threadId !== spec.threadId || typeof context.prefix !== 'string' || context.prefix !== prefix(spec.threadId)) throw issue('The source workspace is not owned by this account/thread', 409, 'permission_error');
+    return { ...context, path: spec.path, key: context.prefix + '/' + spec.path };
+  }
+  function publicationTarget(current, spec, previous) {
+    const fileId = spec.fileId ?? previous?.fileId;
+    if (spec.fileId !== null) {
+      const target = current.generatedFiles[fileId];
+      if (!target) throw issue('The generated publication was not found for this account', 404, 'file_not_found');
+      if (target.deleting) throw issue('The generated publication is being permanently deleted', 409, 'publication_deleted');
+      if (target.revision !== spec.expectedRevision || target.rawFileId !== spec.expectedRawFileId) throw issue('The generated publication has changed; reload its current revision before saving', 409, 'publication_conflict');
+      return target;
+    }
+    if (fileId && (current.generatedFiles[fileId] || current.files[fileId])) throw issue('The publication ID is already used', 409, 'publication_conflict');
+    return null;
+  }
+  function publicationStop(id, operationKey, signal) {
+    cancellation(signal); assertOwner(id);
+    const op = state(id).publicationOps[operationKey];
+    if (!op || op.cancelRequested || op.phase === 'deleted') throw issue('The publication operation was cancelled or deleted', 409, 'publication_cancelled');
+    return op;
+  }
+  async function publicationReceipt(id, operationKey) {
+    assertOwner(id);
+    const current = state(id), op = current.publicationOps[operationKey];
+    if (!op || op.phase !== 'committed') throw issue('The publication has not committed', 409, 'publication_not_committed');
+    const logical = current.generatedFiles[op.fileId];
+    if (!logical || logical.deleting) throw issue('The publication has been deleted or is being deleted', 410, 'publication_deleted');
+    const { record } = await readFile(op.rawFileId);
+    assertOwner(id);
+    if (record.sha256 !== op.sourceSHA256 || record.size !== op.size || record.generated?.fileId !== op.fileId || record.generated?.revision !== op.revision || record.status !== 'ready') throw issue('The committed publication bytes do not match its receipt', 409, 'file_corrupted');
+    if (op.receipt.operationId !== op.operationId || op.receipt.fileName !== record.fileName || op.receipt.mimeType !== record.mimeType || op.receipt.size !== record.size || op.receipt.kind !== record.kind || op.receipt.publication?.origin !== 'generated' || op.receipt.publication?.revision !== op.revision) throw issue('The saved publication receipt metadata is damaged', 409, 'file_corrupted');
+    if (record.kind === 'document') await readDocumentText(id, record);
+    assertOwner(id);
+    const fresh = state(id), after = fresh.publicationOps[operationKey], active = fresh.generatedFiles[op.fileId];
+    if (after?.phase !== 'committed' || !active || active.deleting) throw issue('The publication was deleted while its receipt was recovered', 410, 'publication_deleted');
+    return { ...copy(op.receipt), currentRevision: active.revision, superseded: active.rawFileId !== op.rawFileId };
+  }
+  async function cleanPublicationStage(id, operationKey, { failedCode } = {}) {
+    assertOwner(id);
+    const op = state(id).publicationOps[operationKey];
+    if (!op || ['failed','deleted'].includes(op.phase)) return false;
+    if (op.phase === 'committed') return false;
+    const row = state(id).files[op.rawFileId];
+    if (!row?.generated || row.generated.operationKey !== operationKey || row.generated.fileId !== op.fileId) throw issue('The publication cleanup journal no longer owns its raw version', 409, 'file_corrupted');
+    const paths = [storageKey(row), ...(row.kind === 'document' ? [row.namespace + '/extracted.txt'] : [])];
+    const confirm = async key => {
+      assertOwner(id);
+      try { await storage.read(key); }
+      catch (cause) { assertOwner(id); if (notFound(cause)) return; throw issue('Publication cleanup absence could not be verified', 503, 'local_storage_unavailable'); }
+      assertOwner(id); throw issue('Publication staging bytes remain; cleanup must be retried', 503, 'local_storage_unavailable');
+    };
+    try {
+      for (const key of paths) {
+        assertOwner(id);
+        try { await storage.remove(key); }
+        catch (cause) { assertOwner(id); if (!notFound(cause)) throw issue('Publication staging bytes could not be removed', 503, 'local_storage_unavailable'); }
+        assertOwner(id); await confirm(key);
+      }
+      for (const key of paths) await confirm(key);
+      await mutateState(id, current => {
+        const latest = current.publicationOps[operationKey], raw = current.files[op.rawFileId];
+        if (!latest || latest.phase === 'committed' || raw?.generated?.operationKey !== operationKey || raw.namespace !== row.namespace) throw issue('Publication ownership changed during cleanup', 409, 'permission_error');
+        delete current.files[op.rawFileId];
+        current.publicationOps[operationKey] = { ...latest, phase: 'failed', failureCode: failedCode ?? latest.failureCode ?? 'publication_interrupted', cleanupPending: false };
+      });
+      return false;
+    } catch (cause) {
+      if (getAccountId() === id) try {
+        await mutateState(id, current => {
+          const latest = current.publicationOps[operationKey];
+          if (latest && latest.phase !== 'committed' && latest.phase !== 'deleted') current.publicationOps[operationKey] = { ...latest, phase: 'cleanup_pending', failureCode: failedCode ?? latest.failureCode ?? 'publication_interrupted', cleanupPending: true };
+        });
+      } catch { /* The existing staging journal/reservation remains authoritative. */ }
+      throw cause;
+    }
+  }
+
+  async function permanentDeleteGenerated(id, fileId, { signal } = {}) {
+    if (!sharedLocksAvailable()) throw issue('Shared storage locks are required to delete a generated publication safely', 503, 'publication_lock_unavailable');
+    return withSharedLock('chatgpt-local-files:' + encodeURIComponent(id) + ':delete:' + fileId, signal, async () => {
+      const stop = () => { cancellation(signal); assertOwner(id); };
+      stop();
+      const operations = await mutateState(id, current => {
+        const logical = current.generatedFiles[fileId];
+        if (!logical) throw issue('The generated publication was not found', 404, 'file_not_found');
+        current.generatedFiles[fileId] = { ...logical, deleting: true };
+        const keys = [];
+        for (const [key, op] of Object.entries(current.publicationOps)) if (op.fileId === fileId) {
+          if (['staging','cleanup_pending'].includes(op.phase)) current.publicationOps[key] = { ...op, cancelRequested: true };
+          keys.push({ key, rawFileId: op.rawFileId });
+        }
+        return keys;
+      }, { signal });
+      for (const op of operations) active.get(op.rawFileId)?.abort(new DOMException('Publication is being permanently deleted', 'AbortError'));
+      // Drain genuine cross-context operation locks after releasing metadata.
+      // An already admitted writer observes cancelRequested before any commit.
+      for (const op of operations.sort((a,b) => a.key.localeCompare(b.key))) {
+        stop();
+        await withSharedLock('chatgpt-local-files:' + encodeURIComponent(id) + ':publication:' + op.key, signal, async () => {});
+      }
+      stop();
+      const rows = Object.values(state(id).files).filter(row => row.generated?.fileId === fileId);
+      const paths = rows.flatMap(row => [storageKey(row), ...(row.kind === 'document' ? [row.namespace + '/extracted.txt'] : [])]);
+      const confirm = async key => {
+        stop();
+        try { await storage.read(key); }
+        catch (cause) { stop(); if (notFound(cause)) return; throw issue('Generated revision deletion could not be verified; retry is available', 503, 'local_storage_unavailable'); }
+        stop(); throw issue('Generated revision bytes remain; retry is available', 503, 'local_storage_unavailable');
+      };
+      for (const key of paths) {
+        stop();
+        try { await storage.remove(key); }
+        catch (cause) { stop(); if (!notFound(cause)) throw issue('Generated revision bytes could not be removed; retry is available', 503, 'local_storage_unavailable'); }
+        stop(); await confirm(key);
+      }
+      for (const key of paths) await confirm(key);
+      await mutateState(id, current => {
+        const logical = current.generatedFiles[fileId];
+        if (!logical?.deleting) throw issue('The publication deletion marker changed', 409, 'permission_error');
+        const remaining = Object.values(current.files).filter(row => row.generated?.fileId === fileId);
+        if (remaining.length !== rows.length || remaining.some(row => !rows.some(before => before.fileId === row.fileId && before.namespace === row.namespace && before.storageName === row.storageName))) throw issue('The publication versions changed during deletion', 409, 'permission_error');
+        for (const row of remaining) delete current.files[row.fileId];
+        delete current.generatedFiles[fileId];
+        for (const [key, op] of Object.entries(current.publicationOps)) if (op.fileId === fileId) current.publicationOps[key] = { ...op, phase: 'deleted', cancelRequested: true, cleanupPending: false };
+      }, { signal });
+      note('generated-publication-deleted', { fileId, versions: rows.length });
       return { deleted: true, fileId };
     });
   }
+
+  /** Explicit save of one actual owned workspace file, not an artifact/log scan. */
+  async function publishGeneratedFile(value, { signal } = {}) {
+    if (!sharedLocksAvailable()) throw issue('Shared browser storage locks are unavailable; generated files were not published', 503, 'publication_lock_unavailable');
+    if (typeof getOwnedSourceWorkspace !== 'function') throw issue('The owned source-workspace provider is unavailable', 503, 'publication_source_unavailable');
+    const id = owner(), spec = publicationSpec(value);
+    const operationKey = await hash(new TextEncoder().encode(spec.requestId));
+    cancellation(signal); assertOwner(id);
+    const intentHash = await hash(new TextEncoder().encode(JSON.stringify(spec)));
+    cancellation(signal); assertOwner(id);
+    return withSharedLock('chatgpt-local-files:' + encodeURIComponent(id) + ':publication:' + operationKey, signal, async () => {
+      let admitted = false, committed = false, controller;
+      try {
+        assertOwner(id); cancellation(signal);
+        let current = state(id), previous = current.publicationOps[operationKey];
+        if (previous && previous.intentHash !== intentHash) throw issue('A publication operation ID cannot be reused with different arguments', 409, 'publication_request_changed');
+        if (previous?.phase === 'deleted') throw issue('This publication operation belongs to a permanently deleted file', 410, 'publication_deleted');
+        if (previous?.phase === 'committed') return publicationReceipt(id, operationKey);
+        admitted = previous?.phase === 'staging';
+        if (previous?.phase === 'cleanup_pending') { await cleanPublicationStage(id, operationKey); previous = state(id).publicationOps[operationKey]; }
+        cancellation(signal); assertOwner(id);
+        publicationTarget(state(id), spec, previous);
+        const context = await ownedPublicationSource(id, spec, signal);
+        let bytes, sourceSHA256;
+        if (previous?.phase === 'staging') {
+          admitted = true;
+          const existing = state(id).files[previous.rawFileId];
+          try { bytes = bytesOf(await storage.read(storageKey(existing))); }
+          catch (cause) { if (!notFound(cause)) throw issue('The staged publication bytes could not be recovered', 503, 'local_storage_unavailable'); }
+          publicationStop(id, operationKey, signal);
+          if (bytes && (bytes.length !== previous.size || await hash(bytes) !== previous.sourceSHA256)) throw issue('The staged publication bytes failed SHA-256 recovery', 409, 'file_corrupted');
+          publicationStop(id, operationKey, signal);
+        }
+        if (!bytes) {
+          try { bytes = bytesOf(await storage.read(context.key)); }
+          catch (cause) { throw issue(notFound(cause) ? 'The exact source workspace file was not found' : 'The source workspace file could not be read', notFound(cause) ? 404 : 503, notFound(cause) ? 'file_not_found' : 'local_storage_unavailable'); }
+          cancellation(signal); assertOwner(id);
+          if (!bytes || !bytes.length) throw issue('The generated source file is empty', 400, 'file_zero_bytes');
+          if (bytes.length > maxFileBytes) throw issue('The generated file exceeds the local file-size limit', 413, 'file_too_large');
+        }
+        bytes = bytes.slice(); sourceSHA256 = await hash(bytes);
+        cancellation(signal); assertOwner(id);
+        if (spec.expectedSourceSHA256 && spec.expectedSourceSHA256 !== sourceSHA256 || previous && previous.sourceSHA256 !== sourceSHA256) throw issue('The source bytes differ from this operation snapshot', 409, 'publication_source_changed');
+        if (!previous || previous.phase === 'failed') {
+          const kind = kindOf(spec.fileName, spec.mimeType), documentFormat = kind === 'document' ? documentFormatOf(spec.fileName, spec.mimeType) : null;
+          if (kind === 'unknown') throw issue('This generated file format has no connected local validator', 415, 'unhandled_mime_type');
+          if (typeof readStorageEstimate === 'function') {
+            const estimate = await readStorageEstimate(); cancellation(signal); assertOwner(id);
+            if (Number.isFinite(estimate?.quota) && Number.isFinite(estimate?.usage) && estimate.quota - estimate.usage < bytes.length) throw issue('The browser reports insufficient storage for the new immutable revision', 507, 'over_user_quota');
+          }
+          const rawSuffix = randomHex(uuid), logicalSuffix = spec.fileId || previous ? null : randomHex(uuid);
+          if (!TICKET.test(rawSuffix) || logicalSuffix !== null && !TICKET.test(logicalSuffix)) throw issue('A secure publication ID could not be allocated', 500, 'local_storage_unavailable');
+          const rawFileId = LOCAL_FILE_PREFIX + rawSuffix, fileId = spec.fileId ?? previous?.fileId ?? LOCAL_FILE_PREFIX + logicalSuffix;
+          const namespace = prefix('publication-' + rawSuffix);
+          const imageExtension = /image\/png/i.test(spec.mimeType) || /\.png$/i.test(spec.fileName) ? 'png' : /image\/jpeg/i.test(spec.mimeType) || /\.jpe?g$/i.test(spec.fileName) ? 'jpg' : /image\/webp/i.test(spec.mimeType) || /\.webp$/i.test(spec.fileName) ? 'webp' : 'bin';
+          previous = await mutateState(id, state => {
+            const found = state.publicationOps[operationKey];
+            if (found && (found.intentHash !== intentHash || found.phase !== 'failed')) throw issue('Publication operation state changed before admission', 409, 'publication_conflict');
+            if (!found && Object.keys(state.publicationOps).length >= MAX_PUBLICATION_OPERATIONS) throw issue('The durable publication journal is full', 507, 'over_user_quota');
+            const target = publicationTarget(state, spec, found ?? previous);
+            if (usedBytes(state.files) + bytes.length > maxTotalBytes) throw issue('The account file quota cannot hold the old and new revisions together', 507, 'over_user_quota');
+            if (fileId === rawFileId || state.files[rawFileId] || state.generatedFiles[rawFileId] || !target && (state.files[fileId] || state.generatedFiles[fileId])) throw issue('A publication ID is already used', 409, 'publication_conflict');
+            const revision = target ? target.revision + 1 : 1, createdAt = now();
+            const op = { owner: id, operationId: spec.requestId, intentHash, sourceSHA256, fileId, rawFileId, revision, size: bytes.length, phase: 'staging', createdAt, sourceThreadId: spec.threadId, sourcePath: spec.path, isCreate: spec.fileId === null, previousRawFileId: target?.rawFileId ?? null, expectedRevision: spec.expectedRevision, expectedRawFileId: spec.expectedRawFileId };
+            state.files[rawFileId] = { fileId: rawFileId, owner: id, generated: { fileId, revision, operationKey }, namespace, storageName: kind === 'document' ? 'document.' + documentFormat : kind === 'image' ? 'image.' + imageExtension : 'payload.txt', fileName: spec.fileName, mimeType: spec.mimeType || (kind === 'text' ? 'text/plain' : 'application/octet-stream'), kind, ...(documentFormat ? { documentFormat } : {}), size: bytes.length, status: 'pending', createdAt };
+            state.publicationOps[operationKey] = op;
+            return op;
+          }, { signal });
+          admitted = true;
+        }
+        publicationStop(id, operationKey, signal);
+        controller = new AbortController();
+        const abort = () => controller.abort(signal?.reason);
+        signal?.addEventListener('abort', abort, { once: true });
+        try {
+          const row = state(id).files[previous.rawFileId];
+          active.set(row.fileId, controller);
+          const stop = () => { controller.signal.throwIfAborted(); return publicationStop(id, operationKey, signal); };
+          stop();
+          if (row.status === 'pending') {
+            try { await storage.write(storageKey(row), bytes); }
+            catch { throw issue('The immutable generated bytes could not be persisted', 507, 'local_storage_write_failed'); }
+            stop();
+            let verified;
+            try { verified = bytesOf(await storage.read(storageKey(row))); }
+            catch { throw issue('The generated bytes could not be verified after writing', 503, 'local_storage_unavailable'); }
+            stop();
+            if (!verified || verified.length !== bytes.length || await hash(verified) !== sourceSHA256) throw issue('The generated byte readback failed SHA-256 verification', 409, 'file_corrupted');
+            stop();
+            await update(id, row.fileId, prior => ({ ...prior, status: 'stored', sha256: sourceSHA256, storedAt: now() }), { signal: controller.signal });
+          } else {
+            const saved = await readBytes(id, row, controller.signal);
+            if (await hash(saved) !== sourceSHA256) throw issue('The recovered version differs from its operation snapshot', 409, 'file_corrupted');
+          }
+          stop();
+          const prepared = await processFile(previous.rawFileId, controller.signal);
+          stop();
+          await ownedPublicationSource(id, spec, controller.signal);
+          stop();
+          const receipt = await mutateState(id, state => {
+            const op = state.publicationOps[operationKey], raw = state.files[previous.rawFileId], target = publicationTarget(state, spec, op);
+            if (!op || op.phase !== 'staging' || op.cancelRequested || raw?.status !== 'ready' || raw.sha256 !== sourceSHA256 || raw.generated?.operationKey !== operationKey) throw issue('The prepared publication changed before its atomic commit', 409, 'publication_conflict');
+            if (usedBytes(state.files) > maxTotalBytes) throw issue('Concurrent storage reservations filled the account quota', 507, 'over_user_quota');
+            const updatedAt = now(), createdAt = target?.createdAt ?? updatedAt;
+            const result = { committed: true, operationId: spec.requestId, fileId: op.fileId, rawFileId: op.rawFileId, revision: op.revision, sha256: raw.sha256, fileName: raw.fileName, mimeType: raw.mimeType, size: raw.size, kind: raw.kind, created: op.isCreate, updated: !op.isCreate, createdAt, updatedAt, publication: { origin: 'generated', revision: op.revision, updatedAt } };
+            state.generatedFiles[op.fileId] = { fileId: op.fileId, rawFileId: op.rawFileId, revision: op.revision, createdAt, updatedAt };
+            state.publicationOps[operationKey] = { ...op, phase: 'committed', receipt: result };
+            return result;
+          }, { signal: controller.signal });
+          committed = true; assertOwner(id);
+          note('generated-publication-committed', { fileId: receipt.fileId, rawFileId: receipt.rawFileId, revision: receipt.revision, bytes: receipt.size });
+          return { ...receipt, currentRevision: receipt.revision, superseded: false };
+        } finally {
+          signal?.removeEventListener('abort', abort);
+          if (previous) active.delete(previous.rawFileId);
+        }
+      } catch (cause) {
+        // A storage host may lose an acknowledgement after an atomic commit.
+        // Re-read before cleanup: never delete bytes that actually committed.
+        if (getAccountId() === id) {
+          let saved;
+          try { saved = state(id).publicationOps[operationKey]; } catch {}
+          if (saved?.phase === 'committed' && saved.intentHash === intentHash) return publicationReceipt(id, operationKey);
+          if (saved?.intentHash === intentHash && ['staging','cleanup_pending'].includes(saved.phase)) admitted = true;
+          if (admitted && !committed) {
+            try { await cleanPublicationStage(id, operationKey, { failedCode: cause?.name === 'AbortError' ? 'upload_cancelled' : cause?.code }); cause.cleanupPending = false; }
+            catch { try { cause.cleanupPending = true; } catch {} }
+          }
+        }
+        throw cause;
+      }
+    });
+  }
+
   async function handle(request, canonicalPath) {
     const incoming = new URL(request.url), path = (canonicalPath ?? incoming.pathname).replace(/^\/(?:backend-api|__codex-api)(?=\/)/, '');
     const method = request.method.toUpperCase();
@@ -539,6 +889,7 @@ export function createLocalFilesService({
         }
         if (path.startsWith('/files/download/') && method === 'GET') {
           const { record } = await readFile(fileId, { signal: request.signal });
+          if (record.generated) throw issue('Generated revisions require the owner-validated Library resource resolver', 501, 'publication_resource_unavailable');
           return response({ status: 'success', download_url: downloadURL(record), adapter_source: LOCAL_FILES_SOURCE });
         }
       }
@@ -651,5 +1002,5 @@ export function createLocalFilesService({
     }
     return { input: inputs, files, textFiles, attachments, adapter_source: LOCAL_FILES_SOURCE };
   }
-  return Object.freeze({ handle, upload, isLocalUploadURL, ownsUploadURL, readFile, cancelUpload, listFiles, permanentDeleteFile, materializeForThread, resolveUserInputImage, resolveChatAttachments, source: Object.freeze({ provider: LOCAL_FILES_SOURCE, capturedAccountFiles: false, pdfParsing: true, docxParsing: true, xlsxParsing: true, pptxParsing: true, legacyOfficeParsing: false, documentScope: 'PDF text layer / DOCX body / XLSX saved cells and caches / PPTX slide text; no OCR, spreadsheet calculation or external refresh', maxFileBytes, maxTotalBytes }) });
+  return Object.freeze({ handle, upload, publishGeneratedFile, isLocalUploadURL, ownsUploadURL, readFile, cancelUpload, listFiles, permanentDeleteFile, materializeForThread, resolveUserInputImage, resolveChatAttachments, source: Object.freeze({ provider: LOCAL_FILES_SOURCE, capturedAccountFiles: false, pdfParsing: true, docxParsing: true, xlsxParsing: true, pptxParsing: true, legacyOfficeParsing: false, documentScope: 'PDF text layer / DOCX body / XLSX saved cells and caches / PPTX slide text; no OCR, spreadsheet calculation or external refresh', maxFileBytes, maxTotalBytes }) });
 }
