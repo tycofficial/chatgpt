@@ -1,5 +1,5 @@
 /** Apply browser-local custom instructions only to original Classic Chat/Work. */
-import { USER_SYSTEM_MESSAGES_STORAGE_KEY } from './local-personalization-service.mjs?v=aca183ac308a3a64';
+import { USER_SYSTEM_MESSAGES_STORAGE_KEY } from './local-personalization-service.mjs?v=21b425b0887a5155';
 
 const identityFields = ['accountId', 'userId', 'accountUserId'];
 const copyIdentity = value => value && Object.fromEntries(identityFields.map(key => [key, value[key] ?? null]));
@@ -17,6 +17,19 @@ export function createPersonalizationIdentityProvider({ getSiteAccount, getLocal
         getStorageKey(USER_SYSTEM_MESSAGES_STORAGE_KEY) !== bootNamespace ||
         bootNamespace === USER_SYSTEM_MESSAGES_STORAGE_KEY + ':guest' || !sameIdentity(identity, bootIdentity)) return null;
     return copyIdentity(identity);
+  };
+}
+
+/** Conversations also support the existing signed-out Free UI, in its own browser namespace. */
+export function createConversationIdentityProvider({getSiteAccount,getVerifiedIdentity,getStorageKey}) {
+  const bootOwner=getSiteAccount()?.id??null,namespace=getStorageKey('cg-original-app-server:v1');
+  const guest=Object.freeze({ownerId:'browser-guest',accountId:'browser-guest',userId:'browser-guest',accountUserId:'browser-guest',authenticationMode:'browser-guest'});
+  return()=>{
+    const site=getSiteAccount();
+    if(getStorageKey('cg-original-app-server:v1')!==namespace)return null;
+    if(!bootOwner)return !site&&namespace==='cg-original-app-server:v1:guest'?guest:null;
+    const local=getVerifiedIdentity();
+    return site?.id===bootOwner&&local?{...local,ownerId:site.id}:null;
   };
 }
 

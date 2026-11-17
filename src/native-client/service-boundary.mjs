@@ -14,7 +14,7 @@ import { createClassicResponseActions } from './classic-response-branches.mjs';
 import { LocalConversationPubSub } from './local-pubsub.mjs';
 import { readLocalUserPreferences, updateLocalUserPreference, acknowledgeLocalAnnouncement } from './local-user-preferences.mjs';
 import { createLocalPersonalizationService } from './local-personalization-service.mjs';
-import { createPersonalizationIdentityProvider, createPersonalizedSettingsReader } from './local-personalization-context.mjs';
+import { createPersonalizationIdentityProvider, createConversationIdentityProvider, createPersonalizedSettingsReader } from './local-personalization-context.mjs';
 import { createBrowserToolExecutor, workspacePath } from './browser-tool-executor.mjs';
 import { createWorkspaceDownloadSource } from './local-workspace-download-source.mjs';
 import { createLocalWorkspaceDownloadService } from './local-workspace-download-service.mjs';
@@ -56,6 +56,7 @@ localProtocolDiagnostics.push = function (...events) {
   return this.length;
 };
 const getPersonalizationIdentity = createPersonalizationIdentityProvider({ getSiteAccount, getLocalIdentity: getPrototypeLocalAuth, getStorageKey: getLocalAccountStorageKey });
+const getConversationIdentity = createConversationIdentityProvider({ getSiteAccount, getVerifiedIdentity: getPersonalizationIdentity, getStorageKey: getLocalAccountStorageKey });
 export const localPersonalizationService = createLocalPersonalizationService({
   storage: {
     getItem: key => globalThis.localStorage.getItem(key),
@@ -75,7 +76,7 @@ export const localPreferredHostTransport = createPreferredHostTransport({ baseUR
 });
 export const localAPIRouter = createProviderCompletionRouter({
   complete: streamCompletion, getProviders: () => DEFAULT_SETTINGS.apiProviders,
-  isCurrent: () => isPrototypeLocalSession() && Boolean(getPersonalizationIdentity()),
+  isCurrent: () => Boolean(getConversationIdentity()),
   onDiagnostic: event => localProtocolDiagnostics.push(event),
 });
 export const localPreferredCompletion = createPreferredCompletion({ runtimeCompletion: localAPIRouter.complete, preferredTransport: localPreferredHostTransport,
@@ -157,7 +158,7 @@ export const localAppServer = new LocalAppServer({
   toolExecutor: localToolExecutor,
   prepareUserInput: createLocalInputPreparer({ files: localFilesService }),
   agentOptions: { toolTransport: 'responses', verifiedPriority: false, ultraOrchestration: true },
-  getExecutionPolicy: () => ({ modelSelection: hasModelSelectionAccess() }),
+  getExecutionPolicy: () => ({ modelSelection: hasModelSelectionAccess(), freeChatModel: DEFAULT_SETTINGS.freeChatModel }),
   onPersist: threads => localAccountHistory?.capture(threads),
 });
 // Transient sandbox files keep their exact assistant/producer context and real
@@ -319,7 +320,7 @@ export const localReadAloudHost = Object.freeze({
   }),
 });
 
-const getResponseIdentity = () => { const local = getPersonalizationIdentity(), site = getSiteAccount(); return local && site ? { ...local, ownerId: site.id } : null; };
+const getResponseIdentity = getConversationIdentity;
 const localResponseActions = createClassicResponseActions({
   appServer: localAppServer, classic: localClassicChatAdapter,
   models: localModelAdapter, getIdentity: getResponseIdentity,

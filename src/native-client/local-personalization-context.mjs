@@ -20,6 +20,19 @@ export function createPersonalizationIdentityProvider({ getSiteAccount, getLocal
   };
 }
 
+/** Conversations also support the existing signed-out Free UI, in its own browser namespace. */
+export function createConversationIdentityProvider({getSiteAccount,getVerifiedIdentity,getStorageKey}) {
+  const bootOwner=getSiteAccount()?.id??null,namespace=getStorageKey('cg-original-app-server:v1');
+  const guest=Object.freeze({ownerId:'browser-guest',accountId:'browser-guest',userId:'browser-guest',accountUserId:'browser-guest',authenticationMode:'browser-guest'});
+  return()=>{
+    const site=getSiteAccount();
+    if(getStorageKey('cg-original-app-server:v1')!==namespace)return null;
+    if(!bootOwner)return !site&&namespace==='cg-original-app-server:v1:guest'?guest:null;
+    const local=getVerifiedIdentity();
+    return site?.id===bootOwner&&local?{...local,ownerId:site.id}:null;
+  };
+}
+
 export function getClassicPersonalizationSurface({ thread, turn } = {}) {
   const metadata = thread?.adapterMetadata;
   if (typeof metadata?.classicRootId !== 'string' || !metadata.classicRootId) return null;

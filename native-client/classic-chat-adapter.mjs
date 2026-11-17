@@ -1,10 +1,10 @@
 /** Original classic Chat REST/SSE shapes over the same real local thread engine. */
-import { FRONTEND_TO_RAW_EFFORT } from './model-catalog-adapter.mjs?v=aca183ac308a3a64';
-import { hostedSearchMessage, mergeWebSearchReferences } from './local-web-search.mjs?v=aca183ac308a3a64';
-import { turnHostCheckpoints } from './preferred-host-transport.mjs?v=aca183ac308a3a64';
+import { FRONTEND_TO_RAW_EFFORT } from './model-catalog-adapter.mjs?v=21b425b0887a5155';
+import { hostedSearchMessage, mergeWebSearchReferences } from './local-web-search.mjs?v=21b425b0887a5155';
+import { turnHostCheckpoints } from './preferred-host-transport.mjs?v=21b425b0887a5155';
 
-import { parseClassicInputMessages } from './classic-input-messages.mjs?v=aca183ac308a3a64';
-export { parseClassicInputMessages, CLASSIC_CONTEXT_LIMITS } from './classic-input-messages.mjs?v=aca183ac308a3a64';
+import { parseClassicInputMessages } from './classic-input-messages.mjs?v=21b425b0887a5155';
+export { parseClassicInputMessages, CLASSIC_CONTEXT_LIMITS } from './classic-input-messages.mjs?v=21b425b0887a5155';
 export class ClassicChatAdapter {
   constructor({ appServer, models, now = Date.now, uuid = () => crypto.randomUUID(), onConversationChange = () => {}, heartbeatMs = 10000, getPublishedFileReferences = () => [] }) { this.server = appServer; this.models = models; this.now = now; this.uuid = uuid; this.onConversationChange = onConversationChange; this.heartbeatMs = heartbeatMs; this.getPublishedFileReferences = getPublishedFileReferences; this.mutationQueue = Promise.resolve(); }
   json(body, status = 200) { return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }); }
@@ -258,6 +258,7 @@ export class ClassicChatAdapter {
       executionSurface, frontendModelSlug: executionSurface === 'chat' ? body.model : undefined };
   }
   stream(request, body) {
+    this.responseActions?.assertActive();
     if (body.action === 'continue') { const thread = this.server.getThread(body.conversation_id); return this.attachStream(request, thread, this.server.dispatch('turn/resume', { threadId: thread.id })); }
     if (!['next', undefined].includes(body.action)) return this.json({ error: { message: `Classic Chat action ${body.action} is not implemented`, code: 'LOCAL_ADAPTER_UNIMPLEMENTED' } }, 501);
     let parsed;
@@ -277,6 +278,11 @@ export class ClassicChatAdapter {
       thread.adapterMetadata.conversationOrigin = body.conversation_origin ?? null;
       this.server.persist();
       transaction.afterReply?.();
+    }
+    // A rejected pre-login send may have left an empty legacy conversation.
+    if (!thread.turns.length && typeof body.parent_message_id === 'string' && body.parent_message_id !== thread.adapterMetadata.classicRootId) {
+      const previousRoot=thread.adapterMetadata.classicRootId; thread.adapterMetadata.classicRootId=body.parent_message_id;
+      try { this.server.persist(); } catch(error) { thread.adapterMetadata.classicRootId=previousRoot; throw error; }
     }
     const dispatchTurn = params => this.responseActions
       ? this.responseActions.dispatchNext(thread, params, body.parent_message_id)

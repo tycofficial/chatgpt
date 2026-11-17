@@ -54,10 +54,10 @@ export function verifyResponseReasoning(settings, response) {
   const requested = responsesReasoning(settings);
   const actual = response.reasoning;
   if (requested?.mode === 'pro' && actual?.mode !== 'pro') {
-    throw new Error('服务商未启用请求的原生 Pro 模式。请使用已明确标注的替代路由，或切换支持该模式的服务。');
+    throw Object.assign(new Error('服务商未启用请求的原生 Pro 模式。'), {code:'PROVIDER_REASONING_UNSUPPORTED'});
   }
   if (requested?.effort !== undefined && actual?.effort !== undefined && actual.effort !== requested.effort) {
-    throw new Error(`服务商未采用请求的思考等级 ${requested.effort}，实际返回 ${actual.effort}。`);
+    throw Object.assign(new Error(`服务商未采用请求的思考等级 ${requested.effort}，实际返回 ${actual.effort}。`), {code:'PROVIDER_REASONING_UNSUPPORTED'});
   }
 }
 
@@ -134,6 +134,10 @@ export async function streamCompletion({ settings, messages, tools, toolChoice, 
   const consume = (body) => {
     if (body.error) throw providerError(body, { transportStatus: response.status, requestId: response.headers.get('x-request-id') });
     if (body.usage) assembled.usage = body.usage;
+    if (typeof body.model === 'string') {
+      if (body.model !== settings.model && !body.model.startsWith(settings.model+'-')) throw Object.assign(new Error('服务商返回的模型与所选模型不一致。'),{code:'PROVIDER_MODEL_UNSUPPORTED'});
+      assembled.model=body.model;
+    }
     const choice = body.choices?.[0];
     if (!choice) return;
     const delta = choice.delta || choice.message || {};

@@ -155,6 +155,7 @@ export async function runAgentTurn(server, running) {
       let result;
       try {
         result = frame.result ? clone(frame.result) : await server.streamCompletion({ settings, messages, tools, toolChoice: searchRequest.toolChoice, signal,
+          providerRoutingContext: { isFreeChat: turn.executionSurface === 'chat' && !server.executionPolicy().modelSelection },
           transportContext: { checkpoint: frame.transport, requestId: turn.id + ':' + metric.sequence, onCheckpoint: save, reattach: isHostCheckpoint(frame.transport), savedPartial: cp.partialResponse, requiredConcurrency: turn.reasoningEffort === 'ultra' ? 3 : 1, getAbortMode: () => running.interruptReason === 'pagehide' ? 'pagehide' : signal.reason?.requiresTransportResume ? 'transport' : 'user' },
           onActivity: () => { if (metric.firstOutputAt == null) metric.firstOutputAt = server.now(); }, onDelta: (_delta, assembled) => {
           if (running.terminal) return;

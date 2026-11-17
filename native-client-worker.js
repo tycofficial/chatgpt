@@ -1,9 +1,9 @@
-import {BrowserWorkspaceStore,workspacePath} from './native-client/browser-tool-executor.mjs?v=aca183ac308a3a64';
+import {BrowserWorkspaceStore,workspacePath} from './native-client/browser-tool-executor.mjs?v=21b425b0887a5155';
 const workspace=new BrowserWorkspaceStore();
 const SOURCE_BUILD="ef0c3fb941611420d8683bf88f61acf1a8ac6b19";
 const BASE=new URL('./',self.location.href).pathname;
 const CACHE='chatgpt-original-assets-'+SOURCE_BUILD;
-const SHELL_CACHE='chatgpt-native-shell-aca183ac308a3a64';
+const SHELL_CACHE='chatgpt-native-shell-21b425b0887a5155';
 self.addEventListener('install',event=>event.waitUntil(self.skipWaiting()));
 self.addEventListener('activate',event=>event.waitUntil(self.clients.claim()));
 function mirror(url){
@@ -25,17 +25,17 @@ self.addEventListener('fetch',event=>{
   }catch{return new Response('File not found in this browser workspace',{status:404});}})());return;
  }
  if(event.request.mode==='navigate'&&requested.origin===self.location.origin&&requested.pathname.startsWith(BASE)&&!requested.pathname.startsWith(BASE+'_orbit-renderer/')){
-  event.respondWith((async()=>{const cache=await caches.open(SHELL_CACHE),key=new URL(BASE+'index.html',self.location.origin).href;
-   try{let page=await fetch(event.request,{cache:'no-store'});if(page.status===404)page=await fetch(key,{cache:'no-store'});if(page.ok)await cache.put(key,page.clone());return page;}
-   catch(error){const saved=await cache.match(key);if(saved)return saved;throw error;}
+  event.respondWith((async()=>{const cache=await caches.open(SHELL_CACHE).catch(()=>null),key=new URL(BASE+'index.html',self.location.origin).href;
+   try{let page=await fetch(event.request,{cache:'no-store'});if(page.status===404)page=await fetch(key,{cache:'no-store'});if(page.ok&&cache)await cache.put(key,page.clone()).catch(()=>{});return page;}
+   catch(error){const saved=cache?await cache.match(key).catch(()=>null):null;if(saved)return saved;throw error;}
   })());return;
  }
  const mapped=mirror(requested);if(!mapped)return;
  event.respondWith((async()=>{
-  const cache=await caches.open(CACHE),cached=await cache.match(event.request.url);if(cached)return cached;
+  const cache=await caches.open(CACHE).catch(()=>null),cached=cache?await cache.match(event.request.url).catch(()=>null):null;if(cached)return cached;
   const fetched=await fetch(mapped,{credentials:'omit',redirect:'error'});
   const headers=new Headers(fetched.headers);headers.delete('content-encoding');headers.delete('content-length');headers.set('Access-Control-Allow-Origin','*');headers.set('Cross-Origin-Resource-Policy','cross-origin');
   const response=new Response(fetched.body,{status:fetched.status,statusText:fetched.statusText,headers});
-  if(response.ok)await cache.put(event.request.url,response.clone());return response;
+  if(response.ok&&cache)await cache.put(event.request.url,response.clone()).catch(()=>{});return response;
  })());
 });

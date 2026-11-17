@@ -30,7 +30,8 @@ const snapshot = {
   source: 'localAdapter', targetingAccount: account, targetingRequest: context,
   adapterIdentity: 'prototype-local-only', googleAuthenticated: false, openaiAuthenticated: false,
 };
-const isActive = () => enabled && (!siteAccount || getSiteAccount()?.id === siteAccount.id);
+// Native browser-auth cleanup must not revoke a separately verified site login.
+const isActive = () => siteAccount ? getSiteAccount()?.id === siteAccount.id : enabled;
 export const isPrototypeLocalSession = isActive;
 /** Admin keeps existing storage; registered and guest accounts never read it. */
 export function getLocalAccountStorageKey(key) { return administrator ? key : registeredSiteUser ? key + ':account:' + LOCAL_ACCOUNT_ID : key + ':guest'; }

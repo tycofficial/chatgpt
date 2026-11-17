@@ -258,6 +258,7 @@ export class ClassicChatAdapter {
       executionSurface, frontendModelSlug: executionSurface === 'chat' ? body.model : undefined };
   }
   stream(request, body) {
+    this.responseActions?.assertActive();
     if (body.action === 'continue') { const thread = this.server.getThread(body.conversation_id); return this.attachStream(request, thread, this.server.dispatch('turn/resume', { threadId: thread.id })); }
     if (!['next', undefined].includes(body.action)) return this.json({ error: { message: `Classic Chat action ${body.action} is not implemented`, code: 'LOCAL_ADAPTER_UNIMPLEMENTED' } }, 501);
     let parsed;
@@ -277,6 +278,11 @@ export class ClassicChatAdapter {
       thread.adapterMetadata.conversationOrigin = body.conversation_origin ?? null;
       this.server.persist();
       transaction.afterReply?.();
+    }
+    // A rejected pre-login send may have left an empty legacy conversation.
+    if (!thread.turns.length && typeof body.parent_message_id === 'string' && body.parent_message_id !== thread.adapterMetadata.classicRootId) {
+      const previousRoot=thread.adapterMetadata.classicRootId; thread.adapterMetadata.classicRootId=body.parent_message_id;
+      try { this.server.persist(); } catch(error) { thread.adapterMetadata.classicRootId=previousRoot; throw error; }
     }
     const dispatchTurn = params => this.responseActions
       ? this.responseActions.dispatchNext(thread, params, body.parent_message_id)

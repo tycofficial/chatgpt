@@ -29,10 +29,12 @@ export function createReleaseUpdater({
   navigate = url => globalThis.location.replace(url),
   storage = globalThis.sessionStorage, now = Date.now,
   eventTarget = globalThis.window, document = globalThis.document,
-  intervalMs = 60000, requestTimeoutMs = 8000,
+  intervalMs = 60000, requestTimeoutMs = 8000, interactionQuietMs = 0,
 } = {}) {
   const base = new URL(baseURL), state = { currentRelease, pendingRelease: null, checkedAt: null, status: 'idle', error: null };
   let stopped = false, applied = false, inFlight = null, timer = null, controller = null;
+  let lastInteraction=now(); const interactionEvents=['pointerdown','keydown','input','focusin','popstate'];
+  const interaction=()=>{lastInteraction=now();};
   const ownURL = path => new URL(path, base);
   const request = async path => {
     const url = ownURL(path); if (url.origin !== base.origin || !url.pathname.startsWith(base.pathname)) throw Error('Release URL outside this application');
@@ -42,15 +44,16 @@ export function createReleaseUpdater({
   };
   function applyIfSafe() {
     if (stopped || applied || !state.pendingRelease) return false;
-    if (isBusy() || hasDraft()) { state.status = 'deferred'; return false; }
+    if (isBusy() || hasDraft() || now()-lastInteraction<interactionQuietMs || [...(document?.querySelectorAll?.('[role=dialog],[role=menu],[role=listbox]')||[])].some(visibleComposerElement)) { state.status = 'deferred'; return false; }
     const key = 'chatgpt-release-application:' + state.pendingRelease;
     let previous;
     try { previous = JSON.parse(storage?.getItem(key) || 'null'); } catch {}
-    if (previous?.attempts >= 2 && now() - previous.at < 120000) { state.status = 'waiting-for-fresh-page'; return false; }
+    if (previous?.attempts >= 1) { state.status = 'waiting-for-fresh-page'; return false; }
     const target = new URL(currentURL());
     if (target.origin !== base.origin) return false;
     if (target.pathname === base.pathname.replace(/\/$/, '')) target.pathname = base.pathname;
     if (!target.pathname.startsWith(base.pathname)) return false;
+    if(target.searchParams.get('__native_release')===state.pendingRelease){state.status='waiting-for-fresh-page';return false;}
     target.searchParams.set('__native_release', state.pendingRelease);
     try { storage?.setItem(key, JSON.stringify({ attempts: (previous?.attempts || 0) + 1, at: now() })); } catch {}
     applied = true; state.status = 'applying'; navigate(target.href); return true;
@@ -80,7 +83,7 @@ export function createReleaseUpdater({
   const wake = () => { if (!stopped && document?.visibilityState !== 'hidden') void check(); };
   return {
     check, applyIfSafe, getState: () => ({ ...state }),
-    start() { eventTarget?.addEventListener?.('focus', wake); eventTarget?.addEventListener?.('pageshow', wake); document?.addEventListener?.('visibilitychange', wake); schedule(); void check(); return this; },
-    stop() { stopped = true; clearTimeout(timer); controller?.abort(); eventTarget?.removeEventListener?.('focus', wake); eventTarget?.removeEventListener?.('pageshow', wake); document?.removeEventListener?.('visibilitychange', wake); },
+    start() { for(const name of interactionEvents)eventTarget?.addEventListener?.(name,interaction); eventTarget?.addEventListener?.('focus', wake); eventTarget?.addEventListener?.('pageshow', wake); document?.addEventListener?.('visibilitychange', wake); schedule(); void check(); return this; },
+    stop() { for(const name of interactionEvents)eventTarget?.removeEventListener?.(name,interaction); stopped = true; clearTimeout(timer); controller?.abort(); eventTarget?.removeEventListener?.('focus', wake); eventTarget?.removeEventListener?.('pageshow', wake); document?.removeEventListener?.('visibilitychange', wake); },
   };
 }

@@ -1,9 +1,9 @@
 /** Original app-server protocol over real, resumable local execution. */
-import { runAgentTurn } from './agent-turn-runner.mjs?v=aca183ac308a3a64';
-import { readWebSearchIntent, interruptHostedSearch } from './local-web-search.mjs?v=aca183ac308a3a64';
-import { readClassicBranchRequest, getClassicExecutionThread } from './classic-response-branches.mjs?v=aca183ac308a3a64';
-import { parseClassicInputMessages } from './classic-input-messages.mjs?v=aca183ac308a3a64';
-import { allowedReasoningEfforts } from '../runtime.js?v=aca183ac308a3a64';
+import { runAgentTurn } from './agent-turn-runner.mjs?v=21b425b0887a5155';
+import { readWebSearchIntent, interruptHostedSearch } from './local-web-search.mjs?v=21b425b0887a5155';
+import { readClassicBranchRequest, getClassicExecutionThread } from './classic-response-branches.mjs?v=21b425b0887a5155';
+import { parseClassicInputMessages } from './classic-input-messages.mjs?v=21b425b0887a5155';
+import { allowedReasoningEfforts } from '../runtime.js?v=21b425b0887a5155';
 export class RpcError extends Error {
   constructor(code, message, data) { super(message); this.name = 'RpcError'; this.code = code; if (data !== undefined) this.data = data; }
 }
@@ -175,7 +175,7 @@ export class LocalAppServer {
   }
   executionPolicy() {
     let policy; try { policy = this.getExecutionPolicy(); } catch { throw new RpcError(-32003, 'The account execution policy could not be verified'); }
-    return policy?.modelSelection === true ? { modelSelection: true } : { modelSelection: false, fixedModel: 'gpt-6-luna', defaultEffort: 'low', allowedEfforts: ['low', 'medium'] };
+    return policy?.modelSelection === true ? { modelSelection: true } : { modelSelection: false, fixedModel: 'gpt-6-luna', chatModel: this.catalog.WORK_MODEL_IDS.includes(policy?.freeChatModel) ? policy.freeChatModel : 'gpt-5.6-luna', defaultEffort: 'low', allowedEfforts: ['low', 'medium'] };
   }
   assertExecutionAllowed(turn) {
     const policy = this.executionPolicy();
@@ -183,7 +183,7 @@ export class LocalAppServer {
       const surface = turn.executionSurface ?? turn.adapterMetadata?.executionSurface;
       const mode = turn.reasoningMode ?? turn.adapterMetadata?.reasoningMode ?? 'standard';
       const allowed = surface === 'chat'
-        ? turn.model === 'gpt-5.6-luna' && ['none', 'medium'].includes(turn.reasoningEffort) && mode === 'standard'
+        ? [policy.chatModel,'gpt-5.6-luna'].includes(turn.model) && ['none', 'medium'].includes(turn.reasoningEffort) && mode === 'standard'
         : !surface && turn.model === policy.fixedModel && policy.allowedEfforts.includes(turn.reasoningEffort) && mode === 'standard';
       if (!allowed) throw new RpcError(-32003, 'This saved turn requires model access unavailable to this account. Send a new message using the Free model instead.');
     }
@@ -197,8 +197,8 @@ export class LocalAppServer {
     let model, effort, reasoningMode = 'standard', frontendModelSlug = null, chatFamily = null;
     if (!policy.modelSelection) {
       if (surface === 'work' || surface === 'codex') throw new RpcError(-32003, 'Work and Codex require model-selection access');
-      model = surface === 'chat' ? 'gpt-5.6-luna' : policy.fixedModel;
-      effort = supplied === 'medium' || Array.isArray(params.systemHints) && params.systemHints.includes('reason') ? 'medium' : surface === 'chat' ? 'none' : policy.defaultEffort;
+      model = surface === 'chat' ? policy.chatModel : policy.fixedModel;
+      effort = supplied === 'medium' || Array.isArray(params.systemHints) && params.systemHints.some(hint=>hint==='reason'||hint==='search') ? 'medium' : surface === 'chat' ? 'none' : policy.defaultEffort;
       frontendModelSlug = surface === 'chat' ? 'auto' : model;
     } else if (surface === 'chat') {
       const explicit = params.frontendModelSlug != null || params.model != null;

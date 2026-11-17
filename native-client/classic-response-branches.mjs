@@ -42,7 +42,7 @@ export function projectClassicBranchGraph(thread,baseDetail,projectItem){
 export function createClassicResponseActions({appServer,classic,models,getIdentity,uuid=()=>crypto.randomUUID()}){
  const originalDetail=classic.detail.bind(classic),originalProject=classic.projectItem.bind(classic),originalMessage=classic.message.bind(classic);
  const graph=thread=>projectClassicBranchGraph(thread,originalDetail(thread),originalProject);
- const assertOwner=owner=>{if(!owner||identity(getIdentity())!==owner)throw error('CONVERSATION_OWNER_CHANGED','The active account is unavailable',401);};
+ const assertOwner=owner=>{if(!owner||identity(getIdentity())!==owner)throw error('SITE_ACCOUNT_REQUIRED','登录状态已失效，请重新登录本站账户后发送。',401);};
  const admit=thread=>{if(!thread||typeof thread.adapterMetadata?.classicRootId!=='string'||!thread.adapterMetadata.classicRootId||!([null,undefined,'tpp','flora'].includes(thread.adapterMetadata.conversationOrigin)))throw error('CLASSIC_ACTION_UNSUPPORTED','This action applies to original Chat/Work conversations only',422);if(appServer.running.has(thread.id))throw error('CONVERSATION_BUSY','Wait for this response to finish',409);};
  function dispatch(thread,params,metadata,owner){
   assertOwner(owner);admit(thread);const before=clone(thread);requests.set(params,clone(metadata));
@@ -83,5 +83,5 @@ export function createClassicResponseActions({appServer,classic,models,getIdenti
    return classic.attachStream(request,created,transaction);
   }catch(cause){if(cause.name==='AbortError')throw cause;return classic.json({error:{code:cause.code??'REGENERATION_FAILED',message:cause.code?cause.message:'The answer could not be regenerated'}},cause.status??503);}
  }
- return{handle,dispatchNext,detail:thread=>graph(thread).detail,message(thread,turn,item,role){const result=originalMessage(thread,turn,item,role);if(branchOf(turn)?.frontendSlug)result.metadata.model_slug=branchOf(turn).frontendSlug;return result;},projectItem(thread,turn,item){return branchOf(turn)?.kind==='regenerate'&&item.type==='userMessage'?[]:originalProject(thread,turn,item);},capabilities:Object.freeze({regeneration:'new-turn-shared-prompt-branch',privateCheckpointRetry:false,moreMenuFork:false,providerCallsAreReal:true})};
+ return{handle,dispatchNext,assertActive(){const owner=identity(getIdentity());assertOwner(owner);return owner;},detail:thread=>graph(thread).detail,message(thread,turn,item,role){const result=originalMessage(thread,turn,item,role);if(branchOf(turn)?.frontendSlug)result.metadata.model_slug=branchOf(turn).frontendSlug;return result;},projectItem(thread,turn,item){return branchOf(turn)?.kind==='regenerate'&&item.type==='userMessage'?[]:originalProject(thread,turn,item);},capabilities:Object.freeze({regeneration:'new-turn-shared-prompt-branch',privateCheckpointRetry:false,moreMenuFork:false,providerCallsAreReal:true})};
 }
