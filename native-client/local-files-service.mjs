@@ -3,8 +3,8 @@
  * Original UI and event pipeline remain unchanged; no Azure/cookie/private API.
  * POST /files -> upload URL -> actual bytes -> process NDJSON/uploaded.
  */
-import { workspacePath } from './browser-tool-executor.mjs?v=705ed7058b476fbe';
-import { createLocalDocumentExtractor } from './local-document-extraction.mjs?v=705ed7058b476fbe';
+import { workspacePath } from './browser-tool-executor.mjs?v=d800b021d071aaa0';
+import { createLocalDocumentExtractor } from './local-document-extraction.mjs?v=d800b021d071aaa0';
 export const LOCAL_FILES_SOURCE = 'browser-origin-file-storage';
 export const LOCAL_FILE_PREFIX = 'file_local_';
 /** Pure transport classification: no current-account or metadata dependency. */

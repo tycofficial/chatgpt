@@ -1,34 +1,37 @@
-import * as modelCatalog from '../model-catalog.js?v=705ed7058b476fbe';
-import { createModelCatalogAdapter } from './model-catalog-adapter.mjs?v=705ed7058b476fbe';
-import { DEFAULT_SETTINGS } from '../config.js?v=705ed7058b476fbe';
-import { streamCompletion, PythonRuntime, PYTHON_TOOL } from '../runtime.js?v=705ed7058b476fbe';
-import { LocalAppServer, LocalProtocolSocket } from './local-app-server.mjs?v=705ed7058b476fbe';
-import { getPrototypeLocalSession, getPrototypeLocalAuth, getLocalAccountCheck, getLocalOptimizedAccount, getLocalWhamAccounts, getPrototypeCurrentUser, isPrototypeLocalSession, clearPrototypeLocalSession, getLocalSignedOutUrl, getLocalAccountStorageKey } from './local-identity.mjs?v=705ed7058b476fbe';
-import { getPrototypeConfiguration, setLocalLibraryAvailability } from './local-configuration.mjs?v=705ed7058b476fbe';
-import { ClassicChatAdapter } from './classic-chat-adapter.mjs?v=705ed7058b476fbe';
-import { LocalConversationPubSub } from './local-pubsub.mjs?v=705ed7058b476fbe';
-import { readLocalUserPreferences, updateLocalUserPreference, acknowledgeLocalAnnouncement } from './local-user-preferences.mjs?v=705ed7058b476fbe';
-import { createLocalPersonalizationService } from './local-personalization-service.mjs?v=705ed7058b476fbe';
-import { createPersonalizationIdentityProvider, createPersonalizedSettingsReader } from './local-personalization-context.mjs?v=705ed7058b476fbe';
-import { createBrowserToolExecutor } from './browser-tool-executor.mjs?v=705ed7058b476fbe';
-import { createLocalFilesService } from './local-files-service.mjs?v=705ed7058b476fbe';
-import { createLocalLibraryService } from './local-library-service.mjs?v=705ed7058b476fbe';
-import { createLibraryPublishingExecutor, normalizePublicationReceipt } from './local-library-publisher.mjs?v=705ed7058b476fbe';
-import { createPublishedResourceRehydrator } from './published-resource-rehydration.mjs?v=705ed7058b476fbe';
-import { createNativeLibraryRefresh } from './native-library-refresh.mjs?v=705ed7058b476fbe';
-import { createNativePublicationReferences } from './native-publication-references.mjs?v=705ed7058b476fbe';
-import { createLocalInputPreparer } from './local-input-preparation.mjs?v=705ed7058b476fbe';
-import { createLocalPricingAdapter } from './local-pricing.mjs?v=705ed7058b476fbe';
-import { SITE_ACCOUNT_SERVICE, getSiteAccount, getSiteSessionToken, hasModelSelectionAccess, logoutSiteAccount } from './site-account.mjs?v=705ed7058b476fbe';
-import { createLocalCodexAdapter } from './local-codex-adapter.mjs?v=705ed7058b476fbe';
-import { isOpenStreetMapTileRequest, fetchOpenStreetMapTile } from './local-map-provider.mjs?v=705ed7058b476fbe';
-import { createLocalDiscoveryAdapter } from './local-discovery.mjs?v=705ed7058b476fbe';
-import { createLocalDotAdapter } from './local-dot-adapter.mjs?v=705ed7058b476fbe';
-import { createLocalMapsService } from './local-maps-service.mjs?v=705ed7058b476fbe';
-import { createPreferredHostTransport, createPreferredCompletion, turnHostCheckpoints, cancelTurnHostRequests } from './preferred-host-transport.mjs?v=705ed7058b476fbe';
-import { createChatHistorySync, projectChatHistoryThread } from './chat-history-sync.mjs?v=705ed7058b476fbe';
-import { createAccountHistoryCoordinator } from './account-history-coordinator.mjs?v=705ed7058b476fbe';
-import { createNativeCloudSyncFeedback } from './native-cloud-sync-feedback.mjs?v=705ed7058b476fbe';
+import * as modelCatalog from '../model-catalog.js?v=d800b021d071aaa0';
+import { createModelCatalogAdapter } from './model-catalog-adapter.mjs?v=d800b021d071aaa0';
+import { DEFAULT_SETTINGS } from '../config.js?v=d800b021d071aaa0';
+import { streamCompletion, PythonRuntime, PYTHON_TOOL } from '../runtime.js?v=d800b021d071aaa0';
+import { LocalAppServer, LocalProtocolSocket } from './local-app-server.mjs?v=d800b021d071aaa0';
+import { getPrototypeLocalSession, getPrototypeLocalAuth, getLocalAccountCheck, getLocalOptimizedAccount, getLocalWhamAccounts, getPrototypeCurrentUser, isPrototypeLocalSession, clearPrototypeLocalSession, getLocalSignedOutUrl, getLocalAccountStorageKey } from './local-identity.mjs?v=d800b021d071aaa0';
+import { getPrototypeConfiguration, setLocalLibraryAvailability } from './local-configuration.mjs?v=d800b021d071aaa0';
+import { ClassicChatAdapter } from './classic-chat-adapter.mjs?v=d800b021d071aaa0';
+import { LocalConversationPubSub } from './local-pubsub.mjs?v=d800b021d071aaa0';
+import { readLocalUserPreferences, updateLocalUserPreference, acknowledgeLocalAnnouncement } from './local-user-preferences.mjs?v=d800b021d071aaa0';
+import { createLocalPersonalizationService } from './local-personalization-service.mjs?v=d800b021d071aaa0';
+import { createPersonalizationIdentityProvider, createPersonalizedSettingsReader } from './local-personalization-context.mjs?v=d800b021d071aaa0';
+import { createBrowserToolExecutor, workspacePath } from './browser-tool-executor.mjs?v=d800b021d071aaa0';
+import { createWorkspaceDownloadSource } from './local-workspace-download-source.mjs?v=d800b021d071aaa0';
+import { createLocalWorkspaceDownloadService } from './local-workspace-download-service.mjs?v=d800b021d071aaa0';
+import { createOwnedDownloadTransport } from './owned-download-transport.mjs?v=d800b021d071aaa0';
+import { createLocalFilesService } from './local-files-service.mjs?v=d800b021d071aaa0';
+import { createLocalLibraryService } from './local-library-service.mjs?v=d800b021d071aaa0';
+import { createLibraryPublishingExecutor, normalizePublicationReceipt } from './local-library-publisher.mjs?v=d800b021d071aaa0';
+import { createPublishedResourceRehydrator } from './published-resource-rehydration.mjs?v=d800b021d071aaa0';
+import { createNativeLibraryRefresh } from './native-library-refresh.mjs?v=d800b021d071aaa0';
+import { createNativePublicationReferences } from './native-publication-references.mjs?v=d800b021d071aaa0';
+import { createLocalInputPreparer } from './local-input-preparation.mjs?v=d800b021d071aaa0';
+import { createLocalPricingAdapter } from './local-pricing.mjs?v=d800b021d071aaa0';
+import { SITE_ACCOUNT_SERVICE, getSiteAccount, getSiteSessionToken, hasModelSelectionAccess, logoutSiteAccount } from './site-account.mjs?v=d800b021d071aaa0';
+import { createLocalCodexAdapter } from './local-codex-adapter.mjs?v=d800b021d071aaa0';
+import { isOpenStreetMapTileRequest, fetchOpenStreetMapTile } from './local-map-provider.mjs?v=d800b021d071aaa0';
+import { createLocalDiscoveryAdapter } from './local-discovery.mjs?v=d800b021d071aaa0';
+import { createLocalDotAdapter } from './local-dot-adapter.mjs?v=d800b021d071aaa0';
+import { createLocalMapsService } from './local-maps-service.mjs?v=d800b021d071aaa0';
+import { createPreferredHostTransport, createPreferredCompletion, turnHostCheckpoints, cancelTurnHostRequests } from './preferred-host-transport.mjs?v=d800b021d071aaa0';
+import { createChatHistorySync, projectChatHistoryThread } from './chat-history-sync.mjs?v=d800b021d071aaa0';
+import { createAccountHistoryCoordinator } from './account-history-coordinator.mjs?v=d800b021d071aaa0';
+import { createNativeCloudSyncFeedback } from './native-cloud-sync-feedback.mjs?v=d800b021d071aaa0';
 
 export const localModelAdapter = createModelCatalogAdapter(modelCatalog);
 export const localProtocolDiagnostics = [];
@@ -77,10 +80,6 @@ export const localFilesService = createLocalFilesService({ storage: localWorkspa
 export const localLibraryService = createLocalLibraryService({ files: localFilesService,
   metadataStorage: { getItem: key => globalThis.localStorage.getItem(key), setItem: (key, value) => globalThis.localStorage.setItem(key, value) },
   getAccountId: getOwnedFileAccountId, diagnostics: localProtocolDiagnostics,
-});
-export const localLibraryByteTransport = Object.freeze({
-  ownsObjectURL: value => localLibraryService.ownsObjectURL(value),
-  fetch: (value, options) => globalThis.fetch(value, options),
 });
 let nativeLibraryClient = null, nativeLibraryInvalidator = null;
 const localNativeLibraryRefresh = createNativeLibraryRefresh({
@@ -142,6 +141,24 @@ export const localAppServer = new LocalAppServer({
   getExecutionPolicy: () => ({ modelSelection: hasModelSelectionAccess() }),
   onPersist: threads => localAccountHistory?.capture(threads),
 });
+// Transient sandbox files keep their exact assistant/producer context and real
+// workspace bytes. They never enter the permanent Library publication registry.
+export const localWorkspaceDownloadSource = createWorkspaceDownloadSource({
+  getIdentity: getPersonalizationIdentity, getThread: id => localAppServer.threads.get(id),
+  getWorkspacePrefix: localWorkspaceExecutor.getWorkspacePrefix, storage: localWorkspaceExecutor.storage, workspacePath,
+});
+export const localWorkspaceDownloadService = createLocalWorkspaceDownloadService({
+  getIdentity: getPersonalizationIdentity, resolveSource: spec => localWorkspaceDownloadSource.resolve(spec),
+  isSourceCurrent: proof => localWorkspaceDownloadSource.isCurrent(proof),
+  onDiagnostic: event => localProtocolDiagnostics.push(event),
+});
+export const localOwnedDownloadTransport = createOwnedDownloadTransport({
+  providers: [localLibraryService, localWorkspaceDownloadService],
+  fetchImpl: (...args) => globalThis.fetch(...args), onDiagnostic: event => localProtocolDiagnostics.push(event),
+});
+// Keep the existing native upload/fetch wrapper's public provider identity.
+export const localLibraryByteTransport = localOwnedDownloadTransport;
+globalThis.addEventListener('pagehide', () => localWorkspaceDownloadService.dispose());
 export const localConversationPubSub = new LocalConversationPubSub(localAppServer);
 const localPublishedResourceRehydrator = getPersonalizationIdentity() ? createPublishedResourceRehydrator({
   normalizeReceipt: normalizePublicationReceipt, getIdentity: getPersonalizationIdentity, projectThread: projectChatHistoryThread,
@@ -262,8 +279,8 @@ export function getLocalExecutionCapabilities() {
 export function installNetworkBoundary() {
   const originalFetch = globalThis.fetch.bind(globalThis);
   const originalCreateObjectURL = URL.createObjectURL.bind(URL), originalRevokeObjectURL = URL.revokeObjectURL.bind(URL);
-  URL.createObjectURL = blob => localLibraryService.createNativeDownloadURL(blob, originalCreateObjectURL);
-  URL.revokeObjectURL = url => { localLibraryService.forgetNativeDownloadURL(url); return originalRevokeObjectURL(url); };
+  URL.createObjectURL = blob => localOwnedDownloadTransport.createNativeDownloadURL(blob, originalCreateObjectURL);
+  URL.revokeObjectURL = url => { localOwnedDownloadTransport.forgetNativeDownloadURL(url); return originalRevokeObjectURL(url); };
   const diagnostics = localProtocolDiagnostics;
   const localCsrfToken = crypto.randomUUID();
   const gateway = new URL(DEFAULT_SETTINGS.apiBase);
@@ -284,7 +301,7 @@ export function installNetworkBoundary() {
       const headers = new Headers(request.headers); headers.delete('Authorization'); headers.delete('Cookie');
       return originalFetch(new Request(request, {headers,credentials:'omit'}));
     }
-    if (url.protocol === 'blob:' && ['GET', 'HEAD'].includes(request.method) && localLibraryService.ownsObjectURL(url.href)) {
+    if (url.protocol === 'blob:' && ['GET', 'HEAD'].includes(request.method) && localOwnedDownloadTransport.ownsObjectURL(url.href)) {
       const headers = new Headers(request.headers); headers.delete('Authorization'); headers.delete('Cookie');
       return originalFetch(new Request(request, { headers, credentials: 'omit' }));
     }
@@ -319,6 +336,7 @@ export function installNetworkBoundary() {
       await finishAccountHistoryBeforeLogout();
       localNativeLibraryRefresh.dispose();
       localLibraryService.dispose();
+      localWorkspaceDownloadService.dispose();
       await logoutSiteAccount();
       clearPrototypeLocalSession({ reload: false });
       return response({ url: target });
@@ -368,6 +386,8 @@ export function installNetworkBoundary() {
       if (pricing) return pricing;
       const discovery = await localDiscoveryAdapter.handle(request, adapterPath);
       if (discovery) return discovery;
+      const workspaceDownload = await localWorkspaceDownloadService.handle(request, adapterPath);
+      if (workspaceDownload) return workspaceDownload;
       const library = await localLibraryService.handle(request, adapterPath);
       if (library) return library;
       const files = await localFilesService.handle(request, adapterPath);
@@ -409,7 +429,7 @@ export function installNetworkBoundary() {
     const link = event.target instanceof Element && event.target.closest('a[href]');
     if (!link) return;
     const url = new URL(link.href, location.href);
-    const ownedDownload = url.protocol === 'blob:' && link.hasAttribute('download') && localLibraryService.ownsObjectURL(url.href);
+    const ownedDownload = url.protocol === 'blob:' && link.hasAttribute('download') && localOwnedDownloadTransport.ownsObjectURL(url.href);
     if (!ownedDownload && !['http:', 'https:'].includes(url.protocol)) {
       event.preventDefault();
       event.stopPropagation();

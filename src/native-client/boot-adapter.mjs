@@ -2,7 +2,7 @@
  * Loads the public original component graph with explicit local host services.
  * Private original backend credentials are never used by this entry point.
  */
-import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter, localFilesService, localLibraryService, localLibraryByteTransport, initializeLocalAccountHistory, setNativeAccountHistoryToaster, initializeLocalPublishedResources, registerNativeLibrarySource, notifyNativeLibrarySourceReady } from './service-boundary.mjs';
+import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter, localFilesService, localOwnedDownloadTransport, localLibraryByteTransport, initializeLocalAccountHistory, setNativeAccountHistoryToaster, initializeLocalPublishedResources, registerNativeLibrarySource, notifyNativeLibrarySourceReady } from './service-boundary.mjs';
 import * as mapLibreRenderer from './map-vendor/maplibre-gl.mjs';
 import { createLocalMapProvider } from './local-map-provider.mjs';
 import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs';
@@ -110,7 +110,7 @@ overrideExports('GaA7', {}, { deferred: true }, {
       maxBytes: requireOriginal('I07G').Hd,
       createTooLargeError: size => new (requireOriginal('smHt').b)(size),
       wrapRpcMethod: callback => new (requireOriginal('ZG9f').b)(callback),
-      downloadVerifiedBytes: (...input) => localLibraryService.downloadVerifiedBytes(...input),
+      downloadVerifiedBytes: (...input) => localOwnedDownloadTransport.downloadVerifiedBytes(...input),
       nativeDownload: (blob, fileName) => requireOriginal('ripK').a(blob, fileName),
     }), ...args);
   },
@@ -120,7 +120,7 @@ overrideExports('GaA7', {}, { deferred: true }, {
 // Preserve its URL validation for every URL outside this provider's registry.
 overrideExports('GfAi', {}, { deferred: true }, {
   b: validateURL => function (value, ...args) {
-    if (typeof value === 'string' && localLibraryService.ownsObjectURL(value.trim())) return value.trim();
+    if (typeof value === 'string' && localOwnedDownloadTransport.ownsObjectURL(value.trim())) return value.trim();
     return validateURL.call(this, value, ...args);
   },
 });

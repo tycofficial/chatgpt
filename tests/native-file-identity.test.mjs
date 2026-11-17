@@ -11,7 +11,9 @@ const source = fs.readFileSync(new URL('../src/native-client/service-boundary.mj
 const identitySource = fs.readFileSync(new URL('../src/native-client/local-identity.mjs', import.meta.url), 'utf8');
 const identities = source.match(/^const getPersonalizationIdentity = .*;$/m)?.[0];
 const fileOwner = source.match(/^const getOwnedFileAccountId = .*;$/m)?.[0];
-const start = source.indexOf('export const localFilesService ='), end = source.indexOf('export const localLibraryByteTransport =', start);
+// The byte transport now composes providers after AppServer construction.
+// Extract only the actual file/Library constructors tested by this fixture.
+const start = source.indexOf('export const localFilesService ='), end = source.indexOf('let nativeLibraryClient =', start);
 assert.ok(identities && fileOwner && start > 0 && end > start);
 const constructors = source.slice(start, end).replace('export const localFilesService =', 'globalThis.localFilesService =').replace('export const localLibraryService =', 'globalThis.localLibraryService =');
 const admin = { id: 'site-admin', username: 'Neutral admin', role: 'administrator', planType: 'pro', createdAt: 1 };
