@@ -1,27 +1,30 @@
-import * as modelCatalog from '../model-catalog.js?v=c1dca215dd59102e';
-import { createModelCatalogAdapter } from './model-catalog-adapter.mjs?v=c1dca215dd59102e';
-import { DEFAULT_SETTINGS } from '../config.js?v=c1dca215dd59102e';
-import { streamCompletion, PythonRuntime, PYTHON_TOOL } from '../runtime.js?v=c1dca215dd59102e';
-import { LocalAppServer, LocalProtocolSocket } from './local-app-server.mjs?v=c1dca215dd59102e';
-import { getPrototypeLocalSession, getPrototypeLocalAuth, getLocalAccountCheck, getLocalOptimizedAccount, getLocalWhamAccounts, getPrototypeCurrentUser, isPrototypeLocalSession, clearPrototypeLocalSession, getLocalSignedOutUrl, getLocalAccountStorageKey } from './local-identity.mjs?v=c1dca215dd59102e';
-import { getPrototypeConfiguration, setLocalLibraryAvailability } from './local-configuration.mjs?v=c1dca215dd59102e';
-import { ClassicChatAdapter } from './classic-chat-adapter.mjs?v=c1dca215dd59102e';
-import { LocalConversationPubSub } from './local-pubsub.mjs?v=c1dca215dd59102e';
-import { readLocalUserPreferences, updateLocalUserPreference, acknowledgeLocalAnnouncement } from './local-user-preferences.mjs?v=c1dca215dd59102e';
-import { createLocalPersonalizationService } from './local-personalization-service.mjs?v=c1dca215dd59102e';
-import { createPersonalizationIdentityProvider, createPersonalizedSettingsReader } from './local-personalization-context.mjs?v=c1dca215dd59102e';
-import { createBrowserToolExecutor } from './browser-tool-executor.mjs?v=c1dca215dd59102e';
-import { createLocalFilesService } from './local-files-service.mjs?v=c1dca215dd59102e';
-import { createLocalLibraryService } from './local-library-service.mjs?v=c1dca215dd59102e';
-import { createLocalInputPreparer } from './local-input-preparation.mjs?v=c1dca215dd59102e';
-import { createLocalPricingAdapter } from './local-pricing.mjs?v=c1dca215dd59102e';
-import { SITE_ACCOUNT_SERVICE, getSiteAccount, getSiteSessionToken, hasModelSelectionAccess, logoutSiteAccount } from './site-account.mjs?v=c1dca215dd59102e';
-import { createLocalCodexAdapter } from './local-codex-adapter.mjs?v=c1dca215dd59102e';
-import { isOpenStreetMapTileRequest, fetchOpenStreetMapTile } from './local-map-provider.mjs?v=c1dca215dd59102e';
-import { createLocalDiscoveryAdapter } from './local-discovery.mjs?v=c1dca215dd59102e';
-import { createLocalDotAdapter } from './local-dot-adapter.mjs?v=c1dca215dd59102e';
-import { createLocalMapsService } from './local-maps-service.mjs?v=c1dca215dd59102e';
-import { createPreferredHostTransport, createPreferredCompletion, turnHostCheckpoints, cancelTurnHostRequests } from './preferred-host-transport.mjs?v=c1dca215dd59102e';
+import * as modelCatalog from '../model-catalog.js?v=990e0c77c1b1bedb';
+import { createModelCatalogAdapter } from './model-catalog-adapter.mjs?v=990e0c77c1b1bedb';
+import { DEFAULT_SETTINGS } from '../config.js?v=990e0c77c1b1bedb';
+import { streamCompletion, PythonRuntime, PYTHON_TOOL } from '../runtime.js?v=990e0c77c1b1bedb';
+import { LocalAppServer, LocalProtocolSocket } from './local-app-server.mjs?v=990e0c77c1b1bedb';
+import { getPrototypeLocalSession, getPrototypeLocalAuth, getLocalAccountCheck, getLocalOptimizedAccount, getLocalWhamAccounts, getPrototypeCurrentUser, isPrototypeLocalSession, clearPrototypeLocalSession, getLocalSignedOutUrl, getLocalAccountStorageKey } from './local-identity.mjs?v=990e0c77c1b1bedb';
+import { getPrototypeConfiguration, setLocalLibraryAvailability } from './local-configuration.mjs?v=990e0c77c1b1bedb';
+import { ClassicChatAdapter } from './classic-chat-adapter.mjs?v=990e0c77c1b1bedb';
+import { LocalConversationPubSub } from './local-pubsub.mjs?v=990e0c77c1b1bedb';
+import { readLocalUserPreferences, updateLocalUserPreference, acknowledgeLocalAnnouncement } from './local-user-preferences.mjs?v=990e0c77c1b1bedb';
+import { createLocalPersonalizationService } from './local-personalization-service.mjs?v=990e0c77c1b1bedb';
+import { createPersonalizationIdentityProvider, createPersonalizedSettingsReader } from './local-personalization-context.mjs?v=990e0c77c1b1bedb';
+import { createBrowserToolExecutor } from './browser-tool-executor.mjs?v=990e0c77c1b1bedb';
+import { createLocalFilesService } from './local-files-service.mjs?v=990e0c77c1b1bedb';
+import { createLocalLibraryService } from './local-library-service.mjs?v=990e0c77c1b1bedb';
+import { createLocalInputPreparer } from './local-input-preparation.mjs?v=990e0c77c1b1bedb';
+import { createLocalPricingAdapter } from './local-pricing.mjs?v=990e0c77c1b1bedb';
+import { SITE_ACCOUNT_SERVICE, getSiteAccount, getSiteSessionToken, hasModelSelectionAccess, logoutSiteAccount } from './site-account.mjs?v=990e0c77c1b1bedb';
+import { createLocalCodexAdapter } from './local-codex-adapter.mjs?v=990e0c77c1b1bedb';
+import { isOpenStreetMapTileRequest, fetchOpenStreetMapTile } from './local-map-provider.mjs?v=990e0c77c1b1bedb';
+import { createLocalDiscoveryAdapter } from './local-discovery.mjs?v=990e0c77c1b1bedb';
+import { createLocalDotAdapter } from './local-dot-adapter.mjs?v=990e0c77c1b1bedb';
+import { createLocalMapsService } from './local-maps-service.mjs?v=990e0c77c1b1bedb';
+import { createPreferredHostTransport, createPreferredCompletion, turnHostCheckpoints, cancelTurnHostRequests } from './preferred-host-transport.mjs?v=990e0c77c1b1bedb';
+import { createChatHistorySync, projectChatHistoryThread } from './chat-history-sync.mjs?v=990e0c77c1b1bedb';
+import { createAccountHistoryCoordinator } from './account-history-coordinator.mjs?v=990e0c77c1b1bedb';
+import { createNativeCloudSyncFeedback } from './native-cloud-sync-feedback.mjs?v=990e0c77c1b1bedb';
 
 export const localModelAdapter = createModelCatalogAdapter(modelCatalog);
 export const localProtocolDiagnostics = [];
@@ -75,6 +78,14 @@ globalThis.addEventListener('pagehide', () => localLibraryService.dispose());
 export const localPricingAdapter = createLocalPricingAdapter({ diagnostics: localProtocolDiagnostics, readMembership: () => getSiteAccount() });
 export const localDiscoveryAdapter = createLocalDiscoveryAdapter({ storage: { getItem: key => globalThis.localStorage.getItem(key), setItem: (key, value) => globalThis.localStorage.setItem(key, value) }, getAccountId: () => getPrototypeLocalAuth()?.accountId ?? null, diagnostics: localProtocolDiagnostics });
 export const localMapsService = createLocalMapsService({ storage: { getItem: key => globalThis.localStorage.getItem(key), setItem: (key, value) => globalThis.localStorage.setItem(key, value) }, getAccountId: () => getPrototypeLocalAuth()?.accountId ?? null, diagnostics: localProtocolDiagnostics });
+// Verified site ownership and the local namespace are both bound at boot.
+// A preview flag, prototype account ID or late login cannot claim cloud history.
+const getHistoryIdentity = () => {
+  const local = getPersonalizationIdentity(), site = getSiteAccount();
+  return local && site?.id ? { ownerId: site.id, accountId: local.accountId, namespace: getLocalAccountStorageKey('cg-original-app-server:v1') } : null;
+};
+export let localAccountHistory = null;
+let historyFeedback = null, nativeHistoryToaster = () => null, historyApplying = false;
 export const localAppServer = new LocalAppServer({
   storage: {
     getItem: key => globalThis.localStorage.getItem(getLocalAccountStorageKey(key)),
@@ -90,8 +101,65 @@ export const localAppServer = new LocalAppServer({
   prepareUserInput: createLocalInputPreparer({ files: localFilesService }),
   agentOptions: { toolTransport: 'responses', verifiedPriority: false, ultraOrchestration: true },
   getExecutionPolicy: () => ({ modelSelection: hasModelSelectionAccess() }),
+  onPersist: threads => localAccountHistory?.capture(threads),
 });
 export const localConversationPubSub = new LocalConversationPubSub(localAppServer);
+const historyIdentity = getHistoryIdentity();
+if (historyIdentity) {
+  historyFeedback = createNativeCloudSyncFeedback({
+    ownerId: historyIdentity.ownerId, getOwnerId: () => getHistoryIdentity()?.ownerId,
+    getToaster: () => nativeHistoryToaster(),
+    onRetry: ({ signal }) => localAccountHistory.synchronize({ signal }),
+    onResolveConflict: (id, choice) => localAccountHistory.resolveConflict(id, choice),
+  });
+  const feedback = historyFeedback;
+  localAccountHistory = createAccountHistoryCoordinator({
+    appServer: localAppServer, getIdentity: getHistoryIdentity, projectThread: projectChatHistoryThread,
+    createSync: () => createChatHistorySync({ baseURL: SITE_ACCOUNT_SERVICE,
+      fetchImpl: (...args) => globalThis.fetch(...args), getIdentity: getHistoryIdentity,
+      getSessionToken: getSiteSessionToken, onDiagnostic: event => localProtocolDiagnostics.push(event),
+    }),
+    onFeedback: event => feedback.report(event),
+    onClearFeedback: event => { if (event.ownerId === historyIdentity.ownerId) feedback.clear(event.kind, event.conversationId); },
+    onDiagnostic: event => localProtocolDiagnostics.push(event),
+    onApplied: ({ added, updated, removed }) => {
+      historyApplying = true;
+      try {
+      for (const id of removed) {
+        localConversationPubSub.publish('conversation-history-update', { conversation_id: id, update_type: 'conversation-deleted' });
+        localAppServer.notify('thread/deleted', { threadId: id });
+      }
+      for (const id of added) localAppServer.notify('thread/started', { thread: localAppServer.snapshot(localAppServer.threads.get(id), false) });
+      for (const id of updated) {
+        const thread = localAppServer.threads.get(id);
+        if (!thread || localAppServer.running.has(id)) continue;
+        localAppServer.notify('thread/name/updated', { threadId: id, threadName: thread.name });
+        localAppServer.notify(thread.archived ? 'thread/archived' : 'thread/unarchived', { threadId: id });
+        const turn = thread.turns.at(-1);
+        if (turn) localAppServer.notify('turn/completed', { threadId: id, turn });
+      }
+      } finally { historyApplying = false; }
+    },
+  });
+  localAppServer.subscribe(event => {
+    if (!historyApplying && event.method === 'turn/completed') void localAccountHistory.synchronize();
+  });
+}
+export function initializeLocalAccountHistory() { return localAccountHistory?.start() ?? Promise.resolve({ ok: true, signedOut: true }); }
+export function setNativeAccountHistoryToaster(provider) {
+  nativeHistoryToaster = typeof provider === 'function' ? provider : () => null;
+  historyFeedback?.flush();
+}
+async function finishAccountHistoryBeforeLogout() {
+  if (!localAccountHistory) return;
+  const controller = new AbortController(), deadline = setTimeout(() => controller.abort(), 8000);
+  try {
+    do {
+      const outcome = await localAccountHistory.synchronize({ signal: controller.signal });
+      if (!outcome.ok || outcome.deferred || outcome.conflictCount || !outcome.pending) break;
+    } while (!controller.signal.aborted);
+  } finally { clearTimeout(deadline); localAccountHistory.dispose(); historyFeedback?.dispose(); }
+}
 export const localDotAdapter = createLocalDotAdapter({
   storage: { getItem: key => globalThis.localStorage.getItem(key), setItem: (key, value) => globalThis.localStorage.setItem(key, value) },
   appServer: localAppServer, getIdentity: getPrototypeLocalAuth, isLocalSession: isPrototypeLocalSession,
@@ -133,7 +201,7 @@ export function installNetworkBoundary() {
       return originalFetch(new Request(request, { headers, credentials: 'omit' }));
     }
     if (isOpenStreetMapTileRequest(request)) return fetchOpenStreetMapTile(originalFetch, request);
-    if (url.origin === SITE_ACCOUNT_SERVICE && /^\/(?:auth\/(?:login|register|session|logout)|bridge\/status|usage|jobs(?:\/[^/]+(?:\/events)?)?)$/.test(url.pathname)) return originalFetch(new Request(request, { credentials: 'omit', redirect: 'error' }));
+    if (url.origin === SITE_ACCOUNT_SERVICE && /^\/(?:auth\/(?:login|register|session|logout)|bridge\/status|usage|jobs(?:\/[^/]+(?:\/events)?)?|sync\/(?:conversations(?:\/[^/]+)?|changes|batch))$/.test(url.pathname)) return originalFetch(new Request(request, { credentials: 'omit', redirect: 'error' }));
     // Consume analytics locally; never forward captured telemetry to its vendor.
     if (isTelemetry(url)) return response({ success: true });
     if (local && (/^\/cdn\//.test(url.pathname) || /^\/__prototype\//.test(url.pathname))) {
@@ -160,6 +228,7 @@ export function installNetworkBoundary() {
       localAppServer.interruptAll({ reason: 'logout' });
       const stopResults = await cancelTurnHostRequests(localPreferredHostTransport, [...localAppServer.threads.values()].flatMap(thread => thread.turns), { onCheckpoint: () => localAppServer.persist() });
       for (const result of stopResults) if (result.status === 'rejected') diagnostics.push({ type: 'local-signout-host-cancel-unconfirmed', code: result.reason?.code ?? null });
+      await finishAccountHistoryBeforeLogout();
       localLibraryService.dispose();
       await logoutSiteAccount();
       clearPrototypeLocalSession({ reload: false });

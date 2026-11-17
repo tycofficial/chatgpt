@@ -7,7 +7,7 @@ const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const referenceInput=path.join(root,'.test-output/original-client-prototype');
 const input=path.join(root,'src/native-client');
 const output=path.join(root,'native-client');
-const helpers=['boot-adapter.mjs','service-boundary.mjs','preferred-host-transport.mjs','synthetic-bootstrap.mjs','public-auth-envelope.mjs','local-identity.mjs','local-token-identity.mjs','site-account.mjs','local-model-selection-policy.mjs','local-configuration.mjs','local-user-preferences.mjs','local-personalization-service.mjs','local-personalization-context.mjs','local-host-settings.mjs','local-work-policy.mjs','local-codex-adapter.mjs','local-dot-adapter.mjs','local-map-provider.mjs','local-maps-service.mjs','local-discovery.mjs','public-plugin-catalog.mjs','local-pubsub.mjs','model-catalog-adapter.mjs','local-app-server.mjs','classic-chat-adapter.mjs','classic-input-messages.mjs','agent-turn-runner.mjs','site-ultra-orchestrator.mjs','browser-tool-executor.mjs','local-document-extraction.mjs','document-text-worker.mjs','local-ooxml-container.mjs','local-office-xml.mjs','local-xlsx-extraction.mjs','local-pptx-extraction.mjs','local-files-service.mjs','local-library-service.mjs','local-native-upload.mjs','local-input-preparation.mjs','local-pricing.mjs','entry-library.mjs'];
+const helpers=['boot-adapter.mjs','service-boundary.mjs','preferred-host-transport.mjs','synthetic-bootstrap.mjs','public-auth-envelope.mjs','local-identity.mjs','local-token-identity.mjs','site-account.mjs','chat-history-sync.mjs','account-history-coordinator.mjs','native-cloud-sync-feedback.mjs','local-model-selection-policy.mjs','local-configuration.mjs','local-user-preferences.mjs','local-personalization-service.mjs','local-personalization-context.mjs','local-host-settings.mjs','local-work-policy.mjs','local-codex-adapter.mjs','local-dot-adapter.mjs','local-map-provider.mjs','local-maps-service.mjs','local-discovery.mjs','public-plugin-catalog.mjs','local-pubsub.mjs','model-catalog-adapter.mjs','local-app-server.mjs','classic-chat-adapter.mjs','classic-input-messages.mjs','agent-turn-runner.mjs','site-ultra-orchestrator.mjs','browser-tool-executor.mjs','local-document-extraction.mjs','document-text-worker.mjs','local-ooxml-container.mjs','local-office-xml.mjs','local-xlsx-extraction.mjs','local-pptx-extraction.mjs','local-files-service.mjs','local-library-service.mjs','local-native-upload.mjs','local-input-preparation.mjs','local-pricing.mjs','entry-library.mjs'];
 if(new Set(helpers).size!==helpers.length)throw Error('Duplicate native helper declaration');
 if(process.argv.includes('--from-reference')){
  await fs.mkdir(input,{recursive:true});
@@ -82,15 +82,21 @@ if (!navigator.serviceWorker.controller || !new URL(navigator.serviceWorker.cont
  await new Promise((resolve,reject)=>{const done=()=>{clearTimeout(timer);navigator.serviceWorker.removeEventListener('controllerchange',done);resolve();};const timer=setTimeout(()=>reject(Error('Original asset host did not become ready')),20000);navigator.serviceWorker.addEventListener('controllerchange',done);if(navigator.serviceWorker.controller)done();});
 }
 const siteAccount = await import('./site-account.mjs?v='+${JSON.stringify(release)});
-if(['login','auth/login','signup','auth/signup'].map(route=>rootURL.pathname+route).includes(location.pathname.replace(/\\/$/,''))) siteAccount.renderSiteLoginPage();
+let isBusy;
+if(['login','auth/login','signup','auth/signup'].map(route=>rootURL.pathname+route).includes(location.pathname.replace(/\\/$/,''))) {
+ siteAccount.renderSiteLoginPage();
+ isBusy = () => [...document.querySelectorAll('.site-login input')].some(input=>input===document.activeElement||input.value.length>0)||!!document.querySelector('.site-login button:disabled');
+}
 else {
  await siteAccount.initializeSiteAccount();
  await import('./boot-adapter.mjs?v='+${JSON.stringify(release)});
- const [{createReleaseUpdater},{localAppServer}] = await Promise.all([import('../release-updater.js?v='+${JSON.stringify(release)}),import('./service-boundary.mjs?v='+${JSON.stringify(release)})]);
- const updater = createReleaseUpdater({currentRelease:${JSON.stringify(release)},baseURL:rootURL,fetchImpl:releaseFetch,isBusy:()=>localAppServer.running.size>0});
- updater.start();
- globalThis.addEventListener('pagehide',()=>updater.stop(),{once:true});
+ const {localAppServer} = await import('./service-boundary.mjs?v='+${JSON.stringify(release)});
+ isBusy = () => localAppServer.running.size>0;
 }
+const {createReleaseUpdater} = await import('../release-updater.js?v='+${JSON.stringify(release)});
+const updater = createReleaseUpdater({currentRelease:${JSON.stringify(release)},baseURL:rootURL,fetchImpl:releaseFetch,isBusy});
+updater.start();
+globalThis.addEventListener('pagehide',()=>updater.stop(),{once:true});
 `;
 await write(path.join(output,'bootstrap.mjs'),bootstrap);
 const worker=`import {BrowserWorkspaceStore,workspacePath} from './native-client/browser-tool-executor.mjs?v=${release}';

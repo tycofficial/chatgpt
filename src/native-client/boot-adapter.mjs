@@ -2,7 +2,7 @@
  * Loads the public original component graph with explicit local host services.
  * Private original backend credentials are never used by this entry point.
  */
-import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter, localFilesService, localLibraryService, localLibraryByteTransport } from './service-boundary.mjs';
+import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter, localFilesService, localLibraryService, localLibraryByteTransport, initializeLocalAccountHistory, setNativeAccountHistoryToaster } from './service-boundary.mjs';
 import * as mapLibreRenderer from './map-vendor/maplibre-gl.mjs';
 import { createLocalMapProvider } from './local-map-provider.mjs';
 import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs';
@@ -16,6 +16,9 @@ import { wrapNativeFileUploadClass } from './local-native-upload.mjs';
 
 const boundary = installNetworkBoundary();
 globalThis.__originalClientProbe = boundary.diagnostics;
+// Restore the verified account's real durable history before native loaders
+// resolve a fresh-device conversation URL. Offline failures retain local data.
+await initializeLocalAccountHistory();
 installSyntheticDocumentState();
 
 const plan = await (await fetch('/__prototype/entry-plan.json')).json();
@@ -319,6 +322,12 @@ for (const [id, file] of Object.entries(plan.initialRoutes)) {
   routeModules[id] = await import(file);
 }
 window.__reactRouterRouteModules = routeModules;
+const initialHistoryToaster = requireOriginal.m.SGsN ? requireOriginal('SGsN').b() : null;
+setNativeAccountHistoryToaster(() => {
+  if (!requireOriginal.m.SGsN || !document.querySelector('[data-sonner-toaster]')) return null;
+  const service = requireOriginal('SGsN').b();
+  return service !== initialHistoryToaster ? service : null;
+});
 
 // This is the original entry's terminal statement. No extracted component,
 // custom UI fragment, HTML click handler, or alternate application is mounted.

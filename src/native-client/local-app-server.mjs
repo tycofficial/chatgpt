@@ -12,13 +12,14 @@ const errorShape = message => ({ message, codexErrorInfo: null, additionalDetail
 const defaultCollaboration = model => ({ mode: 'default', settings: { model, reasoning_effort: null, developer_instructions: null } });
 
 export class LocalAppServer {
-  constructor({ storage, streamCompletion, readSettings, models, catalog, diagnostics = [], now = Date.now, uuid = () => crypto.randomUUID(), toolExecutor = null, checkpointStore = null, agentOptions = {}, getExecutionPolicy = null, onIdleTurnInterrupt = null, prepareUserInput = null }) {
+  constructor({ storage, streamCompletion, readSettings, models, catalog, diagnostics = [], now = Date.now, uuid = () => crypto.randomUUID(), toolExecutor = null, checkpointStore = null, agentOptions = {}, getExecutionPolicy = null, onIdleTurnInterrupt = null, prepareUserInput = null, onPersist = null }) {
     this.storage = storage;
     this.toolExecutor = toolExecutor;
     this.prepareUserInput = prepareUserInput;
     this.checkpointStore = checkpointStore;
     this.agentOptions = agentOptions;
     this.onIdleTurnInterrupt = onIdleTurnInterrupt;
+    this.onPersist = onPersist;
     this.getExecutionPolicy = getExecutionPolicy ?? (() => ({ modelSelection: false, fixedModel: 'gpt-6-luna', defaultEffort: 'low', allowedEfforts: ['low', 'medium'] }));
     this.streamCompletion = streamCompletion;
     this.readSettings = readSettings;
@@ -72,9 +73,66 @@ export class LocalAppServer {
   persist() {
     if (this.loadError) throw this.loadError;
     if (!this.storage) return;
+    let serialized;
     try {
-      this.storage.setItem(this.storageKey, JSON.stringify({ schemaVersion: 1, threads: [...this.threads.values()].filter(thread => !thread.ephemeral) }));
+      serialized = JSON.stringify({ schemaVersion: 1, threads: [...this.threads.values()].filter(thread => !thread.ephemeral) });
+      this.storage.setItem(this.storageKey, serialized);
     } catch (error) { throw new RpcError(-32000, `Local conversation history could not be saved: ${error.message}`); }
+    // A background sync failure must not roll back an already durable native
+    // checkpoint or cause a second provider/tool submission.
+    try {
+      const pending = this.onPersist?.(JSON.parse(serialized).threads);
+      if (pending?.then) Promise.resolve(pending).catch(() => this.diagnostics.push({ type: 'local-history-capture-error' }));
+    } catch { this.diagnostics.push({ type: 'local-history-capture-error' }); }
+  }
+  applyHistorySnapshot(records, { projectThread = null } = {}) {
+    if (this.loadError) throw this.loadError;
+    if (!Array.isArray(records) || records.length > 2000) throw new RpcError(-32602, 'Invalid account conversation snapshot');
+    const next = new Map();
+    for (const input of records) {
+      if (!object(input) || typeof input.id !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(input.id) || next.has(input.id) || input.ephemeral || !Array.isArray(input.turns)) throw new RpcError(-32602, 'Invalid account conversation record');
+      const thread = copy(input);
+      const original = this.threads.get(thread.id);
+      if (original && typeof projectThread === 'function' && !this.running.has(thread.id)) {
+        const stable = value => Array.isArray(value) ? value.map(stable) : object(value) ? Object.fromEntries(Object.keys(value).sort().map(key => [key, stable(value[key])])) : value;
+        const localView = projectThread(original), incomingView = projectThread(thread);
+        const oldViews = new Map((localView?.turns ?? []).map(turn => [turn.id, turn]));
+        const newViews = new Map((incomingView?.turns ?? []).map(turn => [turn.id, turn]));
+        const oldTurns = new Map(original.turns.map(turn => [turn.id, turn]));
+        // Renaming/archiving a thread on another device cannot erase an
+        // unchanged interrupted turn's private, same-device checkpoint.
+        thread.turns = thread.turns.map(turn => oldTurns.has(turn.id) && oldViews.has(turn.id) && newViews.has(turn.id) && JSON.stringify(stable(oldViews.get(turn.id))) === JSON.stringify(stable(newViews.get(turn.id))) ? copy(oldTurns.get(turn.id)) : turn);
+        thread.adapterMetadata = { ...copy(original.adapterMetadata ?? {}), ...thread.adapterMetadata };
+        if (original.adapterMetadata?.clientMetadata || thread.adapterMetadata.clientMetadata) thread.adapterMetadata.clientMetadata = { ...copy(original.adapterMetadata?.clientMetadata ?? {}), ...thread.adapterMetadata.clientMetadata };
+      }
+      for (const turn of thread.turns) {
+        if (!object(turn) || typeof turn.id !== 'string' || !Array.isArray(turn.items)) throw new RpcError(-32602, 'Invalid account conversation turn');
+        if (turn.status === 'inProgress') {
+          turn.status = 'interrupted';
+          turn.adapterMetadata = { ...turn.adapterMetadata, resumable: false, resumePolicy: 'manual', interruption: 'account-history-restore' };
+          delete turn.adapterMetadata.checkpoint;
+        }
+      }
+      if (thread.adapterMetadata?.cloudHistorySync && thread.turns.some(turn => turn.adapterMetadata?.checkpoint)) thread.adapterMetadata.cloudHistorySync.executionCheckpointAvailable = true;
+      thread.status = idle();
+      next.set(thread.id, thread);
+    }
+    // The snapshot written to disk includes the exact active objects retained
+    // in memory. Cloud polling never rewinds a live checkpoint to an older copy.
+    for (const [id, thread] of this.threads) if (thread.ephemeral || this.running.has(id)) next.set(id, thread);
+    const before = this.threads;
+    try {
+      this.storage?.setItem(this.storageKey, JSON.stringify({ schemaVersion: 1, threads: [...next.values()].filter(thread => !thread.ephemeral) }));
+    } catch (error) { throw new RpcError(-32000, `Account conversation history could not be applied: ${error.message}`); }
+    this.threads = next;
+    const changes = { added: [], updated: [], removed: [] };
+    for (const [id, thread] of next) {
+      if (this.running.has(id) || thread.ephemeral) continue;
+      if (!before.has(id)) changes.added.push(id);
+      else if (JSON.stringify(before.get(id)) !== JSON.stringify(thread)) changes.updated.push(id);
+    }
+    for (const [id, thread] of before) if (!next.has(id) && !thread.ephemeral) changes.removed.push(id);
+    return changes;
   }
   getThread(id) {
     if (typeof id !== 'string' || !this.threads.has(id)) throw new RpcError(-32001, 'thread_not_found');

@@ -2,24 +2,27 @@
  * Loads the public original component graph with explicit local host services.
  * Private original backend credentials are never used by this entry point.
  */
-import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter, localFilesService, localLibraryService, localLibraryByteTransport } from './service-boundary.mjs?v=c1dca215dd59102e';
-import * as mapLibreRenderer from './map-vendor/maplibre-gl.mjs?v=c1dca215dd59102e';
-import { createLocalMapProvider } from './local-map-provider.mjs?v=c1dca215dd59102e';
-import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs?v=c1dca215dd59102e';
-import { getPrototypeLocalSession, getPrototypeLocalAuth, isPrototypeLocalSession, getPrototypeLocalAuthGeneration, clearPrototypeLocalSession } from './local-identity.mjs?v=c1dca215dd59102e';
-import { createLocalHostSettingsClass } from './local-host-settings.mjs?v=c1dca215dd59102e';
-import { createLocalWorkPolicy } from './local-work-policy.mjs?v=c1dca215dd59102e';
-import { hasModelSelectionAccess, getSiteLoginUrl } from './site-account.mjs?v=c1dca215dd59102e';
-import { createNativeModelSelectionPolicy, createNativeThinkingEntryPolicy } from './local-model-selection-policy.mjs?v=c1dca215dd59102e';
-import { createLocalHostClaimsReader } from './local-token-identity.mjs?v=c1dca215dd59102e';
-import { wrapNativeFileUploadClass } from './local-native-upload.mjs?v=c1dca215dd59102e';
+import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter, localFilesService, localLibraryService, localLibraryByteTransport, initializeLocalAccountHistory, setNativeAccountHistoryToaster } from './service-boundary.mjs?v=990e0c77c1b1bedb';
+import * as mapLibreRenderer from './map-vendor/maplibre-gl.mjs?v=990e0c77c1b1bedb';
+import { createLocalMapProvider } from './local-map-provider.mjs?v=990e0c77c1b1bedb';
+import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs?v=990e0c77c1b1bedb';
+import { getPrototypeLocalSession, getPrototypeLocalAuth, isPrototypeLocalSession, getPrototypeLocalAuthGeneration, clearPrototypeLocalSession } from './local-identity.mjs?v=990e0c77c1b1bedb';
+import { createLocalHostSettingsClass } from './local-host-settings.mjs?v=990e0c77c1b1bedb';
+import { createLocalWorkPolicy } from './local-work-policy.mjs?v=990e0c77c1b1bedb';
+import { hasModelSelectionAccess, getSiteLoginUrl } from './site-account.mjs?v=990e0c77c1b1bedb';
+import { createNativeModelSelectionPolicy, createNativeThinkingEntryPolicy } from './local-model-selection-policy.mjs?v=990e0c77c1b1bedb';
+import { createLocalHostClaimsReader } from './local-token-identity.mjs?v=990e0c77c1b1bedb';
+import { wrapNativeFileUploadClass } from './local-native-upload.mjs?v=990e0c77c1b1bedb';
 
 const boundary = installNetworkBoundary();
 globalThis.__originalClientProbe = boundary.diagnostics;
+// Restore the verified account's real durable history before native loaders
+// resolve a fresh-device conversation URL. Offline failures retain local data.
+await initializeLocalAccountHistory();
 installSyntheticDocumentState();
 if (globalThis.__CHATGPT_REPLICA_ENV__) window.__reactRouterContext.basename = globalThis.__CHATGPT_REPLICA_ENV__.basePath.replace(/\/$/, '') || '/';
 
-const plan = await (await fetch(new URL('./entry-plan.json?v=c1dca215dd59102e', import.meta.url))).json();
+const plan = await (await fetch(new URL('./entry-plan.json?v=990e0c77c1b1bedb', import.meta.url))).json();
 const { __webpack_require__: requireOriginal } = await import(plan.runtime);
 // One mechanical entry transform defers its terminal hxQI invocation and
 // rebases its relative imports. All original factories and chunks are retained.
@@ -320,6 +323,12 @@ for (const [id, file] of Object.entries(plan.initialRoutes)) {
   routeModules[id] = await import(file);
 }
 window.__reactRouterRouteModules = routeModules;
+const initialHistoryToaster = requireOriginal.m.SGsN ? requireOriginal('SGsN').b() : null;
+setNativeAccountHistoryToaster(() => {
+  if (!requireOriginal.m.SGsN || !document.querySelector('[data-sonner-toaster]')) return null;
+  const service = requireOriginal('SGsN').b();
+  return service !== initialHistoryToaster ? service : null;
+});
 
 // This is the original entry's terminal statement. No extracted component,
 // custom UI fragment, HTML click handler, or alternate application is mounted.

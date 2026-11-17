@@ -1,3 +1,4 @@
+import {handleChatSync} from './chat-sync.mjs';
 /** Username/password auth is local to this site; no original account token is used. */
 const encoder=new TextEncoder();
 const hex=bytes=>Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,'0')).join('');
@@ -98,6 +99,7 @@ async function route(request,env){const path=new URL(request.url).pathname;
   await env.DB.batch([query(env,'INSERT INTO sessions(token_hash,admin_id,expires_at,created_at) VALUES(?,1,?,?)',await digest(token),expiresAt,Date.now()),query(env,'DELETE FROM login_limits WHERE expires_at<?',Date.now()),query(env,'DELETE FROM sessions WHERE expires_at<?',Date.now())]);return json({token,expiresAt,user:account(admin)});
  }
  if(path.startsWith('/bridge/')&&!['/bridge/pair','/bridge/status','/bridge/revoke'].includes(path))return bridgeRoute(request,env,path);
+ if(path.startsWith('/sync/'))return handleChatSync(request,env,await session(request,env));
  const admin=await session(request,env);if(!admin)return fail(401,'ADMIN_AUTH_REQUIRED','请先登录管理员账户。');
  if(path==='/auth/session')return json({user:account(admin),expiresAt:admin.sessionExpiresAt});
  if(path==='/auth/logout'&&request.method==='POST'){const tokenHash=await digest(request.headers.get('authorization').replace(/^Bearer\s+/i,''));await env.DB.batch([query(env,'DELETE FROM sessions WHERE token_hash=?',tokenHash),query(env,'DELETE FROM user_sessions WHERE token_hash=?',tokenHash)]);return json({signedOut:true});}
@@ -137,4 +139,4 @@ async function route(request,env){const path=new URL(request.url).pathname;
  if(path==='/usage'){const sums=await query(env,'SELECT source,COUNT(*) AS requests,SUM(input_tokens) AS input_tokens,SUM(output_tokens) AS output_tokens FROM usage_events GROUP BY source').all();return json({sources:sums.results,subscription:{remaining:null,source:'not-reported-by-official-service'},officialUsageUrl:'https://chatgpt.com/settings/usage'});}
  return fail(404,'ROUTE_NOT_FOUND','接口不存在。');
 }
-export default {async fetch(request,env){const origin=request.headers.get('origin'),own=new URL(request.url).origin,allowed=new Set(['https://tycofficial.github.io','http://127.0.0.1:4400','http://127.0.0.1:1455']);if(origin&&!allowed.has(origin)&&origin!==own)return fail(403,'ORIGIN_NOT_ALLOWED','此来源没有访问权限。');let response;try{response=request.method==='OPTIONS'?new Response(null,{status:204}):await route(request,env);}catch{response=fail(503,'SERVICE_UNAVAILABLE','账户服务暂时不可用，请稍后重试。');}const headers=new Headers(response.headers);if(origin){headers.set('Access-Control-Allow-Origin',origin);headers.set('Vary','Origin');headers.set('Access-Control-Allow-Headers','Content-Type,Authorization');headers.set('Access-Control-Allow-Methods','GET,POST,DELETE,OPTIONS');}headers.set('X-Content-Type-Options','nosniff');return new Response(response.body,{status:response.status,headers});}};
+export default {async fetch(request,env){const origin=request.headers.get('origin'),own=new URL(request.url).origin,allowed=new Set(['https://tycofficial.github.io','http://127.0.0.1:4400','http://127.0.0.1:1455']);if(origin&&!allowed.has(origin)&&origin!==own)return fail(403,'ORIGIN_NOT_ALLOWED','此来源没有访问权限。');let response;try{response=request.method==='OPTIONS'?new Response(null,{status:204}):await route(request,env);}catch{response=fail(503,'SERVICE_UNAVAILABLE','账户服务暂时不可用，请稍后重试。');}const headers=new Headers(response.headers);if(origin){headers.set('Access-Control-Allow-Origin',origin);headers.set('Vary','Origin');headers.set('Access-Control-Allow-Headers','Content-Type,Authorization');headers.set('Access-Control-Allow-Methods','GET,POST,PUT,DELETE,OPTIONS');}headers.set('X-Content-Type-Options','nosniff');return new Response(response.body,{status:response.status,headers});}};

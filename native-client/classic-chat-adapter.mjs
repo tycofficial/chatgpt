@@ -1,9 +1,9 @@
 /** Original classic Chat REST/SSE shapes over the same real local thread engine. */
-import { FRONTEND_TO_RAW_EFFORT } from './model-catalog-adapter.mjs?v=c1dca215dd59102e';
-import { turnHostCheckpoints } from './preferred-host-transport.mjs?v=c1dca215dd59102e';
+import { FRONTEND_TO_RAW_EFFORT } from './model-catalog-adapter.mjs?v=990e0c77c1b1bedb';
+import { turnHostCheckpoints } from './preferred-host-transport.mjs?v=990e0c77c1b1bedb';
 
-import { parseClassicInputMessages } from './classic-input-messages.mjs?v=c1dca215dd59102e';
-export { parseClassicInputMessages, CLASSIC_CONTEXT_LIMITS } from './classic-input-messages.mjs?v=c1dca215dd59102e';
+import { parseClassicInputMessages } from './classic-input-messages.mjs?v=990e0c77c1b1bedb';
+export { parseClassicInputMessages, CLASSIC_CONTEXT_LIMITS } from './classic-input-messages.mjs?v=990e0c77c1b1bedb';
 export class ClassicChatAdapter {
   constructor({ appServer, models, now = Date.now, uuid = () => crypto.randomUUID(), onConversationChange = () => {}, heartbeatMs = 10000 }) { this.server = appServer; this.models = models; this.now = now; this.uuid = uuid; this.onConversationChange = onConversationChange; this.heartbeatMs = heartbeatMs; this.mutationQueue = Promise.resolve(); }
   json(body, status = 200) { return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }); }
