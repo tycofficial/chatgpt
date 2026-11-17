@@ -65,18 +65,20 @@ function providerError(body, { status, requestId, transportStatus = status } = {
   const detail = body?.error && typeof body.error === 'object' ? body.error : body;
   const message = typeof body?.error === 'string' ? body.error : detail?.message || (typeof detail?.detail === 'string' ? detail.detail : undefined);
   const code = detail?.code || body?.code;
+  const proUnsupported = detail?.param === 'reasoning.mode' && (status === 400 || code === 'unsupported_value');
   const subscriptionQuota = code === 'subscription_sharing_usage_limit_exceeded';
   const exhausted = /insufficient.{0,32}(?:balance|quota|credit)|(?:credit|balance|quota).{0,32}(?:exhaust|insufficient)|insufficient_quota|额度不足|余额不足/i.test(String(message || '') + ' ' + String(code || ''));
   const explicitStatus = [detail?.status_code, detail?.http_status, body?.status_code].find(value => Number.isInteger(value) && value >= 400 && value < 600);
   status ??= explicitStatus;
   const error = new Error(subscriptionQuota ? `ChatGPT 订阅额度暂时不可用。${message || '请在官网用量页面查看恢复时间。'}` : exhausted ? `API 额度或余额已耗尽。${message || '请补充服务商额度后重试。'}` : message || (status === 401 || status === 403 ? 'API 认证失败，请在设置中检查密钥及模型访问权限。' : status === 429 ? 'API 请求过于频繁或额度不足，请稍后重试。' : status ? `API 请求失败（HTTP ${status}）` : '模型响应失败。'));
+  if (proUnsupported) error.message = '当前 API 服务商不支持所选模型的 Pro 推理模式。';
   error.status = status;
   error.transportStatus = transportStatus;
   error.providerCode = code || null;
-  error.code = subscriptionQuota ? 'SUBSCRIPTION_QUOTA_EXHAUSTED' : exhausted ? 'API_QUOTA_EXHAUSTED' : code || 'API_REQUEST_FAILED';
+  error.code = proUnsupported ? 'PROVIDER_REASONING_UNSUPPORTED' : subscriptionQuota ? 'SUBSCRIPTION_QUOTA_EXHAUSTED' : exhausted ? 'API_QUOTA_EXHAUSTED' : code || 'API_REQUEST_FAILED';
   error.param = detail?.param ?? null;
   error.requestId = detail?.request_id || body?.request_id || requestId || null;
-  if (subscriptionQuota || exhausted) error.retryable = false;
+  if (proUnsupported || subscriptionQuota || exhausted) error.retryable = false;
   else if (status) error.retryable = status === 408 || status === 429 || status >= 500;
   else if (['server_error','rate_limit_exceeded'].includes(code) || detail?.type === 'server_error') error.retryable = true;
   else if (['invalid_api_key','permission_denied','invalid_request_error','model_not_found'].includes(code) || detail?.type === 'invalid_request_error') error.retryable = false;
@@ -119,6 +121,7 @@ export async function streamCompletion({ settings, messages, tools, toolChoice, 
   if (settings.apiTransport === 'responses' || settings.reasoningMode === 'pro') {
     return streamResponses({ settings, messages, tools, toolChoice, signal, onDelta, onActivity, responsesTransport });
   }
+  if (settings.browserChatCompletions === false) throw Object.assign(new Error('当前主接口的跨域配置未允许浏览器使用所需的 Authorization 鉴权。'), { code: 'API_BROWSER_CHAT_UNAVAILABLE', retryable: false });
   const payload = { model: settings.model, messages: messages.map(({ response_items, phase, ...message }) => message), stream: true };
   const effort = validatedReasoningEffort(settings);
   if (effort !== undefined) payload.reasoning_effort = effort;
@@ -229,7 +232,10 @@ async function streamResponses({ settings, messages, tools, toolChoice, signal, 
   if (reasoning) payload.reasoning = reasoning;
   if ((!allowedReasoningEfforts(settings.model).length || reasoning?.effort === 'none') && settings.temperature !== undefined && settings.temperature !== null && settings.temperature !== '') payload.temperature = Number(settings.temperature);
   if (tools?.length) { payload.tools = toResponsesTools(tools); payload.tool_choice = toolChoice ? structuredClone(toolChoice) : 'auto'; }
-  const fallbackResponses = () => fetch(apiURL(settings.apiBase, 'responses'), { method: 'POST', headers: requestHeaders(settings), body: JSON.stringify(payload), signal });
+  const fallbackResponses = () => {
+    if (settings.browserResponses === false) throw Object.assign(new Error('当前主接口的 Responses 鉴权与跨域配置不支持浏览器直连。'), { code: 'API_BROWSER_RESPONSES_UNAVAILABLE', retryable: false });
+    return fetch(apiURL(settings.apiBase, 'responses'), { method: 'POST', headers: requestHeaders(settings), body: JSON.stringify(payload), signal });
+  };
   const response = responsesTransport ? await responsesTransport(payload, { signal, fallbackResponses }) : await fallbackResponses();
   if (!response.ok) throw await responseError(response);
 

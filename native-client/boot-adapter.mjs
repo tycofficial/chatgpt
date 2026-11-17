@@ -1,21 +1,21 @@
-import { createBrowserReadAloudController, createNativeReadAloudBindings } from './local-native-read-aloud.mjs?v=f9ae2fd5ed7aa130';
-import { normalizeWorkUIStoredPreference } from '../model-catalog.js?v=f9ae2fd5ed7aa130';
+import { createBrowserReadAloudController, createNativeReadAloudBindings } from './local-native-read-aloud.mjs?v=77599d3a62544f6e';
+import { normalizeWorkUIStoredPreference } from '../model-catalog.js?v=77599d3a62544f6e';
 /**
  * Loads the public original component graph with explicit local host services.
  * Private original backend credentials are never used by this entry point.
  */
-import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter, localFilesService, localOwnedDownloadTransport, localLibraryByteTransport, initializeLocalAccountHistory, setNativeAccountHistoryToaster, initializeLocalPublishedResources, registerNativeLibrarySource, notifyNativeLibrarySourceReady, registerNativeFileReferenceSources, localReadAloudHost } from './service-boundary.mjs?v=f9ae2fd5ed7aa130';
-import * as mapLibreRenderer from './map-vendor/maplibre-gl.mjs?v=f9ae2fd5ed7aa130';
-import { createLocalMapProvider } from './local-map-provider.mjs?v=f9ae2fd5ed7aa130';
-import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs?v=f9ae2fd5ed7aa130';
-import { getPrototypeLocalSession, getPrototypeLocalAuth, isPrototypeLocalSession, getPrototypeLocalAuthGeneration, clearPrototypeLocalSession } from './local-identity.mjs?v=f9ae2fd5ed7aa130';
-import { createLocalHostSettingsClass } from './local-host-settings.mjs?v=f9ae2fd5ed7aa130';
-import { createLocalWorkPolicy } from './local-work-policy.mjs?v=f9ae2fd5ed7aa130';
-import { hasModelSelectionAccess, getSiteLoginUrl } from './site-account.mjs?v=f9ae2fd5ed7aa130';
-import { createNativeModelSelectionPolicy, createNativeThinkingEntryPolicy } from './local-model-selection-policy.mjs?v=f9ae2fd5ed7aa130';
-import { createLocalHostClaimsReader } from './local-token-identity.mjs?v=f9ae2fd5ed7aa130';
-import { wrapNativeFileUploadClass } from './local-native-upload.mjs?v=f9ae2fd5ed7aa130';
-import { wrapNativeDownloadServices } from './local-native-download.mjs?v=f9ae2fd5ed7aa130';
+import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter, localFilesService, localOwnedDownloadTransport, localLibraryByteTransport, initializeLocalAccountHistory, setNativeAccountHistoryToaster, initializeLocalPublishedResources, registerNativeLibrarySource, notifyNativeLibrarySourceReady, registerNativeFileReferenceSources, localReadAloudHost } from './service-boundary.mjs?v=77599d3a62544f6e';
+import * as mapLibreRenderer from './map-vendor/maplibre-gl.mjs?v=77599d3a62544f6e';
+import { createLocalMapProvider } from './local-map-provider.mjs?v=77599d3a62544f6e';
+import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs?v=77599d3a62544f6e';
+import { getPrototypeLocalSession, getPrototypeLocalAuth, isPrototypeLocalSession, getPrototypeLocalAuthGeneration, clearPrototypeLocalSession } from './local-identity.mjs?v=77599d3a62544f6e';
+import { createLocalHostSettingsClass } from './local-host-settings.mjs?v=77599d3a62544f6e';
+import { createLocalWorkPolicy } from './local-work-policy.mjs?v=77599d3a62544f6e';
+import { hasModelSelectionAccess, getSiteLoginUrl } from './site-account.mjs?v=77599d3a62544f6e';
+import { createNativeModelSelectionPolicy, createNativeThinkingEntryPolicy } from './local-model-selection-policy.mjs?v=77599d3a62544f6e';
+import { createLocalHostClaimsReader } from './local-token-identity.mjs?v=77599d3a62544f6e';
+import { wrapNativeFileUploadClass } from './local-native-upload.mjs?v=77599d3a62544f6e';
+import { wrapNativeDownloadServices } from './local-native-download.mjs?v=77599d3a62544f6e';
 
 const boundary = installNetworkBoundary();
 globalThis.__originalClientProbe = boundary.diagnostics;
@@ -26,7 +26,7 @@ await initializeLocalPublishedResources();
 installSyntheticDocumentState();
 if (globalThis.__CHATGPT_REPLICA_ENV__) window.__reactRouterContext.basename = globalThis.__CHATGPT_REPLICA_ENV__.basePath.replace(/\/$/, '') || '/';
 
-const plan = await (await fetch(new URL('./entry-plan.json?v=f9ae2fd5ed7aa130', import.meta.url))).json();
+const plan = await (await fetch(new URL('./entry-plan.json?v=77599d3a62544f6e', import.meta.url))).json();
 const { __webpack_require__: requireOriginal } = await import(plan.runtime);
 // One mechanical entry transform defers its terminal hxQI invocation and
 // rebases its relative imports. All original factories and chunks are retained.

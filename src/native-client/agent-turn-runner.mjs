@@ -198,6 +198,7 @@ export async function runAgentTurn(server, running) {
       completeItems(server, running, 'completed', metric.responseReceivedAt);
       metric.endedAt = server.now(); metric.totalMs = metric.endedAt - metric.startedAt; metric.ttftMs = metric.firstOutputAt == null ? null : metric.firstOutputAt - metric.requestSentAt; metric.finishReason = result.finish_reason;
       if (result.usage) metric.usage = compactUsage(result.usage);
+      if (result.adapter_execution) metric.adapterExecution = clone(result.adapter_execution);
       if (['standard', 'pro'].includes(result.actual_reasoning?.mode)) metric.actualReasoningMode = result.actual_reasoning.mode;
       cp.partialResponse = null; cp.inFlight = null;
       if (result.finish_reason === 'length' && result.tool_calls?.length) {

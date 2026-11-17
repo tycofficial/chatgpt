@@ -6,6 +6,7 @@ const primary='https://primary.fixture.test',backup='https://backup.fixture.test
 const providers=()=>[{id:'primary',apiBase:primary,apiKey:'fixture-primary-credential',supportedModels:['gpt-6.1-sol','gpt-6-astra']},{id:'backup',apiBase:backup+'/v1',apiKey:'fixture-backup-credential',supportedModels:['gpt-6.1-sol','gpt-6-astra','gpt-6-luna']}];
 const settings={apiBase:'https://outdated.fixture.invalid',apiKey:'outdated-fixture-credential',model:'gpt-6.1-sol',reasoningEffort:'high',apiTransport:'responses'};
 const options=extra=>({settings:{...settings},messages:[{role:'user',content:'Neutral provider routing question.'}],...extra});
+const browserCompatibleProviders=()=>providers().map((p,index)=>index===0?{...p,standardTransport:'chat-completions',browserResponses:false,fallbackOnRejected:true}:p);
 const jsonError=(status,code='insufficient_quota',message='余额不足')=>new Response(JSON.stringify({error:{code,message}}),{status,headers:{'Content-Type':'application/json'}});
 function success(payload){const result={id:'neutral-response',status:'completed',model:payload.model,reasoning:payload.reasoning,output:[{id:'neutral-output',type:'message',role:'assistant',phase:'final_answer',status:'completed',content:[{type:'output_text',text:'Neutral actual completion.'}]}]};if(payload.messages)return new Response(JSON.stringify({model:payload.model,choices:[{message:{role:'assistant',content:'Neutral actual completion.'},finish_reason:'stop'}]}),{headers:{'Content-Type':'application/json'}});return new Response('data: '+JSON.stringify({type:'response.completed',response:result})+'\n\n',{headers:{'Content-Type':'text/event-stream'}});}
 const stream=events=>new Response(events.map(event=>'data: '+JSON.stringify(event)+'\n\n').join(''),{headers:{'Content-Type':'text/event-stream'}});
@@ -99,3 +100,23 @@ test('arbitrary private provider objects and echoed credential codes cannot leak
  const r=router({complete:async()=>{throw Object.assign(Error('fixture-primary-credential'),{code:'fixture-backup-credential',param:{credential:'fixture-backup-credential'},requestId:'fixture-primary-credential'});}});
  let failure;try{await r.complete(options());}catch(error){failure=error;}assert.ok(failure);assert.equal(failure.param,null);assert.ok(!JSON.stringify(failure).includes('fixture-primary-credential')&&!JSON.stringify(failure).includes('fixture-backup-credential'));assert.ok(!failure.stack.includes('fixture-primary-credential'));
 });
+
+test('browser-incompatible primary Responses route bypasses before submission and keeps Astra Pro on backup',()=>fixture(({route,payload})=>{assert.equal(route,'backup');return success(payload);},async requests=>{
+ const r=router({getProviders:browserCompatibleProviders});
+ const result=await r.complete(options({settings:{...settings,model:'gpt-6-astra',reasoningMode:'pro'}}));
+ assert.equal(result.content,'Neutral actual completion.');assert.equal(requests.length,1);
+ assert.equal(requests[0].payload.model,'gpt-6-astra');assert.deepEqual(requests[0].payload.reasoning,{effort:'high',mode:'pro'});
+}));
+test('real unsupported Pro shape reports capability failure instead of authentication or silent downgrade',()=>fixture(()=>new Response(JSON.stringify({error:{message:'`reasoning.mode` is not supported with this model.',type:'invalid_request_error',param:'reasoning.mode',code:'unsupported_value'}}),{status:400,headers:{'Content-Type':'application/json'}}),async requests=>{
+ const r=router({getProviders:browserCompatibleProviders});
+ await assert.rejects(r.complete(options({settings:{...settings,model:'gpt-6-astra',reasoningMode:'pro'}})),error=>error.code==='PROVIDER_REASONING_UNSUPPORTED'&&error.retryable===false&&/Pro/.test(error.message)&&!/认证失败/.test(error.message));
+ assert.deepEqual(requests.map(x=>x.route),['backup']);assert.equal(requests[0].payload.reasoning.mode,'pro');
+}));
+test('browser Responses restriction leaves ordinary primary Chat Completions enabled',()=>fixture(({route,payload})=>{assert.equal(route,'primary');return success(payload);},async requests=>{
+ await router({getProviders:browserCompatibleProviders}).complete(options({settings:{...settings,reasoningMode:'standard'}}));
+ assert.equal(requests.length,1);assert.equal(requests[0].path,'/v1/chat/completions');assert.equal(requests[0].payload.model,settings.model);
+}));
+test('browser Responses restriction does not block an available real host transport',()=>fixture(()=>{throw Error('No direct request expected');},async requests=>{
+ let hosted=0;await router({getProviders:browserCompatibleProviders}).complete(options({settings:{...settings,model:'gpt-6-astra',reasoningMode:'pro'},responsesTransport:async payload=>{hosted++;return success(payload);}}));
+ assert.equal(hosted,1);assert.equal(requests.length,0);
+}));

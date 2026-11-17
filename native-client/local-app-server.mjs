@@ -1,9 +1,9 @@
 /** Original app-server protocol over real, resumable local execution. */
-import { runAgentTurn } from './agent-turn-runner.mjs?v=f9ae2fd5ed7aa130';
-import { readWebSearchIntent, interruptHostedSearch } from './local-web-search.mjs?v=f9ae2fd5ed7aa130';
-import { readClassicBranchRequest, getClassicExecutionThread } from './classic-response-branches.mjs?v=f9ae2fd5ed7aa130';
-import { parseClassicInputMessages } from './classic-input-messages.mjs?v=f9ae2fd5ed7aa130';
-import { allowedReasoningEfforts } from '../runtime.js?v=f9ae2fd5ed7aa130';
+import { runAgentTurn } from './agent-turn-runner.mjs?v=77599d3a62544f6e';
+import { readWebSearchIntent, interruptHostedSearch } from './local-web-search.mjs?v=77599d3a62544f6e';
+import { readClassicBranchRequest, getClassicExecutionThread } from './classic-response-branches.mjs?v=77599d3a62544f6e';
+import { parseClassicInputMessages } from './classic-input-messages.mjs?v=77599d3a62544f6e';
+import { allowedReasoningEfforts } from '../runtime.js?v=77599d3a62544f6e';
 export class RpcError extends Error {
   constructor(code, message, data) { super(message); this.name = 'RpcError'; this.code = code; if (data !== undefined) this.data = data; }
 }

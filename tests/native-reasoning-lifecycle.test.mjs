@@ -104,7 +104,7 @@ test('Work HTTP commentary → real file → final retains real summaries and co
       assert(pendingStart >= 0); const firstSummary = events.findIndex(event => event.method === 'item/reasoning/summaryTextDelta'); assert(firstSummary > pendingStart);
       assert.equal(events.filter(event => event.method === 'item/reasoning/summaryTextDelta').map(event => event.params.delta).join('|'), '真实摘要 A 😀|Model summary B');
       for (const item of reasoning(turn)) assert.equal(events.filter(event => event.method === 'item/completed' && event.params.item?.id === item.id).length, 1);
-      const final = wireMessages(wire).findLast(message => message.channel === 'final'); assert.equal(final.metadata.reasoning_end_time, (base + 12000) / 1000); assert.match(wire, /message_stream_complete/);
+      const final = wireMessages(wire).findLast(message => message.channel === 'final'); assert.equal(final.metadata.reasoning_end_time, undefined); assert.equal(final.metadata.reasoning_status, undefined); assert.equal(final.metadata.reasoning_group_id, undefined); assert.match(wire, /message_stream_complete/);
     });
   } finally { await fs.rm(root, { recursive: true, force: true }); }
 });

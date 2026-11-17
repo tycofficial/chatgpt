@@ -1,7 +1,7 @@
 /** Resumable API/tool loop. Original frontend receives its existing item lifecycle. */
-import { isHostCheckpoint } from './preferred-host-transport.mjs?v=f9ae2fd5ed7aa130';
-import { parseClassicInputMessages } from './classic-input-messages.mjs?v=f9ae2fd5ed7aa130';
-import { webSearchRequest, updateHostedSearch, interruptHostedSearch, webSearchReferences } from './local-web-search.mjs?v=f9ae2fd5ed7aa130';
+import { isHostCheckpoint } from './preferred-host-transport.mjs?v=77599d3a62544f6e';
+import { parseClassicInputMessages } from './classic-input-messages.mjs?v=77599d3a62544f6e';
+import { webSearchRequest, updateHostedSearch, interruptHostedSearch, webSearchReferences } from './local-web-search.mjs?v=77599d3a62544f6e';
 const clone = value => structuredClone(value);
 const CONTINUE = 'Continue the unfinished response from the saved text, without repeating it. Preserve the requested task, model and reasoning effort. Do not claim any tool succeeded unless its recorded output confirms it.';
 const compactUsage = usage => Object.fromEntries(['input_tokens', 'output_tokens', 'total_tokens', 'prompt_tokens', 'completion_tokens', 'input_tokens_details', 'output_tokens_details', 'prompt_tokens_details', 'completion_tokens_details'].filter(key => usage[key] !== undefined).map(key => [key, clone(usage[key])]));
@@ -79,7 +79,7 @@ export async function runAgentTurn(server, running) {
     meta.underlyingApiEffort = turn.reasoningEffort === 'ultra' ? 'max' : turn.reasoningEffort;
     if (turn.reasoningEffort === 'ultra') {
       if (server.agentOptions.ultraOrchestration !== true) throw Object.assign(Error('Site Ultra orchestration is not enabled in this deployment. No provider request was submitted.'), { code: 'ULTRA_ORCHESTRATION_NOT_ENABLED', retryable: false });
-      const { createUltraToolExecutor } = await import('./site-ultra-orchestrator.mjs?v=f9ae2fd5ed7aa130');
+      const { createUltraToolExecutor } = await import('./site-ultra-orchestrator.mjs?v=77599d3a62544f6e');
       executor = createUltraToolExecutor({ baseExecutor: executor, streamCompletion: options => server.streamCompletion(options), turn, checkpoint: cp, save, getSettings: executionSettings, getContext: () => [...server.messages(thread, turn, { omitCurrent: true }), ...cp.transcript], getAbortMode: () => running.interruptReason === 'pagehide' ? 'pagehide' : signal.reason?.requiresTransportResume ? 'transport' : 'user', now: server.now, redact: errorText });
     }
     // A partial response is genuine saved output, not a completed tool call.
@@ -198,6 +198,7 @@ export async function runAgentTurn(server, running) {
       completeItems(server, running, 'completed', metric.responseReceivedAt);
       metric.endedAt = server.now(); metric.totalMs = metric.endedAt - metric.startedAt; metric.ttftMs = metric.firstOutputAt == null ? null : metric.firstOutputAt - metric.requestSentAt; metric.finishReason = result.finish_reason;
       if (result.usage) metric.usage = compactUsage(result.usage);
+      if (result.adapter_execution) metric.adapterExecution = clone(result.adapter_execution);
       if (['standard', 'pro'].includes(result.actual_reasoning?.mode)) metric.actualReasoningMode = result.actual_reasoning.mode;
       cp.partialResponse = null; cp.inFlight = null;
       if (result.finish_reason === 'length' && result.tool_calls?.length) {

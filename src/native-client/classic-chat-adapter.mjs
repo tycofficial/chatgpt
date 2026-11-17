@@ -61,7 +61,10 @@ export class ClassicChatAdapter {
       status: role === 'user' || done || itemDone && !terminal ? 'finished_successfully' : terminal ? 'finished_partial_completion' : 'in_progress',
       end_turn: role === 'assistant' && terminal && lastAssistant && (!turn.adapterMetadata.resumable || turn.adapterMetadata.resumePolicy === 'manual'),
       weight: 1, recipient: 'all', channel: role === 'assistant' ? item.phase === 'commentary' ? 'commentary' : 'final' : null,
-      metadata: { ...(original?.metadata ? structuredClone(original.metadata) : {}), ...(role === 'assistant' ? this.reasoningMetadata(turn) : {}), model_slug: frontendSlug, thinking_effort: FRONTEND_TO_RAW_EFFORT[turn.reasoningEffort], reasoning_mode: turn.reasoningMode ?? 'standard', ...(turn.reasoningMode === 'pro' ? { reasoning_type: 'pro' } : {}), adapter_api_model: turn.model, is_complete: role === 'user' || Boolean(itemDone), ...(done && role === 'assistant' ? { finish_details: { type: 'stop', stop_tokens: [] } } : {}), ...(nativeReferences.length ? { content_references: nativeReferences } : {}), adapter_source: 'local-original-client-adapter' },
+      // hUUF treats reasoning_status as a reasoning-group membership marker,
+      // including on final text. Only real thoughts carry that lifecycle data.
+      // Native v5 commentary preserves preamble text and subsequent activity order.
+      metadata: { ...(original?.metadata ? structuredClone(original.metadata) : {}), ...(role === 'assistant' && item.phase === 'commentary' ? { cot_version: 'v5', hide_inline_actions: true, disable_turn_actions: true } : {}), model_slug: frontendSlug, thinking_effort: FRONTEND_TO_RAW_EFFORT[turn.reasoningEffort], reasoning_mode: turn.reasoningMode ?? 'standard', ...(turn.reasoningMode === 'pro' ? { reasoning_type: 'pro' } : {}), adapter_api_model: turn.model, is_complete: role === 'user' || Boolean(itemDone), ...(done && role === 'assistant' ? { finish_details: { type: 'stop', stop_tokens: [] } } : {}), ...(nativeReferences.length ? { content_references: nativeReferences } : {}), adapter_source: 'local-original-client-adapter' },
     };
   }
   originalInputMessages(thread, turn, item) {
@@ -121,6 +124,22 @@ export class ClassicChatAdapter {
     const requested = url.searchParams.get('item_type');
     if (requested && requested !== 'conversation') return this.json([]);
     return this.json([...this.server.threads.values()].filter(thread => thread.adapterMetadata.pinnedAt).map(thread => ({ item_type: 'conversation', pinned_at: thread.adapterMetadata.pinnedAt, item: { conversation: this.summary(thread) } })));
+  }
+  resumeAutomaticCheckpoint(thread) {
+    const turn = thread.turns.at(-1);
+    if (this.server.running.has(thread.id) || !turn || turn.status === 'completed' ||
+        !turn.adapterMetadata?.resumable || turn.adapterMetadata.resumePolicy !== 'automatic' || !turn.adapterMetadata.checkpoint) return;
+    try {
+      // The native recovery poll treats FAILURE as terminal. Admit the saved
+      // execution before returning its snapshot/status; subsequent readers attach
+      // to that same turn. resumeTurn performs the real current-plan permission check.
+      const transaction = this.server.dispatch('turn/resume', { threadId: thread.id, turnId: turn.id });
+      if (transaction.afterReply) setTimeout(transaction.afterReply, 0);
+    } catch (error) {
+      turn.adapterMetadata.resumePolicy = 'manual';
+      this.server.persist();
+      this.server.diagnostics?.push({ type: 'automatic-checkpoint-resume-rejected', code: error.code ?? null });
+    }
   }
   /** REST bulk controls address Chat/Work records, never separate RPC/Dot storage. */
   bulkMutationTargets() {
@@ -208,9 +227,14 @@ export class ClassicChatAdapter {
     if (method === 'POST' && ['/sentinel/chat-requirements', '/sentinel/chat-requirements/prepare', '/sentinel/chat-requirements/finalize'].includes(pathname)) {
       return this.json({ token: 'local-prototype-requirements-not-valid-at-openai', force_login: false, proofofwork: { required: false }, turnstile: { required: false }, adapter_source: 'local-protocol-only-no-original-service-access' });
     }
-    if (method === 'GET' && /^\/conversation\/[^/]+$/.test(pathname)) return this.json(this.detail(this.server.getThread(decodeURIComponent(pathname.split('/')[2]))));
+    if (method === 'GET' && /^\/conversation\/[^/]+$/.test(pathname)) {
+      const thread = this.server.getThread(decodeURIComponent(pathname.split('/')[2]));
+      this.resumeAutomaticCheckpoint(thread);
+      return this.json(this.detail(thread));
+    }
     if (method === 'GET' && /^\/conversation\/[^/]+\/stream_status$/.test(pathname)) {
       const thread = this.server.getThread(decodeURIComponent(pathname.split('/')[2]));
+      this.resumeAutomaticCheckpoint(thread);
       const last = thread.turns.at(-1);
       return this.json({ status: this.server.running.has(thread.id) ? 'IS_STREAMING' : last?.status === 'completed' ? 'COMPLETE' : last?.adapterMetadata?.resumable && last?.adapterMetadata?.resumePolicy !== 'manual' ? 'FAILURE' : 'UNAVAILABLE' });
     }

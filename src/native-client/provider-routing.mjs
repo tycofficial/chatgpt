@@ -9,7 +9,7 @@ function routes(value){
   if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash||typeof entry.apiKey!=='string'||!entry.apiKey.trim())throw routeError('API_PROVIDER_CONFIG_INVALID','Each API provider needs an HTTPS base and a configured credential.');
   if(!Array.isArray(entry.supportedModels)||!entry.supportedModels.length||entry.supportedModels.length>500||new Set(entry.supportedModels).size!==entry.supportedModels.length||entry.supportedModels.some(model=>typeof model!=='string'||!model||model.length>160))throw routeError('API_PROVIDER_CONFIG_INVALID','Each API provider needs an exact recorded supported-model list.');
   const base=url.href.replace(/\/+$/,''),path=url.pathname.replace(/\/+$/,'');
-  return{id:entry.id,apiBase:base,apiKey:entry.apiKey,supportedModels:[...entry.supportedModels],apiKeyHeader:entry.apiKeyHeader==='x-api-key'?'x-api-key':undefined,freeChatTransport:entry.freeChatTransport,standardTransport:entry.standardTransport,fallbackOnRejected:entry.fallbackOnRejected===true,index,origin:url.origin,apiPath:path.endsWith('/v1')?path:path+'/v1'};
+  return{id:entry.id,apiBase:base,apiKey:entry.apiKey,supportedModels:[...entry.supportedModels],apiKeyHeader:entry.apiKeyHeader==='x-api-key'?'x-api-key':undefined,freeChatTransport:entry.freeChatTransport,standardTransport:entry.standardTransport,browserResponses:entry.browserResponses,browserChatCompletions:entry.browserChatCompletions,proExecution:entry.proExecution,fallbackOnRejected:entry.fallbackOnRejected===true,index,origin:url.origin,apiPath:path.endsWith('/v1')?path:path+'/v1'};
  });
 }
 export function getProviderRequestAllowlist(providers){return routes(providers).flatMap(route=>[
@@ -68,7 +68,10 @@ export function createProviderCompletionRouter({complete,getProviders,isCurrent=
     catch(error){if(had)checkpoint.apiProviderId=previous;else delete checkpoint.apiProviderId;if(error?.name==='AbortError'||error?.code==='API_ROUTE_OWNER_CHANGED')throw error;throw routeError('API_ROUTE_CHECKPOINT_FAILED','The API route could not be saved; the backup request was not submitted.');}
    }
    for(let index=start;index<eligible.length;index++){
-    const provider=eligible[index];const freeChat=(provider.standardTransport==='chat-completions'||options.providerRoutingContext?.isFreeChat===true&&provider.freeChatTransport==='chat-completions')&&options.settings.reasoningMode!=='pro'&&!(options.tools??[]).some(tool=>tool.type&&tool.type!=='function');let directUsed=freeChat||typeof originalTransport!=='function'||index>start;
+    const provider=eligible[index];
+    const proMax=provider.proExecution==='astra-max'&&options.settings.reasoningMode==='pro'&&options.settings.model==='gpt-6-astra';
+    const selectedSettings=proMax?{...options.settings,reasoningMode:'standard',reasoningEffort:'max'}:options.settings;
+    const freeChat=(provider.standardTransport==='chat-completions'||options.providerRoutingContext?.isFreeChat===true&&provider.freeChatTransport==='chat-completions')&&selectedSettings.reasoningMode!=='pro'&&!(options.tools??[]).some(tool=>tool.type&&tool.type!=='function');let directUsed=freeChat||typeof originalTransport!=='function'||index>start;
     const activity=event=>{observed=true;options.onActivity?.(event);};
     const delta=(text,assembled)=>{if(text||assembled?.content||assembled?.reasoning||assembled?.tool_calls?.length)observed=true;options.onDelta?.(text,assembled);};
     const responsesTransport=originalTransport&&index===start?async(payload,transport)=>originalTransport(payload,{...transport,fallbackResponses:async()=>{
@@ -78,11 +81,11 @@ export function createProviderCompletionRouter({complete,getProviders,isCurrent=
     if(directUsed)await pin(provider);
     emit({type:'api-provider-attempt',providerId:provider.id,model:options.settings.model,reason:index>start?'explicit-quota-fallback':provider.index?'model-admission-or-saved-route':'configured-primary'});
     try{
-     const result=await complete({...options,settings:{...options.settings,apiBase:provider.apiBase,apiKey:provider.apiKey,apiKeyHeader:provider.apiKeyHeader,...(freeChat?{apiTransport:'chat-completions'}:{})},onActivity:activity,onDelta:delta,responsesTransport:freeChat?undefined:responsesTransport});
-     return result;
+     const result=await complete({...options,settings:{...selectedSettings,apiBase:provider.apiBase,apiKey:provider.apiKey,apiKeyHeader:provider.apiKeyHeader,browserResponses:provider.browserResponses,browserChatCompletions:provider.browserChatCompletions,...(freeChat?{apiTransport:'chat-completions'}:{})},onActivity:activity,onDelta:delta,responsesTransport:freeChat?undefined:responsesTransport});
+     return proMax?{...result,adapter_execution:{presentationReasoningMode:'pro',actualRequestedReasoningMode:'standard',actualRequestedEffort:'max',model:'gpt-6-astra'}}:result;
     }catch(error){
      options.signal?.throwIfAborted();if(!isCurrent())throw routeError('API_ROUTE_OWNER_CHANGED','The active account changed during the API request.');
-     const quota=isExplicitQuotaExhaustion(error),rejected=provider.fallbackOnRejected&&(error.status===401||error.status===403||error.providerCode==='model_not_found'||['PROVIDER_REASONING_UNSUPPORTED','PROVIDER_MODEL_UNSUPPORTED'].includes(error.code)||['invalid_api_key','authentication_error','permission_denied'].includes(error.providerCode));
+     const quota=isExplicitQuotaExhaustion(error),rejected=provider.fallbackOnRejected&&(error.status===401||error.status===403||error.providerCode==='model_not_found'||['PROVIDER_REASONING_UNSUPPORTED','PROVIDER_MODEL_UNSUPPORTED','API_BROWSER_RESPONSES_UNAVAILABLE','API_BROWSER_CHAT_UNAVAILABLE'].includes(error.code)||['invalid_api_key','authentication_error','permission_denied'].includes(error.providerCode));
      const canSwitch=(quota||rejected)&&directUsed&&!observed&&(!sideEffects||rejected)&&!hostAdmitted(checkpoint)&&index+1<eligible.length;
      emit({type:'api-provider-failed',providerId:provider.id,code:error?.status===401?'API_AUTHENTICATION_FAILED':quota?'API_QUOTA_EXHAUSTED':'API_REQUEST_FAILED',status:Number.isInteger(error?.status)?error.status:null,fallback:canSwitch});
      if(!canSwitch)throw error;

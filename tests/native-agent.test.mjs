@@ -127,8 +127,27 @@ test('pagehide checkpoint remains unfinished in the exact source snapshot and re
   const restored = setup(async () => ({ content: 'Finished after reopening', finish_reason: 'stop' }), { storage });
   const adapter = new ClassicChatAdapter({ appServer: restored, models }), detail = adapter.detail(restored.getThread(id));
   assert.equal(detail.mapping[detail.current_node].message.end_turn, false);
-  assert.equal((await (await adapter.handle(new Request('http://fixture.invalid/conversation/' + id + '/stream_status'), '/conversation/' + id + '/stream_status')).json()).status, 'FAILURE');
+  assert.equal((await (await adapter.handle(new Request('http://fixture.invalid/conversation/' + id + '/stream_status'), '/conversation/' + id + '/stream_status')).json()).status, 'IS_STREAMING');
   const resumed = await adapter.handle(new Request('http://fixture.invalid/f/conversation/resume', { method: 'POST', body: JSON.stringify({ conversation_id: id, offset: 0 }) }), '/f/conversation/resume'); assert.match(await resumed.text(), /Finished after reopening/);
+});
+
+test('native snapshot/status reads recover a reload checkpoint once and never resume explicit Stop', async () => {
+  for (const reason of ['pagehide', 'user']) {
+    const storage = memory(); let ready;
+    const began = new Promise(resolve => ready = resolve);
+    const previous = setup(async options => { options.onDelta('Saved result.', {content:'Saved result.'}); ready(); return new Promise((_resolve,reject) => options.signal.addEventListener('abort',()=>reject(options.signal.reason),{once:true})); }, {storage});
+    const id = start(previous), pending = turn(previous,id); await began; previous.interrupt(id,{reason}); await pending;
+    let calls = 0, release;
+    const restored = setup(async options => { calls++; assert(options.messages.some(x=>String(x.content).includes('Saved result.'))); return new Promise(resolve=>release=()=>resolve({content:'Continued result.',finish_reason:'stop'})); },{storage});
+    const adapter = new ClassicChatAdapter({appServer:restored,models});
+    const snapshotPath='/conversation/'+id, statusPath=snapshotPath+'/stream_status';
+    await adapter.handle(new Request('http://fixture.invalid'+snapshotPath),snapshotPath);
+    const statuses=await Promise.all(Array.from({length:3},async()=> (await (await adapter.handle(new Request('http://fixture.invalid'+statusPath),statusPath)).json()).status));
+    if(reason==='user'){assert(statuses.every(x=>x==='UNAVAILABLE'));assert.equal(calls,0);assert.equal(restored.running.size,0);continue;}
+    assert(statuses.every(x=>x==='IS_STREAMING'));assert.equal(restored.running.size,1);
+    const done=terminal(restored,id);await new Promise(resolve=>setTimeout(resolve,15));assert.equal(calls,1);release();assert.equal((await done).status,'completed');
+    assert.equal((await (await adapter.handle(new Request('http://fixture.invalid'+statusPath),statusPath)).json()).status,'COMPLETE');
+  }
 });
 
 test('long model waits send source-compatible SSE ping events instead of pretending to output text', async () => {
