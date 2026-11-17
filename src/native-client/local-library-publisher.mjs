@@ -10,7 +10,7 @@ const properties = {
 };
 export const PUBLISH_FILE_TOOL = Object.freeze({ type: 'function', function: {
   name: 'publish_file',
-  description: 'Save one completed deliverable from this conversation\'s browser /mnt/data workspace into this site\'s persistent Library. Create the actual file first. For edits, retain its Library identity by passing file_id, expected_revision and expected_raw_file_id from the prior receipt. This does not create a cloud editor or a public share link.',
+  description: 'Save one completed deliverable from this conversation\'s browser /mnt/data workspace into this site\'s persistent Library. Create the actual file first. For edits, retain its Library identity by passing file_id, expected_revision and expected_raw_file_id from the prior receipt. This does not create a cloud editor or a public share link. The site displays committed deliverables as native file cards. Refer to the file name in your final response; resource-link Blob URIs are browser transport handles.',
   parameters: { type: 'object', properties, required: ['path'], additionalProperties: false },
 } });
 const failure = (message, code = 'LOCAL_LIBRARY_PUBLICATION_INVALID') => Object.assign(Error(message), { code });

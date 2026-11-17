@@ -174,7 +174,7 @@ test('native cross-worker locks serialize real filesystem metadata and two updat
  await host.source('edit-a.txt','Durable writer A.');await host.source('edit-b.txt','Durable writer B.');
  const barrier=new Int32Array(new SharedArrayBuffer(4)),common={root,serviceURL:new URL('../src/native-client/local-files-service.mjs',import.meta.url).href,metrics,barrier},base={fileId:a.fileId,expectedRevision:1,expectedRawFileId:a.rawFileId,fileName:'report.txt'};
  const workers=[publicationWorker({...common,spec:spec('worker-a',{...base,path:'edit-a.txt'})}),publicationWorker({...common,spec:spec('worker-b',{...base,path:'edit-b.txt'})})];t.after(()=>Promise.allSettled(workers.map(worker=>worker.terminate())));
- const results=await Promise.all(workers.map(worker=>worker.result));assert.equal(results.filter(result=>result.ok).length,1);assert.equal(results.filter(result=>!result.ok&&result.error.status===409).length,1);assert.equal(Atomics.load(metrics,1),0);assert.ok(Atomics.load(metrics,2)>5);assert.equal((await service.listFiles())[0].publication.revision,2);assert.equal(Object.values(host.state().files).length,2);
+ const results=await Promise.all(workers.map(worker=>worker.result)),detail=JSON.stringify(results);assert.equal(results.filter(result=>result.ok).length,1,detail);assert.equal(results.filter(result=>!result.ok&&result.error.status===409).length,1,detail);assert.equal(Atomics.load(metrics,1),0);assert.ok(Atomics.load(metrics,2)>5);assert.equal((await service.listFiles())[0].publication.revision,2);assert.equal(Object.values(host.state().files).length,2);
 });
 
 test('an actually terminated coordinator resumes its persisted genuine DOCX raw+sidecar journal after fresh construction',async t=>{

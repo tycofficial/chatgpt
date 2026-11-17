@@ -5,7 +5,7 @@ import { turnHostCheckpoints } from './preferred-host-transport.mjs';
 import { parseClassicInputMessages } from './classic-input-messages.mjs';
 export { parseClassicInputMessages, CLASSIC_CONTEXT_LIMITS } from './classic-input-messages.mjs';
 export class ClassicChatAdapter {
-  constructor({ appServer, models, now = Date.now, uuid = () => crypto.randomUUID(), onConversationChange = () => {}, heartbeatMs = 10000 }) { this.server = appServer; this.models = models; this.now = now; this.uuid = uuid; this.onConversationChange = onConversationChange; this.heartbeatMs = heartbeatMs; this.mutationQueue = Promise.resolve(); }
+  constructor({ appServer, models, now = Date.now, uuid = () => crypto.randomUUID(), onConversationChange = () => {}, heartbeatMs = 10000, getPublishedFileReferences = () => [] }) { this.server = appServer; this.models = models; this.now = now; this.uuid = uuid; this.onConversationChange = onConversationChange; this.heartbeatMs = heartbeatMs; this.getPublishedFileReferences = getPublishedFileReferences; this.mutationQueue = Promise.resolve(); }
   json(body, status = 200) { return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }); }
   summary(thread) {
     return { id: thread.id, title: thread.name || 'New chat', create_time: new Date(thread.createdAt * 1000).toISOString(), update_time: new Date(thread.updatedAt * 1000).toISOString(), conversation_origin: thread.adapterMetadata.conversationOrigin ?? null, gizmo_id: null, is_archived: !!thread.archived, is_starred: !!thread.adapterMetadata.isStarred };
@@ -16,6 +16,11 @@ export class ClassicChatAdapter {
     const frontendSlug = thread.adapterMetadata?.classicModelSlugs?.[turn.id] ?? thread.adapterMetadata?.frontendModelSlug ?? turn.model;
     const done = turn.status === 'completed', terminal = ['completed', 'failed', 'interrupted'].includes(turn.status), itemDone = terminal || turn.adapterMetadata.completedItemIds?.includes(item.id);
     const lastAssistant = turn.items.findLast(value => value.type === 'agentMessage')?.id === item.id;
+    let publishedReferences = [];
+    if (role === 'assistant') {
+      try { publishedReferences = this.getPublishedFileReferences({ thread, turn, item }); }
+      catch { this.server.diagnostics?.push({ type: 'local-file-reference-projection-error' }); }
+    }
     return {
       id: role === 'user' ? item.clientId ?? item.id : item.id,
       author: { role, name: null, metadata: {} },
@@ -24,7 +29,7 @@ export class ClassicChatAdapter {
       status: role === 'user' || done || itemDone && !terminal ? 'finished_successfully' : terminal ? 'finished_partial_completion' : 'in_progress',
       end_turn: role === 'assistant' && terminal && lastAssistant && (!turn.adapterMetadata.resumable || turn.adapterMetadata.resumePolicy === 'manual'),
       weight: 1, recipient: 'all', channel: role === 'assistant' ? item.phase === 'commentary' ? 'commentary' : 'final' : null,
-      metadata: { ...(original?.metadata ? structuredClone(original.metadata) : {}), model_slug: frontendSlug, thinking_effort: FRONTEND_TO_RAW_EFFORT[turn.reasoningEffort], adapter_api_model: turn.model, is_complete: role === 'user' || Boolean(itemDone), ...(done && role === 'assistant' ? { finish_details: { type: 'stop', stop_tokens: [] } } : {}), adapter_source: 'local-original-client-adapter' },
+      metadata: { ...(original?.metadata ? structuredClone(original.metadata) : {}), model_slug: frontendSlug, thinking_effort: FRONTEND_TO_RAW_EFFORT[turn.reasoningEffort], adapter_api_model: turn.model, is_complete: role === 'user' || Boolean(itemDone), ...(done && role === 'assistant' ? { finish_details: { type: 'stop', stop_tokens: [] } } : {}), ...(Array.isArray(publishedReferences) && publishedReferences.length ? { content_references: publishedReferences } : {}), adapter_source: 'local-original-client-adapter' },
     };
   }
   originalInputMessages(thread, turn, item) {

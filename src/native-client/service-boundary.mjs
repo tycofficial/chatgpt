@@ -16,6 +16,7 @@ import { createLocalLibraryService } from './local-library-service.mjs';
 import { createLibraryPublishingExecutor, normalizePublicationReceipt } from './local-library-publisher.mjs';
 import { createPublishedResourceRehydrator } from './published-resource-rehydration.mjs';
 import { createNativeLibraryRefresh } from './native-library-refresh.mjs';
+import { createNativePublicationReferences } from './native-publication-references.mjs';
 import { createLocalInputPreparer } from './local-input-preparation.mjs';
 import { createLocalPricingAdapter } from './local-pricing.mjs';
 import { SITE_ACCOUNT_SERVICE, getSiteAccount, getSiteSessionToken, hasModelSelectionAccess, logoutSiteAccount } from './site-account.mjs';
@@ -242,7 +243,14 @@ export const localDotAdapter = createLocalDotAdapter({
   appServer: localAppServer, getIdentity: getPrototypeLocalAuth, isLocalSession: isPrototypeLocalSession,
   readSettings: () => ({ ...DEFAULT_SETTINGS }), getCapabilities: getLocalExecutionCapabilities, diagnostics: localProtocolDiagnostics,
 });
-export const localClassicChatAdapter = new ClassicChatAdapter({ appServer: localAppServer, models: localModelAdapter, onConversationChange: (type, payload) => localConversationPubSub.publish(type, payload) });
+const localNativePublicationReferences = createNativePublicationReferences({
+  normalizeReceipt: normalizePublicationReceipt, getIdentity: getPersonalizationIdentity,
+  ownsPublishedResource: (uri, receipt) => localLibraryService.ownsPublishedResource(uri, receipt),
+  onDiagnostic: event => localProtocolDiagnostics.push(event),
+});
+export const localClassicChatAdapter = new ClassicChatAdapter({ appServer: localAppServer, models: localModelAdapter, onConversationChange: (type, payload) => localConversationPubSub.publish(type, payload),
+  getPublishedFileReferences: context => localNativePublicationReferences.forAssistant(context),
+});
 export const localCodexAdapter = createLocalCodexAdapter({ appServer: localAppServer, models: localModelAdapter, readSettings: () => ({ ...DEFAULT_SETTINGS }), getIdentity: getPrototypeLocalAuth, isLocalSession: isPrototypeLocalSession, getCapabilities: getLocalExecutionCapabilities, diagnostics: localProtocolDiagnostics });
 export function getLocalExecutionCapabilities() {
   return { executionSource: 'local-app-server',
@@ -253,6 +261,9 @@ export function getLocalExecutionCapabilities() {
 /** Only local assets/adapters and the explicitly configured gateway can run. */
 export function installNetworkBoundary() {
   const originalFetch = globalThis.fetch.bind(globalThis);
+  const originalCreateObjectURL = URL.createObjectURL.bind(URL), originalRevokeObjectURL = URL.revokeObjectURL.bind(URL);
+  URL.createObjectURL = blob => localLibraryService.createNativeDownloadURL(blob, originalCreateObjectURL);
+  URL.revokeObjectURL = url => { localLibraryService.forgetNativeDownloadURL(url); return originalRevokeObjectURL(url); };
   const diagnostics = localProtocolDiagnostics;
   const localCsrfToken = crypto.randomUUID();
   const gateway = new URL(DEFAULT_SETTINGS.apiBase);

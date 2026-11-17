@@ -13,6 +13,7 @@ import { hasModelSelectionAccess, getSiteLoginUrl } from './site-account.mjs';
 import { createNativeModelSelectionPolicy, createNativeThinkingEntryPolicy } from './local-model-selection-policy.mjs';
 import { createLocalHostClaimsReader } from './local-token-identity.mjs';
 import { wrapNativeFileUploadClass } from './local-native-upload.mjs';
+import { wrapNativeDownloadServices } from './local-native-download.mjs';
 
 const boundary = installNetworkBoundary();
 globalThis.__originalClientProbe = boundary.diagnostics;
@@ -95,6 +96,25 @@ overrideExports('BolX', {}, { deferred: true }, {
 
 // Keep native upload behavior while local tickets store their real bytes.
 overrideExports('GDNt', {}, { deferred: true }, { b: NativeWebFetch => wrapNativeFileUploadClass(NativeWebFetch, localFilesService, undefined, localLibraryByteTransport) });
+
+// Keep the original preview, temporary byte registry, RPC lifecycle and save
+// primitive. Only this site's previously verified Library bytes get a local
+// download capability at the awaited workspaceFiles host-service boundary.
+overrideExports('GaA7', {}, { deferred: true }, {
+  c: register => function(services, ...args) {
+    return register.call(this, wrapNativeDownloadServices(services, {
+      isTemporaryPath: path => requireOriginal('Afr7').c(path),
+      getTemporaryFile: path => requireOriginal('Afr7').b(path),
+      getDefaultFileName: path => requireOriginal('bnxy').j(path),
+      sanitizeFileName: value => requireOriginal('I07G').kh(value),
+      maxBytes: requireOriginal('I07G').Hd,
+      createTooLargeError: size => new (requireOriginal('smHt').b)(size),
+      wrapRpcMethod: callback => new (requireOriginal('ZG9f').b)(callback),
+      downloadVerifiedBytes: (...input) => localLibraryService.downloadVerifiedBytes(...input),
+      nativeDownload: (blob, fileName) => requireOriginal('ripK').a(blob, fileName),
+    }), ...args);
+  },
+});
 
 // The native download flow also serves this browser's verified local files.
 // Preserve its URL validation for every URL outside this provider's registry.

@@ -69,24 +69,93 @@ export function createLocalLibraryService({
   lockManager = globalThis.navigator?.locks,
 } = {}) {
   if (typeof files?.listFiles !== 'function' || typeof files?.readFile !== 'function' || typeof metadataStorage?.getItem !== 'function' || typeof metadataStorage?.setItem !== 'function') throw new TypeError('A real account-scoped file catalog/read service and persistent Library storage are required');
-  let pending = Promise.resolve(), lastOwner = null;
-  const blobs = new Map();
+  let pending = Promise.resolve(), lastOwner = null, publicationRegistryDisposed = false;
+  const blobs = new Map(), nativeDownloadURLs = new Map(), nativeDownloadBlobs = new WeakMap();
   const isGenerated = file => file.publication?.origin === 'generated';
   const rawIdOf = file => file.rawFileId ?? file.fileId;
   const modifiedAt = file => isGenerated(file) ? file.publication.updatedAt : file.processedAt ?? file.createdAt;
   const sourceMatches = (file, source) => source == null || (source === 'generated') === isGenerated(file);
-  function revokeFileBlobs(fileId) { for (const [key, value] of blobs) if (value.logicalId === fileId) { try { revokeObjectURL(value.url); } catch {} blobs.delete(key); } }
+  function revokeFileBlobs(fileId) {
+    for (const [url, value] of nativeDownloadURLs) if (value.source.logicalId === fileId) { nativeDownloadURLs.delete(url); try { revokeObjectURL(url); } catch {} }
+    for (const [key, value] of blobs) if (value.logicalId === fileId) { try { revokeObjectURL(value.url); } catch {} blobs.delete(key); }
+  }
 
-  function dispose() { for (const value of blobs.values()) try { revokeObjectURL(value.url); } catch {} blobs.clear(); }
+  function clearObjectURLs() {
+    for (const url of nativeDownloadURLs.keys()) try { revokeObjectURL(url); } catch {}
+    nativeDownloadURLs.clear();
+    for (const value of blobs.values()) try { revokeObjectURL(value.url); } catch {}
+    blobs.clear();
+  }
+  function dispose() { publicationRegistryDisposed = true; clearObjectURLs(); }
   function owner() {
     const id = getAccountId();
-    if (id !== lastOwner) { dispose(); lastOwner = id; }
+    if (id !== lastOwner) { clearObjectURLs(); lastOwner = id; }
     if (typeof id !== 'string' || !id) throw issue('请先登录本站后再打开资料库', 401, 'LOCAL_LIBRARY_AUTH_REQUIRED');
     return id;
   }
   function ownsObjectURL(value) {
-    try { const id = owner(); return typeof value === 'string' && value.startsWith('blob:') && [...blobs.values()].some(row => row.owner === id && row.url === value); }
+    try {
+      const id = owner();
+      if (typeof value !== 'string' || !value.startsWith('blob:')) return false;
+      const derived = nativeDownloadURLs.get(value);
+      return [...blobs.values()].some(row => row.owner === id && row.url === value)
+        || !!derived && !publicationRegistryDisposed && derived.source.owner === id && blobs.get(derived.key) === derived.source;
+    }
     catch { return false; }
+  }
+  // Called only by the host's standard URL API bridge. Unknown Blob objects
+  // retain their normal URL behavior without gaining a download capability.
+  function createNativeDownloadURL(blob, createURL) {
+    const grant = nativeDownloadBlobs.get(blob);
+    const url = createURL(blob);
+    if (grant) {
+      try {
+        if (publicationRegistryDisposed || owner() !== grant.source.owner || blobs.get(grant.key) !== grant.source || typeof url !== 'string' || !url.startsWith('blob:')) throw issue('下载账户或文件已更改，请重新打开预览', 409, 'LOCAL_LIBRARY_DOWNLOAD_CHANGED');
+        nativeDownloadURLs.set(url, grant);
+      } catch (error) { try { revokeObjectURL(url); } catch {} throw error; }
+    }
+    return url;
+  }
+  function forgetNativeDownloadURL(url) { nativeDownloadURLs.delete(url); }
+  /** Native workspaceFiles.downloadCopy reconstructs a temporary byte buffer.
+   * Re-read the exact previously verified immutable raw file before invoking
+   * the intact native save primitive. No guessed path or arbitrary Blob grants.
+   */
+  async function downloadVerifiedBytes(value, { fileName, signal } = {}, nativeDownload) {
+    if (typeof nativeDownload !== 'function') throw new TypeError('The original synchronous save primitive is required');
+    const id = owner(); check(id, signal);
+    if (publicationRegistryDisposed) throw issue('下载服务已关闭，请重新打开页面', 409, 'LOCAL_LIBRARY_DOWNLOAD_DISPOSED');
+    const input = value instanceof Uint8Array ? value : value instanceof ArrayBuffer ? new Uint8Array(value) : ArrayBuffer.isView(value) ? new Uint8Array(value.buffer, value.byteOffset, value.byteLength) : null;
+    if (!input) throw issue('原生下载没有提供真实文件字节', 400, 'LOCAL_LIBRARY_DOWNLOAD_BYTES_INVALID');
+    const bytes = input.slice(), digest = await hash(bytes); check(id, signal);
+    const entry = [...blobs.entries()].find(([, row]) => row.owner === id && row.size === bytes.length && row.sha256 === digest);
+    if (!entry) return { handled: false };
+    const [key, source] = entry;
+    const verified = await verifiedBytes(id, source.rawFileId, signal, { allowRaw: true });
+    check(id, signal);
+    if (publicationRegistryDisposed || blobs.get(key) !== source || verified.logicalId !== source.logicalId || verified.rawFileId !== source.rawFileId || verified.rawRecord.sha256 !== digest || verified.rawRecord.size !== bytes.length || verified.rawRecord.mimeType !== source.mimeType) throw issue('下载文件身份已更改，请重新打开预览', 409, 'LOCAL_LIBRARY_DOWNLOAD_CHANGED');
+    const downloadName = name(fileName ?? source.fileName);
+    const blob = new Blob([bytes], { type: source.mimeType });
+    nativeDownloadBlobs.set(blob, { key, source });
+    try {
+      nativeDownload(blob, downloadName);
+      return { handled: true };
+    } finally { nativeDownloadBlobs.delete(blob); }
+  }
+  /** Synchronous capability check for an already byte/SHA-verified generated resource.
+   * Receipt fields alone, a matching upload, or a same-content foreign Blob grant
+   * never register authority; only blobResource after verifiedBytes may do so.
+   */
+  function ownsPublishedResource(uri, receipt) {
+    try {
+      if (publicationRegistryDisposed) return false;
+      const id = owner();
+      if (typeof uri !== 'string' || !uri.startsWith('blob:') || !object(receipt) || receipt.committed !== true) return false;
+      const { fileId, rawFileId, revision, sha256, mimeType, size, fileName } = receipt;
+      if (!FILE_ID.test(fileId ?? '') || !FILE_ID.test(rawFileId ?? '') || fileId === rawFileId || !Number.isSafeInteger(revision) || revision < 1 || !/^[0-9a-f]{64}$/.test(sha256 ?? '') || !Number.isSafeInteger(size) || size < 0 || typeof fileName !== 'string' || !fileName || typeof mimeType !== 'string' || !mimeType) return false;
+      const matches = [...blobs.values()].some(row => row.generated === true && row.owner === id && row.url === uri && row.logicalId === fileId && row.rawFileId === rawFileId && row.revision === revision && row.sha256 === sha256 && row.mimeType === mimeType && row.size === size && row.fileName === fileName);
+      return matches && !publicationRegistryDisposed && owner() === id;
+    } catch { return false; }
   }
   const check = (id, signal) => { signal?.throwIfAborted(); if (owner() !== id) throw issue('资料库账户已更改，请重新打开', 409, 'LOCAL_LIBRARY_ACCOUNT_CHANGED'); };
   const key = id => PREFIX + encodeURIComponent(id);
@@ -219,7 +288,7 @@ export function createLocalLibraryService({
     if (!cached) {
       let url; try { url = createObjectURL(new Blob([bytes], { type: record.mimeType })); } catch { throw issue('浏览器无法创建真实文件下载资源', 503, 'LOCAL_LIBRARY_BLOB_UNAVAILABLE'); }
       if (typeof url !== 'string' || !url.startsWith('blob:')) throw issue('文件资源提供者没有返回有效的本地 Blob URL', 502, 'LOCAL_LIBRARY_BLOB_INVALID');
-      cached = { owner: id, logicalId, rawFileId, revision, sha256: record.sha256, mimeType: record.mimeType, url }; blobs.set(cacheKey, cached);
+      cached = { owner: id, logicalId, rawFileId, revision, sha256: record.sha256, mimeType: record.mimeType, size: record.size, fileName: record.fileName, generated: !!verified.rawRecord.generated, url }; blobs.set(cacheKey, cached);
     }
     return cached;
   }
@@ -354,7 +423,7 @@ export function createLocalLibraryService({
       }
       if (/shar(?:e|ing)/i.test(path)) throw issue('本站资料库保存于当前浏览器，尚未连接可生成共享链接的云服务', 501, 'LOCAL_LIBRARY_CLOUD_SHARING_UNAVAILABLE');
       throw issue('此资料库服务操作尚未接通；原文件未更改', 501, 'LOCAL_LIBRARY_OPERATION_UNSUPPORTED');
-    } catch (cause) { if (getAccountId() !== lastOwner) { dispose(); lastOwner = getAccountId(); } diagnostics.push({ type: 'local-library-error', method, path, code: cause?.code ?? cause?.name, status: cause?.status ?? 500 }); return failure(cause); }
+    } catch (cause) { if (getAccountId() !== lastOwner) { clearObjectURLs(); lastOwner = getAccountId(); } diagnostics.push({ type: 'local-library-error', method, path, code: cause?.code ?? cause?.name, status: cause?.status ?? 500 }); return failure(cause); }
   }
-  return Object.freeze({ handle, dispose, ownsObjectURL, resolvePublishedResource, source: Object.freeze({ provider: LOCAL_LIBRARY_SOURCE, capturedAccountFiles: false, openaiCloud: false, rawFileListing: true, nativeNodeListing: true, localFolders: true, localFavorites: true, localTrash: true, permanentDelete: typeof files.permanentDeleteFile === 'function', rawBytesVerifiedBySHA256: true, generatedFileProjection: true, immutablePublishedResources: true, generatedArtifactDiscriminator: LOCAL_GENERATED_ARTIFACT_TYPE }) });
+  return Object.freeze({ handle, dispose, ownsObjectURL, ownsPublishedResource, resolvePublishedResource, downloadVerifiedBytes, createNativeDownloadURL, forgetNativeDownloadURL, source: Object.freeze({ provider: LOCAL_LIBRARY_SOURCE, capturedAccountFiles: false, openaiCloud: false, rawFileListing: true, nativeNodeListing: true, localFolders: true, localFavorites: true, localTrash: true, permanentDelete: typeof files.permanentDeleteFile === 'function', rawBytesVerifiedBySHA256: true, generatedFileProjection: true, immutablePublishedResources: true, generatedArtifactDiscriminator: LOCAL_GENERATED_ARTIFACT_TYPE }) });
 }

@@ -6,6 +6,15 @@ import {ClassicChatAdapter,parseClassicInputMessages,CLASSIC_CONTEXT_LIMITS} fro
 const golden=JSON.parse(fs.readFileSync(new URL('./support/native-library-new-request.fixture.json',import.meta.url),'utf8')).request;
 assert.ok(golden);
 const clone=x=>structuredClone(x);
+
+test('an unavailable local file-reference observer never turns readable conversation history into a load failure',()=>{
+  const diagnostics=[],turn={id:'turn-reference-outage',status:'completed',startedAt:1700000000,completedAt:1700000001,model:'gpt-6.1-sol',reasoningEffort:'low',adapterMetadata:{},items:[{type:'agentMessage',id:'assistant-reference-outage',text:'Actual saved assistant text remains readable.'}]};
+  const thread={id:'thread-reference-outage',name:'Neutral',createdAt:1700000000,updatedAt:1700000001,adapterMetadata:{classicRootId:'root-reference-outage'},turns:[turn]};
+  const adapter=new ClassicChatAdapter({appServer:{diagnostics},models:{},getPublishedFileReferences(){throw Error('Neutral byte storage temporarily unavailable');}});
+  const detail=adapter.detail(JSON.parse(JSON.stringify(thread))),message=detail.mapping['assistant-reference-outage'].message;
+  assert.equal(message.content.parts[0],turn.items[0].text);assert.equal(message.metadata.thinking_effort,'min');assert.equal(message.metadata.content_references,undefined);
+  assert.deepEqual(diagnostics,[{type:'local-file-reference-projection-error'}]);
+});
 const user=(id='user-neutral')=>({id,author:{role:'user',metadata:{neutral:true}},content:{content_type:'text',parts:['Neutral visible request.']},metadata:{serialization_metadata:{render_format:'markdown'}}});
 const hidden=(id='hidden-neutral',text='A structurally valid neutral context. 此为另一种真实结构。')=>({id,author:{role:'system'},content:{content_type:'text',parts:[text]},metadata:{is_visually_hidden_from_conversation:true,neutral_fixture:true}});
 test('actual original Library New/send payload is admitted without flattening IDs, metadata, roles or order',()=>{
