@@ -35,11 +35,11 @@ test('missing identity is rejected before creating an empty conversation or char
  assert.equal(f.server.threads.size,0);assert.equal(f.requests.length,0);
 });
 test('native browser-auth cleanup preserves a real site login; actual site logout revokes it',()=>{
- let account={id:'site-admin',role:'administrator',planType:'pro',username:'TYC',createdAt:1};
- const context=vm.createContext({getSiteAccount:()=>account,URL,Date,Event,location:{href:'https://fixture.test/chatgpt/',origin:'https://fixture.test',reload(){}},history:{state:null,replaceState(){}},sessionStorage:{getItem:()=>null,setItem(){}},dispatchEvent(){}});
+ let reloads=0;let account={id:'site-admin',role:'administrator',planType:'pro',username:'TYC',createdAt:1};
+ const context=vm.createContext({getSiteAccount:()=>account,URL,Date,Event,location:{href:'https://fixture.test/chatgpt/',origin:'https://fixture.test',reload(){reloads++;}},history:{state:null,replaceState(){}},sessionStorage:{getItem:()=>null,setItem(){}},dispatchEvent(){}});
  const source=fs.readFileSync(new URL('../src/native-client/local-identity.mjs',import.meta.url),'utf8').replace(/^import .*;\r?$/gm,'').replace(/^export\s+/gm,'').replaceAll('import.meta.url',JSON.stringify('https://fixture.test/chatgpt/native-client/local-identity.mjs'));
  new vm.Script(source+'\nglobalThis.api={getPrototypeLocalAuth,clearPrototypeLocalSession};').runInContext(context);
- context.api.clearPrototypeLocalSession({reload:false});assert.equal(context.api.getPrototypeLocalAuth().planType,'pro');
+ context.api.clearPrototypeLocalSession();assert.equal(reloads,0);assert.equal(context.api.getPrototypeLocalAuth().planType,'pro');
  account=null;assert.equal(context.api.getPrototypeLocalAuth(),null);
 });
 test('explicit primary authentication rejection falls back without changing the paid model or effort',async t=>{

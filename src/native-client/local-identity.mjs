@@ -41,7 +41,7 @@ export const getPrototypeLocalAuthGeneration = () => generation;
 export function getPrototypeCurrentUser() {
   return isActive() ? { id: user.id, created: user.created, email: user.email, name: user.name, first_name: user.name, email_domain_type: null, phone_number: null, picture: null } : null;
 }
-export function clearPrototypeLocalSession({ reload = true } = {}) {
+export function clearPrototypeLocalSession({ reload = false } = {}) {
   enabled = false; generation++;
   try {
     globalThis.sessionStorage.setItem(toggleKey, '0');

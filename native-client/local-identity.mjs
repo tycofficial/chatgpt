@@ -1,5 +1,5 @@
 /** Explicit prototype-local identity; never a Google/OpenAI authentication. */
-import { getSiteAccount } from './site-account.mjs?v=21b425b0887a5155';
+import { getSiteAccount } from './site-account.mjs?v=bc79f07ae8ccb077';
 const siteAccount = getSiteAccount();
 const registeredSiteUser = siteAccount?.role === 'user' && siteAccount.planType === 'free' ? siteAccount : null;
 const administrator = siteAccount?.role === 'administrator' && siteAccount.planType === 'pro' ? siteAccount : null;
@@ -41,7 +41,7 @@ export const getPrototypeLocalAuthGeneration = () => generation;
 export function getPrototypeCurrentUser() {
   return isActive() ? { id: user.id, created: user.created, email: user.email, name: user.name, first_name: user.name, email_domain_type: null, phone_number: null, picture: null } : null;
 }
-export function clearPrototypeLocalSession({ reload = true } = {}) {
+export function clearPrototypeLocalSession({ reload = false } = {}) {
   enabled = false; generation++;
   try {
     globalThis.sessionStorage.setItem(toggleKey, '0');

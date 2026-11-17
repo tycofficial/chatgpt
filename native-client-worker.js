@@ -1,9 +1,9 @@
-import {BrowserWorkspaceStore,workspacePath} from './native-client/browser-tool-executor.mjs?v=21b425b0887a5155';
+import {BrowserWorkspaceStore,workspacePath} from './native-client/browser-tool-executor.mjs?v=bc79f07ae8ccb077';
 const workspace=new BrowserWorkspaceStore();
 const SOURCE_BUILD="ef0c3fb941611420d8683bf88f61acf1a8ac6b19";
 const BASE=new URL('./',self.location.href).pathname;
 const CACHE='chatgpt-original-assets-'+SOURCE_BUILD;
-const SHELL_CACHE='chatgpt-native-shell-21b425b0887a5155';
+const SHELL_CACHE='chatgpt-native-shell-bc79f07ae8ccb077';
 self.addEventListener('install',event=>event.waitUntil(self.skipWaiting()));
 self.addEventListener('activate',event=>event.waitUntil(self.clients.claim()));
 function mirror(url){
