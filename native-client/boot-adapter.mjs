@@ -2,18 +2,18 @@
  * Loads the public original component graph with explicit local host services.
  * Private original backend credentials are never used by this entry point.
  */
-import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter, localFilesService, localOwnedDownloadTransport, localLibraryByteTransport, initializeLocalAccountHistory, setNativeAccountHistoryToaster, initializeLocalPublishedResources, registerNativeLibrarySource, notifyNativeLibrarySourceReady } from './service-boundary.mjs?v=6445d73493757f92';
-import * as mapLibreRenderer from './map-vendor/maplibre-gl.mjs?v=6445d73493757f92';
-import { createLocalMapProvider } from './local-map-provider.mjs?v=6445d73493757f92';
-import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs?v=6445d73493757f92';
-import { getPrototypeLocalSession, getPrototypeLocalAuth, isPrototypeLocalSession, getPrototypeLocalAuthGeneration, clearPrototypeLocalSession } from './local-identity.mjs?v=6445d73493757f92';
-import { createLocalHostSettingsClass } from './local-host-settings.mjs?v=6445d73493757f92';
-import { createLocalWorkPolicy } from './local-work-policy.mjs?v=6445d73493757f92';
-import { hasModelSelectionAccess, getSiteLoginUrl } from './site-account.mjs?v=6445d73493757f92';
-import { createNativeModelSelectionPolicy, createNativeThinkingEntryPolicy } from './local-model-selection-policy.mjs?v=6445d73493757f92';
-import { createLocalHostClaimsReader } from './local-token-identity.mjs?v=6445d73493757f92';
-import { wrapNativeFileUploadClass } from './local-native-upload.mjs?v=6445d73493757f92';
-import { wrapNativeDownloadServices } from './local-native-download.mjs?v=6445d73493757f92';
+import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter, localFilesService, localOwnedDownloadTransport, localLibraryByteTransport, initializeLocalAccountHistory, setNativeAccountHistoryToaster, initializeLocalPublishedResources, registerNativeLibrarySource, notifyNativeLibrarySourceReady, registerNativeFileReferenceSources } from './service-boundary.mjs?v=2389b4a65e4ee133';
+import * as mapLibreRenderer from './map-vendor/maplibre-gl.mjs?v=2389b4a65e4ee133';
+import { createLocalMapProvider } from './local-map-provider.mjs?v=2389b4a65e4ee133';
+import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs?v=2389b4a65e4ee133';
+import { getPrototypeLocalSession, getPrototypeLocalAuth, isPrototypeLocalSession, getPrototypeLocalAuthGeneration, clearPrototypeLocalSession } from './local-identity.mjs?v=2389b4a65e4ee133';
+import { createLocalHostSettingsClass } from './local-host-settings.mjs?v=2389b4a65e4ee133';
+import { createLocalWorkPolicy } from './local-work-policy.mjs?v=2389b4a65e4ee133';
+import { hasModelSelectionAccess, getSiteLoginUrl } from './site-account.mjs?v=2389b4a65e4ee133';
+import { createNativeModelSelectionPolicy, createNativeThinkingEntryPolicy } from './local-model-selection-policy.mjs?v=2389b4a65e4ee133';
+import { createLocalHostClaimsReader } from './local-token-identity.mjs?v=2389b4a65e4ee133';
+import { wrapNativeFileUploadClass } from './local-native-upload.mjs?v=2389b4a65e4ee133';
+import { wrapNativeDownloadServices } from './local-native-download.mjs?v=2389b4a65e4ee133';
 
 const boundary = installNetworkBoundary();
 globalThis.__originalClientProbe = boundary.diagnostics;
@@ -24,11 +24,17 @@ await initializeLocalPublishedResources();
 installSyntheticDocumentState();
 if (globalThis.__CHATGPT_REPLICA_ENV__) window.__reactRouterContext.basename = globalThis.__CHATGPT_REPLICA_ENV__.basePath.replace(/\/$/, '') || '/';
 
-const plan = await (await fetch(new URL('./entry-plan.json?v=6445d73493757f92', import.meta.url))).json();
+const plan = await (await fetch(new URL('./entry-plan.json?v=2389b4a65e4ee133', import.meta.url))).json();
 const { __webpack_require__: requireOriginal } = await import(plan.runtime);
 // One mechanical entry transform defers its terminal hxQI invocation and
 // rebases its relative imports. All original factories and chunks are retained.
 const entryLibrary = await import(plan.registrationEntry);
+// Reuse the exact public Markdown parser and byte SHA factories. These
+// callbacks run only when a completed native message requests file metadata.
+registerNativeFileReferenceSources({
+  parseMarkdown: text => requireOriginal('cC4N').a(text),
+  sha256Bytes: bytes => requireOriginal('hAXn').e(requireOriginal('LMwm').a(bytes)),
+});
 const transforms = new Map();
 const transformed = new WeakMap();
 requireOriginal.m = new Proxy(requireOriginal.m, {

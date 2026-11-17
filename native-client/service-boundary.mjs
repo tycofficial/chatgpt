@@ -1,37 +1,46 @@
-import * as modelCatalog from '../model-catalog.js?v=6445d73493757f92';
-import { createModelCatalogAdapter } from './model-catalog-adapter.mjs?v=6445d73493757f92';
-import { DEFAULT_SETTINGS } from '../config.js?v=6445d73493757f92';
-import { streamCompletion, PythonRuntime, PYTHON_TOOL } from '../runtime.js?v=6445d73493757f92';
-import { LocalAppServer, LocalProtocolSocket } from './local-app-server.mjs?v=6445d73493757f92';
-import { getPrototypeLocalSession, getPrototypeLocalAuth, getLocalAccountCheck, getLocalOptimizedAccount, getLocalWhamAccounts, getPrototypeCurrentUser, isPrototypeLocalSession, clearPrototypeLocalSession, getLocalSignedOutUrl, getLocalAccountStorageKey } from './local-identity.mjs?v=6445d73493757f92';
-import { getPrototypeConfiguration, setLocalLibraryAvailability } from './local-configuration.mjs?v=6445d73493757f92';
-import { ClassicChatAdapter } from './classic-chat-adapter.mjs?v=6445d73493757f92';
-import { LocalConversationPubSub } from './local-pubsub.mjs?v=6445d73493757f92';
-import { readLocalUserPreferences, updateLocalUserPreference, acknowledgeLocalAnnouncement } from './local-user-preferences.mjs?v=6445d73493757f92';
-import { createLocalPersonalizationService } from './local-personalization-service.mjs?v=6445d73493757f92';
-import { createPersonalizationIdentityProvider, createPersonalizedSettingsReader } from './local-personalization-context.mjs?v=6445d73493757f92';
-import { createBrowserToolExecutor, workspacePath } from './browser-tool-executor.mjs?v=6445d73493757f92';
-import { createWorkspaceDownloadSource } from './local-workspace-download-source.mjs?v=6445d73493757f92';
-import { createLocalWorkspaceDownloadService } from './local-workspace-download-service.mjs?v=6445d73493757f92';
-import { createOwnedDownloadTransport } from './owned-download-transport.mjs?v=6445d73493757f92';
-import { createLocalFilesService } from './local-files-service.mjs?v=6445d73493757f92';
-import { createLocalLibraryService } from './local-library-service.mjs?v=6445d73493757f92';
-import { createLibraryPublishingExecutor, normalizePublicationReceipt } from './local-library-publisher.mjs?v=6445d73493757f92';
-import { createPublishedResourceRehydrator } from './published-resource-rehydration.mjs?v=6445d73493757f92';
-import { createNativeLibraryRefresh } from './native-library-refresh.mjs?v=6445d73493757f92';
-import { createNativePublicationReferences } from './native-publication-references.mjs?v=6445d73493757f92';
-import { createLocalInputPreparer } from './local-input-preparation.mjs?v=6445d73493757f92';
-import { createLocalPricingAdapter } from './local-pricing.mjs?v=6445d73493757f92';
-import { SITE_ACCOUNT_SERVICE, getSiteAccount, getSiteSessionToken, hasModelSelectionAccess, logoutSiteAccount } from './site-account.mjs?v=6445d73493757f92';
-import { createLocalCodexAdapter } from './local-codex-adapter.mjs?v=6445d73493757f92';
-import { isOpenStreetMapTileRequest, fetchOpenStreetMapTile } from './local-map-provider.mjs?v=6445d73493757f92';
-import { createLocalDiscoveryAdapter } from './local-discovery.mjs?v=6445d73493757f92';
-import { createLocalDotAdapter } from './local-dot-adapter.mjs?v=6445d73493757f92';
-import { createLocalMapsService } from './local-maps-service.mjs?v=6445d73493757f92';
-import { createPreferredHostTransport, createPreferredCompletion, turnHostCheckpoints, cancelTurnHostRequests } from './preferred-host-transport.mjs?v=6445d73493757f92';
-import { createChatHistorySync, projectChatHistoryThread } from './chat-history-sync.mjs?v=6445d73493757f92';
-import { createAccountHistoryCoordinator } from './account-history-coordinator.mjs?v=6445d73493757f92';
-import { createNativeCloudSyncFeedback } from './native-cloud-sync-feedback.mjs?v=6445d73493757f92';
+import * as modelCatalog from '../model-catalog.js?v=2389b4a65e4ee133';
+import { createModelCatalogAdapter } from './model-catalog-adapter.mjs?v=2389b4a65e4ee133';
+import { DEFAULT_SETTINGS } from '../config.js?v=2389b4a65e4ee133';
+import { streamCompletion, PythonRuntime, PYTHON_TOOL } from '../runtime.js?v=2389b4a65e4ee133';
+import { LocalAppServer, LocalProtocolSocket } from './local-app-server.mjs?v=2389b4a65e4ee133';
+import { getPrototypeLocalSession, getPrototypeLocalAuth, getLocalAccountCheck, getLocalOptimizedAccount, getLocalWhamAccounts, getPrototypeCurrentUser, isPrototypeLocalSession, clearPrototypeLocalSession, getLocalSignedOutUrl, getLocalAccountStorageKey } from './local-identity.mjs?v=2389b4a65e4ee133';
+import { getPrototypeConfiguration, setLocalLibraryAvailability } from './local-configuration.mjs?v=2389b4a65e4ee133';
+import { ClassicChatAdapter } from './classic-chat-adapter.mjs?v=2389b4a65e4ee133';
+import { LocalConversationPubSub } from './local-pubsub.mjs?v=2389b4a65e4ee133';
+import { readLocalUserPreferences, updateLocalUserPreference, acknowledgeLocalAnnouncement } from './local-user-preferences.mjs?v=2389b4a65e4ee133';
+import { createLocalPersonalizationService } from './local-personalization-service.mjs?v=2389b4a65e4ee133';
+import { createPersonalizationIdentityProvider, createPersonalizedSettingsReader } from './local-personalization-context.mjs?v=2389b4a65e4ee133';
+import { createBrowserToolExecutor, workspacePath } from './browser-tool-executor.mjs?v=2389b4a65e4ee133';
+import { createWorkspaceDownloadSource } from './local-workspace-download-source.mjs?v=2389b4a65e4ee133';
+import { createLocalWorkspaceDownloadService } from './local-workspace-download-service.mjs?v=2389b4a65e4ee133';
+import { createOwnedDownloadTransport } from './owned-download-transport.mjs?v=2389b4a65e4ee133';
+import { createLocalFilesService } from './local-files-service.mjs?v=2389b4a65e4ee133';
+import { createLocalLibraryService } from './local-library-service.mjs?v=2389b4a65e4ee133';
+import { createLibraryPublishingExecutor, normalizePublicationReceipt } from './local-library-publisher.mjs?v=2389b4a65e4ee133';
+import { createPublishedResourceRehydrator } from './published-resource-rehydration.mjs?v=2389b4a65e4ee133';
+import { createNativeLibraryRefresh } from './native-library-refresh.mjs?v=2389b4a65e4ee133';
+import { createNativePublicationReferences } from './native-publication-references.mjs?v=2389b4a65e4ee133';
+import { createNativeWorkspaceReferences } from './native-workspace-references.mjs?v=2389b4a65e4ee133';
+import { createNativeFileReferenceComposition } from './native-file-reference-composition.mjs?v=2389b4a65e4ee133';
+import { createLocalInputPreparer } from './local-input-preparation.mjs?v=2389b4a65e4ee133';
+import { createLocalPricingAdapter } from './local-pricing.mjs?v=2389b4a65e4ee133';
+import { SITE_ACCOUNT_SERVICE, getSiteAccount, getSiteSessionToken, hasModelSelectionAccess, logoutSiteAccount } from './site-account.mjs?v=2389b4a65e4ee133';
+import { createLocalCodexAdapter } from './local-codex-adapter.mjs?v=2389b4a65e4ee133';
+import { isOpenStreetMapTileRequest, fetchOpenStreetMapTile } from './local-map-provider.mjs?v=2389b4a65e4ee133';
+import { createLocalDiscoveryAdapter } from './local-discovery.mjs?v=2389b4a65e4ee133';
+import { createLocalDotAdapter } from './local-dot-adapter.mjs?v=2389b4a65e4ee133';
+import { createLocalMapsService } from './local-maps-service.mjs?v=2389b4a65e4ee133';
+import { createPreferredHostTransport, createPreferredCompletion, turnHostCheckpoints, cancelTurnHostRequests } from './preferred-host-transport.mjs?v=2389b4a65e4ee133';
+import { createChatHistorySync, projectChatHistoryThread } from './chat-history-sync.mjs?v=2389b4a65e4ee133';
+import { createAccountHistoryCoordinator } from './account-history-coordinator.mjs?v=2389b4a65e4ee133';
+import { createNativeCloudSyncFeedback } from './native-cloud-sync-feedback.mjs?v=2389b4a65e4ee133';
+
+let nativeFileReferenceCodecs = null;
+export function registerNativeFileReferenceSources({ parseMarkdown, sha256Bytes } = {}) {
+  if (typeof parseMarkdown !== 'function' || typeof sha256Bytes !== 'function') throw TypeError('The original Markdown parser and byte SHA source callbacks are required.');
+  if (nativeFileReferenceCodecs && (nativeFileReferenceCodecs.parseMarkdown !== parseMarkdown || nativeFileReferenceCodecs.sha256Bytes !== sha256Bytes)) throw Error('Original file-reference codecs were already registered for this page.');
+  nativeFileReferenceCodecs = Object.freeze({ parseMarkdown, sha256Bytes });
+}
 
 export const localModelAdapter = createModelCatalogAdapter(modelCatalog);
 export const localProtocolDiagnostics = [];
@@ -146,6 +155,11 @@ export const localAppServer = new LocalAppServer({
 export const localWorkspaceDownloadSource = createWorkspaceDownloadSource({
   getIdentity: getPersonalizationIdentity, getThread: id => localAppServer.threads.get(id),
   getWorkspacePrefix: localWorkspaceExecutor.getWorkspacePrefix, storage: localWorkspaceExecutor.storage, workspacePath,
+  artifactBaseURL: new URL(globalThis.__CHATGPT_REPLICA_ENV__?.basePath || '/', globalThis.location.origin).href,
+  sha256Bytes: bytes => {
+    if (!nativeFileReferenceCodecs) throw Error('The original byte SHA source is not ready.');
+    return nativeFileReferenceCodecs.sha256Bytes(bytes);
+  },
 });
 export const localWorkspaceDownloadService = createLocalWorkspaceDownloadService({
   getIdentity: getPersonalizationIdentity, resolveSource: spec => localWorkspaceDownloadSource.resolve(spec),
@@ -265,8 +279,27 @@ const localNativePublicationReferences = createNativePublicationReferences({
   ownsPublishedResource: (uri, receipt) => localLibraryService.ownsPublishedResource(uri, receipt),
   onDiagnostic: event => localProtocolDiagnostics.push(event),
 });
+const localNativeWorkspaceReferences = createNativeWorkspaceReferences({
+  getIdentity: getPersonalizationIdentity, getThread: id => localAppServer.threads.get(id),
+  parseMarkdown: text => {
+    if (!nativeFileReferenceCodecs) throw Error('The original Markdown source is not ready.');
+    return nativeFileReferenceCodecs.parseMarkdown(text);
+  },
+  describeFile: spec => localWorkspaceDownloadSource.describe(spec),
+  isDescriptionCurrent: description => localWorkspaceDownloadSource.isDescriptionCurrent(description),
+  onDiagnostic: event => localProtocolDiagnostics.push(event),
+});
+const localNativeFileReferences = createNativeFileReferenceComposition({
+  getIdentity: getPersonalizationIdentity, getThread: id => localAppServer.threads.get(id),
+  publicationProjector: localNativePublicationReferences, workspaceProjector: localNativeWorkspaceReferences,
+  normalizeReceipt: normalizePublicationReceipt,
+  describePublicationSource: receipt => localFilesService.describePublicationSource(receipt),
+  isPublicationSourceCurrent: proof => localFilesService.isPublicationSourceCurrent(proof),
+  getDescriptionSHA: description => localWorkspaceDownloadSource.getDescriptionSHA(description),
+  onDiagnostic: event => localProtocolDiagnostics.push(event),
+});
 export const localClassicChatAdapter = new ClassicChatAdapter({ appServer: localAppServer, models: localModelAdapter, onConversationChange: (type, payload) => localConversationPubSub.publish(type, payload),
-  getPublishedFileReferences: context => localNativePublicationReferences.forAssistant(context),
+  getPublishedFileReferences: context => localNativeFileReferences.forAssistant(context),
 });
 export const localCodexAdapter = createLocalCodexAdapter({ appServer: localAppServer, models: localModelAdapter, readSettings: () => ({ ...DEFAULT_SETTINGS }), getIdentity: getPrototypeLocalAuth, isLocalSession: isPrototypeLocalSession, getCapabilities: getLocalExecutionCapabilities, diagnostics: localProtocolDiagnostics });
 export function getLocalExecutionCapabilities() {

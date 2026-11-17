@@ -20,6 +20,8 @@ import { createLibraryPublishingExecutor, normalizePublicationReceipt } from './
 import { createPublishedResourceRehydrator } from './published-resource-rehydration.mjs';
 import { createNativeLibraryRefresh } from './native-library-refresh.mjs';
 import { createNativePublicationReferences } from './native-publication-references.mjs';
+import { createNativeWorkspaceReferences } from './native-workspace-references.mjs';
+import { createNativeFileReferenceComposition } from './native-file-reference-composition.mjs';
 import { createLocalInputPreparer } from './local-input-preparation.mjs';
 import { createLocalPricingAdapter } from './local-pricing.mjs';
 import { SITE_ACCOUNT_SERVICE, getSiteAccount, getSiteSessionToken, hasModelSelectionAccess, logoutSiteAccount } from './site-account.mjs';
@@ -32,6 +34,13 @@ import { createPreferredHostTransport, createPreferredCompletion, turnHostCheckp
 import { createChatHistorySync, projectChatHistoryThread } from './chat-history-sync.mjs';
 import { createAccountHistoryCoordinator } from './account-history-coordinator.mjs';
 import { createNativeCloudSyncFeedback } from './native-cloud-sync-feedback.mjs';
+
+let nativeFileReferenceCodecs = null;
+export function registerNativeFileReferenceSources({ parseMarkdown, sha256Bytes } = {}) {
+  if (typeof parseMarkdown !== 'function' || typeof sha256Bytes !== 'function') throw TypeError('The original Markdown parser and byte SHA source callbacks are required.');
+  if (nativeFileReferenceCodecs && (nativeFileReferenceCodecs.parseMarkdown !== parseMarkdown || nativeFileReferenceCodecs.sha256Bytes !== sha256Bytes)) throw Error('Original file-reference codecs were already registered for this page.');
+  nativeFileReferenceCodecs = Object.freeze({ parseMarkdown, sha256Bytes });
+}
 
 export const localModelAdapter = createModelCatalogAdapter(modelCatalog);
 export const localProtocolDiagnostics = [];
@@ -146,6 +155,11 @@ export const localAppServer = new LocalAppServer({
 export const localWorkspaceDownloadSource = createWorkspaceDownloadSource({
   getIdentity: getPersonalizationIdentity, getThread: id => localAppServer.threads.get(id),
   getWorkspacePrefix: localWorkspaceExecutor.getWorkspacePrefix, storage: localWorkspaceExecutor.storage, workspacePath,
+  artifactBaseURL: new URL(globalThis.__CHATGPT_REPLICA_ENV__?.basePath || '/', globalThis.location.origin).href,
+  sha256Bytes: bytes => {
+    if (!nativeFileReferenceCodecs) throw Error('The original byte SHA source is not ready.');
+    return nativeFileReferenceCodecs.sha256Bytes(bytes);
+  },
 });
 export const localWorkspaceDownloadService = createLocalWorkspaceDownloadService({
   getIdentity: getPersonalizationIdentity, resolveSource: spec => localWorkspaceDownloadSource.resolve(spec),
@@ -265,8 +279,27 @@ const localNativePublicationReferences = createNativePublicationReferences({
   ownsPublishedResource: (uri, receipt) => localLibraryService.ownsPublishedResource(uri, receipt),
   onDiagnostic: event => localProtocolDiagnostics.push(event),
 });
+const localNativeWorkspaceReferences = createNativeWorkspaceReferences({
+  getIdentity: getPersonalizationIdentity, getThread: id => localAppServer.threads.get(id),
+  parseMarkdown: text => {
+    if (!nativeFileReferenceCodecs) throw Error('The original Markdown source is not ready.');
+    return nativeFileReferenceCodecs.parseMarkdown(text);
+  },
+  describeFile: spec => localWorkspaceDownloadSource.describe(spec),
+  isDescriptionCurrent: description => localWorkspaceDownloadSource.isDescriptionCurrent(description),
+  onDiagnostic: event => localProtocolDiagnostics.push(event),
+});
+const localNativeFileReferences = createNativeFileReferenceComposition({
+  getIdentity: getPersonalizationIdentity, getThread: id => localAppServer.threads.get(id),
+  publicationProjector: localNativePublicationReferences, workspaceProjector: localNativeWorkspaceReferences,
+  normalizeReceipt: normalizePublicationReceipt,
+  describePublicationSource: receipt => localFilesService.describePublicationSource(receipt),
+  isPublicationSourceCurrent: proof => localFilesService.isPublicationSourceCurrent(proof),
+  getDescriptionSHA: description => localWorkspaceDownloadSource.getDescriptionSHA(description),
+  onDiagnostic: event => localProtocolDiagnostics.push(event),
+});
 export const localClassicChatAdapter = new ClassicChatAdapter({ appServer: localAppServer, models: localModelAdapter, onConversationChange: (type, payload) => localConversationPubSub.publish(type, payload),
-  getPublishedFileReferences: context => localNativePublicationReferences.forAssistant(context),
+  getPublishedFileReferences: context => localNativeFileReferences.forAssistant(context),
 });
 export const localCodexAdapter = createLocalCodexAdapter({ appServer: localAppServer, models: localModelAdapter, readSettings: () => ({ ...DEFAULT_SETTINGS }), getIdentity: getPrototypeLocalAuth, isLocalSession: isPrototypeLocalSession, getCapabilities: getLocalExecutionCapabilities, diagnostics: localProtocolDiagnostics });
 export function getLocalExecutionCapabilities() {

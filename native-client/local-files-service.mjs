@@ -3,8 +3,8 @@
  * Original UI and event pipeline remain unchanged; no Azure/cookie/private API.
  * POST /files -> upload URL -> actual bytes -> process NDJSON/uploaded.
  */
-import { workspacePath } from './browser-tool-executor.mjs?v=6445d73493757f92';
-import { createLocalDocumentExtractor } from './local-document-extraction.mjs?v=6445d73493757f92';
+import { workspacePath } from './browser-tool-executor.mjs?v=2389b4a65e4ee133';
+import { createLocalDocumentExtractor } from './local-document-extraction.mjs?v=2389b4a65e4ee133';
 export const LOCAL_FILES_SOURCE = 'browser-origin-file-storage';
 export const LOCAL_FILE_PREFIX = 'file_local_';
 /** Pure transport classification: no current-account or metadata dependency. */
@@ -1002,5 +1002,63 @@ export function createLocalFilesService({
     }
     return { input: inputs, files, textFiles, attachments, adapter_source: LOCAL_FILES_SOURCE };
   }
-  return Object.freeze({ handle, upload, publishGeneratedFile, isLocalUploadURL, ownsUploadURL, readFile, cancelUpload, listFiles, permanentDeleteFile, materializeForThread, resolveUserInputImage, resolveChatAttachments, source: Object.freeze({ provider: LOCAL_FILES_SOURCE, capturedAccountFiles: false, pdfParsing: true, docxParsing: true, xlsxParsing: true, pptxParsing: true, legacyOfficeParsing: false, documentScope: 'PDF text layer / DOCX body / XLSX saved cells and caches / PPTX slide text; no OCR, spreadsheet calculation or external refresh', maxFileBytes, maxTotalBytes }) });
+
+  // Internal presentation provenance only. These descriptions never issue a
+  // resource or assert current physical bytes; existing download checks remain.
+  const publicationDescriptions = new WeakMap();
+  let descriptionOwner = null, descriptionEpoch = 0;
+  function publicationDescriptionOwner() {
+    let id;
+    try { id = owner(); }
+    catch (cause) { if (descriptionOwner !== null) descriptionEpoch++; descriptionOwner = null; throw cause; }
+    if (id !== descriptionOwner) { descriptionOwner = id; descriptionEpoch++; }
+    return { id, epoch: descriptionEpoch };
+  }
+  function publicationReceiptTuple(value) {
+    const required = ['committed','operationId','fileId','rawFileId','revision','sha256','size','fileName','mimeType','publication'];
+    const optional = ['kind','created','updated','createdAt','updatedAt','currentRevision','superseded'];
+    const invalid = () => { throw issue('A strict normalized committed publication receipt is required', 400, 'publication_source_receipt_invalid'); };
+    if (!object(value) || Object.keys(value).some(key => !required.includes(key) && !optional.includes(key))) invalid();
+    const tuple = {};
+    for (const key of required) { const descriptor = Object.getOwnPropertyDescriptor(value, key); if (!descriptor || !Object.hasOwn(descriptor, 'value')) invalid(); tuple[key] = descriptor.value; }
+    const publication = tuple.publication, checked = {};
+    if (!object(publication) || Object.keys(publication).some(key => !['origin','revision','updatedAt'].includes(key))) invalid();
+    for (const key of ['origin','revision','updatedAt']) { const descriptor = Object.getOwnPropertyDescriptor(publication, key); if (!descriptor || !Object.hasOwn(descriptor, 'value')) invalid(); checked[key] = descriptor.value; }
+    if (tuple.committed !== true || !/^tool_[0-9a-f]{64}$/.test(tuple.operationId ?? '') || !FILE_ID.test(tuple.fileId ?? '') || !FILE_ID.test(tuple.rawFileId ?? '') || tuple.fileId === tuple.rawFileId || !Number.isSafeInteger(tuple.revision) || tuple.revision < 1 || !SHA256.test(tuple.sha256 ?? '') || !Number.isSafeInteger(tuple.size) || tuple.size < 1 || typeof tuple.fileName !== 'string' || !tuple.fileName.trim() || typeof tuple.mimeType !== 'string' || !tuple.mimeType.trim() || checked.origin !== 'generated' || checked.revision !== tuple.revision || !Number.isSafeInteger(checked.updatedAt) || checked.updatedAt < 0) invalid();
+    tuple.publication = checked; return tuple;
+  }
+  function capturePublicationDescription(tuple, expectedOwner) {
+    const account = publicationDescriptionOwner(), id = account.id;
+    if (expectedOwner && (expectedOwner.id !== id || expectedOwner.epoch !== account.epoch)) throw issue('The provenance account changed', 409, 'publication_source_changed');
+    const current = state(id); assertOwner(id);
+    const matches = Object.entries(current.publicationOps).filter(([, op]) => op.operationId === tuple.operationId);
+    if (matches.length !== 1) throw issue('A unique owned publication operation was not found', matches.length ? 409 : 404, 'publication_source_unavailable');
+    const [operationKey, op] = matches[0], raw = current.files[tuple.rawFileId], logical = current.generatedFiles[tuple.fileId];
+    if (op.phase !== 'committed' || op.cancelRequested === true || !logical || logical.deleting) throw issue('The publication is not currently available', 410, 'publication_source_unavailable');
+    if (!raw || raw.status !== 'ready' || raw.owner !== id || raw.fileId !== tuple.rawFileId || raw.generated?.operationKey !== operationKey || raw.generated?.fileId !== tuple.fileId || raw.generated?.revision !== tuple.revision || logical.fileId !== tuple.fileId || logical.revision < tuple.revision || op.owner !== id || op.fileId !== tuple.fileId || op.rawFileId !== tuple.rawFileId || op.revision !== tuple.revision || op.sourceSHA256 !== tuple.sha256 || raw.sha256 !== tuple.sha256 || op.size !== tuple.size || raw.size !== tuple.size || raw.fileName !== tuple.fileName || raw.mimeType !== tuple.mimeType) throw issue('The publication provenance tuple does not match its actual version', 409, 'publication_source_mismatch');
+    for (const key of ['committed','operationId','fileId','rawFileId','revision','sha256','size','fileName','mimeType']) if (op.receipt?.[key] !== tuple[key]) throw issue('The stored receipt no longer matches the publication', 409, 'publication_source_mismatch');
+    for (const key of ['origin','revision','updatedAt']) if (op.receipt?.publication?.[key] !== tuple.publication[key]) throw issue('The stored receipt publication revision changed', 409, 'publication_source_mismatch');
+    let sourcePath;
+    try { sourcePath = workspacePath(op.sourcePath); } catch { throw issue('The stored source path is unavailable', 409, 'publication_source_metadata_invalid'); }
+    if (typeof op.sourceThreadId !== 'string' || !op.sourceThreadId || op.sourceThreadId.length > 256 || /[\u0000-\u001f\u007f]/u.test(op.sourceThreadId) || typeof op.sourcePath !== 'string' || !op.sourcePath || op.sourcePath.length > 2048 || sourcePath !== op.sourcePath || /[\\\u0000-\u001f\u007f]/u.test(sourcePath)) throw issue('The stored source provenance is invalid', 409, 'publication_source_metadata_invalid');
+    const description = { owner: id, operationId: tuple.operationId, fileId: tuple.fileId, rawFileId: tuple.rawFileId, revision: tuple.revision, sourceThreadId: op.sourceThreadId, sourcePath, sourceSHA256: op.sourceSHA256, size: op.size, bytesVerified: false };
+    const signature = JSON.stringify([description, operationKey, raw.fileName, raw.mimeType, tuple.publication]);
+    const after = publicationDescriptionOwner();
+    if (after.id !== id || after.epoch !== account.epoch) throw issue('The provenance account changed during metadata access', 409, 'publication_source_changed');
+    assertOwner(id); return { account, signature, description };
+  }
+  function describePublicationSource(receipt) {
+    const tuple = publicationReceiptTuple(receipt), captured = capturePublicationDescription(tuple);
+    const description = Object.freeze(captured.description);
+    publicationDescriptions.set(description, { tuple, account: captured.account, signature: captured.signature }); return description;
+  }
+  function isPublicationSourceCurrent(description) {
+    const saved = object(description) ? publicationDescriptions.get(description) : null;
+    if (!saved) return false;
+    try { const current = capturePublicationDescription(saved.tuple, saved.account); if (current.signature === saved.signature) return true; }
+    catch { /* Not a byte grant; failed metadata/owner checks revoke this description. */ }
+    publicationDescriptions.delete(description); return false;
+  }
+
+  return Object.freeze({ describePublicationSource, isPublicationSourceCurrent, handle, upload, publishGeneratedFile, isLocalUploadURL, ownsUploadURL, readFile, cancelUpload, listFiles, permanentDeleteFile, materializeForThread, resolveUserInputImage, resolveChatAttachments, source: Object.freeze({ provider: LOCAL_FILES_SOURCE, capturedAccountFiles: false, pdfParsing: true, docxParsing: true, xlsxParsing: true, pptxParsing: true, legacyOfficeParsing: false, documentScope: 'PDF text layer / DOCX body / XLSX saved cells and caches / PPTX slide text; no OCR, spreadsheet calculation or external refresh', maxFileBytes, maxTotalBytes }) });
 }

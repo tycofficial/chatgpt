@@ -2,7 +2,7 @@
  * Loads the public original component graph with explicit local host services.
  * Private original backend credentials are never used by this entry point.
  */
-import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter, localFilesService, localOwnedDownloadTransport, localLibraryByteTransport, initializeLocalAccountHistory, setNativeAccountHistoryToaster, initializeLocalPublishedResources, registerNativeLibrarySource, notifyNativeLibrarySourceReady } from './service-boundary.mjs';
+import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter, localFilesService, localOwnedDownloadTransport, localLibraryByteTransport, initializeLocalAccountHistory, setNativeAccountHistoryToaster, initializeLocalPublishedResources, registerNativeLibrarySource, notifyNativeLibrarySourceReady, registerNativeFileReferenceSources } from './service-boundary.mjs';
 import * as mapLibreRenderer from './map-vendor/maplibre-gl.mjs';
 import { createLocalMapProvider } from './local-map-provider.mjs';
 import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs';
@@ -28,6 +28,12 @@ const { __webpack_require__: requireOriginal } = await import(plan.runtime);
 // One mechanical entry transform defers its terminal hxQI invocation and
 // rebases its relative imports. All original factories and chunks are retained.
 const entryLibrary = await import(plan.registrationEntry);
+// Reuse the exact public Markdown parser and byte SHA factories. These
+// callbacks run only when a completed native message requests file metadata.
+registerNativeFileReferenceSources({
+  parseMarkdown: text => requireOriginal('cC4N').a(text),
+  sha256Bytes: bytes => requireOriginal('hAXn').e(requireOriginal('LMwm').a(bytes)),
+});
 const transforms = new Map();
 const transformed = new WeakMap();
 requireOriginal.m = new Proxy(requireOriginal.m, {

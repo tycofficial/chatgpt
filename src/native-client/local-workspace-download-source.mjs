@@ -16,11 +16,18 @@ const owner = value => object(value) && typeof value.accountId === 'string' && v
   ? JSON.stringify([value.accountId, value.userId, value.accountUserId ?? null]) : null;
 const hash = async value => [...new Uint8Array(await crypto.subtle.digest('SHA-256', value))].map(byte => byte.toString(16).padStart(2, '0')).join('');
 
-export function createWorkspaceDownloadSource({ getIdentity, getThread, getWorkspacePrefix, storage, workspacePath, maxBytes = MAX_FILE_BYTES } = {}) {
+export function createWorkspaceDownloadSource({ getIdentity, getThread, getWorkspacePrefix, storage, workspacePath, maxBytes = MAX_FILE_BYTES, artifactBaseURL = null, sha256Bytes = null } = {}) {
   if (![getIdentity, getThread, getWorkspacePrefix, workspacePath].every(value => typeof value === 'function') || typeof storage?.read !== 'function'
     || !Number.isSafeInteger(maxBytes) || maxBytes < 1 || maxBytes > MAX_FILE_BYTES) throw new TypeError('Verified identity, actual thread/workspace readers and the bounded original path resolver are required.');
+  if (sha256Bytes !== null && typeof sha256Bytes !== 'function') throw new TypeError('A supplied synchronous expected-byte SHA callback must be a function.');
+  const expectedSHACache = new WeakMap();
   const readOwner = () => { try { return owner(getIdentity()); } catch { return null; } };
-  const bootOwner = readOwner(), issued = new WeakMap(), encoder = new TextEncoder();
+  const bootOwner = readOwner(), issued = new WeakMap(), descriptions = new WeakMap(), encoder = new TextEncoder();
+  let artifactBase = null;
+  if (artifactBaseURL !== null) {
+    try { artifactBase = new URL(artifactBaseURL); } catch { throw TypeError('The artifact presentation base must be an absolute HTTP app directory URL.'); }
+    if (!['https:', 'http:'].includes(artifactBase.protocol) || artifactBase.username || artifactBase.password || artifactBase.search || artifactBase.hash || !artifactBase.pathname.endsWith('/')) throw TypeError('The artifact presentation base must be an absolute HTTP app directory URL.');
+  }
   function guardOwner() {
     if (!bootOwner) fail('AUTH_REQUIRED', 'Sign in before downloading a conversation workspace file.', 401);
     if (readOwner() !== bootOwner) fail('ACCOUNT_CHANGED', 'The verified workspace account changed. Reopen the original account.');
@@ -129,7 +136,7 @@ export function createWorkspaceDownloadSource({ getIdentity, getThread, getWorks
     };
     const signature = JSON.stringify(snapshot);
     guardOwner();
-    return { spec, prefix, content, fileName, mimeType, size, signature, kind: event.kind, expectedSHA: event.kind === 'python' ? file.sha256 : null };
+    return { spec, prefix, content, fileName, mimeType, size, signature, producer, kind: event.kind, expectedSHA: event.kind === 'python' ? file.sha256 : null, artifactURI: file.url };
   }
   function current(source) {
     try { const next = capture(source.spec); return next.prefix === source.prefix && next.signature === source.signature; } catch { return false; }
@@ -179,5 +186,58 @@ export function createWorkspaceDownloadSource({ getIdentity, getThread, getWorks
     const source = object(proof) ? issued.get(proof) : null;
     return !!source && readOwner() === bootOwner && current(source) && readOwner() === bootOwner;
   }
-  return Object.freeze({ resolve, isCurrent });
+
+  // Presentation descriptions do not read storage, verify current disk bytes,
+  // issue URLs or replace resolve(). They reuse the same actual source capture.
+  function descriptionCurrent(source) {
+    try { const next = capture(source.spec); return next.prefix === source.prefix && next.signature === source.signature && next.artifactURI === source.artifactURI && readOwner() === bootOwner; } catch { return false; }
+  }
+  function describe(value) {
+    guardOwner();
+    if (!artifactBase) fail('PRESENTATION_UNAVAILABLE', 'A verified artifact app base has not been configured.', 503);
+    const ids = request({ ...value, sandboxPath: '/mnt/data/presentation-request' });
+    if (typeof value?.artifactURI !== 'string' || !value.artifactURI || value.artifactURI.length > 8192 || value.artifactURI.trim() !== value.artifactURI || /[\u0000-\u0020\u007f]/u.test(value.artifactURI)) fail('INVALID_ARTIFACT_URI', 'An exact produced artifact URI is required.', 400);
+    let uri, prefix;
+    try { uri = new URL(value.artifactURI, artifactBase); prefix = getWorkspacePrefix(ids.conversationId); } catch { fail('INVALID_ARTIFACT_URI', 'The produced artifact URI is unavailable.', 400); }
+    if (typeof prefix !== 'string' || !prefix || /[/\\\u0000-\u001f\u007f]/u.test(prefix)) fail('WORKSPACE_UNAVAILABLE', 'The owned workspace namespace is invalid.', 503);
+    const prefixURI = new URL('__local_artifacts/' + prefix + '/', artifactBase);
+    if (uri.origin !== artifactBase.origin || uri.username || uri.password || uri.search || uri.hash || prefixURI.search || prefixURI.hash || !uri.pathname.startsWith(prefixURI.pathname)) fail('INVALID_ARTIFACT_URI', 'The URI does not identify this owned conversation workspace.', 400);
+    let relative;
+    try { relative = uri.pathname.slice(prefixURI.pathname.length).split('/').map(decodeURIComponent).join('/'); } catch { fail('INVALID_ARTIFACT_URI', 'The produced artifact URI has invalid escaping.', 400); }
+    const spec = request({ conversationId: ids.conversationId, messageId: ids.messageId, sandboxPath: '/mnt/data/' + relative }), source = capture(spec);
+    const expected = new URL(prefixURI.pathname + spec.relativePath.split('/').map(encodeURIComponent).join('/'), artifactBase.origin);
+    if (source.prefix !== prefix || uri.href !== expected.href || typeof source.artifactURI !== 'string' || ![expected.href, expected.pathname].includes(source.artifactURI) || ![source.artifactURI, expected.href].includes(value.artifactURI)) fail('ARTIFACT_URI_MISMATCH', 'The URI does not match the actual produced file descriptor.', 409);
+    if (source.kind === 'create_file') {
+      const bytes = encoder.encode(source.content);
+      if (bytes.length > maxBytes) fail('FILE_TOO_LARGE', 'The produced file exceeds the configured presentation limit.', 413);
+      if (bytes.length !== source.size) fail('VERSION_UNAVAILABLE', 'The producer size does not match its actual UTF-8 content.', 409);
+    }
+    if (!descriptionCurrent(source)) fail('SOURCE_CHANGED', 'The actual source changed while preparing a file reference.', 409);
+    const description = Object.freeze({ conversationId: spec.conversationId, messageId: spec.messageId, sandboxPath: spec.sandboxPath, ownerKey: bootOwner, fileName: source.fileName, mimeType: source.mimeType, size: source.size, artifactURI: expected.href, producerKind: source.kind, bytesVerified: false });
+    descriptions.set(description, source); return description;
+  }
+  function isDescriptionCurrent(description) {
+    const source = object(description) ? descriptions.get(description) : null;
+    return !!source && readOwner() === bootOwner && descriptionCurrent(source) && readOwner() === bootOwner;
+  }
+  function getDescriptionSHA(description) {
+    try {
+      const original = object(description) ? descriptions.get(description) : null;
+      if (!original || !isDescriptionCurrent(description)) return null;
+      const source = capture(original.spec);
+      if (!isDescriptionCurrent(description)) return null;
+      if (source.kind === 'python') return SHA256.test(source.expectedSHA ?? '') && isDescriptionCurrent(description) ? source.expectedSHA : null;
+      if (source.kind !== 'create_file' || !sha256Bytes || typeof source.content !== 'string' || !object(source.producer)) return null;
+      const version = [source.kind, source.producer.id, source.producer.status, source.fileName, source.mimeType, source.size, source.artifactURI];
+      const cached = expectedSHACache.get(source.producer);
+      if (cached && cached.content === source.content && cached.version.length === version.length && version.every((value, index) => value === cached.version[index])) return isDescriptionCurrent(description) ? cached.sha256 : null;
+      const bytes = encoder.encode(source.content);
+      if (bytes.length !== source.size || bytes.length > maxBytes || !isDescriptionCurrent(description)) return null;
+      const argument = bytes.slice(), digest = sha256Bytes(argument);
+      if (typeof digest !== 'string' || !SHA256.test(digest) || argument.length !== bytes.length || argument.some((value, index) => value !== bytes[index]) || !isDescriptionCurrent(description)) return null;
+      expectedSHACache.set(source.producer, { content: source.content, version, sha256: digest });
+      return isDescriptionCurrent(description) ? digest : null;
+    } catch { return null; }
+  }
+  return Object.freeze({ resolve, isCurrent, describe, isDescriptionCurrent, getDescriptionSHA });
 }

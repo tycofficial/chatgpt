@@ -1,9 +1,9 @@
 /** Original classic Chat REST/SSE shapes over the same real local thread engine. */
-import { FRONTEND_TO_RAW_EFFORT } from './model-catalog-adapter.mjs?v=6445d73493757f92';
-import { turnHostCheckpoints } from './preferred-host-transport.mjs?v=6445d73493757f92';
+import { FRONTEND_TO_RAW_EFFORT } from './model-catalog-adapter.mjs?v=2389b4a65e4ee133';
+import { turnHostCheckpoints } from './preferred-host-transport.mjs?v=2389b4a65e4ee133';
 
-import { parseClassicInputMessages } from './classic-input-messages.mjs?v=6445d73493757f92';
-export { parseClassicInputMessages, CLASSIC_CONTEXT_LIMITS } from './classic-input-messages.mjs?v=6445d73493757f92';
+import { parseClassicInputMessages } from './classic-input-messages.mjs?v=2389b4a65e4ee133';
+export { parseClassicInputMessages, CLASSIC_CONTEXT_LIMITS } from './classic-input-messages.mjs?v=2389b4a65e4ee133';
 export class ClassicChatAdapter {
   constructor({ appServer, models, now = Date.now, uuid = () => crypto.randomUUID(), onConversationChange = () => {}, heartbeatMs = 10000, getPublishedFileReferences = () => [] }) { this.server = appServer; this.models = models; this.now = now; this.uuid = uuid; this.onConversationChange = onConversationChange; this.heartbeatMs = heartbeatMs; this.getPublishedFileReferences = getPublishedFileReferences; this.mutationQueue = Promise.resolve(); }
   json(body, status = 200) { return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }); }
