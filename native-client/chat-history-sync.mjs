@@ -54,10 +54,38 @@ function safeReceipt(value) {
   if (!object(value) || value.committed !== true || typeof value.fileId !== 'string' || typeof value.rawFileId !== 'string') return null;
   return { ...fields(value, ['committed', 'operationId', 'fileId', 'rawFileId', 'revision', 'sha256', 'fileName', 'mimeType', 'size', 'kind', 'created', 'updated', 'createdAt', 'updatedAt', 'currentRevision', 'superseded', 'unchanged', 'cleanupPending']), ...(object(value.publication) ? { publication: fields(value.publication, ['origin', 'revision', 'updatedAt']) } : {}) };
 }
+function publicWebURL(value) {
+  if (typeof value !== 'string' || localURI(value)) return null;
+  try { const url = new URL(value); if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || [...url.searchParams.keys()].some(key => /^(?:api[_-]?key|access_token|token|auth|authorization|password|session|cookie)$/i.test(key))) return null; return url.href; } catch { return null; }
+}
+function publicWebReferences(value, text) {
+  const out = [], chars = Array.from(text);
+  for (const ref of Array.isArray(value) ? value : []) {
+    if (!object(ref) || !['webpage', 'grouped_webpages'].includes(ref.type) || !Number.isSafeInteger(ref.start_idx) || !Number.isSafeInteger(ref.end_idx) || ref.start_idx < 0 || ref.end_idx <= ref.start_idx || ref.end_idx > chars.length || chars.slice(ref.start_idx, ref.end_idx).join('') !== ref.matched_text) continue;
+    const sources = (ref.type === 'webpage' ? [ref] : Array.isArray(ref.items) ? ref.items : []).flatMap(item => { const url = publicWebURL(item?.url); return url ? [{ url, ...(typeof item.title === 'string' ? { title: item.title } : {}) }] : []; });
+    if (!sources.length) continue;
+    const range = fields(ref, ['start_idx', 'end_idx', 'matched_text']);
+    out.push(ref.type === 'webpage' ? { type: 'webpage', ...range, ...sources[0] } : { type: 'grouped_webpages', ...range, items: sources });
+  }
+  return out;
+}
+function publicWebSearch(value) {
+  const raw = value.responseItem;
+  if (!object(raw) || raw.type !== 'web_search_call' || typeof raw.id !== 'string' || !raw.id || !['in_progress', 'searching', 'completed', 'failed'].includes(raw.status)) fail('SYNC_INVALID_DOCUMENT', 'Invalid hosted search history record.');
+  const action = raw.action, projected = { type: raw.type, id: raw.id, status: raw.status };
+  if (object(action)) {
+    if (action.type === 'search') projected.action = { type: 'search', ...(typeof action.query === 'string' ? { query: safeLinkText(action.query) } : {}), ...(Array.isArray(action.queries) ? { queries: strings(action.queries).map(safeLinkText) } : {}) };
+    if (['open_page', 'find_in_page'].includes(action.type)) { const url = publicWebURL(action.url); if (url) projected.action = { type: action.type, url, ...(action.type === 'find_in_page' && typeof action.pattern === 'string' ? { pattern: safeLinkText(action.pattern) } : {}) }; }
+    if (action.type === 'other') projected.action = { type: 'other' };
+  }
+  const pending = ['in_progress', 'searching'].includes(raw.status);
+  return { id: value.id, type: 'webSearch', ...fields(value, ['providerCallId', 'round']), responseItem: projected, ...(pending ? { interruption: 'cancelled', completedAtMs: null, durationMs: null } : ['cancelled', 'failed'].includes(value.interruption) ? { interruption: value.interruption } : {}) };
+}
 function syncItem(value, unavailableResources) {
   if (!object(value) || typeof value.id !== 'string') fail('SYNC_INVALID_DOCUMENT', 'Invalid conversation item.');
   if (value.type === 'userMessage') return { ...fields(value, ['id', 'type', 'clientId']), content: userInput(value.content) };
-  if (value.type === 'agentMessage') return { id: value.id, type: value.type, ...(['commentary', 'final_answer'].includes(value.phase) ? { phase: value.phase } : {}), text: safeLinkText(value.text) };
+  if (value.type === 'agentMessage') { const text = safeLinkText(value.text), refs = publicWebReferences(value.webSearchReferences, text); return { id: value.id, type: value.type, ...(['commentary', 'final_answer'].includes(value.phase) ? { phase: value.phase } : {}), text, ...(refs.length ? { webSearchReferences: refs } : {}) }; }
+  if (value.type === 'webSearch') return publicWebSearch(value);
   if (value.type === 'reasoning') return { id: value.id, type: value.type, summary: strings(value.summary).map(safeLinkText), content: strings(value.content).map(safeLinkText), ...fields(value, ['status', 'startedAtMs', 'completedAtMs', 'durationMs']), ...(value.status === 'inProgress' ? { status: 'cancelled', completedAtMs: null, durationMs: null } : {}) };
   if (value.type === 'mcpToolCall') {
     const content = [];
@@ -97,6 +125,7 @@ export function projectChatHistoryThread(thread) {
     const wasRunning = turn.status === 'inProgress';
     const metadata = { ...fields(turn.adapterMetadata, ['startedAtMs', 'frontendModelSlug', 'reasoningMode', 'executionSurface', 'chatFamily', 'selectionMode', 'curatedPresetMatch', 'interruption']), instructions: strings(turn.adapterMetadata?.instructions).map(safeLinkText), resumable: false, resumePolicy: 'manual' };
     if (wasRunning) metadata.interruption = 'cloud-history-restored-without-execution-checkpoint';
+    if (turn.adapterMetadata?.webSearchIntent?.enabled === true) metadata.webSearchIntent = { enabled: true, required: turn.adapterMetadata.webSearchIntent.required === true };
     if (object(turn.adapterMetadata?.reasoningLifecycle)) {
       metadata.reasoningLifecycle = fields(turn.adapterMetadata.reasoningLifecycle, ['startedAtMs', 'workStartedAtMs', 'completedAtMs', 'status', 'attemptDurationMs', 'workDurationMs', 'timingBasis']);
       if (wasRunning) { metadata.reasoningLifecycle.status = 'cancelled'; metadata.reasoningLifecycle.completedAtMs = null; delete metadata.reasoningLifecycle.workDurationMs; }

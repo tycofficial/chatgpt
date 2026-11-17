@@ -1,8 +1,9 @@
 /** Original app-server protocol over real, resumable local execution. */
-import { runAgentTurn } from './agent-turn-runner.mjs?v=68d4f5727a1b8a6f';
-import { readClassicBranchRequest, getClassicExecutionThread } from './classic-response-branches.mjs?v=68d4f5727a1b8a6f';
-import { parseClassicInputMessages } from './classic-input-messages.mjs?v=68d4f5727a1b8a6f';
-import { allowedReasoningEfforts } from '../runtime.js?v=68d4f5727a1b8a6f';
+import { runAgentTurn } from './agent-turn-runner.mjs?v=aca183ac308a3a64';
+import { readWebSearchIntent, interruptHostedSearch } from './local-web-search.mjs?v=aca183ac308a3a64';
+import { readClassicBranchRequest, getClassicExecutionThread } from './classic-response-branches.mjs?v=aca183ac308a3a64';
+import { parseClassicInputMessages } from './classic-input-messages.mjs?v=aca183ac308a3a64';
+import { allowedReasoningEfforts } from '../runtime.js?v=aca183ac308a3a64';
 export class RpcError extends Error {
   constructor(code, message, data) { super(message); this.name = 'RpcError'; this.code = code; if (data !== undefined) this.data = data; }
 }
@@ -391,21 +392,23 @@ export class LocalAppServer {
     if (classic) params = { ...params, clientUserMessageId: classic.incoming.id, classicUserMessage: classic.incoming };
     const thread = this.getThread(params.threadId), input = this.textInput(params), selected = this.selection(params, thread);
     if (params.outputSchema != null) throw new RpcError(-32601, 'Structured-output schema execution is not implemented by this local text adapter');
+    const webSearchIntent = readWebSearchIntent(params);
     const fingerprintParts = [input, selected.model, selected.reasoningEffort, selected.serviceTier];
     if (params.classicUserMessage?.metadata?.attachments?.length) fingerprintParts.push(params.classicUserMessage.metadata.attachments);
     const legacyFingerprint = JSON.stringify(fingerprintParts);
     if (classic) fingerprintParts.push({ classicInputMessages: classic.originalMessages });
     const legacyContextFingerprint = JSON.stringify(fingerprintParts);
     if (selected.executionSurface != null || selected.reasoningMode === 'pro') fingerprintParts.push({ executionSurface: selected.executionSurface, reasoningMode: selected.reasoningMode, frontendModelSlug: selected.frontendModelSlug });
+    if (webSearchIntent) fingerprintParts.push({ webSearchIntent });
     const fingerprint = JSON.stringify(fingerprintParts);
     const duplicate = params.clientUserMessageId && thread.turns.find(turn => turn.clientUserMessageId === params.clientUserMessageId);
     if (duplicate) {
       const original = duplicate.adapterMetadata.classicUserMessage;
       const legacyUser = classic ? { content: classic.incoming.content, metadata: classic.incoming.metadata ?? {}, author: { role: 'user' } } : null;
-      const legacyClassicRetry = selected.reasoningMode === 'standard' && (duplicate.reasoningMode ?? 'standard') === 'standard' && classic && classic.hiddenCount === 0 && duplicate.adapterMetadata.classicInputMessages == null &&
+      const legacyClassicRetry = !webSearchIntent && selected.reasoningMode === 'standard' && (duplicate.reasoningMode ?? 'standard') === 'standard' && classic && classic.hiddenCount === 0 && duplicate.adapterMetadata.classicInputMessages == null &&
         duplicate.adapterMetadata.fingerprint === legacyFingerprint && original &&
         (JSON.stringify(original) === JSON.stringify(classic.incoming) || JSON.stringify(original) === JSON.stringify(legacyUser));
-      const legacySurfaceRetry = selected.reasoningMode === 'standard' && (duplicate.reasoningMode ?? 'standard') === 'standard' && duplicate.adapterMetadata.executionSurface == null && duplicate.adapterMetadata.fingerprint === legacyContextFingerprint;
+      const legacySurfaceRetry = !webSearchIntent && selected.reasoningMode === 'standard' && (duplicate.reasoningMode ?? 'standard') === 'standard' && duplicate.adapterMetadata.executionSurface == null && duplicate.adapterMetadata.fingerprint === legacyContextFingerprint;
       if (duplicate.adapterMetadata.fingerprint !== fingerprint && !legacyClassicRetry && !legacySurfaceRetry) throw new RpcError(-32602, 'A client user-message ID cannot be reused with different input, Classic records or model settings');
       if (duplicate.status !== 'completed' && duplicate.adapterMetadata?.resumable && duplicate.adapterMetadata?.checkpoint) return this.resumeTurn({ threadId: thread.id, turnId: duplicate.id });
       return { result: { turn: copy(duplicate), ...(admission ? { clientUserMessageId: params.clientUserMessageId, admissionOutcome: 'duplicate', serverUserMessageId: duplicate.items[0].id } : {}) } };
@@ -418,7 +421,7 @@ export class LocalAppServer {
       startedAt: Math.floor(startedAtMs / 1000), completedAt: null, durationMs: null,
       model: selected.model, reasoningEffort: selected.reasoningEffort, reasoningMode: selected.reasoningMode, executionSurface: selected.executionSurface, serviceTier: selected.serviceTier,
       clientUserMessageId: params.clientUserMessageId ?? null,
-      adapterMetadata: { ...(classicBranchMetadata ? { classicResponseBranch: classicBranchMetadata } : {}), startedAtMs, fingerprint, executionPolicy: selected.executionPolicy, executionSurface: selected.executionSurface, reasoningMode: selected.reasoningMode, frontendModelSlug: selected.frontendModelSlug, chatFamily: selected.chatFamily, selectionMode: selected.selectionMode, curatedPresetMatch: selected.curatedPresetMatch, clientMetadata: copy(params.responsesapiClientMetadata ?? null), instructions: this.instructions(params), ...(params.classicUserMessage ? { classicUserMessage: copy(params.classicUserMessage) } : {}), ...(classic ? { classicInputMessages: copy(classic.originalMessages) } : {}) },
+      adapterMetadata: { ...(classicBranchMetadata ? { classicResponseBranch: classicBranchMetadata } : {}), startedAtMs, fingerprint, ...(webSearchIntent ? { webSearchIntent } : {}), executionPolicy: selected.executionPolicy, executionSurface: selected.executionSurface, reasoningMode: selected.reasoningMode, frontendModelSlug: selected.frontendModelSlug, chatFamily: selected.chatFamily, selectionMode: selected.selectionMode, curatedPresetMatch: selected.curatedPresetMatch, clientMetadata: copy(params.responsesapiClientMetadata ?? null), instructions: this.instructions(params), ...(params.classicUserMessage ? { classicUserMessage: copy(params.classicUserMessage) } : {}), ...(classic ? { classicInputMessages: copy(classic.originalMessages) } : {}) },
     };
     const previous = copy(thread);
     this.updateSelection(thread, selected, params);
@@ -546,6 +549,7 @@ export class LocalAppServer {
   }
   finish(running, status, error) {
     if (running.terminal) return;
+    if (status !== 'completed') interruptHostedSearch(this, running);
     const { thread, turn } = running;
     turn.status = status;
     if (turn.adapterMetadata?.checkpoint && status !== 'completed') { turn.adapterMetadata.resumable = true; turn.adapterMetadata.resumePolicy ??= status === 'interrupted' && running.interruptReason === 'pagehide' ? 'automatic' : 'manual'; turn.adapterMetadata.checkpoint.state = status; for (const call of turn.adapterMetadata.checkpoint.pendingCalls || []) if (call.state === 'running') call.state = 'uncertain'; }

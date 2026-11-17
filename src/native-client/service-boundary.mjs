@@ -1,3 +1,5 @@
+import { nativeWebSearchHint } from './local-web-search.mjs';
+import { createLocalReadAloudSource } from './local-native-read-aloud.mjs';
 import * as modelCatalog from './model-catalog.js';
 import { createModelCatalogAdapter } from './model-catalog-adapter.mjs';
 import { DEFAULT_SETTINGS } from './config.js';
@@ -309,6 +311,14 @@ const localNativeFileReferences = createNativeFileReferenceComposition({
 export const localClassicChatAdapter = new ClassicChatAdapter({ appServer: localAppServer, models: localModelAdapter, onConversationChange: (type, payload) => localConversationPubSub.publish(type, payload),
   getPublishedFileReferences: context => localNativeFileReferences.forAssistant(context),
 });
+export const localReadAloudHost = Object.freeze({
+  getIdentity: getPersonalizationIdentity,
+  source: createLocalReadAloudSource({
+    getIdentity: getPersonalizationIdentity,
+    getThread: id => localAppServer.threads.get(id),
+  }),
+});
+
 const getResponseIdentity = () => { const local = getPersonalizationIdentity(), site = getSiteAccount(); return local && site ? { ...local, ownerId: site.id } : null; };
 const localResponseActions = createClassicResponseActions({
   appServer: localAppServer, classic: localClassicChatAdapter,
@@ -393,6 +403,7 @@ export function installNetworkBoundary() {
     if (request.method === 'GET' && /^\/(?:__codex-api\/|backend-api\/)?settings\/user\/?$/.test(url.pathname)) return response(readLocalUserPreferences());
     if (request.method === 'GET' && /^\/(?:__codex-api\/|backend-api\/)?system_hints\/?$/.test(url.pathname)) {
       const hints = url.searchParams.get('mode') === 'basic' ? [{ system_hint: 'reason', name: '思考一下', action_label: '思考一下', aliases: [], required_features: [], required_models: [], required_conversation_modes: [], allow_in_temporary_chat: true, requires_personalization: false, surfaces: ['chat'], description: '' }] : [];
+      if (url.searchParams.get('mode') === 'basic') hints.push(nativeWebSearchHint());
       return response({ system_hints: hints });
     }
     if (request.method === 'PATCH' && /^\/(?:__codex-api\/|backend-api\/)?settings\/account_user_setting\/?$/.test(url.pathname)) {

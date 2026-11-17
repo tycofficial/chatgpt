@@ -1,6 +1,7 @@
 /** Resumable API/tool loop. Original frontend receives its existing item lifecycle. */
-import { isHostCheckpoint } from './preferred-host-transport.mjs?v=68d4f5727a1b8a6f';
-import { parseClassicInputMessages } from './classic-input-messages.mjs?v=68d4f5727a1b8a6f';
+import { isHostCheckpoint } from './preferred-host-transport.mjs?v=aca183ac308a3a64';
+import { parseClassicInputMessages } from './classic-input-messages.mjs?v=aca183ac308a3a64';
+import { webSearchRequest, updateHostedSearch, interruptHostedSearch, webSearchReferences } from './local-web-search.mjs?v=aca183ac308a3a64';
 const clone = value => structuredClone(value);
 const CONTINUE = 'Continue the unfinished response from the saved text, without repeating it. Preserve the requested task, model and reasoning effort. Do not claim any tool succeeded unless its recorded output confirms it.';
 const compactUsage = usage => Object.fromEntries(['input_tokens', 'output_tokens', 'total_tokens', 'prompt_tokens', 'completion_tokens', 'input_tokens_details', 'output_tokens_details', 'prompt_tokens_details', 'completion_tokens_details'].filter(key => usage[key] !== undefined).map(key => [key, clone(usage[key])]));
@@ -36,6 +37,7 @@ export async function runAgentTurn(server, running) {
     server.assertExecutionAllowed(turn);
     const settings = { ...server.readSettings(), model: turn.model, reasoningEffort: turn.reasoningEffort === 'ultra' ? 'max' : turn.reasoningEffort, reasoningMode: turn.reasoningMode ?? 'standard', autoPython: false };
     if (executor?.tools?.length) settings.apiTransport = server.agentOptions.toolTransport ?? 'responses';
+    if (meta.webSearchIntent?.enabled) settings.apiTransport = 'responses';
     const priority = turn.serviceTier === 'fast' && server.agentOptions.verifiedPriority === true;
     settings.fastMode = priority; settings.serviceTier = priority ? 'priority' : undefined;
     if (priority) settings.apiTransport = 'responses';
@@ -77,7 +79,7 @@ export async function runAgentTurn(server, running) {
     meta.underlyingApiEffort = turn.reasoningEffort === 'ultra' ? 'max' : turn.reasoningEffort;
     if (turn.reasoningEffort === 'ultra') {
       if (server.agentOptions.ultraOrchestration !== true) throw Object.assign(Error('Site Ultra orchestration is not enabled in this deployment. No provider request was submitted.'), { code: 'ULTRA_ORCHESTRATION_NOT_ENABLED', retryable: false });
-      const { createUltraToolExecutor } = await import('./site-ultra-orchestrator.mjs?v=68d4f5727a1b8a6f');
+      const { createUltraToolExecutor } = await import('./site-ultra-orchestrator.mjs?v=aca183ac308a3a64');
       executor = createUltraToolExecutor({ baseExecutor: executor, streamCompletion: options => server.streamCompletion(options), turn, checkpoint: cp, save, getSettings: executionSettings, getContext: () => [...server.messages(thread, turn, { omitCurrent: true }), ...cp.transcript], getAbortMode: () => running.interruptReason === 'pagehide' ? 'pagehide' : signal.reason?.requiresTransportResume ? 'transport' : 'user', now: server.now, redact: errorText });
     }
     // A partial response is genuine saved output, not a completed tool call.
@@ -129,7 +131,8 @@ export async function runAgentTurn(server, running) {
       }
       if (++roundsThisRun > maxRounds) { cp.state = 'yielded'; meta.resumable = true; meta.resumePolicy = 'automatic'; await save(); server.finish(running, 'interrupted', { message: 'Execution checkpoint saved; continue this task to run the next batch.', codexErrorInfo: null, additionalDetails: null, misalignment: null }); return; }
       const settings = executionSettings();
-      const tools = executor?.tools || [], instruction = tools.length ? [{ role: 'system', content: 'Execute requested work using the available real tools instead of only announcing a plan. For a multi-step job, persist running progress with task_status and mark complete only after the deliverables exist. Continue correcting actual tool errors. Python runs in a browser Pyodide environment, not a hosted shell; only workspace files persist after reload. Never claim unexecuted shell, network or file operations. Return real artifact download URLs supplied by tools.' }] : [];
+      const searchRequest = webSearchRequest(meta.webSearchIntent, turn.items, executor?.tools || []);
+      const tools = searchRequest.tools, instruction = (executor?.tools?.length || 0) ? [{ role: 'system', content: 'Execute requested work using the available real tools instead of only announcing a plan. For a multi-step job, persist running progress with task_status and mark complete only after the deliverables exist. Continue correcting actual tool errors. Python runs in a browser Pyodide environment, not a hosted shell; only workspace files persist after reload. Never claim unexecuted shell, network or file operations. Return real artifact download URLs supplied by tools.' }] : [];
       if (turn.reasoningEffort === 'ultra') instruction.push({ role: 'system', content: 'This is the site-provided Ultra execution mode. Use delegate_tasks for independent analysis when it benefits the task; it runs1–3 real parallel workers from the same selected family at API max effort. Inspect their actual results and reconcile differences. You own the real file/Python tools and final synthesis. This is application orchestration, not OpenAI private Ultra infrastructure. Never claim a worker or tool succeeded when its result reports failure.' });
       const messages = [...instruction, ...server.messages(thread, turn, { omitCurrent: true }), ...clone(cp.transcript)];
       let frame = cp.inFlight, metric;
@@ -151,11 +154,12 @@ export async function runAgentTurn(server, running) {
       if (!frame.result) server.beginReasoning(running, { startedAtMs: metric.requestSentAt });
       let result;
       try {
-        result = frame.result ? clone(frame.result) : await server.streamCompletion({ settings, messages, tools, signal,
+        result = frame.result ? clone(frame.result) : await server.streamCompletion({ settings, messages, tools, toolChoice: searchRequest.toolChoice, signal,
           transportContext: { checkpoint: frame.transport, requestId: turn.id + ':' + metric.sequence, onCheckpoint: save, reattach: isHostCheckpoint(frame.transport), savedPartial: cp.partialResponse, requiredConcurrency: turn.reasoningEffort === 'ultra' ? 3 : 1, getAbortMode: () => running.interruptReason === 'pagehide' ? 'pagehide' : signal.reason?.requiresTransportResume ? 'transport' : 'user' },
           onActivity: () => { if (metric.firstOutputAt == null) metric.firstOutputAt = server.now(); }, onDelta: (_delta, assembled) => {
           if (running.terminal) return;
           if (metric.firstOutputAt == null && (assembled.content || assembled.reasoning || assembled.tool_calls?.length)) metric.firstOutputAt = server.now();
+          updateHostedSearch(server, running, assembled);
           cp.partialResponse = { content: assembled.content || '', reasoning: assembled.reasoning || '', ...(assembled.phase ? { phase: assembled.phase } : {}) };
           server.append(running, assembled.content || '', assembled.reasoning || '', assembled.phase);
           frame.assistantItemId = running.assistant?.id ?? frame.assistantItemId; frame.reasoningItemId = running.reasoning?.id ?? frame.reasoningItemId; frame.reasoningComplete = running.reasoningComplete === true;
@@ -185,7 +189,10 @@ export async function runAgentTurn(server, running) {
       if (running.terminal) return;
       cp.networkFailures = 0; cp.hostFailures = 0; cp.nextResumeAt = null;
       const phase = responsePhase(result);
+      updateHostedSearch(server, running, result);
+      if (meta.webSearchIntent?.required && !turn.items.some(item => item.type === 'webSearch' && item.responseItem?.status === 'completed')) throw Object.assign(Error('The provider did not perform the requested hosted web search. No search success or sourced answer was reported.'), { code: 'WEB_SEARCH_NOT_PERFORMED', retryable: false });
       server.append(running, result.content || '', result.reasoning || '', phase ?? 'final_answer');
+      if (running.assistant) running.assistant.webSearchReferences = webSearchReferences(result.content || '', result.response_items || []);
       if (running.assistant && result.tool_calls?.length && !phase) running.assistant.phase = 'commentary';
       completeItems(server, running, 'completed', metric.responseReceivedAt);
       metric.endedAt = server.now(); metric.totalMs = metric.endedAt - metric.startedAt; metric.ttftMs = metric.firstOutputAt == null ? null : metric.firstOutputAt - metric.requestSentAt; metric.finishReason = result.finish_reason;
@@ -201,7 +208,7 @@ export async function runAgentTurn(server, running) {
       if (result.actual_reasoning) meta.actualReasoning = clone(result.actual_reasoning);
       if (result.response_items) meta.gatewayResponseItems = clone(result.response_items);
       if (result.tool_calls?.length) {
-        cp.commentaryOnlyRounds = 0;
+        cp.commentaryOnlyRounds = 0; cp.searchOnlyRounds = 0;
         if (!tools.length) throw Error('Gateway requested a tool that was not available');
         const seen = new Set();
         cp.pendingCalls = result.tool_calls.map(call => {
@@ -212,6 +219,13 @@ export async function runAgentTurn(server, running) {
         });
         if (running.assistant && !phase) running.assistant.phase = 'commentary'; cp.state = 'tool'; await save(); continue;
       }
+      if (!result.content && result.response_items?.some(item => item.type === 'web_search_call' && item.status === 'completed')) {
+        cp.searchOnlyRounds = (cp.searchOnlyRounds || 0) + 1;
+        cp.state = 'continuing'; await save();
+        if (cp.searchOnlyRounds >= 3) throw Object.assign(Error('Hosted web search completed but the provider did not return an answer after three consecutive search-only responses. Actual search records were saved; no final answer was fabricated.'), { code: 'WEB_SEARCH_WITHOUT_ANSWER', retryable: false });
+        continue;
+      }
+      cp.searchOnlyRounds = 0;
       if (phase === 'commentary' && result.finish_reason === 'stop') {
         cp.commentaryOnlyRounds = (cp.commentaryOnlyRounds || 0) + 1;
         cp.state = 'continuing'; await save();
@@ -230,6 +244,7 @@ export async function runAgentTurn(server, running) {
     }
   } catch (error) {
     if (running.terminal) return;
+    interruptHostedSearch(server, running);
     cp.state = signal.aborted ? 'interrupted' : 'failed'; meta.resumable = true;
     const retryable = error.retryable === true || error.retryable !== false && ![400, 401, 402, 403, 404, 422].includes(error.status) && /fetch|network|stream|connection|timeout|terminated|socket/i.test(errorText(error));
     if (error.requiresTransportResume && !error.hostFailureCounted && !signal.aborted) cp.hostFailures = (cp.hostFailures || 0) + 1;

@@ -1,9 +1,10 @@
+import { createBrowserReadAloudController, createNativeReadAloudBindings } from './local-native-read-aloud.mjs';
 import { normalizeWorkUIStoredPreference } from './model-catalog.js';
 /**
  * Loads the public original component graph with explicit local host services.
  * Private original backend credentials are never used by this entry point.
  */
-import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter, localFilesService, localOwnedDownloadTransport, localLibraryByteTransport, initializeLocalAccountHistory, setNativeAccountHistoryToaster, initializeLocalPublishedResources, registerNativeLibrarySource, notifyNativeLibrarySourceReady, registerNativeFileReferenceSources } from './service-boundary.mjs';
+import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter, localFilesService, localOwnedDownloadTransport, localLibraryByteTransport, initializeLocalAccountHistory, setNativeAccountHistoryToaster, initializeLocalPublishedResources, registerNativeLibrarySource, notifyNativeLibrarySourceReady, registerNativeFileReferenceSources, localReadAloudHost } from './service-boundary.mjs';
 import * as mapLibreRenderer from './map-vendor/maplibre-gl.mjs';
 import { createLocalMapProvider } from './local-map-provider.mjs';
 import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs';
@@ -86,6 +87,41 @@ function overrideExports(moduleId, overrides, options, wrappers = {}) {
     return factory.call(this, module, exports, scopedRequire);
   }, options);
 }
+
+let nativeReadAloudBindings;
+function readAloudBindings() {
+  if (nativeReadAloudBindings) return nativeReadAloudBindings;
+  const rootScope = requireOriginal('OWtl').a;
+  const controller = createBrowserReadAloudController({
+    resolveSource: localReadAloudHost.source.resolve,
+    isSourceCurrent: localReadAloudHost.source.isCurrent,
+    getIdentity: localReadAloudHost.getIdentity,
+    getScopeKey: scope => scope.chain.get(rootScope.id) ?? scope.node,
+    speechSynthesis: globalThis.speechSynthesis,
+    Utterance: globalThis.SpeechSynthesisUtterance,
+    getLanguage: () => globalThis.navigator?.language ?? '',
+    eventTarget: globalThis.window,
+    reportError: (scope, errorMessage) => {
+      if (typeof errorMessage === 'string' && errorMessage) scope.get(requireOriginal('SGsN').f).danger(errorMessage);
+    },
+    onDiagnostic: event => boundary.diagnostics.push(event),
+  });
+  return nativeReadAloudBindings = createNativeReadAloudBindings({
+    controller,
+    mutableAtom: (...args) => requireOriginal('BolX').u(...args),
+    derivedAtom: (...args) => requireOriginal('BolX').d(...args),
+    scopeAtom: rootScope,
+    // This getter is read at playback time after BJ43 instantiation. Its own
+    // wrapped stop is safe: the new speech record has not been created yet.
+    stopNative: scope => requireOriginal('BJ43').b(scope),
+  });
+}
+overrideExports('BJ43', {}, { deferred: true }, {
+  a: original => readAloudBindings().wrapStatus(original),
+  b: original => readAloudBindings().wrapStop(original),
+  c: original => readAloudBindings().wrapConversationStop(original),
+  e: original => readAloudBindings().wrapPlay(original),
+});
 
 // Retain the original QueryProvider and its QueryClient. Observe the supplied
 // client at the host seam so actual completed publications use the same native

@@ -68,7 +68,7 @@ export function createClassicResponseActions({appServer,classic,models,getIdenti
   try{
    const owner=identity(getIdentity());assertOwner(owner);request.signal?.throwIfAborted();
    if(typeof body.conversation_id!=='string'||typeof body.parent_message_id!=='string'||body.messages!=null&&(!Array.isArray(body.messages)||body.messages.length))throw error('REGENERATION_INPUT_UNSUPPORTED','Regeneration accepts an existing prompt without a new user message',422);
-   if(Object.keys(body).some(key=>/^(?:branching_|continue_from_|shared_|rewrite_|business_agent|gizmo_|map_search|force_use_search|codex_config)/.test(key)&&body[key]!=null&&body[key]!==false))throw error('REGENERATION_CONTEXT_UNSUPPORTED','This regeneration context is not implemented',422);
+   if(Object.keys(body).some(key=>/^(?:branching_|continue_from_|shared_|rewrite_|business_agent|gizmo_|map_search|codex_config)/.test(key)&&body[key]!=null&&body[key]!==false))throw error('REGENERATION_CONTEXT_UNSUPPORTED','This regeneration context is not implemented',422);
    const thread=appServer.getThread(body.conversation_id);admit(thread);
    const source=thread.turns.filter(turn=>turn.clientUserMessageId===body.parent_message_id);
    if(source.length!==1)throw error('REGENERATION_PROMPT_NOT_FOUND','The original prompt is missing or ambiguous',404);
@@ -77,7 +77,7 @@ export function createClassicResponseActions({appServer,classic,models,getIdenti
    if(!original)throw error('REGENERATION_INPUT_UNSUPPORTED','The original input records are unavailable',422);
    const messages=clone(original).map(message=>({...message,id:uuid()})),user=messages.find(message=>message.author?.role==='user');if(!user)throw error('REGENERATION_INPUT_UNSUPPORTED','The original user input is unavailable',422);
    const decoded=classic.decodeModelRequest({...body,model:body.model??old.adapterMetadata?.frontendModelSlug??old.model},thread);
-   const params={...decoded,effort:decoded.effort??(body.model==null?old.reasoningEffort:undefined),threadId:thread.id,input:user.content.parts.map(part=>typeof part==='string'?{type:'text',text:part,text_elements:[]}:{type:'image',url:part.asset_pointer}),classicUserMessage:user,classicInputMessages:messages,clientUserMessageId:user.id,serviceTier:body.service_tier??body.serviceTier??old.serviceTier,systemHints:Array.isArray(body.system_hints)?body.system_hints:[],responsesapiClientMetadata:{adapterOrigin:'classic-chat-rest'}};
+   const params={...decoded,effort:decoded.effort??(body.model==null?old.reasoningEffort:undefined),threadId:thread.id,input:user.content.parts.map(part=>typeof part==='string'?{type:'text',text:part,text_elements:[]}:{type:'image',url:part.asset_pointer}),classicUserMessage:user,classicInputMessages:messages,clientUserMessageId:user.id,serviceTier:body.service_tier??body.serviceTier??old.serviceTier,systemHints:Array.isArray(body.system_hints)?body.system_hints:[],forceUseSearch:body.force_use_search===true||(body.force_use_search==null&&!Array.isArray(body.system_hints)&&old.adapterMetadata?.webSearchIntent?.enabled===true),responsesapiClientMetadata:{adapterOrigin:'classic-chat-rest'}};
    const selected=appServer.selection(params,thread),metadata={version:1,kind:'regenerate',sourceTurnId:old.id,parentMessageId:body.parent_message_id,ancestorTurnIds:ancestry(thread,old).before,frontendSlug:selected.frontendModelSlug};
    const transaction=dispatch(thread,params,metadata,owner),created=appServer.getThread(thread.id);
    return classic.attachStream(request,created,transaction);

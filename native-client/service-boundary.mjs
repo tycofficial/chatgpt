@@ -1,42 +1,44 @@
-import * as modelCatalog from '../model-catalog.js?v=68d4f5727a1b8a6f';
-import { createModelCatalogAdapter } from './model-catalog-adapter.mjs?v=68d4f5727a1b8a6f';
-import { DEFAULT_SETTINGS } from '../config.js?v=68d4f5727a1b8a6f';
-import { streamCompletion, PythonRuntime, PYTHON_TOOL } from '../runtime.js?v=68d4f5727a1b8a6f';
-import { createProviderCompletionRouter } from './provider-routing.mjs?v=68d4f5727a1b8a6f';
-import { LocalAppServer, LocalProtocolSocket } from './local-app-server.mjs?v=68d4f5727a1b8a6f';
-import { getPrototypeLocalSession, getPrototypeLocalAuth, getLocalAccountCheck, getLocalOptimizedAccount, getLocalWhamAccounts, getPrototypeCurrentUser, isPrototypeLocalSession, clearPrototypeLocalSession, getLocalSignedOutUrl, getLocalAccountStorageKey } from './local-identity.mjs?v=68d4f5727a1b8a6f';
-import { getPrototypeConfiguration, setLocalLibraryAvailability } from './local-configuration.mjs?v=68d4f5727a1b8a6f';
-import { ClassicChatAdapter } from './classic-chat-adapter.mjs?v=68d4f5727a1b8a6f';
-import { createPortableConversationShare } from './portable-conversation-share.mjs?v=68d4f5727a1b8a6f';
-import { createClassicResponseActions } from './classic-response-branches.mjs?v=68d4f5727a1b8a6f';
-import { LocalConversationPubSub } from './local-pubsub.mjs?v=68d4f5727a1b8a6f';
-import { readLocalUserPreferences, updateLocalUserPreference, acknowledgeLocalAnnouncement } from './local-user-preferences.mjs?v=68d4f5727a1b8a6f';
-import { createLocalPersonalizationService } from './local-personalization-service.mjs?v=68d4f5727a1b8a6f';
-import { createPersonalizationIdentityProvider, createPersonalizedSettingsReader } from './local-personalization-context.mjs?v=68d4f5727a1b8a6f';
-import { createBrowserToolExecutor, workspacePath } from './browser-tool-executor.mjs?v=68d4f5727a1b8a6f';
-import { createWorkspaceDownloadSource } from './local-workspace-download-source.mjs?v=68d4f5727a1b8a6f';
-import { createLocalWorkspaceDownloadService } from './local-workspace-download-service.mjs?v=68d4f5727a1b8a6f';
-import { createOwnedDownloadTransport } from './owned-download-transport.mjs?v=68d4f5727a1b8a6f';
-import { createLocalFilesService } from './local-files-service.mjs?v=68d4f5727a1b8a6f';
-import { createLocalLibraryService } from './local-library-service.mjs?v=68d4f5727a1b8a6f';
-import { createLibraryPublishingExecutor, normalizePublicationReceipt } from './local-library-publisher.mjs?v=68d4f5727a1b8a6f';
-import { createPublishedResourceRehydrator } from './published-resource-rehydration.mjs?v=68d4f5727a1b8a6f';
-import { createNativeLibraryRefresh } from './native-library-refresh.mjs?v=68d4f5727a1b8a6f';
-import { createNativePublicationReferences } from './native-publication-references.mjs?v=68d4f5727a1b8a6f';
-import { createNativeWorkspaceReferences } from './native-workspace-references.mjs?v=68d4f5727a1b8a6f';
-import { createNativeFileReferenceComposition } from './native-file-reference-composition.mjs?v=68d4f5727a1b8a6f';
-import { createLocalInputPreparer } from './local-input-preparation.mjs?v=68d4f5727a1b8a6f';
-import { createLocalPricingAdapter } from './local-pricing.mjs?v=68d4f5727a1b8a6f';
-import { SITE_ACCOUNT_SERVICE, getSiteAccount, getSiteSessionToken, hasModelSelectionAccess, getSitePlanCapabilities, logoutSiteAccount } from './site-account.mjs?v=68d4f5727a1b8a6f';
-import { createLocalCodexAdapter } from './local-codex-adapter.mjs?v=68d4f5727a1b8a6f';
-import { isOpenStreetMapTileRequest, fetchOpenStreetMapTile } from './local-map-provider.mjs?v=68d4f5727a1b8a6f';
-import { createLocalDiscoveryAdapter } from './local-discovery.mjs?v=68d4f5727a1b8a6f';
-import { createLocalDotAdapter } from './local-dot-adapter.mjs?v=68d4f5727a1b8a6f';
-import { createLocalMapsService } from './local-maps-service.mjs?v=68d4f5727a1b8a6f';
-import { createPreferredHostTransport, createPreferredCompletion, turnHostCheckpoints, cancelTurnHostRequests } from './preferred-host-transport.mjs?v=68d4f5727a1b8a6f';
-import { createChatHistorySync, projectChatHistoryThread } from './chat-history-sync.mjs?v=68d4f5727a1b8a6f';
-import { createAccountHistoryCoordinator } from './account-history-coordinator.mjs?v=68d4f5727a1b8a6f';
-import { createNativeCloudSyncFeedback } from './native-cloud-sync-feedback.mjs?v=68d4f5727a1b8a6f';
+import { nativeWebSearchHint } from './local-web-search.mjs?v=aca183ac308a3a64';
+import { createLocalReadAloudSource } from './local-native-read-aloud.mjs?v=aca183ac308a3a64';
+import * as modelCatalog from '../model-catalog.js?v=aca183ac308a3a64';
+import { createModelCatalogAdapter } from './model-catalog-adapter.mjs?v=aca183ac308a3a64';
+import { DEFAULT_SETTINGS } from '../config.js?v=aca183ac308a3a64';
+import { streamCompletion, PythonRuntime, PYTHON_TOOL } from '../runtime.js?v=aca183ac308a3a64';
+import { createProviderCompletionRouter } from './provider-routing.mjs?v=aca183ac308a3a64';
+import { LocalAppServer, LocalProtocolSocket } from './local-app-server.mjs?v=aca183ac308a3a64';
+import { getPrototypeLocalSession, getPrototypeLocalAuth, getLocalAccountCheck, getLocalOptimizedAccount, getLocalWhamAccounts, getPrototypeCurrentUser, isPrototypeLocalSession, clearPrototypeLocalSession, getLocalSignedOutUrl, getLocalAccountStorageKey } from './local-identity.mjs?v=aca183ac308a3a64';
+import { getPrototypeConfiguration, setLocalLibraryAvailability } from './local-configuration.mjs?v=aca183ac308a3a64';
+import { ClassicChatAdapter } from './classic-chat-adapter.mjs?v=aca183ac308a3a64';
+import { createPortableConversationShare } from './portable-conversation-share.mjs?v=aca183ac308a3a64';
+import { createClassicResponseActions } from './classic-response-branches.mjs?v=aca183ac308a3a64';
+import { LocalConversationPubSub } from './local-pubsub.mjs?v=aca183ac308a3a64';
+import { readLocalUserPreferences, updateLocalUserPreference, acknowledgeLocalAnnouncement } from './local-user-preferences.mjs?v=aca183ac308a3a64';
+import { createLocalPersonalizationService } from './local-personalization-service.mjs?v=aca183ac308a3a64';
+import { createPersonalizationIdentityProvider, createPersonalizedSettingsReader } from './local-personalization-context.mjs?v=aca183ac308a3a64';
+import { createBrowserToolExecutor, workspacePath } from './browser-tool-executor.mjs?v=aca183ac308a3a64';
+import { createWorkspaceDownloadSource } from './local-workspace-download-source.mjs?v=aca183ac308a3a64';
+import { createLocalWorkspaceDownloadService } from './local-workspace-download-service.mjs?v=aca183ac308a3a64';
+import { createOwnedDownloadTransport } from './owned-download-transport.mjs?v=aca183ac308a3a64';
+import { createLocalFilesService } from './local-files-service.mjs?v=aca183ac308a3a64';
+import { createLocalLibraryService } from './local-library-service.mjs?v=aca183ac308a3a64';
+import { createLibraryPublishingExecutor, normalizePublicationReceipt } from './local-library-publisher.mjs?v=aca183ac308a3a64';
+import { createPublishedResourceRehydrator } from './published-resource-rehydration.mjs?v=aca183ac308a3a64';
+import { createNativeLibraryRefresh } from './native-library-refresh.mjs?v=aca183ac308a3a64';
+import { createNativePublicationReferences } from './native-publication-references.mjs?v=aca183ac308a3a64';
+import { createNativeWorkspaceReferences } from './native-workspace-references.mjs?v=aca183ac308a3a64';
+import { createNativeFileReferenceComposition } from './native-file-reference-composition.mjs?v=aca183ac308a3a64';
+import { createLocalInputPreparer } from './local-input-preparation.mjs?v=aca183ac308a3a64';
+import { createLocalPricingAdapter } from './local-pricing.mjs?v=aca183ac308a3a64';
+import { SITE_ACCOUNT_SERVICE, getSiteAccount, getSiteSessionToken, hasModelSelectionAccess, getSitePlanCapabilities, logoutSiteAccount } from './site-account.mjs?v=aca183ac308a3a64';
+import { createLocalCodexAdapter } from './local-codex-adapter.mjs?v=aca183ac308a3a64';
+import { isOpenStreetMapTileRequest, fetchOpenStreetMapTile } from './local-map-provider.mjs?v=aca183ac308a3a64';
+import { createLocalDiscoveryAdapter } from './local-discovery.mjs?v=aca183ac308a3a64';
+import { createLocalDotAdapter } from './local-dot-adapter.mjs?v=aca183ac308a3a64';
+import { createLocalMapsService } from './local-maps-service.mjs?v=aca183ac308a3a64';
+import { createPreferredHostTransport, createPreferredCompletion, turnHostCheckpoints, cancelTurnHostRequests } from './preferred-host-transport.mjs?v=aca183ac308a3a64';
+import { createChatHistorySync, projectChatHistoryThread } from './chat-history-sync.mjs?v=aca183ac308a3a64';
+import { createAccountHistoryCoordinator } from './account-history-coordinator.mjs?v=aca183ac308a3a64';
+import { createNativeCloudSyncFeedback } from './native-cloud-sync-feedback.mjs?v=aca183ac308a3a64';
 
 let nativeFileReferenceCodecs = null;
 export function registerNativeFileReferenceSources({ parseMarkdown, sha256Bytes } = {}) {
@@ -309,6 +311,14 @@ const localNativeFileReferences = createNativeFileReferenceComposition({
 export const localClassicChatAdapter = new ClassicChatAdapter({ appServer: localAppServer, models: localModelAdapter, onConversationChange: (type, payload) => localConversationPubSub.publish(type, payload),
   getPublishedFileReferences: context => localNativeFileReferences.forAssistant(context),
 });
+export const localReadAloudHost = Object.freeze({
+  getIdentity: getPersonalizationIdentity,
+  source: createLocalReadAloudSource({
+    getIdentity: getPersonalizationIdentity,
+    getThread: id => localAppServer.threads.get(id),
+  }),
+});
+
 const getResponseIdentity = () => { const local = getPersonalizationIdentity(), site = getSiteAccount(); return local && site ? { ...local, ownerId: site.id } : null; };
 const localResponseActions = createClassicResponseActions({
   appServer: localAppServer, classic: localClassicChatAdapter,
@@ -401,6 +411,7 @@ export function installNetworkBoundary() {
     if (request.method === 'GET' && /^\/(?:__codex-api\/|backend-api\/)?settings\/user\/?$/.test(url.pathname)) return response(readLocalUserPreferences());
     if (request.method === 'GET' && /^\/(?:__codex-api\/|backend-api\/)?system_hints\/?$/.test(url.pathname)) {
       const hints = url.searchParams.get('mode') === 'basic' ? [{ system_hint: 'reason', name: '思考一下', action_label: '思考一下', aliases: [], required_features: [], required_models: [], required_conversation_modes: [], allow_in_temporary_chat: true, requires_personalization: false, surfaces: ['chat'], description: '' }] : [];
+      if (url.searchParams.get('mode') === 'basic') hints.push(nativeWebSearchHint());
       return response({ system_hints: hints });
     }
     if (request.method === 'PATCH' && /^\/(?:__codex-api\/|backend-api\/)?settings\/account_user_setting\/?$/.test(url.pathname)) {

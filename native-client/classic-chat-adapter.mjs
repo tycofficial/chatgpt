@@ -1,9 +1,10 @@
 /** Original classic Chat REST/SSE shapes over the same real local thread engine. */
-import { FRONTEND_TO_RAW_EFFORT } from './model-catalog-adapter.mjs?v=68d4f5727a1b8a6f';
-import { turnHostCheckpoints } from './preferred-host-transport.mjs?v=68d4f5727a1b8a6f';
+import { FRONTEND_TO_RAW_EFFORT } from './model-catalog-adapter.mjs?v=aca183ac308a3a64';
+import { hostedSearchMessage, mergeWebSearchReferences } from './local-web-search.mjs?v=aca183ac308a3a64';
+import { turnHostCheckpoints } from './preferred-host-transport.mjs?v=aca183ac308a3a64';
 
-import { parseClassicInputMessages } from './classic-input-messages.mjs?v=68d4f5727a1b8a6f';
-export { parseClassicInputMessages, CLASSIC_CONTEXT_LIMITS } from './classic-input-messages.mjs?v=68d4f5727a1b8a6f';
+import { parseClassicInputMessages } from './classic-input-messages.mjs?v=aca183ac308a3a64';
+export { parseClassicInputMessages, CLASSIC_CONTEXT_LIMITS } from './classic-input-messages.mjs?v=aca183ac308a3a64';
 export class ClassicChatAdapter {
   constructor({ appServer, models, now = Date.now, uuid = () => crypto.randomUUID(), onConversationChange = () => {}, heartbeatMs = 10000, getPublishedFileReferences = () => [] }) { this.server = appServer; this.models = models; this.now = now; this.uuid = uuid; this.onConversationChange = onConversationChange; this.heartbeatMs = heartbeatMs; this.getPublishedFileReferences = getPublishedFileReferences; this.mutationQueue = Promise.resolve(); }
   json(body, status = 200) { return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }); }
@@ -37,13 +38,13 @@ export class ClassicChatAdapter {
       content: { content_type: 'thoughts', thoughts: summary.map(text => ({ summary: text, content: '', finished: !pending })) },
       status: pending ? 'in_progress' : turn.status === 'failed' || turn.status === 'interrupted' ? 'finished_partial_completion' : 'finished_successfully',
       end_turn: false, weight: 1, recipient: 'all', channel: 'analysis',
-      metadata: { model_slug: thread.adapterMetadata?.classicModelSlugs?.[turn.id] ?? thread.adapterMetadata?.frontendModelSlug ?? turn.model, thinking_effort: FRONTEND_TO_RAW_EFFORT[turn.reasoningEffort], reasoning_mode: turn.reasoningMode ?? 'standard', ...(turn.reasoningMode === 'pro' ? { reasoning_type: 'pro' } : {}), adapter_api_model: turn.model, ...this.reasoningMetadata(turn, item), adapter_source: 'local-original-client-adapter' },
+      metadata: { model_slug: turn.adapterMetadata?.frontendModelSlug ?? thread.adapterMetadata?.classicModelSlugs?.[turn.id] ?? thread.adapterMetadata?.frontendModelSlug ?? turn.model, thinking_effort: FRONTEND_TO_RAW_EFFORT[turn.reasoningEffort], reasoning_mode: turn.reasoningMode ?? 'standard', ...(turn.reasoningMode === 'pro' ? { reasoning_type: 'pro' } : {}), adapter_api_model: turn.model, ...this.reasoningMetadata(turn, item), adapter_source: 'local-original-client-adapter' },
     };
   }
   message(thread, turn, item, role) {
     const original = role === 'user' ? turn.adapterMetadata?.classicUserMessage : null;
     const text = role === 'user' ? item.content.filter(part => part.type === 'text').map(part => part.text).join('\n') : item.text;
-    const frontendSlug = thread.adapterMetadata?.classicModelSlugs?.[turn.id] ?? thread.adapterMetadata?.frontendModelSlug ?? turn.model;
+    const frontendSlug = turn.adapterMetadata?.frontendModelSlug ?? thread.adapterMetadata?.classicModelSlugs?.[turn.id] ?? thread.adapterMetadata?.frontendModelSlug ?? turn.model;
     const done = turn.status === 'completed', terminal = ['completed', 'failed', 'interrupted'].includes(turn.status), itemDone = terminal || turn.adapterMetadata.completedItemIds?.includes(item.id);
     const lastAssistant = turn.items.findLast(value => value.type === 'agentMessage')?.id === item.id;
     let publishedReferences = [];
@@ -51,6 +52,7 @@ export class ClassicChatAdapter {
       try { publishedReferences = this.getPublishedFileReferences({ thread, turn, item }); }
       catch { this.server.diagnostics?.push({ type: 'local-file-reference-projection-error' }); }
     }
+    const nativeReferences = mergeWebSearchReferences(publishedReferences, role === 'assistant' ? item.webSearchReferences ?? [] : []);
     return {
       id: role === 'user' ? item.clientId ?? item.id : item.id,
       author: { role, name: null, metadata: {} },
@@ -59,7 +61,7 @@ export class ClassicChatAdapter {
       status: role === 'user' || done || itemDone && !terminal ? 'finished_successfully' : terminal ? 'finished_partial_completion' : 'in_progress',
       end_turn: role === 'assistant' && terminal && lastAssistant && (!turn.adapterMetadata.resumable || turn.adapterMetadata.resumePolicy === 'manual'),
       weight: 1, recipient: 'all', channel: role === 'assistant' ? item.phase === 'commentary' ? 'commentary' : 'final' : null,
-      metadata: { ...(original?.metadata ? structuredClone(original.metadata) : {}), ...(role === 'assistant' ? this.reasoningMetadata(turn) : {}), model_slug: frontendSlug, thinking_effort: FRONTEND_TO_RAW_EFFORT[turn.reasoningEffort], reasoning_mode: turn.reasoningMode ?? 'standard', ...(turn.reasoningMode === 'pro' ? { reasoning_type: 'pro' } : {}), adapter_api_model: turn.model, is_complete: role === 'user' || Boolean(itemDone), ...(done && role === 'assistant' ? { finish_details: { type: 'stop', stop_tokens: [] } } : {}), ...(Array.isArray(publishedReferences) && publishedReferences.length ? { content_references: publishedReferences } : {}), adapter_source: 'local-original-client-adapter' },
+      metadata: { ...(original?.metadata ? structuredClone(original.metadata) : {}), ...(role === 'assistant' ? this.reasoningMetadata(turn) : {}), model_slug: frontendSlug, thinking_effort: FRONTEND_TO_RAW_EFFORT[turn.reasoningEffort], reasoning_mode: turn.reasoningMode ?? 'standard', ...(turn.reasoningMode === 'pro' ? { reasoning_type: 'pro' } : {}), adapter_api_model: turn.model, is_complete: role === 'user' || Boolean(itemDone), ...(done && role === 'assistant' ? { finish_details: { type: 'stop', stop_tokens: [] } } : {}), ...(nativeReferences.length ? { content_references: nativeReferences } : {}), adapter_source: 'local-original-client-adapter' },
     };
   }
   originalInputMessages(thread, turn, item) {
@@ -75,8 +77,9 @@ export class ClassicChatAdapter {
     if (item.type === 'userMessage') return this.originalInputMessages(thread, turn, item);
     if (item.type === 'agentMessage') return [this.message(thread, turn, item, 'assistant')];
     if (item.type === 'reasoning') return [this.reasoningMessage(thread, turn, item)];
+    if (item.type === 'webSearch') return [hostedSearchMessage(thread, turn, item, turn.adapterMetadata?.frontendModelSlug ?? thread.adapterMetadata?.classicModelSlugs?.[turn.id] ?? turn.model)];
     if (item.type !== 'mcpToolCall') return [];
-    const finished = item.status !== 'inProgress', base = { create_time: turn.startedAt, update_time: this.now() / 1000, weight: 1, metadata: { model_slug: thread.adapterMetadata?.classicModelSlugs?.[turn.id] ?? thread.adapterMetadata.frontendModelSlug ?? turn.model, thinking_effort: FRONTEND_TO_RAW_EFFORT[turn.reasoningEffort], adapter_source: 'browser-workspace-mcp', mcp_tool_call: { server: item.server, tool: item.tool, status: item.status } } };
+    const finished = item.status !== 'inProgress', base = { create_time: turn.startedAt, update_time: this.now() / 1000, weight: 1, metadata: { model_slug: turn.adapterMetadata?.frontendModelSlug ?? thread.adapterMetadata?.classicModelSlugs?.[turn.id] ?? thread.adapterMetadata.frontendModelSlug ?? turn.model, thinking_effort: FRONTEND_TO_RAW_EFFORT[turn.reasoningEffort], adapter_source: 'browser-workspace-mcp', mcp_tool_call: { server: item.server, tool: item.tool, status: item.status } } };
     const call = { ...base, id: item.id + '-call', author: { role: 'assistant', name: null, metadata: {} }, recipient: item.tool, channel: 'commentary', content: { content_type: 'code', language: item.tool === 'python' ? 'python' : 'json', text: item.tool === 'python' ? item.arguments.code || '' : JSON.stringify(item.arguments, null, 2) }, status: finished ? 'finished_successfully' : 'in_progress', end_turn: false };
     if (!finished) return [call];
     const output = item.result || { content: [{ type: 'text', text: item.error?.message || 'Tool execution was interrupted' }], isError: true };
@@ -283,7 +286,7 @@ export class ClassicChatAdapter {
       classicUserMessage: structuredClone(incoming),
       classicInputMessages: parsed.originalMessages,
       clientUserMessageId: incoming.id, model, effort, reasoningMode, executionSurface, frontendModelSlug: executionSurface === 'chat' ? model : undefined, serviceTier: body.service_tier ?? body.serviceTier,
-      selectionMode: body.selectionMode, systemHints: Array.isArray(body.system_hints) ? body.system_hints : [],
+      selectionMode: body.selectionMode, systemHints: Array.isArray(body.system_hints) ? body.system_hints : [], forceUseSearch: body.force_use_search === true,
       responsesapiClientMetadata: { ...body.responsesapi_client_metadata, requestedModel: body.model, adapterOrigin: 'classic-chat-rest' },
     });
     const turnId = transaction.result.turn.id;
@@ -332,6 +335,7 @@ export class ClassicChatAdapter {
             for (const item of turn.items.filter(value => value.type === 'reasoning')) emit({ conversation_id: thread.id, message: this.reasoningMessage(thread, turn, item) });
           }
           if (['item/started', 'item/completed'].includes(event.method) && params.item?.type === 'mcpToolCall') for (const message of this.projectItem(thread, turn, params.item)) emit({ conversation_id: thread.id, message });
+          if ((event.method === 'item/started' || event.method === 'item/webSearch/updated') && params.item?.type === 'webSearch') for (const message of this.projectItem(thread, turn, params.item)) emit({ conversation_id: thread.id, message });
           if (event.method === 'turn/completed') finishStream(params.turn);
         });
         request.signal?.addEventListener('abort', abort, { once: true });

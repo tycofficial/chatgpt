@@ -115,9 +115,9 @@ export class SSEDecoder {
   }
 }
 
-export async function streamCompletion({ settings, messages, tools, signal, onDelta = () => {}, onActivity = () => {}, responsesTransport }) {
+export async function streamCompletion({ settings, messages, tools, toolChoice, signal, onDelta = () => {}, onActivity = () => {}, responsesTransport }) {
   if (settings.apiTransport === 'responses' || settings.reasoningMode === 'pro') {
-    return streamResponses({ settings, messages, tools, signal, onDelta, onActivity, responsesTransport });
+    return streamResponses({ settings, messages, tools, toolChoice, signal, onDelta, onActivity, responsesTransport });
   }
   const payload = { model: settings.model, messages: messages.map(({ response_items, phase, ...message }) => message), stream: true };
   const effort = validatedReasoningEffort(settings);
@@ -218,19 +218,19 @@ export function toResponsesTools(tools = []) {
 }
 
 /** Responses transport preserves the same app-facing assistant/tool-call contract. */
-async function streamResponses({ settings, messages, tools, signal, onDelta, onActivity, responsesTransport }) {
+async function streamResponses({ settings, messages, tools, toolChoice, signal, onDelta, onActivity, responsesTransport }) {
   const payload = { model: settings.model, input: toResponsesInput(messages), stream: true, store: false, include: ['reasoning.encrypted_content'] };
   if (settings.serviceTier) payload.service_tier = settings.serviceTier;
   const reasoning = responsesReasoning(settings);
   if (reasoning) payload.reasoning = reasoning;
   if ((!allowedReasoningEfforts(settings.model).length || reasoning?.effort === 'none') && settings.temperature !== undefined && settings.temperature !== null && settings.temperature !== '') payload.temperature = Number(settings.temperature);
-  if (tools?.length) { payload.tools = toResponsesTools(tools); payload.tool_choice = 'auto'; }
+  if (tools?.length) { payload.tools = toResponsesTools(tools); payload.tool_choice = toolChoice ? structuredClone(toolChoice) : 'auto'; }
   const fallbackResponses = () => fetch(apiURL(settings.apiBase, 'responses'), { method: 'POST', headers: requestHeaders(settings), body: JSON.stringify(payload), signal });
   const response = responsesTransport ? await responsesTransport(payload, { signal, fallbackResponses }) : await fallbackResponses();
   if (!response.ok) throw await responseError(response);
 
   const assembled = { role: 'assistant', content: '' };
-  const texts = new Map(), reasoningTexts = new Map(), calls = new Map(), items = new Map(), itemIndexes = new Map();
+  const texts = new Map(), reasoningTexts = new Map(), calls = new Map(), items = new Map(), itemIndexes = new Map(), searchCalls = new Map();
   let finished = false;
   const outputIndex = event => event.output_index ?? itemIndexes.get(event.item_id) ?? 0;
   const refreshCalls = () => {
@@ -263,6 +263,12 @@ async function streamResponses({ settings, messages, tools, signal, onDelta, onA
     refreshCalls();
     return call;
   };
+  const ingestSearch = (item, index) => {
+    const value = { ...(searchCalls.get(index) || {}), ...structuredClone(item), type: 'web_search_call' };
+    searchCalls.set(index, value);
+    assembled.web_search_calls = [...searchCalls.entries()].sort((a,b) => a[0]-b[0]).map(([,call]) => structuredClone(call));
+    onActivity({type:'web_search_delta'}); onDelta('', assembled);
+  };
   const ingestItem = (item, index, complete = false) => {
     if (!item) return;
     if (item.id) itemIndexes.set(item.id, index);
@@ -270,6 +276,7 @@ async function streamResponses({ settings, messages, tools, signal, onDelta, onA
     if (item.type === 'reasoning') (item.summary || []).forEach((part, summaryIndex) => {
       if (part?.type === 'summary_text' && typeof part.text === 'string') reasoningPart(index, summaryIndex, part.text);
     });
+    if (item.type === 'web_search_call') ingestSearch(item, index);
     if (item.type === 'function_call') { onActivity({type:'tool_delta'}); ensureCall(index, item); }
     if (item.type === 'message') {
       if (item.phase === 'commentary' || item.phase === 'final_answer') assembled.phase = item.phase;
@@ -296,6 +303,10 @@ async function streamResponses({ settings, messages, tools, signal, onDelta, onA
     if (body.type === 'error') throw providerError(body, { transportStatus: response.status, requestId: response.headers.get('x-request-id') });
     const index = outputIndex(body);
     switch (body.type) {
+      case 'response.web_search_call.in_progress':
+      case 'response.web_search_call.searching':
+      case 'response.web_search_call.completed':
+        ingestSearch({ id: body.item_id, status: body.type.endsWith('.completed') ? 'completed' : body.type.endsWith('.searching') ? 'searching' : 'in_progress' }, index); break;
       case 'response.output_item.added': ingestItem(body.item,index); break;
       case 'response.output_item.done': ingestItem(body.item,index,true); break;
       case 'response.output_text.delta': textPart(index,body.content_index || 0,body.delta || '',true); break;
@@ -343,7 +354,7 @@ async function streamResponses({ settings, messages, tools, signal, onDelta, onA
   if (assembled.tool_calls?.some(call => !call.id || !call.function.name)) throw new Error('服务商返回的工具调用缺少 call_id 或名称。');
   for (const [index,call] of calls) if (items.has(index)) items.set(index,{...items.get(index),...call});
   if (items.size) assembled.response_items = [...items.entries()].sort((a,b)=>a[0]-b[0]).map(([,item])=>item);
-  if (!assembled.content && !assembled.tool_calls?.length) throw new Error('模型没有返回内容。请检查模型可用性或重新生成。');
+  if (!assembled.content && !assembled.tool_calls?.length && !assembled.response_items?.some(item => item.type === 'web_search_call' && item.status === 'completed')) throw new Error('模型没有返回内容。请检查模型可用性或重新生成。');
   return assembled;
 }
 
