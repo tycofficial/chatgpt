@@ -5,7 +5,7 @@ const MAX_FILE = 20 * 1024 * 1024;
 const decodeWorkspaceText = bytes => bytes[0] === 0xff && bytes[1] === 0xfe
   ? new TextDecoder('utf-16le').decode(bytes)
   : bytes[0] === 0xfe && bytes[1] === 0xff ? new TextDecoder('utf-16be').decode(bytes) : decoder.decode(bytes);
-const mime = name => ({ txt: 'text/plain', md: 'text/markdown', py: 'text/x-python', js: 'text/javascript', html: 'text/html', svg: 'image/svg+xml', csv: 'text/csv', json: 'application/json', png: 'image/png', pdf: 'application/pdf', zip: 'application/zip' }[name.split('.').at(-1)] || 'application/octet-stream');
+const mime = name => { const extensions = { txt: 'text/plain', md: 'text/markdown', py: 'text/x-python', js: 'text/javascript', html: 'text/html', svg: 'image/svg+xml', csv: 'text/csv', json: 'application/json', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', pdf: 'application/pdf', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', zip: 'application/zip' }; const extension = name.split('.').at(-1).toLowerCase(); return Object.hasOwn(extensions, extension) ? extensions[extension] : 'application/octet-stream'; };
 const PYTHON_ARTIFACT_MANIFEST = Object.freeze({ version: 1, source: 'browser-workspace-written-files', algorithm: 'sha256', verification: 'write-readback' });
 const artifactSHA256 = async bytes => [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map(value => value.toString(16).padStart(2, '0')).join('');
 function copyArtifactBytes(value) {

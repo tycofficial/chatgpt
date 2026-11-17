@@ -153,8 +153,8 @@ test('empty binary files have an exact version while malformed bytes/paths and o
   }
 });
 
-test('the existing descriptor MIME resolver remains unchanged; this version marker does not add Office rendering support', async t => {
+test('known Office MIME hints preserve exact byte versions without claiming binary validation or rendering support', async t => {
   const e = await environment(t, { output: output([{ name: 'example.docx', bytes: utf8('Negative MIME-contract fixture; not a DOCX parser claim'), mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }]) });
-  const result = await e.invoke(); assert.equal(result.structuredContent.files[0].mime, 'application/octet-stream');
+  const result = await e.invoke(); assert.equal(result.structuredContent.files[0].mime, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
   assert.equal(result.structuredContent.files[0].sha256, sha(await e.actual('example.docx')));
 });

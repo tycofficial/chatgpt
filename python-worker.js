@@ -64,7 +64,8 @@ async function snapshot(fs, path = '/mnt/data', result = new Map()) {
 
 function mimeType(name) {
   const extensions = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml', pdf: 'application/pdf', csv: 'text/csv', json: 'application/json', html: 'text/html', txt: 'text/plain', md: 'text/markdown', py: 'text/x-python', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', zip: 'application/zip' };
-  return extensions[name.split('.').pop().toLowerCase()] || 'application/octet-stream';
+  const extension = name.split('.').pop().toLowerCase();
+  return Object.hasOwn(extensions, extension) ? extensions[extension] : 'application/octet-stream';
 }
 
 function dataURL(bytes, mime) {
