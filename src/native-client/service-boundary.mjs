@@ -2,10 +2,13 @@ import * as modelCatalog from './model-catalog.js';
 import { createModelCatalogAdapter } from './model-catalog-adapter.mjs';
 import { DEFAULT_SETTINGS } from './config.js';
 import { streamCompletion, PythonRuntime, PYTHON_TOOL } from './runtime.js';
+import { createProviderCompletionRouter } from './provider-routing.mjs';
 import { LocalAppServer, LocalProtocolSocket } from './local-app-server.mjs';
 import { getPrototypeLocalSession, getPrototypeLocalAuth, getLocalAccountCheck, getLocalOptimizedAccount, getLocalWhamAccounts, getPrototypeCurrentUser, isPrototypeLocalSession, clearPrototypeLocalSession, getLocalSignedOutUrl, getLocalAccountStorageKey } from './local-identity.mjs';
 import { getPrototypeConfiguration, setLocalLibraryAvailability } from './local-configuration.mjs';
 import { ClassicChatAdapter } from './classic-chat-adapter.mjs';
+import { createPortableConversationShare } from './portable-conversation-share.mjs';
+import { createClassicResponseActions } from './classic-response-branches.mjs';
 import { LocalConversationPubSub } from './local-pubsub.mjs';
 import { readLocalUserPreferences, updateLocalUserPreference, acknowledgeLocalAnnouncement } from './local-user-preferences.mjs';
 import { createLocalPersonalizationService } from './local-personalization-service.mjs';
@@ -24,7 +27,7 @@ import { createNativeWorkspaceReferences } from './native-workspace-references.m
 import { createNativeFileReferenceComposition } from './native-file-reference-composition.mjs';
 import { createLocalInputPreparer } from './local-input-preparation.mjs';
 import { createLocalPricingAdapter } from './local-pricing.mjs';
-import { SITE_ACCOUNT_SERVICE, getSiteAccount, getSiteSessionToken, hasModelSelectionAccess, logoutSiteAccount } from './site-account.mjs';
+import { SITE_ACCOUNT_SERVICE, getSiteAccount, getSiteSessionToken, hasModelSelectionAccess, getSitePlanCapabilities, logoutSiteAccount } from './site-account.mjs';
 import { createLocalCodexAdapter } from './local-codex-adapter.mjs';
 import { isOpenStreetMapTileRequest, fetchOpenStreetMapTile } from './local-map-provider.mjs';
 import { createLocalDiscoveryAdapter } from './local-discovery.mjs';
@@ -68,7 +71,12 @@ export const localPreferredHostTransport = createPreferredHostTransport({ baseUR
   fetchImpl: (...args) => globalThis.fetch(...args), getSiteAccount, getSiteSessionToken,
   onDiagnostic: event => localProtocolDiagnostics.push(event),
 });
-export const localPreferredCompletion = createPreferredCompletion({ runtimeCompletion: streamCompletion, preferredTransport: localPreferredHostTransport,
+export const localAPIRouter = createProviderCompletionRouter({
+  complete: streamCompletion, getProviders: () => DEFAULT_SETTINGS.apiProviders,
+  isCurrent: () => isPrototypeLocalSession() && Boolean(getPersonalizationIdentity()),
+  onDiagnostic: event => localProtocolDiagnostics.push(event),
+});
+export const localPreferredCompletion = createPreferredCompletion({ runtimeCompletion: localAPIRouter.complete, preferredTransport: localPreferredHostTransport,
   enabled: () => globalThis.__CHATGPT_REPLICA_ENV__?.preferredHostEnabled === true,
 });
 const localWorkspaceExecutor = createBrowserToolExecutor({ PythonRuntime, PYTHON_TOOL,
@@ -129,7 +137,7 @@ export const localMapsService = createLocalMapsService({ storage: { getItem: key
 // A preview flag, prototype account ID or late login cannot claim cloud history.
 const getHistoryIdentity = () => {
   const local = getPersonalizationIdentity(), site = getSiteAccount();
-  return local && site?.id ? { ownerId: site.id, accountId: local.accountId, namespace: getLocalAccountStorageKey('cg-original-app-server:v1') } : null;
+  return local && site?.id && site.authenticationMode !== 'offline-administrator' ? { ownerId: site.id, accountId: local.accountId, namespace: getLocalAccountStorageKey('cg-original-app-server:v1') } : null;
 };
 export let localAccountHistory = null;
 let historyFeedback = null, nativeHistoryToaster = () => null, historyApplying = false;
@@ -271,7 +279,7 @@ async function finishAccountHistoryBeforeLogout() {
 }
 export const localDotAdapter = createLocalDotAdapter({
   storage: { getItem: key => globalThis.localStorage.getItem(key), setItem: (key, value) => globalThis.localStorage.setItem(key, value) },
-  appServer: localAppServer, getIdentity: getPrototypeLocalAuth, isLocalSession: isPrototypeLocalSession,
+  appServer: localAppServer, getIdentity: getPrototypeLocalAuth, isLocalSession: () => isPrototypeLocalSession() && getSitePlanCapabilities().dot,
   readSettings: () => ({ ...DEFAULT_SETTINGS }), getCapabilities: getLocalExecutionCapabilities, diagnostics: localProtocolDiagnostics,
 });
 const localNativePublicationReferences = createNativePublicationReferences({
@@ -301,6 +309,20 @@ const localNativeFileReferences = createNativeFileReferenceComposition({
 export const localClassicChatAdapter = new ClassicChatAdapter({ appServer: localAppServer, models: localModelAdapter, onConversationChange: (type, payload) => localConversationPubSub.publish(type, payload),
   getPublishedFileReferences: context => localNativeFileReferences.forAssistant(context),
 });
+const getResponseIdentity = () => { const local = getPersonalizationIdentity(), site = getSiteAccount(); return local && site ? { ...local, ownerId: site.id } : null; };
+const localResponseActions = createClassicResponseActions({
+  appServer: localAppServer, classic: localClassicChatAdapter,
+  models: localModelAdapter, getIdentity: getResponseIdentity,
+});
+localClassicChatAdapter.responseActions = localResponseActions;
+localClassicChatAdapter.detail = localResponseActions.detail;
+localClassicChatAdapter.message = localResponseActions.message;
+localClassicChatAdapter.projectItem = localResponseActions.projectItem;
+export const localConversationShare = createPortableConversationShare({
+  getIdentity: getResponseIdentity,
+  getConversation: id => localClassicChatAdapter.detail(localAppServer.getThread(id)),
+  baseURL: new URL('../', import.meta.url).href,
+});
 export const localCodexAdapter = createLocalCodexAdapter({ appServer: localAppServer, models: localModelAdapter, readSettings: () => ({ ...DEFAULT_SETTINGS }), getIdentity: getPrototypeLocalAuth, isLocalSession: isPrototypeLocalSession, getCapabilities: getLocalExecutionCapabilities, diagnostics: localProtocolDiagnostics });
 export function getLocalExecutionCapabilities() {
   return { executionSource: 'local-app-server',
@@ -316,10 +338,7 @@ export function installNetworkBoundary() {
   URL.revokeObjectURL = url => { localOwnedDownloadTransport.forgetNativeDownloadURL(url); return originalRevokeObjectURL(url); };
   const diagnostics = localProtocolDiagnostics;
   const localCsrfToken = crypto.randomUUID();
-  const gateway = new URL(DEFAULT_SETTINGS.apiBase);
-  const cleanPath = gateway.pathname.replace(/\/+$/, '');
-  const apiPath = cleanPath.endsWith('/v1') ? cleanPath : `${cleanPath}/v1`;
-  const gatewayPaths = new Set([`${apiPath}/chat/completions`, `${apiPath}/responses`, `${apiPath}/models`]);
+  const gatewayRules = localAPIRouter.getAllowedRequests();
   const response = (body, status = 200) => new Response(JSON.stringify(body), {
     status, headers: { 'Content-Type': 'application/json' },
   });
@@ -342,7 +361,7 @@ export function installNetworkBoundary() {
       headers.delete('Cookie');
       return originalFetch(new Request(request, { headers, credentials: 'omit' }));
     }
-    if (url.origin === gateway.origin && gatewayPaths.has(url.pathname)) {
+    if (gatewayRules.some(rule => url.origin === rule.origin && url.pathname === rule.path && request.method === rule.method && !url.search)) {
       diagnostics.push({ type: 'authorized-gateway-request', method: request.method, path: url.pathname });
       return originalFetch(new Request(request, { credentials: 'omit', redirect: 'error' }));
     }
@@ -399,6 +418,8 @@ export function installNetworkBoundary() {
     }
     const adapterPath = url.pathname.replace(/^\/(?:__codex-api|backend-api)(?=\/)/, '');
     try {
+      const share = await localConversationShare.handle(request, adapterPath);
+      if (share) return share;
       const personalization = await localPersonalizationService.handle(request, adapterPath);
       if (personalization) return personalization;
       const artifact = await localToolExecutor.handleArtifactRequest(request, adapterPath);

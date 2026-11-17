@@ -19,8 +19,6 @@ export function createModelCatalogAdapter(catalog) {
   const curated = catalog.getWorkSelectionCatalog({ selectionMode: 'auto' });
   const manual = new Map(ids.map(model => [model, catalog.getWorkSelectionCatalog({ model, selectionMode: 'pinned' })]));
   const selection = catalog.normalizeWorkSelection({});
-  // Chat is a frontend alias for the base API model, without Work orchestration.
-  const chatManual = manual.get(selection.model).filter(choice => choice.effort !== 'ultra');
   const modelLabel = model => catalog.WORK_MODEL_LABELS[model];
   const rawEffort = effort => {
     const raw = FRONTEND_TO_RAW_EFFORT[effort];
@@ -39,8 +37,8 @@ export function createModelCatalogAdapter(catalog) {
     originalPrivateMetadata: false,
     fastMode: { originalServiceTierId: 'fast', originalPreferenceKey: 'chatgpt-tpp-cloud-service-tier-v1', uiPreference: true, providerPriorityVerified: false },
     siteUltraOrchestration: catalog.SITE_ULTRA_ORCHESTRATION,
-    frontendChatAlias: { slug: 'auto', apiModel: selection.model, meaning: 'frontend selection alias, not an additional gateway model' },
-    description: 'Curated presets come from the explicit six-position capture. Per-model manual efforts combine API capabilities with explicit site Ultra orchestration; they are not a captured original account response.',
+    frontendChatAlias: { defaultSlug: 'auto', families: catalog.CHAT_FAMILIES, meaning: 'Chat aliases route to explicit models and reasoning modes; aliases are not gateway models' },
+    description: 'The captured six presets remain unchanged. Manual Work/Codex efforts follow the first-party calling-host declaration plus explicit site Ultra; Chat uses two official families. These are not captured private account responses.',
   });
   function preset(choice) {
     return {
@@ -64,61 +62,53 @@ export function createModelCatalogAdapter(catalog) {
     };
   }
   function getChatGptModels() {
+    const chatModels = catalog.CHAT_FAMILIES.flatMap(family => [
+      { slug: family.standardAlias, title: family.label, description: null, configurable_thinking_effort: true, default_thinking_effort: 'standard', thinking_efforts: catalog.CHAT_EFFORTS.map(effort => ({ thinking_effort: rawEffort(effort), short_label: catalog.CHAT_EFFORT_LABELS[effort], full_label: catalog.CHAT_EFFORT_LABELS[effort] })), is_work_mode_model: false, enabled_tools: [], tags: [] },
+      { slug: family.proAlias, title: family.label + ' Pro', description: null, configurable_thinking_effort: true, default_thinking_effort: 'standard', thinking_efforts: [{ thinking_effort: 'standard', short_label: 'Pro', full_label: 'Pro' }], reasoning_type: 'pro', is_work_mode_model: false, enabled_tools: [], tags: [] },
+    ]);
+    const familyPresets = family => [
+      ...catalog.CHAT_EFFORTS.map(effort => ({ model_slug: family.standardAlias, thinking_effort: rawEffort(effort), lane: effort === 'none' ? 'instant' : 'thinking', title: catalog.CHAT_EFFORT_LABELS[effort], selected_display_title: catalog.CHAT_EFFORT_LABELS[effort], selected_display_version: family.label, preset_type: 'available' })),
+      { model_slug: family.proAlias, thinking_effort: 'standard', lane: 'pro', reasoning_type: 'pro', title: 'Pro', selected_display_title: 'Pro', selected_display_version: family.label, preset_type: 'available' },
+    ];
     return {
       default_model_slug: 'auto',
-      categories: [{ action_pill_short_name: 'ChatGPT', category: 'auto', default_model: 'auto', human_category_name: 'ChatGPT', human_category_short_name: 'ChatGPT', model_lane: 'thinking', short_explainer: null, supported_models: ['auto'], tagline: null, title: 'ChatGPT' }, ...ids.map(model => ({
-        action_pill_short_name: modelLabel(model),
-        category: model,
-        default_model: model,
-        human_category_name: modelLabel(model),
-        human_category_short_name: modelLabel(model),
+      categories: catalog.CHAT_FAMILIES.map(family => ({
+        action_pill_short_name: family.label,
+        category: family.id,
+        default_model: family.standardAlias,
+        human_category_name: family.label,
+        human_category_short_name: family.label,
         model_lane: 'thinking',
         short_explainer: null,
-        supported_models: [model],
+        supported_models: [family.standardAlias, family.proAlias],
         tagline: null,
-        title: modelLabel(model),
-      }))],
-      models: [{ slug: 'auto', title: 'ChatGPT', description: null, configurable_thinking_effort: true, default_thinking_effort: rawEffort(selection.effort), thinking_efforts: chatManual.map(choice => ({ thinking_effort: rawEffort(choice.effort), short_label: choice.label, full_label: choice.label })), is_work_mode_model: false, enabled_tools: [], tags: [] }, ...ids.map(model => ({
-        slug: model,
-        title: modelLabel(model),
-        description: null,
-        configurable_thinking_effort: true,
-        default_thinking_effort: rawEffort(defaults.get(model)),
-        thinking_efforts: manual.get(model).map(choice => ({
-          thinking_effort: rawEffort(choice.effort),
-          short_label: choice.label,
-          full_label: choice.label,
-        })),
-        is_work_mode_model: true,
-        service_tier_options: fastOptions(),
-        enabled_tools: [],
-        tags: [],
-      }))],
-      internal_groups: [{ group: 'default', model_ids: ['auto', ...ids] }],
-      versions: [
-        version('latest', catalog.WORK_DEFAULT_OPTION.label, [...new Set(curated.map(choice => choice.model))], curated),
-        ...ids.map(model => version(model, modelLabel(model), [model], manual.get(model))),
-        // Source iLYI chooses Chat from isWorkModeModel=false; its original
-        // picker needs a version radio to select this frontend alias again.
-        version('auto', 'ChatGPT', ['auto'], chatManual.map(choice => ({ ...choice, model: 'auto', displayLabel: `ChatGPT ${choice.label}` }))),
-      ],
-      slider_settings: curated.map(choice => ({ model_slug: choice.model, thinking_effort: rawEffort(choice.effort) })),
+        title: family.label,
+      })),
+      // iLYI needs Work capability flags when switching the original modes.
+      // These rows are deliberately absent from Chat categories and versions.
+      models: [...chatModels, ...workModelRows()],
+      internal_groups: [{ group: 'default', model_ids: chatModels.map(model => model.slug) }],
+      versions: catalog.CHAT_FAMILIES.map(family => ({ id: family.id, display_text: family.label, display_text_for_intelligence: family.label, slugs: [family.standardAlias, family.proAlias], intelligence_presets: familyPresets(family) })),
+      slider_settings: familyPresets(catalog.CHAT_FAMILIES[0]).map(choice => ({ model_slug: choice.model_slug, thinking_effort: choice.thinking_effort })),
       workspace_model_policy: null,
-      adapter_provenance: provenance,
+      adapter_provenance: { ...provenance, chat: catalog.CHAT_MODEL_PROVENANCE },
     };
   }
+  function workModelRows() {
+    return ids.map(model => ({ slug: model, title: modelLabel(model), description: null, configurable_thinking_effort: true, default_thinking_effort: rawEffort(defaults.get(model)), thinking_efforts: manual.get(model).map(choice => ({ thinking_effort: rawEffort(choice.effort), short_label: choice.label, full_label: choice.label })), is_work_mode_model: true, service_tier_options: fastOptions(), enabled_tools: [], tags: [] }));
+  }
   function getWorkModels() {
-    const raw = getChatGptModels(), workIds = new Set(ids);
     // TFzY.p consumes this exact default_model_slug field. qJjJ/osfW use it
     // only when no valid saved Work preference exists, then TFzY.k picks
     // the original latest version and TuVM/LLIt retains its six presets.
     return {
-      ...raw,
       default_model_slug: selection.model,
-      categories: raw.categories.filter(row => workIds.has(row.default_model)),
-      models: raw.models.filter(row => workIds.has(row.slug)),
-      versions: raw.versions.filter(row => row.id !== 'auto'),
-      internal_groups: raw.internal_groups.map(group => ({ ...group, model_ids: group.model_ids.filter(id => workIds.has(id)) })),
+      categories: ids.map(model => ({ action_pill_short_name: modelLabel(model), category: model, default_model: model, human_category_name: modelLabel(model), human_category_short_name: modelLabel(model), model_lane: 'thinking', short_explainer: null, supported_models: [model], tagline: null, title: modelLabel(model) })),
+      models: workModelRows(),
+      versions: [version('latest', catalog.WORK_DEFAULT_OPTION.label, [...new Set(curated.map(choice => choice.model))], curated), ...ids.map(model => version(model, modelLabel(model), [model], manual.get(model)))],
+      internal_groups: [{ group: 'default', model_ids: [...ids] }],
+      slider_settings: curated.map(choice => ({ model_slug: choice.model, thinking_effort: rawEffort(choice.effort) })),
+      workspace_model_policy: null,
       adapter_provenance: { ...provenance, surface: 'work', frontendChatAlias: undefined, defaultSelectionSource: 'curated-six-position-catalog-with-original-latest-version' },
     };
   }

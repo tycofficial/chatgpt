@@ -21,7 +21,7 @@ function fixture({ storage = memory(), workspaceStore = workspace(), free = fals
   const prepare = createLocalInputPreparer({ files });
   const server = new LocalAppServer({ storage, models, catalog, toolExecutor: executor, getExecutionPolicy: () => ({ modelSelection: !free }), prepareUserInput: async context => { preparations++; return prepare(context); }, streamCompletion: transport ?? streamCompletion, readSettings: () => ({ apiBase: 'https://file-gateway.fixture', apiKey: 'fixture-only', model: 'gpt-6.1-sol', apiTransport: 'responses' }), agentOptions: { streamRetries: 0 } });
   const classic = new ClassicChatAdapter({ appServer: server, models });
-  return { server, classic, files, executor, workspaceStore, storage, setAccount: value => { account = value; }, get preparations() { return preparations; } };
+  return { server, classic, files, executor, workspaceStore, storage, free, setAccount: value => { account = value; }, get preparations() { return preparations; } };
 }
 async function ready(env, contents = 'Actual neutral uploaded content.\n', name = 'neutral.txt', mime = 'text/plain') {
   const bytes = typeof contents === 'string' ? new TextEncoder().encode(contents) : contents;
@@ -34,7 +34,7 @@ async function ready(env, contents = 'Actual neutral uploaded content.\n', name 
   return { id: row.file_id, name, mime_type: mime, size: bytes.length };
 }
 async function send(env, { attachment, parts = ['Read the attached neutral input.'], content_type = 'text', conversation_id, hints } = {}) {
-  const body = { action: 'next', model: 'gpt-6-astra', thinking_effort: 'extended', system_hints: hints, conversation_id, messages: [{ id: crypto.randomUUID(), author: { role: 'user' }, content: { content_type, parts }, metadata: { attachments: attachment ? [attachment] : [] } }] };
+  const body = { action: 'next', conversation_origin: env.free ? null : 'tpp', model: env.free ? 'auto' : 'gpt-6-astra', thinking_effort: 'extended', system_hints: hints, conversation_id, messages: [{ id: crypto.randomUUID(), author: { role: 'user' }, content: { content_type, parts }, metadata: { attachments: attachment ? [attachment] : [] } }] };
   const response = await env.classic.handle(new Request('https://local.fixture/f/conversation', { method: 'POST', body: JSON.stringify(body) }), '/f/conversation');
   assert.equal(response.status, 200); return response.text();
 }
@@ -140,7 +140,7 @@ test('pagehide resumes prepared input without rereading bytes or replacing an ac
 
 test('Free attachment context retains fixed Luna and native reason hint medium', async () => {
   const env = fixture({ free: true }), attachment = await ready(env, 'Actual Free text file.');
-  await withGateway(async requests => { assert.match(await send(env, { attachment, hints: ['reason'] }), /message_stream_complete/); assert.equal(requests[0].model, 'gpt-6-luna'); assert.equal(requests[0].reasoning.effort, 'medium'); assert.match(requests[0].input.find(message => message.role === 'user').content, /Actual Free text file/); });
+  await withGateway(async requests => { assert.match(await send(env, { attachment, hints: ['reason'] }), /message_stream_complete/); assert.equal(requests[0].model, 'gpt-5.6-luna'); assert.equal(requests[0].reasoning.effort, 'medium'); assert.match(requests[0].input.find(message => message.role === 'user').content, /Actual Free text file/); });
 });
 
 

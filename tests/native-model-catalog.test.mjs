@@ -3,21 +3,21 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
-import * as catalog from '../model-catalog.js';
+import * as catalog from '../src/native-client/model-catalog.js';
 import {createModelCatalogAdapter,FRONTEND_TO_RAW_EFFORT} from '../src/native-client/model-catalog-adapter.mjs';
 import {allowedReasoningEfforts} from '../runtime.js';
 const adapter=createModelCatalogAdapter(catalog);
 test('TFzY raw effort semantics keep zero/none, max and ultra distinct',()=>{assert.equal(FRONTEND_TO_RAW_EFFORT.none,'zero');assert.equal(FRONTEND_TO_RAW_EFFORT.max,'max');assert.equal(FRONTEND_TO_RAW_EFFORT.ultra,'ultra');assert.notEqual(FRONTEND_TO_RAW_EFFORT.max,FRONTEND_TO_RAW_EFFORT.ultra);});
-test('Luna exposes None first and Max last without the site Ultra mode',()=>{const raw=adapter.getChatGptModels().models.find(m=>m.slug==='gpt-6-luna'),rpc=adapter.getRpcModelList().data.find(m=>m.model==='gpt-6-luna');assert.equal(raw.thinking_efforts[0].thinking_effort,'zero');assert.equal(raw.thinking_efforts[0].short_label,'无');assert.equal(rpc.supportedReasoningEfforts[0].reasoningEffort,'none');assert.equal(rpc.supportedReasoningEfforts.at(-1).reasoningEffort,'max');assert(!rpc.supportedReasoningEfforts.some(e=>e.reasoningEffort==='ultra'));});
-test('Sol and Astra expose a separate site Ultra mode above their API Max effort',()=>{for(const model of ['gpt-6.1-sol','gpt-6-astra']){const row=adapter.getRpcModelList().data.find(m=>m.model===model),top=row.supportedReasoningEfforts.at(-1);assert.equal(top.reasoningEffort,'ultra');assert.equal(top.adapterExecutionMode.mode,'parallel-agents');assert.equal(top.adapterExecutionMode.baseReasoningEffort,'max');assert.equal(top.adapterExecutionMode.providerReasoningEffort,false);assert(row.supportedReasoningEfforts.some(e=>e.reasoningEffort==='max'));assert.equal(adapter.getChatGptModels().models.find(m=>m.slug===model).thinking_efforts.at(-1).short_label,'Ultra');}});
+test('both Luna manual catalogs start at Low and end at Max without site Ultra',()=>{for(const model of ['gpt-6-luna','gpt-5.6-luna']){const raw=adapter.getWorkModels().models.find(m=>m.slug===model),rpc=adapter.getRpcModelList().data.find(m=>m.model===model);assert.equal(raw.thinking_efforts[0].thinking_effort,'min');assert.equal(raw.thinking_efforts[0].short_label,'轻度');assert.equal(rpc.supportedReasoningEfforts[0].reasoningEffort,'low');assert.equal(rpc.supportedReasoningEfforts.at(-1).reasoningEffort,'max');assert(!rpc.supportedReasoningEfforts.some(e=>e.reasoningEffort==='ultra'));}});
+test('six non-Luna models expose separate site Ultra above their API Max effort',()=>{for(const model of catalog.SITE_ULTRA_ORCHESTRATION.models){const row=adapter.getRpcModelList().data.find(m=>m.model===model),top=row.supportedReasoningEfforts.at(-1);assert.equal(top.reasoningEffort,'ultra');assert.equal(top.adapterExecutionMode.mode,'parallel-agents');assert.equal(top.adapterExecutionMode.baseReasoningEffort,'max');assert.equal(top.adapterExecutionMode.providerReasoningEffort,false);assert(row.supportedReasoningEfforts.some(e=>e.reasoningEffort==='max'));assert.equal(adapter.getWorkModels().models.find(m=>m.slug===model).thinking_efforts.at(-1).short_label,'Ultra');}});
 test('Ultra is never advertised as a provider reasoning_effort value',()=>{for(const model of catalog.WORK_MODEL_IDS)assert(!allowedReasoningEfforts(model).includes('ultra'));});
-test('raw display title contains only effort and model version has its own field',()=>{const raw=adapter.getChatGptModels();for(const version of raw.versions){for(const preset of version.intelligence_presets){assert.equal(preset.selected_display_title,preset.title);assert(!/GPT|Luna|Sol|Astra/.test(preset.selected_display_title));assert.equal(preset.selected_display_version,preset.model_slug==='auto'?'ChatGPT':catalog.WORK_MODEL_LABELS[preset.model_slug]);}}});
-test('the Chat alias stays a plain API model selection without Work orchestration',()=>{const raw=adapter.getChatGptModels();assert(!raw.models.find(m=>m.slug==='auto').thinking_efforts.some(e=>e.thinking_effort==='ultra'));assert(!raw.versions.find(v=>v.id==='auto').intelligence_presets.some(e=>e.thinking_effort==='ultra'));});
+test('raw display title contains only thinking option and each Chat family owns its version field',()=>{const raw=adapter.getChatGptModels();for(const version of raw.versions){for(const preset of version.intelligence_presets){assert.equal(preset.selected_display_title,preset.title);assert(!/GPT|Luna|Sol|Astra/.test(preset.selected_display_title));assert.equal(preset.selected_display_version,version.display_text);}}});
+test('legacy auto remains GPT-6 standard and Chat never gains Work orchestration',()=>{const raw=adapter.getChatGptModels();assert(!raw.models.find(m=>m.slug==='auto').thinking_efforts.some(e=>e.thinking_effort==='ultra'));assert(raw.versions.every(v=>v.intelligence_presets.every(e=>e.thinking_effort!=='ultra')));assert.equal(catalog.resolveChatSelection('auto').model,'gpt-6-sol');});
 test('the six observed default presets remain distinct from manual model capabilities',()=>{assert.equal(adapter.getSliderModelsConfig().presets[0].length,6);assert.deepEqual(adapter.getSliderModelsConfig().presets[0].map(e=>[e.model,e.reasoning_effort]),catalog.WORK_PRESETS.map(e=>[e.model,e.effort]));});
-test('source mode separation and both Ultra gates use verified site permission',()=>{const source=fs.readFileSync(new URL('../src/native-client/local-configuration.mjs',import.meta.url),'utf8').replace(/^import .*;\r?$/gm,'').replace(/^export\s+/gm,'');for(const access of [false,true]){const context=vm.createContext({catalog,createModelCatalogAdapter,getPrototypeStatsigUser:()=>({userID:'fixture-user',customIDs:{}}),isPrototypeLocalSession:()=>true,hasModelSelectionAccess:()=>access,structuredClone,Date});new vm.Script(source+'\nglobalThis.fixtureConfig=getPrototypeConfiguration();',{filename:'local-configuration.mjs (isolated fixture)'}).runInContext(context);const config=context.fixtureConfig;assert.equal(config.layer_configs['3040264819'].value.merged_picker,false);for(const id of ['536305374','1186680773']){assert.equal(config.feature_gates[id].value,access);assert.equal(Object.values(config.feature_gates).filter(g=>g.name===id).length,2);}}});
+test('source mode separation and both Ultra gates use verified site permission',()=>{const source=fs.readFileSync(new URL('../src/native-client/local-configuration.mjs',import.meta.url),'utf8').replace(/^import .*;\r?$/gm,'').replace(/^export\s+/gm,'');for(const access of [false,true]){const context=vm.createContext({catalog,createModelCatalogAdapter,getPrototypeStatsigUser:()=>({userID:'fixture-user',customIDs:{}}),isPrototypeLocalSession:()=>true,hasModelSelectionAccess:()=>access,getSitePlanCapabilities:()=>({work:access,dot:access}),structuredClone,Date});new vm.Script(source+'\nglobalThis.fixtureConfig=getPrototypeConfiguration();',{filename:'local-configuration.mjs (isolated fixture)'}).runInContext(context);const config=context.fixtureConfig;assert.equal(config.layer_configs['3040264819'].value.merged_picker,false);for(const id of ['536305374','1186680773']){assert.equal(config.feature_gates[id].value,access);assert.equal(Object.values(config.feature_gates).filter(g=>g.name===id).length,2);}}});
 
 test('Fast survives the source TFzY two-level service-tier filter without adding it to Chat',()=>{
-  const raw=adapter.getChatGptModels();
+  const raw=adapter.getWorkModels(),chat=adapter.getChatGptModels();
   const presetTiers=new Set(raw.versions.flatMap(v=>v.intelligence_presets).flatMap(p=>(p.service_tier_options??[]).filter(t=>t.service_tier!=='standard').map(t=>t.service_tier)));
   assert(presetTiers.has('fast'));
   for(const id of catalog.WORK_MODEL_IDS){
@@ -25,22 +25,22 @@ test('Fast survives the source TFzY two-level service-tier filter without adding
     assert(row.service_tier_options.filter(t=>presetTiers.has(t.service_tier)).some(t=>t.service_tier==='fast'));
     assert(adapter.getRpcModelList().data.find(m=>m.model===id).serviceTiers.some(t=>t.id==='fast'));
   }
-  assert.equal(raw.models.find(m=>m.slug==='auto').service_tier_options,undefined);
-  assert(raw.versions.find(v=>v.id==='auto').intelligence_presets.every(p=>p.service_tier_options===undefined));
+  assert.equal(chat.models.find(m=>m.slug==='auto').service_tier_options,undefined);
+  assert(chat.versions.every(v=>v.intelligence_presets.every(p=>p.service_tier_options===undefined)));
   assert.equal(adapter.provenance.fastMode.providerPriorityVerified,false);
 });
 
-test('dual-matched Terra stays manual in Work and Codex, with no invented Ultra or Chat preset',()=>{
-  const id='gpt-6.1-terra',efforts=['none','low','medium','high','xhigh','max'];
+test('dual-matched Terra stays manual with declared host Ultra and no Chat or curated preset',()=>{
+  const id='gpt-6.1-terra',efforts=['low','medium','high','xhigh','max','ultra'];
   assert(catalog.WORK_MODEL_IDS.includes(id));
   assert.deepEqual(catalog.WORK_PINNED_EFFORTS[id],efforts);
   assert.deepEqual(catalog.getWorkSelectionCatalog({model:id,selectionMode:'pinned'}).map(x=>x.effort),efforts);
   assert(!catalog.WORK_PRESETS.some(p=>p.model===id));
-  assert(!catalog.SITE_ULTRA_ORCHESTRATION.models.includes(id));
+  assert(catalog.SITE_ULTRA_ORCHESTRATION.models.includes(id));
   const raw=adapter.getChatGptModels();
   assert(raw.models.find(m=>m.slug===id).is_work_mode_model);
-  assert(!raw.versions.find(v=>v.id==='auto').intelligence_presets.some(p=>p.model_slug===id));
-  assert(!raw.versions.find(v=>v.id==='latest').intelligence_presets.some(p=>p.model_slug===id));
+  assert(raw.versions.every(v=>!v.intelligence_presets.some(p=>p.model_slug===id)));
+  assert(!adapter.getWorkModels().versions.find(v=>v.id==='latest').intelligence_presets.some(p=>p.model_slug===id));
   assert.deepEqual(adapter.getRpcModelList().data.find(m=>m.model===id).supportedReasoningEfforts.map(x=>x.reasoningEffort),efforts);
   assert.equal(catalog.WORK_ADDITIONAL_MODEL_PROVENANCE[id].manualOnly,true);
   assert.equal(catalog.WORK_ADDITIONAL_MODEL_PROVENANCE[id].inferenceVerified,false);

@@ -28,7 +28,7 @@ function serverFor(env, { free = false, serverStorage = memory() } = {}) {
   return { server, classic: new ClassicChatAdapter({ appServer: server, models }), serverStorage };
 }
 async function send(classic, { origin = null, conversationId, think = false, expectFailure = false } = {}) {
-  const body = { action: 'next', parent_message_id: crypto.randomUUID(), model: 'auto', messages: [{ id: crypto.randomUUID(), author: { role: 'user' }, content: { content_type: 'text', parts: ['Neutral next task.'] }, metadata: {} }], ...(origin ? { conversation_origin: origin } : {}), ...(conversationId ? { conversation_id: conversationId } : {}), ...(think ? { system_hints: ['reason'] } : {}) };
+  const body = { action: 'next', parent_message_id: crypto.randomUUID(), model: (origin ?? (conversationId ? classic.server.getThread(conversationId).adapterMetadata.conversationOrigin : null)) === 'tpp' ? 'gpt-6.1-sol' : 'auto', messages: [{ id: crypto.randomUUID(), author: { role: 'user' }, content: { content_type: 'text', parts: ['Neutral next task.'] }, metadata: {} }], ...(origin ? { conversation_origin: origin } : {}), ...(conversationId ? { conversation_id: conversationId } : {}), ...(think ? { system_hints: ['reason'] } : {}) };
   const response = await classic.handle(new Request('https://personalization.fixture/f/conversation', { method: 'POST', body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } }), '/f/conversation');
   assert.equal(response.status, 200); const text = await response.text();
   if (expectFailure) assert.ok(text.includes('Could not read personalization')); else assert.ok(text.includes('[DONE]'));
@@ -55,7 +55,7 @@ test('actual Classic Chat and Work requests carry exact field JSON, preserve bas
       assert.equal(request.input[0].role, 'system');
       assert.equal(request.input[0].content, base.customInstructions + '\n\n' + serializedProfile);
       assert.equal(request.input.filter(record => typeof record.content === 'string' && record.content.includes(serializedProfile)).length, 1);
-      assert.equal(request.model, 'gpt-6.1-sol');
+      assert.equal(request.model, ['gpt-6-sol','gpt-6.1-sol'][requests.indexOf(request)]);
     }
     assert.equal([...server.threads.values()].every(thread => thread.turns[0].status === 'completed'), true);
     assert.deepEqual(env.readSettings(), base);
@@ -81,12 +81,12 @@ test('disabling retains text, removes it from next same-thread request, and re-e
   });
 });
 
-test('Free remains Luna low or explicit medium while the enabled profile has real request effect', async () => {
+test('Free remains 5.6 Luna Instant or explicit medium while the enabled profile has real request effect', async () => {
   const env = ownerEnvironment(); env.service.patchUserSystemMessages(profile);
   await withHTTPFixture(async requests => {
     const { classic } = serverFor(env, { free: true });
     await send(classic); await send(classic, { think: true });
-    assert.deepEqual(requests.map(request => [request.model, request.reasoning.effort]), [['gpt-6-luna', 'low'], ['gpt-6-luna', 'medium']]);
+    assert.deepEqual(requests.map(request => [request.model, request.reasoning.effort]), [['gpt-5.6-luna', 'none'], ['gpt-5.6-luna', 'medium']]);
     assert.ok(requests.every(request => request.input[0].content.endsWith(serializedProfile)));
   });
 });

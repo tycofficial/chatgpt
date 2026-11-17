@@ -58,7 +58,7 @@ function syncItem(value, unavailableResources) {
   if (!object(value) || typeof value.id !== 'string') fail('SYNC_INVALID_DOCUMENT', 'Invalid conversation item.');
   if (value.type === 'userMessage') return { ...fields(value, ['id', 'type', 'clientId']), content: userInput(value.content) };
   if (value.type === 'agentMessage') return { id: value.id, type: value.type, ...(['commentary', 'final_answer'].includes(value.phase) ? { phase: value.phase } : {}), text: safeLinkText(value.text) };
-  if (value.type === 'reasoning') return { id: value.id, type: value.type, summary: strings(value.summary).map(safeLinkText), content: strings(value.content).map(safeLinkText) };
+  if (value.type === 'reasoning') return { id: value.id, type: value.type, summary: strings(value.summary).map(safeLinkText), content: strings(value.content).map(safeLinkText), ...fields(value, ['status', 'startedAtMs', 'completedAtMs', 'durationMs']), ...(value.status === 'inProgress' ? { status: 'cancelled', completedAtMs: null, durationMs: null } : {}) };
   if (value.type === 'mcpToolCall') {
     const content = [];
     for (const item of value.result?.content ?? []) {
@@ -83,10 +83,10 @@ export function projectChatHistoryThread(thread) {
   const id = safeId(thread.id);
   if (thread.ephemeral === true) return null;
   const out = {
-    ...fields(thread, ['sessionId', 'name', 'preview', 'model', 'reasoningEffort', 'serviceTier', 'uiServiceTier', 'modelProvider', 'createdAt', 'updatedAt', 'recencyAt', 'archived', 'path', 'cwd', 'cliVersion', 'source', 'originator', 'threadSource', 'mode', 'threadStartKind', 'historyMode', 'parentThreadId', 'forkedFromId', 'approvalPolicy']),
+    ...fields(thread, ['sessionId', 'name', 'preview', 'model', 'reasoningEffort', 'reasoningMode', 'executionSurface', 'serviceTier', 'uiServiceTier', 'modelProvider', 'createdAt', 'updatedAt', 'recencyAt', 'archived', 'path', 'cwd', 'cliVersion', 'source', 'originator', 'threadSource', 'mode', 'threadStartKind', 'historyMode', 'parentThreadId', 'forkedFromId', 'approvalPolicy']),
     id, ephemeral: false, status: { type: 'idle' }, gitInfo: null, environments: [],
     collaborationMode: { mode: thread.collaborationMode?.mode ?? 'default', settings: { model: thread.collaborationMode?.settings?.model ?? thread.model, reasoning_effort: thread.collaborationMode?.settings?.reasoning_effort ?? thread.reasoningEffort ?? null, developer_instructions: null } },
-    adapterMetadata: { ...fields(thread.adapterMetadata, ['source', 'conversationOrigin', 'classicRootId', 'frontendModelSlug', 'selectionMode', 'curatedPresetMatch']), instructions: strings(thread.adapterMetadata?.instructions).map(safeLinkText), cloudHistorySync: { schemaVersion: 1, executionCheckpointAvailable: false, fileBytesAvailable: false } }, turns: [],
+    adapterMetadata: { ...fields(thread.adapterMetadata, ['source', 'conversationOrigin', 'classicRootId', 'frontendModelSlug', 'reasoningMode', 'executionSurface', 'chatFamily', 'selectionMode', 'curatedPresetMatch']), instructions: strings(thread.adapterMetadata?.instructions).map(safeLinkText), cloudHistorySync: { schemaVersion: 1, executionCheckpointAvailable: false, fileBytesAvailable: false } }, turns: [],
   };
   if (object(thread.adapterMetadata?.classicModelSlugs)) out.adapterMetadata.classicModelSlugs = Object.fromEntries(Object.entries(thread.adapterMetadata.classicModelSlugs).filter(([key, val]) => typeof key === 'string' && typeof val === 'string'));
   const client = fields(thread.adapterMetadata?.clientMetadata, ['conversationOrigin', 'localProductSurface']); if (Object.keys(client).length) out.adapterMetadata.clientMetadata = client;
@@ -95,8 +95,17 @@ export function projectChatHistoryThread(thread) {
     if (!object(turn) || typeof turn.id !== 'string' || ids.has(turn.id) || !Array.isArray(turn.items)) fail('SYNC_INVALID_DOCUMENT', 'Invalid or duplicate native turn.');
     ids.add(turn.id);
     const wasRunning = turn.status === 'inProgress';
-    const metadata = { ...fields(turn.adapterMetadata, ['startedAtMs', 'selectionMode', 'curatedPresetMatch', 'interruption']), instructions: strings(turn.adapterMetadata?.instructions).map(safeLinkText), resumable: false, resumePolicy: 'manual' };
+    const metadata = { ...fields(turn.adapterMetadata, ['startedAtMs', 'frontendModelSlug', 'reasoningMode', 'executionSurface', 'chatFamily', 'selectionMode', 'curatedPresetMatch', 'interruption']), instructions: strings(turn.adapterMetadata?.instructions).map(safeLinkText), resumable: false, resumePolicy: 'manual' };
     if (wasRunning) metadata.interruption = 'cloud-history-restored-without-execution-checkpoint';
+    if (object(turn.adapterMetadata?.reasoningLifecycle)) {
+      metadata.reasoningLifecycle = fields(turn.adapterMetadata.reasoningLifecycle, ['startedAtMs', 'workStartedAtMs', 'completedAtMs', 'status', 'attemptDurationMs', 'workDurationMs', 'timingBasis']);
+      if (wasRunning) { metadata.reasoningLifecycle.status = 'cancelled'; metadata.reasoningLifecycle.completedAtMs = null; delete metadata.reasoningLifecycle.workDurationMs; }
+    }
+    if (object(turn.adapterMetadata?.classicResponseBranch)) {
+      const branch = turn.adapterMetadata.classicResponseBranch;
+      if (branch.version !== 1 || !['next', 'regenerate'].includes(branch.kind) || !Array.isArray(branch.ancestorTurnIds) || branch.ancestorTurnIds.some(id => id === turn.id || !ids.has(id))) fail('SYNC_INVALID_DOCUMENT', 'Invalid response branch ancestry.');
+      metadata.classicResponseBranch = { ...fields(branch, ['version', 'kind', 'sourceTurnId', 'frontendSlug']), parentMessageId: safeId(branch.parentMessageId, 'parent message'), ancestorTurnIds: branch.ancestorTurnIds.map(id => safeId(id, 'ancestor turn')) };
+    }
     if (turn.adapterMetadata?.classicUserMessage) metadata.classicUserMessage = classicMessage(turn.adapterMetadata.classicUserMessage);
     if (Array.isArray(turn.adapterMetadata?.classicInputMessages)) metadata.classicInputMessages = turn.adapterMetadata.classicInputMessages.map(classicMessage);
     const resources = (turn.adapterMetadata?.cloudUnavailableResources ?? []).filter(object).map(value => ({ ...(safeReceipt(value) ?? fields(value, ['name', 'title', 'mimeType', 'size'])), availability: 'original-browser-only' }));
@@ -111,7 +120,7 @@ export function projectChatHistoryThread(thread) {
     }
     metadata.apiTranscript = transcript;
     metadata.apiTranscriptSource = 'sanitized-native-text-history';
-    out.turns.push({ ...fields(turn, ['id', 'startedAt', 'completedAt', 'durationMs', 'model', 'reasoningEffort', 'serviceTier', 'clientUserMessageId']), status: wasRunning ? 'interrupted' : turn.status, items, error: turn.error?.message ? { message: safeLinkText(turn.error.message), codexErrorInfo: null, additionalDetails: null, misalignment: null } : null, adapterMetadata: metadata });
+    out.turns.push({ ...fields(turn, ['id', 'startedAt', 'completedAt', 'durationMs', 'model', 'reasoningEffort', 'reasoningMode', 'executionSurface', 'serviceTier', 'clientUserMessageId']), status: wasRunning ? 'interrupted' : turn.status, items, error: turn.error?.message ? { message: safeLinkText(turn.error.message), codexErrorInfo: null, additionalDetails: null, misalignment: null } : null, adapterMetadata: metadata });
   }
   const serialized = jsonText(out);
   if (encoder.encode(serialized).byteLength > CHAT_HISTORY_SYNC_LIMITS.documentBytes) fail('SYNC_DOCUMENT_TOO_LARGE', 'This conversation exceeds the cloud text-history budget; its complete local copy was retained.', { status: 413 });

@@ -37,7 +37,7 @@ function serverEnvironment({ free = false, personal = service } = {}) {
   return { server, classic: new ClassicChatAdapter({ appServer: server, models }), readSettings };
 }
 async function send(classic, { origin, id, think = false } = {}) {
-  const body = { action: 'next', parent_message_id: crypto.randomUUID(), model: 'auto', messages: [{ id: crypto.randomUUID(), author: { role: 'user' }, content: { content_type: 'text', parts: ['Neutral current task.'] }, metadata: {} }], ...(origin ? { conversation_origin: origin } : {}), ...(id ? { conversation_id: id } : {}), ...(think ? { system_hints: ['reason'] } : {}) };
+  const body = { action: 'next', parent_message_id: crypto.randomUUID(), model: (origin ?? (id ? classic.server.getThread(id).adapterMetadata.conversationOrigin : null)) === 'tpp' ? 'gpt-6.1-sol' : 'auto', messages: [{ id: crypto.randomUUID(), author: { role: 'user' }, content: { content_type: 'text', parts: ['Neutral current task.'] }, metadata: {} }], ...(origin ? { conversation_origin: origin } : {}), ...(id ? { conversation_id: id } : {}), ...(think ? { system_hints: ['reason'] } : {}) };
   const response = await classic.handle(new Request('https://traits.fixture/f/conversation', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }), '/f/conversation');
   assert.equal(response.status, 200); return response.text();
 }
@@ -145,7 +145,7 @@ const cases = {
   },
   async payloadChatWork() {
     seed({ warm: 'more', enthusiastic: 'less', emoji: 'less', scannable: 'more' });
-    return withHTTPFixture(async requests => { const env = serverEnvironment(); await send(env.classic); await send(env.classic, { origin: 'tpp' }); assert.equal(requests.length, 2); for (const request of requests) { const system = request.input[0].content; assert.ok(system.startsWith(base.customInstructions + '\n\n' + JSON.stringify(texts))); assert.match(system, /warmer/); assert.match(system, /calmer/); assert.match(system, /emojis sparingly/); assert.match(system, /headings, lists and tables/); assert.equal(request.model, 'gpt-6.1-sol'); assert.equal(request.input.filter(row => row.role === 'system').length, 1); } return { requests: requests.length, models: requests.map(value => value.model) }; });
+    return withHTTPFixture(async requests => { const env = serverEnvironment(); await send(env.classic); await send(env.classic, { origin: 'tpp' }); assert.equal(requests.length, 2); for (const request of requests) { const system = request.input[0].content; assert.ok(system.startsWith(base.customInstructions + '\n\n' + JSON.stringify(texts))); assert.match(system, /warmer/); assert.match(system, /calmer/); assert.match(system, /emojis sparingly/); assert.match(system, /headings, lists and tables/); assert.equal(request.model, ['gpt-6-sol','gpt-6.1-sol'][requests.indexOf(request)]); assert.equal(request.input.filter(row => row.role === 'system').length, 1); } return { requests: requests.length, models: requests.map(value => value.model) }; });
   },
   async payloadUpdates() {
     seed({ warm: 'more' });
@@ -153,7 +153,7 @@ const cases = {
   },
   async payloadFree() {
     identity = B; seed({ scannable: 'less' });
-    return withHTTPFixture(async requests => { const env = serverEnvironment({ free: true }); await send(env.classic); await send(env.classic, { think: true }); assert.deepEqual(requests.map(value => [value.model, value.reasoning.effort]), [['gpt-6-luna', 'low'], ['gpt-6-luna', 'medium']]); assert.ok(requests.every(value => value.input[0].content.includes('connected paragraphs'))); return { requests: requests.length, selections: requests.map(value => [value.model, value.reasoning.effort]) }; });
+    return withHTTPFixture(async requests => { const env = serverEnvironment({ free: true }); await send(env.classic); await send(env.classic, { think: true }); assert.deepEqual(requests.map(value => [value.model, value.reasoning.effort]), [['gpt-5.6-luna', 'none'], ['gpt-5.6-luna', 'medium']]); assert.ok(requests.every(value => value.input[0].content.includes('connected paragraphs'))); return { requests: requests.length, selections: requests.map(value => [value.model, value.reasoning.effort]) }; });
   },
   async payloadFault() {
     seed({ warm: 'more' }); const broken = createLocalPersonalizationService({ ...options, storage: { ...storage, getItem() { throw Error('Neutral storage unavailable'); } } });

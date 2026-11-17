@@ -1,5 +1,5 @@
 /** Explicit prototype-local identity; never a Google/OpenAI authentication. */
-import { getSiteAccount } from './site-account.mjs?v=bc63582b1dbb7427';
+import { getSiteAccount } from './site-account.mjs?v=68d4f5727a1b8a6f';
 const siteAccount = getSiteAccount();
 const registeredSiteUser = siteAccount?.role === 'user' && siteAccount.planType === 'free' ? siteAccount : null;
 const administrator = siteAccount?.role === 'administrator' && siteAccount.planType === 'pro' ? siteAccount : null;
@@ -71,13 +71,14 @@ export function getLocalAccountCheck() {
           name: user.name, display_name: user.name, is_zdr: false, is_openai_internal: false,
           is_deactivated: false, is_most_recent_expired_subscription_gratis: false,
           is_fedramp_compliant_workspace: false,
+          tbo_config: { tbo_available: siteAccount?.planType === 'pro', adapter_source: 'site-local-dot-provider' },
           adapter_identity: 'prototype-local-only',
         },
-        // lwd4 account-refresh contract; this local Free identity has no paid subscription.
-        entitlement: { has_active_subscription: false, is_delinquent: false, grace_period_id: null },
+        // Native account-refresh shape for this site's membership, not a cloud entitlement.
+        entitlement: { has_active_subscription: ['plus','pro'].includes(account.planType), is_delinquent: false, grace_period_id: null, adapter_source: 'site-membership' },
         // TPx7/m0qY dereference this envelope even for a local Free account.
         last_active_subscription: { purchase_origin_platform: null, will_renew: false },
-        features: [],
+        features: ['dot_account_access_policy'],
         can_access_with_session: true, sso_connection_name: null,
       },
     },
@@ -91,7 +92,7 @@ export function getLocalOptimizedAccount() {
   return {
     account: entry.account,
     account_user: { is_trial: false, seat_type: null, trial_state: null, trial_expires_at: null, pending_seat_upgrade_request: false },
-    features: [],
+    features: entry.features,
     adapter_identity: 'prototype-local-only',
   };
 }

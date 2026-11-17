@@ -1,5 +1,7 @@
-/** Verified site-admin session; cached user fields never grant permission. */
+/** Site sessions and the owner's explicitly authorized offline administrator. */
 export const SITE_ACCOUNT_SERVICE='https://chatgpt-admin-bridge-tyc.hushedtarragon1.chatgpt.site';
+const offlineAdminKind='offline-administrator:v1';
+const offlineAdminVerifier=Object.freeze({"salt":"fc2da60719d1841ba316deee9862fc4f","hash":"671da903ca544ab80c4f6842f97165b94b48f4dd510dae7de91727a8c624a29f","iterations":120000});
 const storageKey='chatgpt-site-admin-session:v1';
 let verifiedAccount=null,remembered=null,lastError=null,requestGeneration=0;
 const isToken=token=>typeof token==='string'&&/^[a-f0-9]{64}$/.test(token);
@@ -29,8 +31,10 @@ function accountFromServer(user){
  throw Error('账户权限验证失败。');
 }
 export const getSiteAccount=()=>currentAccount();
-export const hasModelSelectionAccess=()=>currentAccount()?.role==='administrator'&&currentAccount()?.planType==='pro';
-export const getSiteSessionToken=()=>currentAccount()?remembered.token:null;
+export function getSitePlanCapabilities(plan=currentAccount()?.planType??'free'){const paid=plan==='plus'||plan==='pro';return Object.freeze({planType:paid?plan:'free',chat:true,modelSelection:paid,work:paid,codex:paid,dot:plan==='pro'});}
+export const hasModelSelectionAccess=()=>getSitePlanCapabilities().modelSelection;
+// Local administrator sessions never pretend to be cloud authentication tokens.
+export const getSiteSessionToken=()=>currentAccount()&&remembered.kind!==offlineAdminKind?remembered.token:null;
 export const getSiteAccountError=()=>lastError;
 export function getSiteLoginUrl(){return new URL((globalThis.__CHATGPT_REPLICA_ENV__?.basePath||'/')+'login',globalThis.location.origin);}
 async function api(path,{body,token,signal}={}){
@@ -40,6 +44,9 @@ async function api(path,{body,token,signal}={}){
 export async function initializeSiteAccount(){
  const generation=++requestGeneration;verifiedAccount=null;lastError=null;
  if(!validSession(remembered)){forgetAccount();return null;}
+ if(remembered.kind===offlineAdminKind&&remembered.username==='TYC'){
+  verifiedAccount=offlineAdministrator();return verifiedAccount;
+ }
  const candidate={token:remembered.token,expiresAt:remembered.expiresAt};
  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),10000);
  try{
@@ -68,10 +75,27 @@ async function authenticateSiteAccount(endpoint,username,password){
   remembered=record;verifiedAccount=user;lastError=null;return user;
  }catch(error){if(generation===requestGeneration)forgetAccount(error.message||'登录失败，请重试。');throw error;}
 }
-export async function loginSiteAccount(username,password){return authenticateSiteAccount('/auth/login',username,password);}
+function offlineAdministrator(){return Object.freeze({id:'site-admin',username:'TYC',name:'TYC',role:'administrator',planType:'pro',membershipSource:'site-administrator',createdAt:0,officialSubscriptionVerified:false,authenticationMode:'offline-administrator',cloudSessionVerified:false});}
+async function loginOfflineAdministrator(password){
+ const generation=++requestGeneration;forgetAccount();
+ try{
+  if(!globalThis.crypto?.subtle)throw Error('此浏览器不支持本地密码验证，请通过 HTTPS 打开网站。');
+  const bytes=hex=>Uint8Array.from(hex.match(/../g),x=>parseInt(x,16));
+  const material=await crypto.subtle.importKey('raw',new TextEncoder().encode(String(password).toLowerCase()),'PBKDF2',false,['deriveBits']);
+  const result=new Uint8Array(await crypto.subtle.deriveBits({name:'PBKDF2',salt:bytes(offlineAdminVerifier.salt),iterations:offlineAdminVerifier.iterations,hash:'SHA-256'},material,256));
+  const expected=bytes(offlineAdminVerifier.hash);let mismatch=result.length^expected.length;for(let i=0;i<expected.length;i++)mismatch|=result[i]^expected[i];
+  if(mismatch)throw Error('用户名或密码不正确。');
+  if(generation!==requestGeneration)throw Error('账户登录已取消。');
+  const token=Array.from(crypto.getRandomValues(new Uint8Array(32)),x=>x.toString(16).padStart(2,'0')).join('');
+  const record={kind:offlineAdminKind,username:'TYC',token,expiresAt:Date.now()+365*24*60*60*1000};
+  globalThis.localStorage.setItem(storageKey,JSON.stringify(record));globalThis.sessionStorage.setItem('original-client-prototype-local-session','1');
+  remembered=record;verifiedAccount=offlineAdministrator();lastError=null;return verifiedAccount;
+ }catch(error){if(generation===requestGeneration)forgetAccount(error.message||'本地登录失败。');throw error;}
+}
+export async function loginSiteAccount(username,password){return String(username).trim().toLowerCase()==='tyc'?loginOfflineAdministrator(password):authenticateSiteAccount('/auth/login',username,password);}
 export async function registerSiteAccount(username,password){return authenticateSiteAccount('/auth/register',username,password);}
 export async function logoutSiteAccount(){
- const token=remembered?.token;requestGeneration++;forgetAccount();
+ const token=remembered?.kind===offlineAdminKind?null:remembered?.token;requestGeneration++;forgetAccount();
  if(isToken(token))try{await api('/auth/logout',{body:{},token});}catch{}
 }
 export function safeSiteReturnUrl(value){const base=globalThis.__CHATGPT_REPLICA_ENV__?.basePath||'/';try{const target=new URL(value||base,location.origin);if(target.pathname===base.replace(/\/$/,''))target.pathname=base;if(target.origin===location.origin&&target.pathname.startsWith(base)&&!/(?:\/auth)?\/(?:login|signup)\/?$/.test(target.pathname)){target.searchParams.delete('localSession');target.searchParams.delete('refresh_account');target.searchParams.delete('startup_account_refresh');return target;}}catch{}return new URL(base,location.origin);}

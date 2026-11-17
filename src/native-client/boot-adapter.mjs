@@ -1,3 +1,4 @@
+import { normalizeWorkUIStoredPreference } from './model-catalog.js';
 /**
  * Loads the public original component graph with explicit local host services.
  * Private original backend credentials are never used by this entry point.
@@ -93,6 +94,17 @@ const invalidateOriginalLibrary = (...args) => {
   if (!requireOriginal.m.fvOC) throw Error('Original Library invalidator is not registered');
   return requireOriginal('fvOC').a(...args);
 };
+// BEGIN LOCAL LUNA SAVED-PREFERENCE READ BOUNDARY
+// Keep the original decoder/writer and its original atom as the dependency.
+// Only the deprecated saved Luna UI Zero value is represented as Low.
+overrideExports('pQ72', {}, { deferred: true }, {
+  b: originalAtom => requireOriginal('BolX').c(
+    requireOriginal('OWtl').a,
+    ({ get }) => normalizeWorkUIStoredPreference(get(originalAtom)),
+  ),
+});
+// END LOCAL LUNA SAVED-PREFERENCE READ BOUNDARY
+
 overrideExports('BolX', {}, { deferred: true }, {
   a: OriginalProvider => function NativeLibraryQueryProvider(props) {
     registerNativeLibrarySource(props.queryClient, invalidateOriginalLibrary);
@@ -241,7 +253,7 @@ adaptFactory('YCTv', factory => function(module, exports, require) {
     get(target, key, receiver) {
       if (key !== 'd') return Reflect.get(target, key, receiver);
       return (destination, getters, values) => {
-        if (destination === exports && values?.b) values = { ...values, b: createLocalHostSettingsClass(values.b, { settings: require('I07G'), browser: require('vOiO'), cookie: require('ZhRn'), cookieValue: require('NGML') }) };
+        if (destination === exports && values?.b) values = { ...values, b: createLocalHostSettingsClass(values.b, { canSelectModels: hasModelSelectionAccess, settings: require('I07G'), browser: require('vOiO'), cookie: require('ZhRn'), cookieValue: require('NGML') }) };
         return require.d(destination, getters, values);
       };
     },

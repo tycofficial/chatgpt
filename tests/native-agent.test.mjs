@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import * as catalog from '../model-catalog.js';
+import * as catalog from '../src/native-client/model-catalog.js';
 import { createModelCatalogAdapter } from '../src/native-client/model-catalog-adapter.mjs';
 import { LocalAppServer } from '../src/native-client/local-app-server.mjs';
 import { ClassicChatAdapter } from '../src/native-client/classic-chat-adapter.mjs';
@@ -154,21 +154,24 @@ test('three Classic follow-up turns release execution and preserve per-turn mode
   const selections = [['gpt-6.1-sol', 'extended'], ['gpt-6-astra', 'xhigh'], ['gpt-6-luna', 'max']];
   let id;
   for (const [index, [model, thinking_effort]] of selections.entries()) {
-    const response = await adapter.handle(new Request('http://fixture.invalid/f/conversation', { method: 'POST', body: JSON.stringify({ action: 'next', conversation_id: id, model, thinking_effort, messages: [{ id: 'followup-' + index, author: { role: 'user' }, content: { content_type: 'text', parts: ['Neutral follow-up ' + index] } }] }) }), '/f/conversation');
+    const response = await adapter.handle(new Request('http://fixture.invalid/f/conversation', { method: 'POST', body: JSON.stringify({ action: 'next', conversation_origin: 'tpp', conversation_id: id, model, thinking_effort, messages: [{ id: 'followup-' + index, author: { role: 'user' }, content: { content_type: 'text', parts: ['Neutral follow-up ' + index] } }] }) }), '/f/conversation');
     const wire = await response.text(); assert.match(wire, /message_stream_complete/); assert.match(wire, /\[DONE\]/);
     id ??= [...server.threads.keys()][0]; assert.equal(server.running.size, 0); assert.equal(server.getThread(id).status.type, 'idle');
   }
   assert.equal(server.getThread(id).turns.length, 3); assert.deepEqual(seen.map(value => [value.model, value.effort]), [['gpt-6.1-sol', 'high'], ['gpt-6-astra', 'xhigh'], ['gpt-6-luna', 'max']]);
   assert(seen[2].history.some(message => message.content === 'Fixture completed turn 1')); assert(seen[2].history.some(message => message.content === 'Fixture completed turn 2'));
   const messages = Object.values(adapter.detail(server.getThread(id)).mapping).map(row => row.message).filter(message => message?.author.role === 'assistant');
-  assert.deepEqual(messages.map(message => message.metadata.model_slug), selections.map(value => value[0])); assert(messages.every(message => message.end_turn));
+  const answers = messages.filter(message => message.content.content_type === 'text');
+  const thoughts = messages.filter(message => message.content.content_type === 'thoughts');
+  assert.deepEqual(answers.map(message => message.metadata.model_slug), selections.map(value => value[0])); assert(answers.every(message => message.end_turn));
+  assert.deepEqual(thoughts.map(message => message.metadata.model_slug), selections.map(value => value[0])); assert(thoughts.every(message => message.end_turn === false && message.metadata.reasoning_status === 'reasoning_ended'));
 });
 
 test('Classic nonretryable403 releases the thread for a distinct follow-up without auto-resuming the failure', async () => {
   let calls = 0;
   const server = setup(async options => { if (++calls === 1) throw Object.assign(Error('Fixture insufficient balance'), { status: 403, code: 'API_QUOTA_EXHAUSTED', retryable: false }); assert.equal(options.settings.model, 'gpt-6-astra'); return { content: 'Fixture follow-up accepted', finish_reason: 'stop' }; });
   const adapter = new ClassicChatAdapter({ appServer: server, models });
-  const request = (id, clientId, model) => new Request('http://fixture.invalid/f/conversation', { method: 'POST', body: JSON.stringify({ action: 'next', conversation_id: id, model, thinking_effort: 'extended', messages: [{ id: clientId, author: { role: 'user' }, content: { content_type: 'text', parts: ['Neutral quota follow-up fixture'] } }] }) });
+  const request = (id, clientId, model) => new Request('http://fixture.invalid/f/conversation', { method: 'POST', body: JSON.stringify({ action: 'next', conversation_origin: 'tpp', conversation_id: id, model, thinking_effort: 'extended', messages: [{ id: clientId, author: { role: 'user' }, content: { content_type: 'text', parts: ['Neutral quota follow-up fixture'] } }] }) });
   const failure = await (await adapter.handle(request(undefined, 'before-quota', 'gpt-6.1-sol'), '/f/conversation')).text(), id = [...server.threads.keys()][0];
   assert.match(failure, /API_QUOTA_EXHAUSTED/); assert.doesNotMatch(failure, /message_stream_complete/); assert.equal(calls, 1); assert.equal(server.running.size, 0); assert.equal(server.getThread(id).status.type, 'idle');
   const followup = await (await adapter.handle(request(id, 'after-quota', 'gpt-6-astra'), '/f/conversation')).text(); assert.match(followup, /Fixture follow-up accepted/); assert.match(followup, /message_stream_complete/);
@@ -203,8 +206,9 @@ test('native reason system hint selects Free medium while model and higher effor
   const server = setup(async options => { captured = [options.settings.model, options.settings.reasoningEffort]; return { content: 'Fixture native Think', finish_reason: 'stop' }; }, { getExecutionPolicy: null });
   const adapter = new ClassicChatAdapter({ appServer: server, models });
   const response = await adapter.handle(new Request('http://fixture.invalid/f/conversation', { method: 'POST', body: JSON.stringify({ model: 'gpt-6-astra', thinking_effort: 'ultra', system_hints: ['reason'], messages: [{ id: 'native-free-think', author: { role: 'user' }, content: { content_type: 'text', parts: ['Neutral Think fixture'] } }] }) }), '/f/conversation');
-  assert.match(await response.text(), /Fixture native Think/); assert.deepEqual(captured, ['gpt-6-luna', 'medium']);
-  const detail = adapter.detail([...server.threads.values()][0]); assert.equal(detail.mapping[detail.current_node].message.metadata.model_slug, 'gpt-6-luna');
+  assert.match(await response.text(), /Fixture native Think/); assert.deepEqual(captured, ['gpt-5.6-luna', 'medium']);
+  const detail = adapter.detail([...server.threads.values()][0]), metadata = detail.mapping[detail.current_node].message.metadata;
+  assert.equal(metadata.model_slug, 'auto'); assert.equal(metadata.adapter_api_model, 'gpt-5.6-luna'); assert.equal(metadata.reasoning_mode, 'standard');
 });
 
 test('account workspace namespaces isolate real file keys and artifact lookups while Admin keeps old paths', async () => {

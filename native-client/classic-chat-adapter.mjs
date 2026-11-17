@@ -1,14 +1,44 @@
 /** Original classic Chat REST/SSE shapes over the same real local thread engine. */
-import { FRONTEND_TO_RAW_EFFORT } from './model-catalog-adapter.mjs?v=bc63582b1dbb7427';
-import { turnHostCheckpoints } from './preferred-host-transport.mjs?v=bc63582b1dbb7427';
+import { FRONTEND_TO_RAW_EFFORT } from './model-catalog-adapter.mjs?v=68d4f5727a1b8a6f';
+import { turnHostCheckpoints } from './preferred-host-transport.mjs?v=68d4f5727a1b8a6f';
 
-import { parseClassicInputMessages } from './classic-input-messages.mjs?v=bc63582b1dbb7427';
-export { parseClassicInputMessages, CLASSIC_CONTEXT_LIMITS } from './classic-input-messages.mjs?v=bc63582b1dbb7427';
+import { parseClassicInputMessages } from './classic-input-messages.mjs?v=68d4f5727a1b8a6f';
+export { parseClassicInputMessages, CLASSIC_CONTEXT_LIMITS } from './classic-input-messages.mjs?v=68d4f5727a1b8a6f';
 export class ClassicChatAdapter {
   constructor({ appServer, models, now = Date.now, uuid = () => crypto.randomUUID(), onConversationChange = () => {}, heartbeatMs = 10000, getPublishedFileReferences = () => [] }) { this.server = appServer; this.models = models; this.now = now; this.uuid = uuid; this.onConversationChange = onConversationChange; this.heartbeatMs = heartbeatMs; this.getPublishedFileReferences = getPublishedFileReferences; this.mutationQueue = Promise.resolve(); }
   json(body, status = 200) { return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }); }
   summary(thread) {
     return { id: thread.id, title: thread.name || 'New chat', create_time: new Date(thread.createdAt * 1000).toISOString(), update_time: new Date(thread.updatedAt * 1000).toISOString(), conversation_origin: thread.adapterMetadata.conversationOrigin ?? null, gizmo_id: null, is_archived: !!thread.archived, is_starred: !!thread.adapterMetadata.isStarred };
+  }
+  reasoningMetadata(turn, item = null) {
+    const lifecycle = turn.adapterMetadata?.reasoningLifecycle;
+    if (!lifecycle && !item) return {};
+    const terminal = turn.status !== 'inProgress', ended = lifecycle?.completedAtMs;
+    const start = lifecycle?.workStartedAtMs ?? lifecycle?.startedAtMs ?? item?.startedAtMs;
+    return {
+      reasoning_status: !terminal ? 'is_reasoning' : turn.status === 'completed' ? 'reasoning_ended' : 'reasoning_cancelled',
+      reasoning_group_id: turn.id,
+      ...(Number.isFinite(start) ? { reasoning_start_time: start / 1000 } : {}),
+      ...(terminal && Number.isFinite(ended) ? { reasoning_end_time: ended / 1000 } : {}),
+      ...(item && terminal && Number.isFinite(item.durationMs) ? { finished_duration_sec: item.durationMs / 1000 } : {}),
+      adapter_reasoning_timing_basis: 'local-observed-api-attempt-walltime',
+      ...(item ? { adapter_api_attempt_started_at_ms: item.startedAtMs ?? null, adapter_api_attempt_completed_at_ms: item.completedAtMs ?? null, adapter_api_attempt_duration_ms: item.durationMs ?? null } : {}),
+    };
+  }
+  reasoningMessage(thread, turn, item) {
+    // Keep the last real reasoning phase pending across commentary/tools. Each
+    // API item still has its own genuine observed start/end times in RPC.
+    const pending = turn.status === 'inProgress' && turn.items.findLast(value => value.type === 'reasoning')?.id === item.id;
+    const summary = item.summary ?? [];
+    return {
+      id: item.id, author: { role: 'assistant', name: null, metadata: {} },
+      create_time: Number.isFinite(item.startedAtMs) ? item.startedAtMs / 1000 : turn.startedAt,
+      update_time: Number.isFinite(item.completedAtMs) ? item.completedAtMs / 1000 : null,
+      content: { content_type: 'thoughts', thoughts: summary.map(text => ({ summary: text, content: '', finished: !pending })) },
+      status: pending ? 'in_progress' : turn.status === 'failed' || turn.status === 'interrupted' ? 'finished_partial_completion' : 'finished_successfully',
+      end_turn: false, weight: 1, recipient: 'all', channel: 'analysis',
+      metadata: { model_slug: thread.adapterMetadata?.classicModelSlugs?.[turn.id] ?? thread.adapterMetadata?.frontendModelSlug ?? turn.model, thinking_effort: FRONTEND_TO_RAW_EFFORT[turn.reasoningEffort], reasoning_mode: turn.reasoningMode ?? 'standard', ...(turn.reasoningMode === 'pro' ? { reasoning_type: 'pro' } : {}), adapter_api_model: turn.model, ...this.reasoningMetadata(turn, item), adapter_source: 'local-original-client-adapter' },
+    };
   }
   message(thread, turn, item, role) {
     const original = role === 'user' ? turn.adapterMetadata?.classicUserMessage : null;
@@ -29,10 +59,11 @@ export class ClassicChatAdapter {
       status: role === 'user' || done || itemDone && !terminal ? 'finished_successfully' : terminal ? 'finished_partial_completion' : 'in_progress',
       end_turn: role === 'assistant' && terminal && lastAssistant && (!turn.adapterMetadata.resumable || turn.adapterMetadata.resumePolicy === 'manual'),
       weight: 1, recipient: 'all', channel: role === 'assistant' ? item.phase === 'commentary' ? 'commentary' : 'final' : null,
-      metadata: { ...(original?.metadata ? structuredClone(original.metadata) : {}), model_slug: frontendSlug, thinking_effort: FRONTEND_TO_RAW_EFFORT[turn.reasoningEffort], adapter_api_model: turn.model, is_complete: role === 'user' || Boolean(itemDone), ...(done && role === 'assistant' ? { finish_details: { type: 'stop', stop_tokens: [] } } : {}), ...(Array.isArray(publishedReferences) && publishedReferences.length ? { content_references: publishedReferences } : {}), adapter_source: 'local-original-client-adapter' },
+      metadata: { ...(original?.metadata ? structuredClone(original.metadata) : {}), ...(role === 'assistant' ? this.reasoningMetadata(turn) : {}), model_slug: frontendSlug, thinking_effort: FRONTEND_TO_RAW_EFFORT[turn.reasoningEffort], reasoning_mode: turn.reasoningMode ?? 'standard', ...(turn.reasoningMode === 'pro' ? { reasoning_type: 'pro' } : {}), adapter_api_model: turn.model, is_complete: role === 'user' || Boolean(itemDone), ...(done && role === 'assistant' ? { finish_details: { type: 'stop', stop_tokens: [] } } : {}), ...(Array.isArray(publishedReferences) && publishedReferences.length ? { content_references: publishedReferences } : {}), adapter_source: 'local-original-client-adapter' },
     };
   }
   originalInputMessages(thread, turn, item) {
+    if (turn.adapterMetadata?.classicResponseBranch?.kind === 'regenerate') return [];
     const records = turn.adapterMetadata?.classicInputMessages;
     if (!records) return [this.message(thread, turn, item, 'user')];
     return records.map(record => record.author.role === 'user' ? this.message(thread, turn, item, 'user') : {
@@ -43,6 +74,7 @@ export class ClassicChatAdapter {
   projectItem(thread, turn, item) {
     if (item.type === 'userMessage') return this.originalInputMessages(thread, turn, item);
     if (item.type === 'agentMessage') return [this.message(thread, turn, item, 'assistant')];
+    if (item.type === 'reasoning') return [this.reasoningMessage(thread, turn, item)];
     if (item.type !== 'mcpToolCall') return [];
     const finished = item.status !== 'inProgress', base = { create_time: turn.startedAt, update_time: this.now() / 1000, weight: 1, metadata: { model_slug: thread.adapterMetadata?.classicModelSlugs?.[turn.id] ?? thread.adapterMetadata.frontendModelSlug ?? turn.model, thinking_effort: FRONTEND_TO_RAW_EFFORT[turn.reasoningEffort], adapter_source: 'browser-workspace-mcp', mcp_tool_call: { server: item.server, tool: item.tool, status: item.status } } };
     const call = { ...base, id: item.id + '-call', author: { role: 'assistant', name: null, metadata: {} }, recipient: item.tool, channel: 'commentary', content: { content_type: 'code', language: item.tool === 'python' ? 'python' : 'json', text: item.tool === 'python' ? item.arguments.code || '' : JSON.stringify(item.arguments, null, 2) }, status: finished ? 'finished_successfully' : 'in_progress', end_turn: false };
@@ -206,8 +238,21 @@ export class ClassicChatAdapter {
       const body = await request.json(); this.server.getThread(body.conversation_id); this.server.interrupt(body.conversation_id);
       return this.json({});
     }
-    if (method === 'POST' && ['/f/conversation', '/conversation'].includes(pathname)) return this.stream(request, await request.json());
+    if (method === 'POST' && ['/f/conversation', '/conversation'].includes(pathname)) {
+      const body = await request.json();
+      return await this.responseActions?.handle(request, body) ?? this.stream(request, body);
+    }
     return null;
+  }
+  /** Shared normal-send/regenerate decode. Core alone resolves aliases/access. */
+  decodeModelRequest(body, existing = null) {
+    const origin = Object.hasOwn(body, 'conversation_origin') ? body.conversation_origin : existing?.adapterMetadata?.conversationOrigin;
+    const executionSurface = ['tpp', 'flora', 'codex'].includes(origin) ? 'work' : 'chat';
+    const raw = body.thinking_effort ?? body.reasoning_effort;
+    const map = { zero: 'none', min: 'low', standard: 'medium', extended: 'high', xhigh: 'xhigh', max: 'max', ultra: 'ultra' };
+    return { model: body.model, effort: raw == null ? undefined : map[raw] ?? raw,
+      reasoningMode: body.reasoning_mode ?? body.reasoningMode ?? (body.reasoning_type === 'pro' ? 'pro' : undefined),
+      executionSurface, frontendModelSlug: executionSurface === 'chat' ? body.model : undefined };
   }
   stream(request, body) {
     if (body.action === 'continue') { const thread = this.server.getThread(body.conversation_id); return this.attachStream(request, thread, this.server.dispatch('turn/resume', { threadId: thread.id })); }
@@ -216,32 +261,33 @@ export class ClassicChatAdapter {
     try { parsed = parseClassicInputMessages(body.messages); }
     catch (error) { return this.json({ error: { message: error.message, code: error.code ?? 'LOCAL_INPUT_UNSUPPORTED' } }, error.status ?? 400); }
     if (typeof body.parent_message_id === 'string' && parsed.originalMessages.some(message => message.id === body.parent_message_id)) return this.json({ error: { message: 'An input message ID cannot also be its conversation parent', code: 'LOCAL_INPUT_UNSUPPORTED' } }, 400);
-    const incoming = parsed.incoming, defaultModel = this.models.getRpcModelList().data.find(model => model.isDefault)?.model;
-    const model = body.model === 'auto' ? defaultModel : body.model;
-    const rawEffort = body.thinking_effort ?? body.reasoning_effort;
-    const rawMap = { zero: 'none', min: 'low', standard: 'medium', extended: 'high', xhigh: 'xhigh', max: 'max', ultra: 'ultra' };
-    const effort = rawEffort == null ? undefined : rawMap[rawEffort] ?? rawEffort;
+    const incoming = parsed.incoming;
+    const existing = body.conversation_id ? this.server.getThread(body.conversation_id) : null;
+    const decoded = this.decodeModelRequest(body, existing);
+    const { model, effort, reasoningMode, executionSurface } = decoded;
     let thread;
     if (body.conversation_id) thread = this.server.getThread(body.conversation_id);
     else {
-      const transaction = this.server.dispatch('thread/start', { model, effort, serviceTier: body.service_tier ?? body.serviceTier, ephemeral: body.history_and_training_disabled === true, selectionMode: body.selectionMode });
+      const transaction = this.server.dispatch('thread/start', { model, effort, reasoningMode, executionSurface, frontendModelSlug: executionSurface === 'chat' ? model : undefined, serviceTier: body.service_tier ?? body.serviceTier, ephemeral: body.history_and_training_disabled === true, selectionMode: body.selectionMode });
       thread = this.server.getThread(transaction.result.thread.id);
       thread.adapterMetadata.classicRootId = body.parent_message_id ?? this.uuid();
       thread.adapterMetadata.conversationOrigin = body.conversation_origin ?? null;
       this.server.persist();
       transaction.afterReply?.();
     }
-    const transaction = this.server.dispatch('turn/start', {
+    const dispatchTurn = params => this.responseActions
+      ? this.responseActions.dispatchNext(thread, params, body.parent_message_id)
+      : this.server.dispatch('turn/start', params);
+    const transaction = dispatchTurn({
       threadId: thread.id, input: incoming.content.parts.map(part => typeof part === 'string' ? { type: 'text', text: part, text_elements: [] } : { type: 'image', url: part.asset_pointer }),
       classicUserMessage: structuredClone(incoming),
       classicInputMessages: parsed.originalMessages,
-      clientUserMessageId: incoming.id, model, effort, serviceTier: body.service_tier ?? body.serviceTier,
+      clientUserMessageId: incoming.id, model, effort, reasoningMode, executionSurface, frontendModelSlug: executionSurface === 'chat' ? model : undefined, serviceTier: body.service_tier ?? body.serviceTier,
       selectionMode: body.selectionMode, systemHints: Array.isArray(body.system_hints) ? body.system_hints : [],
       responsesapiClientMetadata: { ...body.responsesapi_client_metadata, requestedModel: body.model, adapterOrigin: 'classic-chat-rest' },
     });
     const turnId = transaction.result.turn.id;
-    const restricted = transaction.result.turn.adapterMetadata.executionPolicy === 'free-luna-low-or-explicit-medium';
-    const frontendSlug = restricted && body.model !== 'auto' ? transaction.result.turn.model : body.model ?? thread.adapterMetadata.frontendModelSlug ?? transaction.result.turn.model;
+    const frontendSlug = transaction.result.turn.adapterMetadata.frontendModelSlug ?? body.model ?? thread.adapterMetadata.frontendModelSlug ?? transaction.result.turn.model;
     thread.adapterMetadata.classicModelSlugs ??= {};
     if (!Object.hasOwn(thread.adapterMetadata.classicModelSlugs, turnId)) {
       thread.adapterMetadata.classicModelSlugs[turnId] = frontendSlug;
@@ -264,8 +310,10 @@ export class ClassicChatAdapter {
         const abort = () => close();
         const assistant = () => this.server.getThread(thread.id).turns.find(turn => turn.id === turnId)?.items.findLast(item => item.type === 'agentMessage');
         const finishStream = turn => {
+          // Failed/interrupted attempts must close their actual reasoning state
+          // before the original error frame, just as successful turns do.
+          for (const item of turn.items) for (const message of this.projectItem(thread, turn, item)) emit({ conversation_id: thread.id, message });
           if (turn.status === 'completed') {
-            for (const item of turn.items) for (const message of this.projectItem(thread, turn, item)) emit({ conversation_id: thread.id, message });
             emit({ type: 'message_stream_complete', conversation_id: thread.id });
             emit({ type: 'main_stream_complete', conversation_id: thread.id, turn_exchange_id: turnId });
             emit('[DONE]');
@@ -279,6 +327,9 @@ export class ClassicChatAdapter {
           if (event.method === 'item/agentMessage/delta' || event.method === 'item/started' && params.item.type === 'agentMessage') {
             const item = assistant();
             if (item) emit({ conversation_id: thread.id, message: this.message(thread, turn, item, 'assistant') });
+          }
+          if (event.method === 'item/reasoning/summaryTextDelta' || ['item/started', 'item/completed'].includes(event.method) && params.item?.type === 'reasoning') {
+            for (const item of turn.items.filter(value => value.type === 'reasoning')) emit({ conversation_id: thread.id, message: this.reasoningMessage(thread, turn, item) });
           }
           if (['item/started', 'item/completed'].includes(event.method) && params.item?.type === 'mcpToolCall') for (const message of this.projectItem(thread, turn, params.item)) emit({ conversation_id: thread.id, message });
           if (event.method === 'turn/completed') finishStream(params.turn);

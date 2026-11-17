@@ -18,10 +18,10 @@ export async function checkpoint(server, running) {
   server.persist();
   if (server.checkpointStore?.save) await server.checkpointStore.save({ schemaVersion: 1, threadId: running.thread.id, turnId: running.turn.id, checkpoint: clone(running.turn.adapterMetadata.checkpoint), turn: clone(running.turn) });
 }
-function completeItems(server, running) {
+function completeItems(server, running, reasoningStatus = 'completed', completedAtMs = server.now()) {
   const completed = running.turn.adapterMetadata.completedItemIds ??= [];
   for (const item of [running.reasoning, running.assistant]) if (item && !completed.includes(item.id)) completed.push(item.id);
-  if (running.reasoning && !running.reasoningComplete) { server.notify('item/completed', { threadId: running.thread.id, turnId: running.turn.id, item: running.reasoning }); running.reasoningComplete = true; }
+  server.completeReasoning(running, reasoningStatus, completedAtMs);
   if (running.assistant && !running.assistantComplete) { server.notify('item/completed', { threadId: running.thread.id, turnId: running.turn.id, item: running.assistant }); running.assistantComplete = true; }
 }
 export async function runAgentTurn(server, running) {
@@ -34,7 +34,7 @@ export async function runAgentTurn(server, running) {
   const notify = (method, extra) => server.notify(method, { threadId: thread.id, turnId: turn.id, ...extra });
   const executionSettings = () => {
     server.assertExecutionAllowed(turn);
-    const settings = { ...server.readSettings(), model: turn.model, reasoningEffort: turn.reasoningEffort === 'ultra' ? 'max' : turn.reasoningEffort, autoPython: false };
+    const settings = { ...server.readSettings(), model: turn.model, reasoningEffort: turn.reasoningEffort === 'ultra' ? 'max' : turn.reasoningEffort, reasoningMode: turn.reasoningMode ?? 'standard', autoPython: false };
     if (executor?.tools?.length) settings.apiTransport = server.agentOptions.toolTransport ?? 'responses';
     const priority = turn.serviceTier === 'fast' && server.agentOptions.verifiedPriority === true;
     settings.fastMode = priority; settings.serviceTier = priority ? 'priority' : undefined;
@@ -72,6 +72,7 @@ export async function runAgentTurn(server, running) {
       }
     }
     meta.requestedEffort = turn.reasoningEffort;
+    meta.reasoningMode = turn.reasoningMode ?? 'standard';
     meta.productExecutionMode = turn.reasoningEffort === 'ultra' ? 'ultra' : 'standard';
     meta.underlyingApiEffort = turn.reasoningEffort === 'ultra' ? 'max' : turn.reasoningEffort;
     if (turn.reasoningEffort === 'ultra') {
@@ -137,6 +138,7 @@ export async function runAgentTurn(server, running) {
         running.assistant = turn.items.find(item => item.id === frame.assistantItemId) ?? (cp.partialResponse?.content ? turn.items.findLast(item => item.type === 'agentMessage' && item.text === cp.partialResponse.content) : null);
         running.reasoning = turn.items.find(item => item.id === frame.reasoningItemId) ?? (cp.partialResponse?.reasoning ? turn.items.findLast(item => item.type === 'reasoning' && item.summary?.[0] === cp.partialResponse.reasoning) : null);
         running.assistantComplete = false; running.reasoningComplete = frame.reasoningComplete === true;
+        if (frame.result && running.reasoning?.status === 'cancelled') running.reasoningComplete = false;
         metric.resumeCount = (metric.resumeCount || 0) + 1; metric.lastResumeAt = server.now();
       } else {
         running.assistant = null; running.assistantComplete = false; running.reasoning = null; running.reasoningComplete = false;
@@ -144,7 +146,9 @@ export async function runAgentTurn(server, running) {
         frame = cp.inFlight = { metricIndex: cp.metrics.length - 1, transport: {}, assistantItemId: null, reasoningItemId: null, reasoningComplete: false };
         metric.transportCheckpoint = frame.transport;
       }
+      metric.requestedReasoningMode ??= settings.reasoningMode ?? 'standard';
       cp.state = 'model'; await save(); metric.requestSentAt ??= server.now();
+      if (!frame.result) server.beginReasoning(running, { startedAtMs: metric.requestSentAt });
       let result;
       try {
         result = frame.result ? clone(frame.result) : await server.streamCompletion({ settings, messages, tools, signal,
@@ -156,6 +160,7 @@ export async function runAgentTurn(server, running) {
           server.append(running, assembled.content || '', assembled.reasoning || '', assembled.phase);
           frame.assistantItemId = running.assistant?.id ?? frame.assistantItemId; frame.reasoningItemId = running.reasoning?.id ?? frame.reasoningItemId; frame.reasoningComplete = running.reasoningComplete === true;
         } });
+        metric.responseReceivedAt ??= server.now();
         if (!['stop', 'tool_calls', 'length'].includes(result.finish_reason)) throw Object.assign(Error('The provider stream did not confirm a complete or explicitly truncated response; no tool was executed and no commentary continuation was submitted.'), { code: 'INCOMPLETE_RESPONSE_STREAM', retryable: false });
         frame.result = clone(result); await save();
       } catch (error) {
@@ -169,7 +174,7 @@ export async function runAgentTurn(server, running) {
         metric.status = error.status ?? null; metric.code = error.code ?? null; metric.retryable = retryable;
         if (retryable) cp.networkFailures = (cp.networkFailures || 0) + 1;
         if (!signal.aborted && retryable && retries++ < (server.agentOptions.streamRetries ?? 2)) {
-          completeItems(server, running);
+          completeItems(server, running, 'cancelled');
           if (cp.partialResponse?.content) { cp.transcript.push({ role: 'assistant', content: cp.partialResponse.content, ...(cp.partialResponse.phase ? { phase: cp.partialResponse.phase } : {}) }); cp.transcript.push({ role: 'user', content: CONTINUE }); }
           cp.partialResponse = null; cp.inFlight = null; cp.state = 'retrying';
           const retryDelay = Math.min(30000, error.retryAfterMs ?? (server.agentOptions.retryDelayMs ?? 500) * 2 ** Math.min(cp.networkFailures - 1, 5)); cp.nextResumeAt = server.now() + retryDelay;
@@ -182,9 +187,10 @@ export async function runAgentTurn(server, running) {
       const phase = responsePhase(result);
       server.append(running, result.content || '', result.reasoning || '', phase ?? 'final_answer');
       if (running.assistant && result.tool_calls?.length && !phase) running.assistant.phase = 'commentary';
-      completeItems(server, running);
+      completeItems(server, running, 'completed', metric.responseReceivedAt);
       metric.endedAt = server.now(); metric.totalMs = metric.endedAt - metric.startedAt; metric.ttftMs = metric.firstOutputAt == null ? null : metric.firstOutputAt - metric.requestSentAt; metric.finishReason = result.finish_reason;
       if (result.usage) metric.usage = compactUsage(result.usage);
+      if (['standard', 'pro'].includes(result.actual_reasoning?.mode)) metric.actualReasoningMode = result.actual_reasoning.mode;
       cp.partialResponse = null; cp.inFlight = null;
       if (result.finish_reason === 'length' && result.tool_calls?.length) {
         if (result.content) cp.transcript.push({ role: 'assistant', content: result.content });

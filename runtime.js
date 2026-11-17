@@ -17,6 +17,8 @@ const VERIFIED_REASONING_EFFORTS = Object.freeze({
   'gpt-6-sol': Object.freeze(['none', 'low', 'medium', 'high', 'xhigh', 'max']),
   'gpt-6-luna': Object.freeze(['none', 'low', 'medium', 'high', 'xhigh', 'max']),
   'gpt-5.6-sol': Object.freeze(['none', 'low', 'medium', 'high', 'xhigh', 'max']),
+  'gpt-5.6-terra': Object.freeze(['none', 'low', 'medium', 'high', 'xhigh', 'max']),
+  'gpt-5.6-luna': Object.freeze(['none', 'low', 'medium', 'high', 'xhigh', 'max']),
 });
 
 export function allowedReasoningEfforts(model) {
@@ -228,7 +230,7 @@ async function streamResponses({ settings, messages, tools, signal, onDelta, onA
   if (!response.ok) throw await responseError(response);
 
   const assembled = { role: 'assistant', content: '' };
-  const texts = new Map(), calls = new Map(), items = new Map(), itemIndexes = new Map();
+  const texts = new Map(), reasoningTexts = new Map(), calls = new Map(), items = new Map(), itemIndexes = new Map();
   let finished = false;
   const outputIndex = event => event.output_index ?? itemIndexes.get(event.item_id) ?? 0;
   const refreshCalls = () => {
@@ -244,6 +246,15 @@ async function streamResponses({ settings, messages, tools, signal, onDelta, onA
     onActivity({type:'text_delta'});
     onDelta(next.startsWith(previous) ? next.slice(previous.length) : '', assembled);
   };
+  const reasoningPart = (index, summaryIndex, text, append = false) => {
+    const key = index + ':' + summaryIndex, previous = reasoningTexts.get(key)?.text || '';
+    const next = append ? previous + text : text;
+    if (next === previous) return;
+    if (!next.startsWith(previous)) throw Object.assign(Error('The provider replaced an already streamed public reasoning summary.'), { code: 'INVALID_REASONING_SUMMARY', retryable: false });
+    reasoningTexts.set(key, { index, summaryIndex, text: next });
+    assembled.reasoning = [...reasoningTexts.values()].sort((a,b) => a.index-b.index || a.summaryIndex-b.summaryIndex).map(part => part.text).join('');
+    onActivity({type:'reasoning_delta'}); onDelta('', assembled);
+  };
   const ensureCall = (index, item = {}) => {
     const call = calls.get(index) || { type: 'function_call', arguments: '' };
     for (const key of ['id','call_id','name','arguments','status']) if (item[key] !== undefined) call[key] = item[key];
@@ -256,6 +267,9 @@ async function streamResponses({ settings, messages, tools, signal, onDelta, onA
     if (!item) return;
     if (item.id) itemIndexes.set(item.id, index);
     if (complete) items.set(index, structuredClone(item));
+    if (item.type === 'reasoning') (item.summary || []).forEach((part, summaryIndex) => {
+      if (part?.type === 'summary_text' && typeof part.text === 'string') reasoningPart(index, summaryIndex, part.text);
+    });
     if (item.type === 'function_call') { onActivity({type:'tool_delta'}); ensureCall(index, item); }
     if (item.type === 'message') {
       if (item.phase === 'commentary' || item.phase === 'final_answer') assembled.phase = item.phase;
@@ -294,8 +308,8 @@ async function streamResponses({ settings, messages, tools, signal, onDelta, onA
         call.arguments += body.delta || ''; refreshCalls(); break;
       }
       case 'response.function_call_arguments.done': ensureCall(index,{ id: body.item_id, arguments: body.arguments || '', ...(body.name ? {name:body.name} : {}) }); break;
-      case 'response.reasoning_summary_text.delta':
-        assembled.reasoning = (assembled.reasoning || '') + (body.delta || ''); onActivity({type:'reasoning_delta'}); onDelta('',assembled); break;
+      case 'response.reasoning_summary_text.delta': reasoningPart(index, body.summary_index ?? 0, body.delta || '', true); break;
+      case 'response.reasoning_summary_text.done': reasoningPart(index, body.summary_index ?? 0, body.text || ''); break;
       case 'response.completed':
       case 'response.incomplete': ingestResponse(body.response || {}); finished = true; break;
       case 'response.failed': throw providerError({ ...body.response, request_id: body.request_id || body.response?.request_id }, { transportStatus: response.status, requestId: response.headers.get('x-request-id') });

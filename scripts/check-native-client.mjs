@@ -25,9 +25,9 @@ for(const helper of provenance.helpers){
 }
 const releaseHash=crypto.createHash('sha256').update(helperInputs.join('\n')).update(builderBytes).update(planInput).update(provenance.deploymentBase);
 for(const asset of provenance.sharedAssets){
- const expectedInput=asset.file==='python-worker.js'?'src/native-client/python-worker.js':null;
+ const expectedInput=['python-worker.js','model-catalog.js'].includes(asset.file)?'src/native-client/'+asset.file:null;
  if(expectedInput){
-  if(asset.inputFile!==expectedInput||asset.inputSha256!==asset.sha256)throw Error('Python worker must be packaged from its canonical source');
+  if(asset.inputFile!==expectedInput||asset.inputSha256!==asset.sha256)throw Error('Shared asset must be packaged from its canonical source');
   const inputBytes=await fs.readFile(path.join(root,expectedInput));
   if(sha256(inputBytes)!==asset.inputSha256)throw Error('Unpackaged canonical shared source: '+asset.file);
  }else if(asset.inputFile!==undefined||asset.inputSha256!==undefined)throw Error('Unexpected shared asset input migration: '+asset.file);

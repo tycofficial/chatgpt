@@ -4,6 +4,13 @@ export function createLocalHostSettingsClass(NativeSettings, api) {
   const readState = () => {
     const state = JSON.parse(globalThis.localStorage.getItem(storageKey) ?? '{}');
     if (!state || typeof state !== 'object' || Array.isArray(state)) throw Error('Invalid local host settings storage');
+    if (api.canSelectModels?.() && state['site-model-slider-version'] !== 2) {
+      const previous=Array.isArray(state['enabled-reasoning-efforts'])?state['enabled-reasoning-efforts']:['low','medium','high','xhigh'];
+      state['enabled-reasoning-efforts']=[...new Set([...previous.filter(value=>value!=='none'),'max','ultra'])];
+      state['show-ultra-in-model-picker-slider']=true;
+      state['site-model-slider-version']=2;
+      globalThis.localStorage.setItem(storageKey,JSON.stringify(state));
+    }
     return state;
   };
   const definitions = () => api.settings.Od.filter(definition => definition.key !== api.settings.lf.externalBrowserLinkShortcut.key && api.settings.lh(definition.key) != null);
@@ -16,7 +23,12 @@ export function createLocalHostSettingsClass(NativeSettings, api) {
       const value = api.cookie.a(cookie.name);
       if (value != null) return api.cookieValue.c(cookie.name, value);
     }
-    return state[key];
+    if (state[key] !== undefined) return state[key];
+    if (api.canSelectModels?.()) {
+      if (key === 'enabled-reasoning-efforts') return ['low','medium','high','xhigh','max','ultra'];
+      if (key === 'show-ultra-in-model-picker-slider') return true;
+    }
+    return undefined;
   };
   const snapshot = (key, state) => {
     const def = definition(key), value = rawValue(key, state), effective = value ?? api.browser.b(def);

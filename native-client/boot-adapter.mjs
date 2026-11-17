@@ -1,19 +1,20 @@
+import { normalizeWorkUIStoredPreference } from '../model-catalog.js?v=68d4f5727a1b8a6f';
 /**
  * Loads the public original component graph with explicit local host services.
  * Private original backend credentials are never used by this entry point.
  */
-import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter, localFilesService, localOwnedDownloadTransport, localLibraryByteTransport, initializeLocalAccountHistory, setNativeAccountHistoryToaster, initializeLocalPublishedResources, registerNativeLibrarySource, notifyNativeLibrarySourceReady, registerNativeFileReferenceSources } from './service-boundary.mjs?v=bc63582b1dbb7427';
-import * as mapLibreRenderer from './map-vendor/maplibre-gl.mjs?v=bc63582b1dbb7427';
-import { createLocalMapProvider } from './local-map-provider.mjs?v=bc63582b1dbb7427';
-import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs?v=bc63582b1dbb7427';
-import { getPrototypeLocalSession, getPrototypeLocalAuth, isPrototypeLocalSession, getPrototypeLocalAuthGeneration, clearPrototypeLocalSession } from './local-identity.mjs?v=bc63582b1dbb7427';
-import { createLocalHostSettingsClass } from './local-host-settings.mjs?v=bc63582b1dbb7427';
-import { createLocalWorkPolicy } from './local-work-policy.mjs?v=bc63582b1dbb7427';
-import { hasModelSelectionAccess, getSiteLoginUrl } from './site-account.mjs?v=bc63582b1dbb7427';
-import { createNativeModelSelectionPolicy, createNativeThinkingEntryPolicy } from './local-model-selection-policy.mjs?v=bc63582b1dbb7427';
-import { createLocalHostClaimsReader } from './local-token-identity.mjs?v=bc63582b1dbb7427';
-import { wrapNativeFileUploadClass } from './local-native-upload.mjs?v=bc63582b1dbb7427';
-import { wrapNativeDownloadServices } from './local-native-download.mjs?v=bc63582b1dbb7427';
+import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter, localFilesService, localOwnedDownloadTransport, localLibraryByteTransport, initializeLocalAccountHistory, setNativeAccountHistoryToaster, initializeLocalPublishedResources, registerNativeLibrarySource, notifyNativeLibrarySourceReady, registerNativeFileReferenceSources } from './service-boundary.mjs?v=68d4f5727a1b8a6f';
+import * as mapLibreRenderer from './map-vendor/maplibre-gl.mjs?v=68d4f5727a1b8a6f';
+import { createLocalMapProvider } from './local-map-provider.mjs?v=68d4f5727a1b8a6f';
+import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs?v=68d4f5727a1b8a6f';
+import { getPrototypeLocalSession, getPrototypeLocalAuth, isPrototypeLocalSession, getPrototypeLocalAuthGeneration, clearPrototypeLocalSession } from './local-identity.mjs?v=68d4f5727a1b8a6f';
+import { createLocalHostSettingsClass } from './local-host-settings.mjs?v=68d4f5727a1b8a6f';
+import { createLocalWorkPolicy } from './local-work-policy.mjs?v=68d4f5727a1b8a6f';
+import { hasModelSelectionAccess, getSiteLoginUrl } from './site-account.mjs?v=68d4f5727a1b8a6f';
+import { createNativeModelSelectionPolicy, createNativeThinkingEntryPolicy } from './local-model-selection-policy.mjs?v=68d4f5727a1b8a6f';
+import { createLocalHostClaimsReader } from './local-token-identity.mjs?v=68d4f5727a1b8a6f';
+import { wrapNativeFileUploadClass } from './local-native-upload.mjs?v=68d4f5727a1b8a6f';
+import { wrapNativeDownloadServices } from './local-native-download.mjs?v=68d4f5727a1b8a6f';
 
 const boundary = installNetworkBoundary();
 globalThis.__originalClientProbe = boundary.diagnostics;
@@ -24,7 +25,7 @@ await initializeLocalPublishedResources();
 installSyntheticDocumentState();
 if (globalThis.__CHATGPT_REPLICA_ENV__) window.__reactRouterContext.basename = globalThis.__CHATGPT_REPLICA_ENV__.basePath.replace(/\/$/, '') || '/';
 
-const plan = await (await fetch(new URL('./entry-plan.json?v=bc63582b1dbb7427', import.meta.url))).json();
+const plan = await (await fetch(new URL('./entry-plan.json?v=68d4f5727a1b8a6f', import.meta.url))).json();
 const { __webpack_require__: requireOriginal } = await import(plan.runtime);
 // One mechanical entry transform defers its terminal hxQI invocation and
 // rebases its relative imports. All original factories and chunks are retained.
@@ -94,6 +95,17 @@ const invalidateOriginalLibrary = (...args) => {
   if (!requireOriginal.m.fvOC) throw Error('Original Library invalidator is not registered');
   return requireOriginal('fvOC').a(...args);
 };
+// BEGIN LOCAL LUNA SAVED-PREFERENCE READ BOUNDARY
+// Keep the original decoder/writer and its original atom as the dependency.
+// Only the deprecated saved Luna UI Zero value is represented as Low.
+overrideExports('pQ72', {}, { deferred: true }, {
+  b: originalAtom => requireOriginal('BolX').c(
+    requireOriginal('OWtl').a,
+    ({ get }) => normalizeWorkUIStoredPreference(get(originalAtom)),
+  ),
+});
+// END LOCAL LUNA SAVED-PREFERENCE READ BOUNDARY
+
 overrideExports('BolX', {}, { deferred: true }, {
   a: OriginalProvider => function NativeLibraryQueryProvider(props) {
     registerNativeLibrarySource(props.queryClient, invalidateOriginalLibrary);
@@ -242,7 +254,7 @@ adaptFactory('YCTv', factory => function(module, exports, require) {
     get(target, key, receiver) {
       if (key !== 'd') return Reflect.get(target, key, receiver);
       return (destination, getters, values) => {
-        if (destination === exports && values?.b) values = { ...values, b: createLocalHostSettingsClass(values.b, { settings: require('I07G'), browser: require('vOiO'), cookie: require('ZhRn'), cookieValue: require('NGML') }) };
+        if (destination === exports && values?.b) values = { ...values, b: createLocalHostSettingsClass(values.b, { canSelectModels: hasModelSelectionAccess, settings: require('I07G'), browser: require('vOiO'), cookie: require('ZhRn'), cookieValue: require('NGML') }) };
         return require.d(destination, getters, values);
       };
     },

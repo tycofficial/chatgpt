@@ -12,6 +12,7 @@ test('native Library stays absent until its actual provider is registered and a 
   const context = vm.createContext({ catalog, createModelCatalogAdapter,
     getPrototypeStatsigUser: () => ({ userID: 'library-fixture', customIDs: {} }),
     isPrototypeLocalSession: () => signedIn, hasModelSelectionAccess: () => false,
+    getSitePlanCapabilities: () => ({ planType: 'free', chat: true, modelSelection: false, work: false, codex: false, dot: false }),
     structuredClone, Date,
   });
   new vm.Script(source + '\nglobalThis.policy={read:getPrototypeConfiguration,register:setLocalLibraryAvailability};').runInContext(context);

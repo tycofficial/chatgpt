@@ -35,7 +35,7 @@ test('Ultra rejects Luna and more than three workers before any transport',async
 
 import { LocalAppServer } from '../src/native-client/local-app-server.mjs';
 import { createModelCatalogAdapter } from '../src/native-client/model-catalog-adapter.mjs';
-import * as catalog from '../model-catalog.js';
+import * as catalog from '../src/native-client/model-catalog.js';
 const models=createModelCatalogAdapter(catalog);
 function server(transport){const data=new Map();return new LocalAppServer({storage:{getItem:key=>data.get(key)??null,setItem:(key,value)=>data.set(key,value)},models,catalog,getExecutionPolicy:()=>({modelSelection:true}),readSettings:()=>({apiBase:'https://fixture.invalid',apiKey:'fixture-only',model:'gpt-6.1-sol'}),agentOptions:{ultraOrchestration:true,verifiedPriority:false},streamCompletion:transport});}
 const providerCall=(id,name,args)=>({id,type:'function',function:{name,arguments:JSON.stringify(args)}});

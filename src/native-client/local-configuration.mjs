@@ -1,7 +1,7 @@
 import * as catalog from './model-catalog.js';
 import { createModelCatalogAdapter } from './model-catalog-adapter.mjs';
 import { getPrototypeStatsigUser, isPrototypeLocalSession } from './local-identity.mjs';
-import { hasModelSelectionAccess } from './site-account.mjs';
+import { hasModelSelectionAccess, getSitePlanCapabilities } from './site-account.mjs';
 const models = createModelCatalogAdapter(catalog);
 let readLibraryAvailability = () => false;
 /** The Library gate is enabled only after its real local file provider exists. */
@@ -17,8 +17,8 @@ export function getPrototypeConfiguration(user = getPrototypeStatsigUser()) {
   // Original khOd.b -> d1ji.T: observed saved rail is browser:w-13 (52px).
   // This selects the captured public layout; it grants no account or cloud rights.
   const rail = { name: '3085093835', value: true, rule_id: 'local-observed-public-layout', secondary_exposures: [], adapter_source: 'captured-public-ui-layout' };
-  const localWork = { name: '1625797156', value: isPrototypeLocalSession(), rule_id: 'local-text-provider', secondary_exposures: [], adapter_source: 'local-app-server-not-openai-cloud' };
-  const localDots = { name: '1202965598', value: isPrototypeLocalSession(), rule_id: 'site-local-dot-provider', secondary_exposures: [], adapter_source: 'public-original-dot-ui-with-local-profile-service' };
+  const localWork = { name: '1625797156', value: isPrototypeLocalSession() && getSitePlanCapabilities().work, rule_id: 'local-text-provider', secondary_exposures: [], adapter_source: 'local-app-server-not-openai-cloud' };
+  const localDots = { name: '1202965598', value: isPrototypeLocalSession() && getSitePlanCapabilities().dot, rule_id: 'site-local-dot-provider', secondary_exposures: [], adapter_source: 'public-original-dot-ui-with-local-profile-service' };
   const localLibrary = { name: '224248639', value: isPrototypeLocalSession() && readLibraryAvailability() === true, rule_id: 'site-local-library-provider', secondary_exposures: [], adapter_source: 'original-library-ui-with-browser-origin-files' };
   // User-selected source layout: keep Chat and Work as separate native modes.
   // rbaa.k/vYe0.X: all captured source screens use the original zh-CN catalog.

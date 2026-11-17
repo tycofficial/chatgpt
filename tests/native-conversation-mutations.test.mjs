@@ -14,7 +14,8 @@ function fixture({ storage = memory(), completion = async () => ({ content: 'Neu
 }
 async function api(env, path, body) { const response = await env.adapter.handle(new Request('https://local.fixture' + path, { method: 'PATCH', body: JSON.stringify(body) }), path.split('?')[0]); assert(response); return { response, data: await response.json() }; }
 async function chat(env, { origin = null, ephemeral = false } = {}) {
-  const response = await env.adapter.handle(new Request('https://local.fixture/f/conversation', { method: 'POST', body: JSON.stringify({ model: 'gpt-6.1-sol', thinking_effort: 'min', conversation_origin: origin, history_and_training_disabled: ephemeral, messages: [{ id: crypto.randomUUID(), author: { role: 'user' }, content: { content_type: 'text', parts: ['A neutral local fixture.'] }, metadata: {} }] }) }), '/f/conversation');
+  const work = origin === 'tpp';
+  const response = await env.adapter.handle(new Request('https://local.fixture/f/conversation', { method: 'POST', body: JSON.stringify({ model: work ? 'gpt-6.1-sol' : 'gpt-6-sol', thinking_effort: work ? 'min' : 'standard', conversation_origin: origin, history_and_training_disabled: ephemeral, messages: [{ id: crypto.randomUUID(), author: { role: 'user' }, content: { content_type: 'text', parts: ['A neutral local fixture.'] }, metadata: {} }] }) }), '/f/conversation');
   const wire = await response.text(); assert.match(wire, /message_stream_complete/); return [...env.server.threads.values()].at(-1);
 }
 function rpc(env, origin) { const tx = env.server.dispatch('thread/start', { model: 'gpt-6.1-sol', effort: 'low', ...(origin ? { conversationOrigin: origin } : {}) }); tx.afterReply?.(); return env.server.getThread(tx.result.thread.id); }
