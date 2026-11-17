@@ -41,13 +41,23 @@ export function safeRelativePath(name) {
   return parts.join('/') || 'file.txt';
 }
 
-function snapshot(fs, path = '/mnt/data', result = new Map()) {
+async function contentHash(bytes) {
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+async function snapshot(fs, path = '/mnt/data', result = new Map()) {
   for (const name of fs.readdir(path)) {
     if (name === '.' || name === '..' || name === '__pycache__' || name.startsWith('.')) continue;
     const full = `${path}/${name}`;
     const stat = fs.stat(full);
-    if (fs.isDir(stat.mode)) snapshot(fs, full, result);
-    else result.set(full, { size: stat.size, mtime: stat.mtime.getTime() });
+    if (fs.isDir(stat.mode)) await snapshot(fs, full, result);
+    else {
+      // Same-size writes may preserve timestamps. Compare actual byte hashes as
+      // well; oversized files retain the existing transfer-limit behavior.
+      const sha256 = stat.size <= 20 * 1024 * 1024 ? await contentHash(fs.readFile(full)) : null;
+      result.set(full, { size: stat.size, mtime: stat.mtime.getTime(), sha256 });
+    }
   }
   return result;
 }
@@ -79,7 +89,7 @@ async function execute({ id, code, files = [] }) {
       uploadedSignatures.set(name, signature);
     }
   }
-  const before = snapshot(runtime.FS);
+  const before = await snapshot(runtime.FS);
   let stdout = '', stderr = '', result = '', executionError = null;
   const outDecoder = new TextDecoder(), errDecoder = new TextDecoder();
   runtime.setStdin({ stdin: () => undefined });
@@ -109,9 +119,9 @@ if 'matplotlib.pyplot' in _runtime_sys.modules:
 `);
   } catch (error) { stderr += `Plot capture: ${error.message}\n`; }
   const generated = [];
-  for (const [path, stat] of snapshot(runtime.FS)) {
+  for (const [path, stat] of await snapshot(runtime.FS)) {
     const old = before.get(path);
-    if (old && old.size === stat.size && old.mtime === stat.mtime) continue;
+    if (old && old.size === stat.size && old.mtime === stat.mtime && old.sha256 === stat.sha256) continue;
     if (stat.size > 20 * 1024 * 1024) { stderr += `文件 ${path} 超过 20 MB，未传回浏览器。\n`; continue; }
     const name = path.slice('/mnt/data/'.length);
     const mime = mimeType(name);

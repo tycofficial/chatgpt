@@ -6,6 +6,14 @@ const decodeWorkspaceText = bytes => bytes[0] === 0xff && bytes[1] === 0xfe
   ? new TextDecoder('utf-16le').decode(bytes)
   : bytes[0] === 0xfe && bytes[1] === 0xff ? new TextDecoder('utf-16be').decode(bytes) : decoder.decode(bytes);
 const mime = name => ({ txt: 'text/plain', md: 'text/markdown', py: 'text/x-python', js: 'text/javascript', html: 'text/html', svg: 'image/svg+xml', csv: 'text/csv', json: 'application/json', png: 'image/png', pdf: 'application/pdf', zip: 'application/zip' }[name.split('.').at(-1)] || 'application/octet-stream');
+const PYTHON_ARTIFACT_MANIFEST = Object.freeze({ version: 1, source: 'browser-workspace-written-files', algorithm: 'sha256', verification: 'write-readback' });
+const artifactSHA256 = async bytes => [...new Uint8Array(await crypto.subtle.digest('SHA-256', bytes))].map(value => value.toString(16).padStart(2, '0')).join('');
+function copyArtifactBytes(value) {
+  const input = value instanceof ArrayBuffer ? new Uint8Array(value) : ArrayBuffer.isView(value) && value.BYTES_PER_ELEMENT === 1 ? new Uint8Array(value.buffer, value.byteOffset, value.byteLength) : Array.isArray(value) && value.every(byte => Number.isInteger(byte) && byte >= 0 && byte <= 255) ? Uint8Array.from(value) : null;
+  if (!input) throw new TypeError('Python returned a file without actual binary bytes');
+  if (input.byteLength > MAX_FILE) throw Error('File exceeds the workspace 20 MB transfer limit');
+  return input.slice();
+}
 export function workspacePath(value) {
   const raw = String(value || '').replace(/\\/g, '/').replace(/^\/mnt\/data\//, '');
   if (!raw || /^[a-z]:/i.test(raw) || raw.startsWith('/') || raw.includes('\0') || raw.split('/').some(part => part === '..' || part === '')) throw Error('Use a relative file name inside /mnt/data');
@@ -53,6 +61,23 @@ export function createBrowserToolExecutor({ PythonRuntime, PYTHON_TOOL, storage 
   const namespace = id => { const scope = owner(), thread = encodeURIComponent(String(id)); return scope == null ? thread : 'account-' + scope + '--' + thread; };
   const url = (threadId, path, prefix = namespace(threadId)) => { const base = globalThis.__CHATGPT_REPLICA_ENV__?.basePath || '/'; return `${base}__local_artifacts/${prefix}/${path.split('/').map(encodeURIComponent).join('/')}`; };
   const artifact = (threadId, name, size, prefix) => ({ name, path: '/mnt/data/' + name, mime: mime(name), size, url: url(threadId, name, prefix) });
+  async function writePythonArtifact(threadId, name, value, prefix, signal, seen) {
+    const check = () => {
+      signal?.throwIfAborted();
+      if (namespace(threadId) !== prefix) throw Object.assign(Error('The workspace namespace changed while recording Python artifacts'), { status: 409, code: 'LOCAL_WORKSPACE_ARTIFACT_NAMESPACE_CHANGED' });
+    };
+    check();
+    if (seen.has(name)) throw Object.assign(Error('Python returned duplicate canonical output paths'), { status: 409, code: 'LOCAL_WORKSPACE_ARTIFACT_DUPLICATE_PATH' });
+    seen.add(name);
+    const bytes = copyArtifactBytes(value), key = prefix + '/' + name;
+    // Preserve a private copy even if a storage adapter mutates its input.
+    await storage.write(key, bytes.slice()); check();
+    const sha256 = await artifactSHA256(bytes); check();
+    const readback = copyArtifactBytes(await storage.read(key)); check();
+    const actualSHA256 = await artifactSHA256(readback); check();
+    if (readback.length !== bytes.length || actualSHA256 !== sha256) throw Object.assign(Error('The written Python artifact changed before byte-version verification'), { status: 409, code: 'LOCAL_WORKSPACE_ARTIFACT_WRITE_CHANGED' });
+    return { ...artifact(threadId, name, bytes.length, prefix), sha256 };
+  }
   const result = (data, isError = false) => ({ content: [{ type: 'text', text: JSON.stringify(data) }, ...(data.files || (data.file ? [data.file] : [])).map(file => ({ type: 'resource_link', uri: globalThis.location ? new URL(file.url, location.origin).href : file.url, name: file.name, mimeType: file.mime }))], structuredContent: data, isError });
   return {
     tools, storage, getWorkspacePrefix: namespace, capabilitySource: 'browser-origin-local-tools',
@@ -70,11 +95,12 @@ export function createBrowserToolExecutor({ PythonRuntime, PYTHON_TOOL, storage 
       signal?.addEventListener('abort', stop, { once: true });
       try {
         const files = await Promise.all((await storage.list(prefix)).map(async f => ({ name: f.name, bytes: await storage.read(prefix + '/' + f.name) })));
-        signal?.throwIfAborted(); const output = await runtime.run(args.code, files, onStatus); signal?.throwIfAborted(); const generated = [];
-        for (const file of output.files || []) { const path = workspacePath(file.name); let bytes = file.bytes; if (!bytes && file.dataUrl) { const encoded = file.dataUrl.split(',')[1]; bytes = Uint8Array.from(atob(encoded), c => c.charCodeAt(0)); } if (!bytes) throw Error('Python returned a file without bytes'); await storage.write(prefix + '/' + path, bytes); generated.push(artifact(threadId, path, bytes.length, prefix)); }
+        signal?.throwIfAborted(); const output = await runtime.run(args.code, files, onStatus); signal?.throwIfAborted(); const generated = [], writtenPaths = new Set();
+        for (const file of output.files || []) { const path = workspacePath(file.name); let bytes = file.bytes; if (!bytes && file.dataUrl) { const encoded = file.dataUrl.split(',')[1]; bytes = Uint8Array.from(atob(encoded), c => c.charCodeAt(0)); } if (!bytes) throw Error('Python returned a file without bytes'); generated.push(await writePythonArtifact(threadId, path, bytes, prefix, signal, writtenPaths)); }
         const bounded = {};
-        for (const key of ['stdout', 'stderr', 'result']) { const text = String(output[key] || ''); bounded[key] = text.slice(0, 32000); if (text.length > 32000) { const name = '.logs/' + String(call.id || Date.now()).replace(/[^a-z0-9_-]/gi, '_') + '-' + key + '.txt', bytes = encoder.encode(text); await storage.write(prefix + '/' + name, bytes); generated.push(artifact(threadId, name, bytes.length, prefix)); bounded[key + '_truncated'] = true; } }
-        return result({ ...bounded, files: generated, ...(output.error ? { error: output.error } : {}), executionEnvironment: 'browser-pyodide' }, output.ok === false || Boolean(output.error));
+        for (const key of ['stdout', 'stderr', 'result']) { const text = String(output[key] || ''); bounded[key] = text.slice(0, 32000); if (text.length > 32000) { const name = '.logs/' + String(call.id || Date.now()).replace(/[^a-z0-9_-]/gi, '_') + '-' + key + '.txt', bytes = encoder.encode(text); generated.push(await writePythonArtifact(threadId, name, bytes, prefix, signal, writtenPaths)); bounded[key + '_truncated'] = true; } }
+        signal?.throwIfAborted();
+        return result({ ...bounded, files: generated, artifact_manifest: PYTHON_ARTIFACT_MANIFEST, ...(output.error ? { error: output.error } : {}), executionEnvironment: 'browser-pyodide' }, output.ok === false || Boolean(output.error));
       } finally { signal?.removeEventListener('abort', stop); }
     },
     recover() { return { pythonVariablesRestored: false, filesPersisted: true }; },

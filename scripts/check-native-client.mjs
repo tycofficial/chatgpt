@@ -10,6 +10,8 @@ const sha256=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
 const provenance=JSON.parse(await fs.readFile(path.join(directory,'adapter-provenance.json'),'utf8'));
 const active=JSON.parse(await fs.readFile(path.join(directory,'active.json'),'utf8'));
 if(!active.active||!provenance.sharedAssets?.length||!provenance.resources)throw Error('Native release has not been packaged with complete provenance');
+const sharedFiles=['config.js','model-catalog.js','runtime.js','python-worker.js','release-updater.js'];
+if(provenance.sharedAssets.length!==sharedFiles.length||new Set(provenance.sharedAssets.map(asset=>asset.file)).size!==sharedFiles.length||provenance.sharedAssets.some(asset=>!sharedFiles.includes(asset.file)))throw Error('Native release must retain exactly the five declared shared assets');
 const builderBytes=await fs.readFile(path.join(root,'scripts/build-native-client.mjs'));
 const planInput=await fs.readFile(path.join(source,'entry-plan.json'),'utf8');
 if(sha256(builderBytes)!==provenance.builderSha256||sha256(planInput)!==provenance.entryPlanInputSha256)throw Error('Build inputs changed after packaging');
@@ -23,6 +25,12 @@ for(const helper of provenance.helpers){
 }
 const releaseHash=crypto.createHash('sha256').update(helperInputs.join('\n')).update(builderBytes).update(planInput).update(provenance.deploymentBase);
 for(const asset of provenance.sharedAssets){
+ const expectedInput=asset.file==='python-worker.js'?'src/native-client/python-worker.js':null;
+ if(expectedInput){
+  if(asset.inputFile!==expectedInput||asset.inputSha256!==asset.sha256)throw Error('Python worker must be packaged from its canonical source');
+  const inputBytes=await fs.readFile(path.join(root,expectedInput));
+  if(sha256(inputBytes)!==asset.inputSha256)throw Error('Unpackaged canonical shared source: '+asset.file);
+ }else if(asset.inputFile!==undefined||asset.inputSha256!==undefined)throw Error('Unexpected shared asset input migration: '+asset.file);
  const bytes=await fs.readFile(path.join(root,asset.file));
  if(sha256(bytes)!==asset.sha256)throw Error('Unversioned root dependency: '+asset.file);
  releaseHash.update(asset.file).update(bytes);

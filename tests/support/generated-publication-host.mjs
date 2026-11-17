@@ -4,18 +4,35 @@ import fss from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import {Worker,isMainThread,parentPort,workerData,threadId} from 'node:worker_threads';
-export async function durablePublicationHost(root,{accountId='publication-owner-fs',metrics,barrier,onSource}={}){
+export async function durablePublicationHost(root,{accountId='publication-owner-fs',metrics,barrier,onSource,metadataWriteSync=fss.writeFileSync,metadataRenameSync=fss.renameSync,metadataPlatform=process.platform}={}){
  await fs.mkdir(path.join(root,'raw'),{recursive:true});await fs.mkdir(path.join(root,'metadata'),{recursive:true});
+ const ioDiagnostics=[];
+ const ioError=(operation,error)=>{ioDiagnostics.push({operation,code:typeof error.code==='string'?error.code:null,errno:typeof error.errno==='number'||typeof error.errno==='string'?error.errno:null,syscall:typeof error.syscall==='string'?error.syscall:null});};
+ const renameWait=new Int32Array(new SharedArrayBuffer(4));
+ const renameMetadata=(temporary,target)=>{
+  const deadline=performance.now()+250;let recoveredError;
+  for(;;){
+   try{metadataRenameSync(temporary,target);if(recoveredError)ioError('metadata-rename-recovered',recoveredError);return;}
+   catch(error){
+    ioError('metadata-rename',error);
+    if(metadataPlatform!=='win32'||error.code!=='EPERM')throw error;
+    const remaining=deadline-performance.now();if(remaining<=0)throw error;
+    Atomics.wait(renameWait,0,0,Math.min(5,remaining));
+    if(performance.now()>=deadline)throw error;
+    recoveredError=error;
+   }
+  }
+ };
  const hash=value=>crypto.createHash('sha256').update(value).digest('hex');
  const rawPath=key=>path.join(root,'raw',hash(key)),metaPath=key=>path.join(root,'metadata',hash(key));
  const storage={
   async read(key){try{return new Uint8Array(await fs.readFile(rawPath(key)));}catch(error){if(error.code==='ENOENT')throw Error('File not found');throw error;}},
-  async write(key,bytes){const target=rawPath(key),temporary=target+'.'+process.pid+'-'+threadId+'.tmp';await fs.writeFile(temporary,bytes);await fs.rename(temporary,target);if(barrier&&key.includes('--publication-')){Atomics.add(barrier,0,1);while(Atomics.load(barrier,0)<2)await new Promise(resolve=>setTimeout(resolve,2));}},
+  async write(key,bytes){const target=rawPath(key),temporary=target+'.'+process.pid+'-'+threadId+'.tmp';await fs.writeFile(temporary,bytes);await fs.rename(temporary,target);if(barrier&&key.includes('--publication-')){Atomics.add(barrier,0,1);const deadline=Date.now()+8000;while(Atomics.load(barrier,0)<2){if(Date.now()>=deadline){const count=Atomics.load(barrier,0);ioDiagnostics.push({operation:'raw-barrier-timeout',count});throw Object.assign(Error('Publication test raw barrier timed out'),{code:'TEST_RAW_BARRIER_TIMEOUT',barrierCount:count});}await new Promise(resolve=>setTimeout(resolve,2));}}},
   async remove(key){try{await fs.unlink(rawPath(key));}catch(error){if(error.code!=='ENOENT')throw error;}},
  };
  const metadataStorage={
   getItem(key){try{return fss.readFileSync(metaPath(key),'utf8');}catch(error){if(error.code==='ENOENT')return null;throw error;}},
-  setItem(key,value){const target=metaPath(key),temporary=target+'.'+process.pid+'-'+threadId+'.tmp';fss.writeFileSync(temporary,value,'utf8');fss.renameSync(temporary,target);},
+  setItem(key,value){const target=metaPath(key),temporary=target+'.'+process.pid+'-'+threadId+'.tmp';try{metadataWriteSync(temporary,value,'utf8');}catch(error){ioError('metadata-write',error);throw error;}renameMetadata(temporary,target);},
  };
  const ownerLock='chatgpt-local-files:'+encodeURIComponent(accountId);
  const storageLocks={request:(name,options,callback)=>globalThis.navigator.locks.request(name,options,async lock=>{
@@ -24,7 +41,7 @@ export async function durablePublicationHost(root,{accountId='publication-owner-
  })};
  const getWorkspacePrefix=id=>accountId+'--'+encodeURIComponent(id);let sources=0;
  const getOwnedSourceWorkspace=async({threadId,signal})=>{signal?.throwIfAborted();if(threadId!=='owned-thread')throw Object.assign(Error('Neutral thread missing'),{status:404});sources++;await onSource?.(sources);return{accountId,threadId,prefix:getWorkspacePrefix(threadId)};};
- return{storage,metadataStorage,storageLocks,getAccountId:()=>accountId,getWorkspacePrefix,getOwnedSourceWorkspace,source:(name,bytes)=>storage.write(getWorkspacePrefix('owned-thread')+'/'+name,typeof bytes==='string'?new TextEncoder().encode(bytes):bytes),state:()=>JSON.parse(metadataStorage.getItem('site-local-files:v1:'+encodeURIComponent(accountId))??'{"files":{},"generatedFiles":{},"publicationOps":{}}')};
+ return{storage,metadataStorage,storageLocks,ioDiagnostics,getAccountId:()=>accountId,getWorkspacePrefix,getOwnedSourceWorkspace,source:(name,bytes)=>storage.write(getWorkspacePrefix('owned-thread')+'/'+name,typeof bytes==='string'?new TextEncoder().encode(bytes):bytes),state:()=>JSON.parse(metadataStorage.getItem('site-local-files:v1:'+encodeURIComponent(accountId))??'{"files":{},"generatedFiles":{},"publicationOps":{}}')};
 }
 export function publicationWorker(data){
  const node=new Worker(new URL(import.meta.url),{type:'module',workerData:data});
@@ -34,10 +51,10 @@ export function publicationWorker(data){
 }
 if(!isMainThread){
  parentPort.on('message',()=>{}); // A real host port keeps an unfinished job alive.
- let extractor;
+ let extractor,host;
  try{
   const {createLocalFilesService}=await import(workerData.serviceURL);
-  const host=await durablePublicationHost(workerData.root,{metrics:workerData.metrics,barrier:workerData.barrier,onSource:async count=>{if(workerData.mode==='pause-after-genuine-parser'&&count===2){parentPort.postMessage({type:'before-commit'});await new Promise(()=>{});}}});
+  host=await durablePublicationHost(workerData.root,{metrics:workerData.metrics,barrier:workerData.barrier,onSource:async count=>{if(workerData.mode==='pause-after-genuine-parser'&&count===2){parentPort.postMessage({type:'before-commit'});await new Promise(()=>{});}}});
   if(workerData.mode==='pause-after-genuine-parser'){
    const {createLocalDocumentExtractor}=await import(workerData.extractorURL);
    // The existing host is itself a Worker entry; importing it inside another
@@ -53,7 +70,7 @@ if(!isMainThread){
   }
   const service=createLocalFilesService({...host,documentExtractor:extractor});
   const receipt=await service.publishGeneratedFile(workerData.spec,{signal:AbortSignal.timeout(10000)});
-  parentPort.postMessage({type:'result',ok:true,receipt});
- }catch(error){parentPort.postMessage({type:'result',ok:false,error:{name:error.name,status:error.status,code:error.code,message:error.message,cleanupPending:error.cleanupPending}});}
+  parentPort.postMessage({type:'result',ok:true,receipt,diagnostics:host?.ioDiagnostics??[]});
+ }catch(error){parentPort.postMessage({type:'result',ok:false,error:{name:error.name,status:error.status,code:error.code,message:error.message,cleanupPending:error.cleanupPending},diagnostics:host?.ioDiagnostics??[]});}
  finally{extractor?.close();parentPort.close();}
 }

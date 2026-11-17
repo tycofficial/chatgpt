@@ -3,6 +3,9 @@
  * history, lists a filesystem, imports a Library file, or publishes a resource.
  */
 const MAX_FILE_BYTES = 20 * 1024 * 1024;
+const SHA256 = /^[0-9a-f]{64}$/;
+const MANIFEST = Object.freeze({ version: 1, source: 'browser-workspace-written-files', algorithm: 'sha256', verification: 'write-readback' });
+const hasManifest = data => object(data?.artifact_manifest) && Object.keys(data.artifact_manifest).length === Object.keys(MANIFEST).length && Object.entries(MANIFEST).every(([key, value]) => data.artifact_manifest[key] === value);
 const terminal = new Set(['completed', 'failed', 'interrupted']);
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const issue = (message, status, code) => Object.assign(new Error(message), { status, code });
@@ -59,7 +62,7 @@ export function createWorkspaceDownloadSource({ getIdentity, getThread, getWorks
     if (matches.length !== 1) fail('MESSAGE_NOT_FOUND', 'A unique actual assistant message was not found in this conversation.', matches.length ? 409 : 404);
     const context = matches[0];
     if (!terminal.has(context.turn.status) || typeof context.item.text !== 'string' || typeof context.turn.id !== 'string') fail('MESSAGE_PENDING', 'Wait for this assistant message to finish before downloading its file.', 409);
-    let event = null;
+    let event = null, unversionedPython = false;
     for (let ti = 0; ti <= context.turnIndex; ti++) {
       const turn = thread.turns[ti], count = ti === context.turnIndex ? context.itemIndex : turn.items.length;
       for (let ii = 0; ii < count; ii++) {
@@ -71,25 +74,46 @@ export function createWorkspaceDownloadSource({ getIdentity, getThread, getWorks
           if (pathOf(args.name ?? args.path) === spec.relativePath) event = { turn, item, args, result, file: object(data?.file) ? data.file : null, kind: item.tool };
         } else if (item.tool === 'delete_file' && pathOf(args.path) === spec.relativePath) {
           event = { turn, item, kind: 'deleted' };
-        } else if (item.tool === 'python' && (Array.isArray(data?.files) ? data.files : []).some(file => pathOf(file?.path ?? file?.name) === spec.relativePath)) {
-          event = { turn, item, kind: 'python' };
+        } else if (item.tool === 'python') {
+          const files = Array.isArray(data?.files) ? data.files : [];
+          if (!hasManifest(data)) unversionedPython = true;
+          const matching = files.filter(file => pathOf(file?.path ?? file?.name) === spec.relativePath);
+          if (matching.length) event = { turn, item, args, result, data, files, matching, kind: 'python' };
         }
       }
     }
-    if (!event) fail('PRODUCER_NOT_FOUND', 'No actual earlier file producer is recorded for this assistant context.', 404);
+    if (!event) {
+      if (unversionedPython) fail('PRODUCER_UNSUPPORTED', 'This Python history has no structured per-write artifact version. File contents cannot be recovered from tool text.', 501);
+      fail('PRODUCER_NOT_FOUND', 'No actual earlier file producer is recorded for this assistant context.', 404);
+    }
     if (event.kind === 'deleted') fail('VERSION_UNAVAILABLE', 'This workspace file was deleted before the requested assistant message.', 404);
-    if (event.kind !== 'create_file') fail('PRODUCER_UNSUPPORTED', 'This workspace producer has no recorded exact byte version. Its historical contents cannot be guessed.', 501);
+    if (event.kind !== 'create_file' && event.kind !== 'python') fail('PRODUCER_UNSUPPORTED', 'This workspace producer has no recorded exact byte version. Its historical contents cannot be guessed.', 501);
+    if (event.kind === 'python') {
+      if (!hasManifest(event.data)) fail('PRODUCER_UNSUPPORTED', 'This Python history has no supported per-write artifact version. Its historical contents cannot be guessed.', 501);
+      if (event.matching.length !== 1) fail('VERSION_UNAVAILABLE', 'The Python result contains duplicate file versions for this path.', 409);
+      const paths = new Set();
+      for (const descriptor of event.files) {
+        const relative = pathOf(descriptor?.path);
+        if (!object(descriptor) || typeof relative !== 'string' || descriptor.path !== '/mnt/data/' + relative || descriptor.name !== relative || paths.has(relative)
+          || !Number.isSafeInteger(descriptor.size) || descriptor.size < 0 || descriptor.size > maxBytes || !SHA256.test(descriptor.sha256 ?? '')
+          || typeof descriptor.mime !== 'string' || !descriptor.mime || descriptor.mime.length > 255 || /[\u0000-\u001f\u007f]/u.test(descriptor.mime)) {
+          fail('VERSION_UNAVAILABLE', 'The Python per-write artifact descriptors are invalid or ambiguous.', 409);
+        }
+        paths.add(relative);
+      }
+      event.file = event.matching[0];
+    }
     const { item: producer, args, result, file } = event;
     // Copy the values used below before the first asynchronous digest or IO.
-    const content = args.content, producerPath = args.name ?? args.path;
+    const content = event.kind === 'create_file' ? args.content : null, producerPath = event.kind === 'create_file' ? args.name ?? args.path : spec.relativePath, pythonCode = event.kind === 'python' ? args.code : null;
     const filePath = file?.path, metadataName = file?.name, size = file?.size, mimeType = file?.mime;
-    if (producer.status !== 'completed' || result?.isError !== false || typeof content !== 'string' || typeof producerPath !== 'string' || !object(file)
+    if (producer.status !== 'completed' || result?.isError !== false || event.kind === 'create_file' && typeof content !== 'string' || event.kind === 'python' && typeof pythonCode !== 'string' || typeof producerPath !== 'string' || !object(file)
       || typeof producer.id !== 'string' || !producer.id || typeof event.turn.id !== 'string' || !event.turn.id
       || filePath !== spec.sandboxPath || metadataName !== spec.relativePath || !Number.isSafeInteger(size) || size < 0
       || typeof mimeType !== 'string' || !mimeType || mimeType.length > 255 || /[\u0000-\u001f\u007f]/u.test(mimeType)) {
       fail('VERSION_UNAVAILABLE', 'The actual file producer did not record a successful exact file version.', 409);
     }
-    if (content.length > maxBytes || size > maxBytes) fail('FILE_TOO_LARGE', 'The workspace file exceeds the configured real-byte transfer limit.', 413);
+    if (event.kind === 'create_file' && content.length > maxBytes || size > maxBytes) fail('FILE_TOO_LARGE', 'The workspace file exceeds the configured real-byte transfer limit.', 413);
     const fileName = spec.relativePath.split('/').at(-1);
     if (!fileName || fileName.length > 255) fail('INVALID_PATH', 'The actual workspace filename is unavailable.', 400);
     let prefix;
@@ -98,12 +122,14 @@ export function createWorkspaceDownloadSource({ getIdentity, getThread, getWorks
     const snapshot = {
       conversationId: spec.conversationId, messageId: spec.messageId, sandboxPath: spec.sandboxPath,
       assistant: { turnId: context.turn.id, turnStatus: context.turn.status, id: context.item.id, text: context.item.text, phase: context.item.phase ?? null },
-      producer: { turnId: event.turn.id, id: producer.id, status: producer.status, server: producer.server, tool: producer.tool, path: producerPath, content,
-        result: { isError: result.isError, fileName: metadataName, path: filePath, mimeType, size } },
+      producer: event.kind === 'create_file' ? { turnId: event.turn.id, id: producer.id, status: producer.status, server: producer.server, tool: producer.tool, path: producerPath, content,
+        result: { isError: result.isError, fileName: metadataName, path: filePath, mimeType, size } }
+        : { turnId: event.turn.id, id: producer.id, status: producer.status, server: producer.server, tool: producer.tool, code: pythonCode,
+          result: { isError: result.isError, fileName: metadataName, path: filePath, mimeType, size, sha256: file.sha256, artifact_manifest: { ...MANIFEST } } },
     };
     const signature = JSON.stringify(snapshot);
     guardOwner();
-    return { spec, prefix, content, fileName, mimeType, size, signature };
+    return { spec, prefix, content, fileName, mimeType, size, signature, kind: event.kind, expectedSHA: event.kind === 'python' ? file.sha256 : null };
   }
   function current(source) {
     try { const next = capture(source.spec); return next.prefix === source.prefix && next.signature === source.signature; } catch { return false; }
@@ -116,11 +142,15 @@ export function createWorkspaceDownloadSource({ getIdentity, getThread, getWorks
   async function resolve(value) {
     const signal = value?.signal; signal?.throwIfAborted();
     const spec = request(value), source = capture(spec);
-    if (source.content.length > maxBytes || source.size > maxBytes) fail('FILE_TOO_LARGE', 'The workspace file exceeds the configured real-byte transfer limit.', 413);
-    const expected = encoder.encode(source.content);
-    if (expected.length > maxBytes) fail('FILE_TOO_LARGE', 'The workspace file exceeds the configured real-byte transfer limit.', 413);
-    if (expected.length !== source.size) fail('VERSION_UNAVAILABLE', 'The producer size does not match its actual UTF-8 content.', 409);
-    const expectedSHA = await hash(expected); assertCurrent(source, signal);
+    if (source.kind === 'create_file' && source.content.length > maxBytes || source.size > maxBytes) fail('FILE_TOO_LARGE', 'The workspace file exceeds the configured real-byte transfer limit.', 413);
+    let expectedSHA = source.expectedSHA;
+    if (source.kind === 'create_file') {
+      const expected = encoder.encode(source.content);
+      if (expected.length > maxBytes) fail('FILE_TOO_LARGE', 'The workspace file exceeds the configured real-byte transfer limit.', 413);
+      if (expected.length !== source.size) fail('VERSION_UNAVAILABLE', 'The producer size does not match its actual UTF-8 content.', 409);
+      expectedSHA = await hash(expected);
+    }
+    assertCurrent(source, signal);
     let input;
     try { input = await storage.read(source.prefix + '/' + spec.relativePath); }
     catch (error) {

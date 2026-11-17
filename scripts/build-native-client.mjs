@@ -36,7 +36,8 @@ for(const asset of supplementalManifest.assets){
 }
 const deploymentBase='/'+(process.env.PUBLIC_BASE_PATH||'chatgpt').replace(/^\/+|\/+$/g,'')+'/';
 const builderBytes=await fs.readFile(fileURLToPath(import.meta.url));
-const sharedAssets=await Promise.all(['config.js','model-catalog.js','runtime.js','python-worker.js','release-updater.js'].map(async file=>({file,bytes:await fs.readFile(path.join(root,file))})));
+const sharedAssetInputs=['config.js','model-catalog.js','runtime.js','python-worker.js','release-updater.js'].map(file=>({file,...(file==='python-worker.js'?{inputFile:'src/native-client/python-worker.js'}:{})}));
+const sharedAssets=await Promise.all(sharedAssetInputs.map(async asset=>({...asset,bytes:await fs.readFile(path.join(root,asset.inputFile??asset.file))})));
 const releaseHash=crypto.createHash('sha256').update([...raw.values()].join('\n')).update(builderBytes).update(entryPlanInput).update(deploymentBase);
 for(const asset of sharedAssets)releaseHash.update(asset.file).update(asset.bytes);
 for(const asset of publicAssets)releaseHash.update(asset.relative).update(asset.bytes);
@@ -45,6 +46,8 @@ for(const asset of supplementalAssets)releaseHash.update(asset.file).update(asse
 const release=releaseHash.digest('hex').slice(0,16);
 await fs.mkdir(output,{recursive:true});
 async function write(file,data){const temporary=file+'.'+process.pid+'.tmp';await fs.writeFile(temporary,data);await fs.rename(temporary,file);}
+// This shared worker has one canonical input; the root URL remains build-derived.
+for(const asset of sharedAssets)if(asset.inputFile)await write(path.join(root,asset.file),asset.bytes);
 function replace(text,from,to){if(!text.includes(from))throw Error('Missing packaging seam: '+from);return text.replaceAll(from,()=>to);}
 for(const asset of publicAssets){const file=path.join(output,asset.relative);await fs.mkdir(path.dirname(file),{recursive:true});await write(file,asset.bytes);}
 const provenance=[];
@@ -149,7 +152,7 @@ const html=`<!DOCTYPE html>
 `;
 await write(path.join(root,'native-client-shell.html'),html);
 const sha256=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
-await write(path.join(output,'adapter-provenance.json'),JSON.stringify({sourceBuild,release,deploymentBase,builderSha256:sha256(builderBytes),entryPlanInputSha256:sha256(entryPlanInput),sourceEntry:plan.sourceEntrySha256,runtime:plan.runtime,manifest:plan.manifest,componentFactoriesModified:false,legacyUiImported:false,serviceAdapter:'Browser-local account/storage and the explicitly configured API; no original private backend or Google authentication is claimed.',sharedAssets:sharedAssets.map(({file,bytes})=>({file,sha256:sha256(bytes)})),resources:publicAssets.map(({relative,bytes})=>({file:relative,sha256:sha256(bytes)})),supplementalManifest:{file:supplementalManifestFile,sha256:sha256(supplementalManifestBytes)},supplementalResources:supplementalAssets.map(({file,bytes})=>({file,sha256:sha256(bytes)})),helpers:provenance},null,2)+'\n');
+await write(path.join(output,'adapter-provenance.json'),JSON.stringify({sourceBuild,release,deploymentBase,builderSha256:sha256(builderBytes),entryPlanInputSha256:sha256(entryPlanInput),sourceEntry:plan.sourceEntrySha256,runtime:plan.runtime,manifest:plan.manifest,componentFactoriesModified:false,legacyUiImported:false,serviceAdapter:'Browser-local account/storage and the explicitly configured API; no original private backend or Google authentication is claimed.',sharedAssets:sharedAssets.map(({file,bytes,inputFile})=>({file,...(inputFile?{inputFile,inputSha256:sha256(bytes)}:{}),sha256:sha256(bytes)})),resources:publicAssets.map(({relative,bytes})=>({file:relative,sha256:sha256(bytes)})),supplementalManifest:{file:supplementalManifestFile,sha256:sha256(supplementalManifestBytes)},supplementalResources:supplementalAssets.map(({file,bytes})=>({file,sha256:sha256(bytes)})),helpers:provenance},null,2)+'\n');
 if(process.argv.includes('--activate')){
  const backup=path.join(root,'.test-output/index-before-native-client.html');
  try{await fs.access(backup);}catch{await fs.copyFile(path.join(root,'index.html'),backup);}
