@@ -5,7 +5,7 @@ function apiURL(base, resource) {
 }
 
 function requestHeaders(settings) {
-  return { 'Content-Type': 'application/json', ...(settings.apiKey ? { Authorization: `Bearer ${settings.apiKey}` } : {}) };
+  return { 'Content-Type': 'application/json', ...(settings.apiKey ? settings.apiKeyHeader === 'x-api-key' ? { 'x-api-key': settings.apiKey } : { Authorization: `Bearer ${settings.apiKey}` } : {}) };
 }
 
 // Verified against the exact model's official capability documentation.

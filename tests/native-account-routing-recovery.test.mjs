@@ -50,10 +50,10 @@ test('explicit primary authentication rejection falls back without changing the 
  assert.equal(result.content,'Neutral fallback');assert.deepEqual(calls.map(c=>c.payload.model),['gpt-6-sol','gpt-6-sol']);assert(calls.every(c=>c.payload.reasoning.effort==='high'));assert.equal(calls[0].url,'https://primary.fixture/v1/responses');
 });
 test('configured standard compatibility uses Chat Completions with the exact selected GPT model',async t=>{
- let call;t.mock.method(globalThis,'fetch',async(url,options)=>{call={url:String(url),body:JSON.parse(options.body)};return Response.json({model:call.body.model,choices:[{message:{role:'assistant',content:'Neutral OK'},finish_reason:'stop'}]});});
- const router=createProviderCompletionRouter({complete:streamCompletion,getProviders:()=>[{id:'primary',apiBase:'https://primary.fixture/v1',apiKey:'neutral',supportedModels:['gpt-6-sol'],standardTransport:'chat-completions'}]});
+ let call;t.mock.method(globalThis,'fetch',async(url,options)=>{call={url:String(url),body:JSON.parse(options.body),headers:options.headers};return Response.json({model:call.body.model,choices:[{message:{role:'assistant',content:'Neutral OK'},finish_reason:'stop'}]});});
+ const router=createProviderCompletionRouter({complete:streamCompletion,getProviders:()=>[{id:'primary',apiBase:'https://primary.fixture/v1',apiKey:'neutral',supportedModels:['gpt-6-sol'],standardTransport:'chat-completions',apiKeyHeader:'x-api-key'}]});
  assert.equal((await router.complete({settings:{model:'gpt-6-sol',reasoningEffort:'none',reasoningMode:'standard',apiTransport:'responses'},messages:[{role:'user',content:'Neutral'}]})).content,'Neutral OK');
- assert.equal(call.url,'https://primary.fixture/v1/chat/completions');assert.equal(call.body.model,'gpt-6-sol');assert.equal(call.body.reasoning_effort,'none');
+ assert.equal(call.url,'https://primary.fixture/v1/chat/completions');assert.equal(call.body.model,'gpt-6-sol');assert.equal(call.body.reasoning_effort,'none');assert.equal(call.headers['x-api-key'],'neutral');assert.equal(call.headers.Authorization,undefined);
 });
 test('updating waits for click inactivity and never repeatedly navigates to the same candidate',async()=>{
  const old='1111111111111111',next='2222222222222222',events=new EventTarget(),store=new Map(),navigations=[];let clock=0;

@@ -9,7 +9,7 @@ function routes(value){
   if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash||typeof entry.apiKey!=='string'||!entry.apiKey.trim())throw routeError('API_PROVIDER_CONFIG_INVALID','Each API provider needs an HTTPS base and a configured credential.');
   if(!Array.isArray(entry.supportedModels)||!entry.supportedModels.length||entry.supportedModels.length>500||new Set(entry.supportedModels).size!==entry.supportedModels.length||entry.supportedModels.some(model=>typeof model!=='string'||!model||model.length>160))throw routeError('API_PROVIDER_CONFIG_INVALID','Each API provider needs an exact recorded supported-model list.');
   const base=url.href.replace(/\/+$/,''),path=url.pathname.replace(/\/+$/,'');
-  return{id:entry.id,apiBase:base,apiKey:entry.apiKey,supportedModels:[...entry.supportedModels],freeChatTransport:entry.freeChatTransport,standardTransport:entry.standardTransport,fallbackOnRejected:entry.fallbackOnRejected===true,index,origin:url.origin,apiPath:path.endsWith('/v1')?path:path+'/v1'};
+  return{id:entry.id,apiBase:base,apiKey:entry.apiKey,supportedModels:[...entry.supportedModels],apiKeyHeader:entry.apiKeyHeader==='x-api-key'?'x-api-key':undefined,freeChatTransport:entry.freeChatTransport,standardTransport:entry.standardTransport,fallbackOnRejected:entry.fallbackOnRejected===true,index,origin:url.origin,apiPath:path.endsWith('/v1')?path:path+'/v1'};
  });
 }
 export function getProviderRequestAllowlist(providers){return routes(providers).flatMap(route=>[
@@ -78,7 +78,7 @@ export function createProviderCompletionRouter({complete,getProviders,isCurrent=
     if(directUsed)await pin(provider);
     emit({type:'api-provider-attempt',providerId:provider.id,model:options.settings.model,reason:index>start?'explicit-quota-fallback':provider.index?'model-admission-or-saved-route':'configured-primary'});
     try{
-     const result=await complete({...options,settings:{...options.settings,apiBase:provider.apiBase,apiKey:provider.apiKey,...(freeChat?{apiTransport:'chat-completions'}:{})},onActivity:activity,onDelta:delta,responsesTransport:freeChat?undefined:responsesTransport});
+     const result=await complete({...options,settings:{...options.settings,apiBase:provider.apiBase,apiKey:provider.apiKey,apiKeyHeader:provider.apiKeyHeader,...(freeChat?{apiTransport:'chat-completions'}:{})},onActivity:activity,onDelta:delta,responsesTransport:freeChat?undefined:responsesTransport});
      return result;
     }catch(error){
      options.signal?.throwIfAborted();if(!isCurrent())throw routeError('API_ROUTE_OWNER_CHANGED','The active account changed during the API request.');
