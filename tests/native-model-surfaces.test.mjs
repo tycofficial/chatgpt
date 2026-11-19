@@ -8,7 +8,7 @@ import {createUltraToolExecutor,ULTRA_MODELS} from '../src/native-client/site-ul
 import {projectChatHistoryThread} from '../src/native-client/chat-history-sync.mjs';
 import {allowedReasoningEfforts,streamCompletion} from '../runtime.js';
 const models=createModelCatalogAdapter(catalog);
-const expected=['gpt-6-luna','gpt-6.1-sol','gpt-6-astra','gpt-6.1-terra','gpt-6-sol','gpt-5.6-sol','gpt-5.6-terra','gpt-5.6-luna'];
+const expected=['gpt-6-luna','gpt-6.1-sol','gpt-6-astra','gpt-6.1-terra','gpt-6.2-sol','gpt-6.2-astra','gpt-6-sol','gpt-5.6-sol','gpt-5.6-terra','gpt-5.6-luna'];
 const sleep=()=>new Promise(resolve=>setImmediate(resolve));
 function fixture({privileged=true,storage=new Map(),transport}={}){
  const requests=[];const server=new LocalAppServer({storage:{getItem:key=>storage.get(key)??null,setItem:(key,value)=>storage.set(key,value)},models,catalog,getExecutionPolicy:()=>({modelSelection:privileged}),readSettings:()=>({apiBase:'https://neutral-model.fixture',apiKey:'neutral-only',model:'gpt-6.1-sol'}),streamCompletion:transport??(async options=>{requests.push({model:options.settings.model,effort:options.settings.reasoningEffort,mode:options.settings.reasoningMode});return{content:'Neutral actual fixture reply',finish_reason:'stop',actual_reasoning:{mode:options.settings.reasoningMode}};}),agentOptions:{toolTransport:'responses',ultraOrchestration:true}});
@@ -16,17 +16,17 @@ function fixture({privileged=true,storage=new Map(),transport}={}){
 }
 function nextBody(model='auto',thinking_effort='standard',extra={}){return{action:'next',model,thinking_effort,parent_message_id:crypto.randomUUID(),messages:[{id:crypto.randomUUID(),author:{role:'user'},content:{content_type:'text',parts:['Neutral manual model correction input']},metadata:{}}],...extra};}
 async function classicTurn(f,body){const response=f.classic.stream(new Request('https://site.fixture/f/conversation'),body);assert.equal(response.status,200);const sse=await response.text();const thread=[...f.server.threads.values()].at(-1),turn=thread.turns.at(-1);return{thread,turn,sse};}
-test('Work/Codex eight exact IDs, Luna five levels, non-Luna six and one original curated default',()=>{
+test('Work/Codex exact IDs, Luna five levels, supported reasoning tiers and one original curated default',()=>{
  assert.deepEqual(catalog.WORK_MODEL_IDS,expected);assert.deepEqual(models.getRpcModelList().data.map(row=>row.model),expected);
- for(const row of models.getRpcModelList().data)assert.deepEqual(row.supportedReasoningEfforts.map(value=>value.reasoningEffort),row.model.endsWith('-luna')?['low','medium','high','xhigh','max']:['low','medium','high','xhigh','max','ultra']);
- const work=models.getWorkModels();assert.equal(work.models.length,8);assert.equal(work.versions.filter(value=>value.display_text==='默认').length,1);assert.equal(work.versions.length,9);
+ for(const row of models.getRpcModelList().data){const expectedEfforts=row.model.endsWith('-luna')||row.model.startsWith('gpt-6.2-')?['low','medium','high','xhigh','max']:['low','medium','high','xhigh','max','ultra'];assert.deepEqual(row.supportedReasoningEfforts.map(value=>value.reasoningEffort),expectedEfforts);}
+ const work=models.getWorkModels();assert.equal(work.models.length,10);assert.equal(work.versions.filter(value=>value.display_text==='默认').length,1);assert.equal(work.versions.length,11);
  assert.deepEqual(models.getSliderModelsConfig().presets[0].map(value=>value.model+':'+value.reasoning_effort),['gpt-6-luna:high','gpt-6.1-sol:low','gpt-6.1-sol:medium','gpt-6-astra:low','gpt-6-astra:medium','gpt-6-astra:xhigh']);
  assert(!work.models.some(row=>row.thinking_efforts.some(value=>value.thinking_effort==='zero')));
 });
 test('Chat exposes only GPT-6/GPT-5.6 Sol families, each Pro row stays in the same version with a legal raw effort',()=>{
  const raw=models.getChatGptModels();assert.deepEqual(raw.versions.map(value=>value.display_text),['GPT-6','GPT-5.6 Sol']);assert.deepEqual(raw.categories.map(value=>value.title),['GPT-6','GPT-5.6 Sol']);
  assert(!raw.categories.some(row=>/ChatGPT|Work|Luna|Astra|Terra/.test(row.title)));
- const aliases=raw.models.filter(row=>!row.is_work_mode_model);assert.equal(aliases.length,4);assert.equal(raw.models.filter(row=>row.is_work_mode_model).length,8);
+ const aliases=raw.models.filter(row=>!row.is_work_mode_model);assert.equal(aliases.length,4);assert.equal(raw.models.filter(row=>row.is_work_mode_model).length,10);
  for(const version of raw.versions){assert.equal(version.slugs.length,2);assert.equal(version.intelligence_presets.length,5);assert.deepEqual(version.intelligence_presets.map(row=>row.thinking_effort),['zero','standard','extended','xhigh','standard']);const pro=version.intelligence_presets.at(-1);assert.equal(pro.lane,'pro');assert.equal(pro.reasoning_type,'pro');assert(version.slugs.includes(pro.model_slug));assert.equal(raw.models.find(row=>row.slug===pro.model_slug).reasoning_type,'pro');}
  assert(!raw.versions.some(value=>value.id==='auto'||value.id==='latest'));assert.equal(raw.default_model_slug,'auto');
 });
@@ -42,7 +42,7 @@ test('the reusable Classic decode keeps aliases and delegates role/model resolut
  const selected=f.server.selection(decoded);assert.equal(selected.model,'gpt-6-astra');assert.equal(selected.reasoningMode,'pro');assert.equal(selected.chatFamily,'gpt-6');
  const work=f.classic.decodeModelRequest({model:'gpt-5.6-terra',thinking_effort:'min'},{adapterMetadata:{conversationOrigin:'tpp'}});assert.equal(work.executionSurface,'work');assert.equal(work.effort,'low');assert.equal(work.frontendModelSlug,undefined);
 });
-test('paid Chat admission excludes Work-only families while Work/RPC retains eight; failed admission mutates nothing',()=>{
+test('paid Chat admission excludes Work-only families while Work/RPC retains ten; failed admission mutates nothing',()=>{
  const f=fixture();for(const model of ['gpt-6-luna','gpt-6.1-sol','gpt-6.1-terra','gpt-5.6-terra','gpt-5.6-luna'])assert.throws(()=>f.server.dispatch('thread/start',{executionSurface:'chat',model,effort:'medium'}),{code:-32602});
  assert.equal(f.server.threads.size,0);assert.equal(f.storage.size,0);assert.equal(f.requests.length,0);
  for(const model of expected)assert.equal(f.server.selection({executionSurface:'work',model,effort:'low'}).model,model);

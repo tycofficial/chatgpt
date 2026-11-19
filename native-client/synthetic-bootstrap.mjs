@@ -1,6 +1,6 @@
-import { publicAuthEnvelope } from './public-auth-envelope.mjs?v=63a859e6c683b1b3';
-import { getPrototypeLocalSession, isPrototypeLocalSession } from './local-identity.mjs?v=63a859e6c683b1b3';
-import { getPrototypeConfiguration } from './local-configuration.mjs?v=63a859e6c683b1b3';
+import { publicAuthEnvelope } from './public-auth-envelope.mjs?v=2eee62044429f6bc';
+import { getPrototypeLocalSession, isPrototypeLocalSession } from './local-identity.mjs?v=2eee62044429f6bc';
+import { getPrototypeConfiguration } from './local-configuration.mjs?v=2eee62044429f6bc';
 
 /** Plain-JSON subset of the format consumed by original jqIZ.nl (447351...). */
 export function encodeRouterState(value) {

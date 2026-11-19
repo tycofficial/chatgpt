@@ -1,10 +1,10 @@
 /** Original classic Chat REST/SSE shapes over the same real local thread engine. */
-import { FRONTEND_TO_RAW_EFFORT } from './model-catalog-adapter.mjs?v=63a859e6c683b1b3';
-import { hostedSearchMessage, mergeWebSearchReferences } from './local-web-search.mjs?v=63a859e6c683b1b3';
-import { turnHostCheckpoints } from './preferred-host-transport.mjs?v=63a859e6c683b1b3';
+import { FRONTEND_TO_RAW_EFFORT } from './model-catalog-adapter.mjs?v=2eee62044429f6bc';
+import { hostedSearchMessage, mergeWebSearchReferences } from './local-web-search.mjs?v=2eee62044429f6bc';
+import { turnHostCheckpoints } from './preferred-host-transport.mjs?v=2eee62044429f6bc';
 
-import { parseClassicInputMessages } from './classic-input-messages.mjs?v=63a859e6c683b1b3';
-export { parseClassicInputMessages, CLASSIC_CONTEXT_LIMITS } from './classic-input-messages.mjs?v=63a859e6c683b1b3';
+import { parseClassicInputMessages } from './classic-input-messages.mjs?v=2eee62044429f6bc';
+export { parseClassicInputMessages, CLASSIC_CONTEXT_LIMITS } from './classic-input-messages.mjs?v=2eee62044429f6bc';
 export class ClassicChatAdapter {
   constructor({ appServer, models, now = Date.now, uuid = () => crypto.randomUUID(), onConversationChange = () => {}, heartbeatMs = 10000, getPublishedFileReferences = () => [] }) { this.server = appServer; this.models = models; this.now = now; this.uuid = uuid; this.onConversationChange = onConversationChange; this.heartbeatMs = heartbeatMs; this.getPublishedFileReferences = getPublishedFileReferences; this.mutationQueue = Promise.resolve(); }
   json(body, status = 200) { return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }); }

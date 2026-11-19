@@ -6,6 +6,7 @@ import vm from 'node:vm';
 import * as catalog from '../src/native-client/model-catalog.js';
 import {createModelCatalogAdapter,FRONTEND_TO_RAW_EFFORT} from '../src/native-client/model-catalog-adapter.mjs';
 import {allowedReasoningEfforts} from '../runtime.js';
+import {DEFAULT_SETTINGS} from '../config.js';
 const adapter=createModelCatalogAdapter(catalog);
 test('TFzY raw effort semantics keep zero/none, max and ultra distinct',()=>{assert.equal(FRONTEND_TO_RAW_EFFORT.none,'zero');assert.equal(FRONTEND_TO_RAW_EFFORT.max,'max');assert.equal(FRONTEND_TO_RAW_EFFORT.ultra,'ultra');assert.notEqual(FRONTEND_TO_RAW_EFFORT.max,FRONTEND_TO_RAW_EFFORT.ultra);});
 test('both Luna manual catalogs start at Low and end at Max without site Ultra',()=>{for(const model of ['gpt-6-luna','gpt-5.6-luna']){const raw=adapter.getWorkModels().models.find(m=>m.slug===model),rpc=adapter.getRpcModelList().data.find(m=>m.model===model);assert.equal(raw.thinking_efforts[0].thinking_effort,'min');assert.equal(raw.thinking_efforts[0].short_label,'轻度');assert.equal(rpc.supportedReasoningEfforts[0].reasoningEffort,'low');assert.equal(rpc.supportedReasoningEfforts.at(-1).reasoningEffort,'max');assert(!rpc.supportedReasoningEfforts.some(e=>e.reasoningEffort==='ultra'));}});
@@ -44,6 +45,26 @@ test('dual-matched Terra stays manual with declared host Ultra and no Chat or cu
   assert.deepEqual(adapter.getRpcModelList().data.find(m=>m.model===id).supportedReasoningEfforts.map(x=>x.reasoningEffort),efforts);
   assert.equal(catalog.WORK_ADDITIONAL_MODEL_PROVENANCE[id].manualOnly,true);
   assert.equal(catalog.WORK_ADDITIONAL_MODEL_PROVENANCE[id].inferenceVerified,false);
+});
+test('GPT-6.2 Sol and Astra are manual Work/Codex models with exact published efforts',()=>{
+  const expected=['low','medium','high','xhigh','max'];
+  for(const id of ['gpt-6.2-sol','gpt-6.2-astra']){
+    assert(catalog.WORK_MODEL_IDS.includes(id));
+    assert.deepEqual(catalog.WORK_PINNED_EFFORTS[id],expected);
+    assert.deepEqual(allowedReasoningEfforts(id),expected);
+    assert.deepEqual(catalog.getWorkSelectionCatalog({model:id,selectionMode:'pinned'}).map(choice=>choice.effort),expected);
+    assert(!catalog.SITE_ULTRA_ORCHESTRATION.models.includes(id));
+    assert(!catalog.WORK_PRESETS.some(choice=>choice.model===id));
+    assert.equal(catalog.WORK_ADDITIONAL_MODEL_PROVENANCE[id].manualOnly,true);
+    assert.equal(catalog.WORK_ADDITIONAL_MODEL_PROVENANCE[id].providerModelsStatus,200);
+    assert.deepEqual(catalog.WORK_ADDITIONAL_MODEL_PROVENANCE[id].surfaces,['work','codex']);
+  }
+  const docode=DEFAULT_SETTINGS.apiProviders.find(provider=>provider.id==='docode');
+  const backup=DEFAULT_SETTINGS.apiProviders.find(provider=>provider.id==='openclawplan');
+  assert(docode.supportedModels.includes('gpt-6.2-sol'));
+  assert(docode.supportedModels.includes('gpt-6.2-astra'));
+  assert(!backup.supportedModels.includes('gpt-6.2-sol'));
+  assert(!backup.supportedModels.includes('gpt-6.2-astra'));
 });
 test('Codex accepts exactly the shared verified manual catalog and rejects provider extras',()=>{
   const source=fs.readFileSync(new URL('../src/native-client/local-codex-adapter.mjs',import.meta.url),'utf8').replace(/^import .*;$/gm,'').replace(/^export\s+/gm,'');
