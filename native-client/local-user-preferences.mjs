@@ -1,15 +1,17 @@
 /** Source g2p6 GET/PATCH shapes backed by real browser-local preferences. */
-import { getLocalAccountStorageKey, isPrototypeLocalSession } from './local-identity.mjs?v=77599d3a62544f6e';
-import { getSiteAccount } from './site-account.mjs?v=77599d3a62544f6e';
+import { getLocalAccountStorageKey, getPrototypeLocalAuthGeneration, isPrototypeLocalSession } from './local-identity.mjs?v=63a859e6c683b1b3';
+import { getSiteAccount } from './site-account.mjs?v=63a859e6c683b1b3';
 
 const key = 'original-client-prototype-user-preferences:v1';
 // Identity namespaces belong to the booted account; switching accounts reloads
 // that provider. An old provider must not keep reading its previous user's key.
 const bootOwner = getSiteAccount()?.id ?? null;
 const bootNamespace = getLocalAccountStorageKey(key);
+const bootGeneration = getPrototypeLocalAuthGeneration();
 function assertCurrent(operation) {
   if ((getSiteAccount()?.id ?? null) !== operation.owner || operation.owner !== bootOwner ||
       getLocalAccountStorageKey(key) !== operation.namespace || operation.namespace !== bootNamespace ||
+      getPrototypeLocalAuthGeneration() !== bootGeneration ||
       (operation.owner === null) !== (operation.namespace === key + ':guest') ||
       (operation.owner !== null && !isPrototypeLocalSession())) {
     throw Object.assign(Error('The active site account changed during preference access'), { status: 409, code: 'LOCAL_PREFERENCES_ACCOUNT_CHANGED' });

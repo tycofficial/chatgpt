@@ -30,7 +30,8 @@ const snapshot = {
   source: 'localAdapter', targetingAccount: account, targetingRequest: context,
   adapterIdentity: 'prototype-local-only', googleAuthenticated: false, openaiAuthenticated: false,
 };
-// Native browser-auth cleanup must not revoke a separately verified site login.
+// Native auth cleanup invalidates the current adapter identity immediately.
+// The separately stored site login can be restored on the next page load.
 const isActive = () => siteAccount ? getSiteAccount()?.id === siteAccount.id : enabled;
 export const isPrototypeLocalSession = isActive;
 /** Admin keeps existing storage; registered and guest accounts never read it. */
@@ -54,9 +55,10 @@ export function clearPrototypeLocalSession({ reload = false } = {}) {
 }
 export function getLocalSignedOutUrl() {
   const fallback = new URL('../', import.meta.url).pathname;
-  const basename = globalThis.document?.documentElement?.dataset?.routerBasename ?? fallback;
+  const basename = globalThis.__CHATGPT_REPLICA_ENV__?.basePath || fallback;
   const candidate = new URL(basename, globalThis.location.origin);
   const url = candidate.origin === globalThis.location.origin ? candidate : new URL(fallback, globalThis.location.origin);
+  if (!url.pathname.endsWith('/')) url.pathname += '/';
   url.searchParams.set('localSession', '0');
   return url.href;
 }

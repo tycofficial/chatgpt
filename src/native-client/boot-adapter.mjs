@@ -381,6 +381,9 @@ overrideExports('QdUF', {
   getBrowserAuthPageUrl: getSiteAuthPageUrl,
   redirectToBrowserChatGptLogin: redirectToSiteLogin,
   maybeRedirectToBrowserChatGptLogin: maybeRedirectToSiteLogin,
+  clearBrowserAuth: clearPrototypeLocalSession,
+  markBrowserChatGptSignedOut: clearPrototypeLocalSession,
+  maybeRedirectToBrowserChatGptLogout: () => false,
   ...(!useOriginalAuth ? {
   loadBrowserChatGptAuth: async () => getPrototypeLocalAuth(),
   getOrLoadBrowserChatGptAuth: () => getPrototypeLocalAuth(),
@@ -394,9 +397,6 @@ overrideExports('QdUF', {
   isBrowserAccountSwitchLoading: () => false,
   refreshBrowserChatGptAuth: async () => getPrototypeLocalAuth(),
   recoverBrowserChatGptAuth: async () => ({ auth: getPrototypeLocalAuth(), recovery: 'reused_current_session' }),
-  clearBrowserAuth: clearPrototypeLocalSession,
-  markBrowserChatGptSignedOut: clearPrototypeLocalSession,
-  maybeRedirectToBrowserChatGptLogout: () => false,
   } : {}),
 }, undefined, {
   readChatGptTokenClaims: originalReader => createLocalHostClaimsReader(originalReader, {

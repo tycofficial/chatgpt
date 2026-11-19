@@ -1,44 +1,44 @@
-import { nativeWebSearchHint } from './local-web-search.mjs?v=77599d3a62544f6e';
-import { createLocalReadAloudSource } from './local-native-read-aloud.mjs?v=77599d3a62544f6e';
-import * as modelCatalog from '../model-catalog.js?v=77599d3a62544f6e';
-import { createModelCatalogAdapter } from './model-catalog-adapter.mjs?v=77599d3a62544f6e';
-import { DEFAULT_SETTINGS } from '../config.js?v=77599d3a62544f6e';
-import { streamCompletion, PythonRuntime, PYTHON_TOOL } from '../runtime.js?v=77599d3a62544f6e';
-import { createProviderCompletionRouter } from './provider-routing.mjs?v=77599d3a62544f6e';
-import { LocalAppServer, LocalProtocolSocket } from './local-app-server.mjs?v=77599d3a62544f6e';
-import { getPrototypeLocalSession, getPrototypeLocalAuth, getLocalAccountCheck, getLocalOptimizedAccount, getLocalWhamAccounts, getPrototypeCurrentUser, isPrototypeLocalSession, clearPrototypeLocalSession, getLocalSignedOutUrl, getLocalAccountStorageKey } from './local-identity.mjs?v=77599d3a62544f6e';
-import { getPrototypeConfiguration, setLocalLibraryAvailability } from './local-configuration.mjs?v=77599d3a62544f6e';
-import { ClassicChatAdapter } from './classic-chat-adapter.mjs?v=77599d3a62544f6e';
-import { createPortableConversationShare } from './portable-conversation-share.mjs?v=77599d3a62544f6e';
-import { createClassicResponseActions } from './classic-response-branches.mjs?v=77599d3a62544f6e';
-import { LocalConversationPubSub } from './local-pubsub.mjs?v=77599d3a62544f6e';
-import { readLocalUserPreferences, updateLocalUserPreference, acknowledgeLocalAnnouncement } from './local-user-preferences.mjs?v=77599d3a62544f6e';
-import { createLocalPersonalizationService } from './local-personalization-service.mjs?v=77599d3a62544f6e';
-import { createPersonalizationIdentityProvider, createConversationIdentityProvider, createPersonalizedSettingsReader } from './local-personalization-context.mjs?v=77599d3a62544f6e';
-import { createBrowserToolExecutor, workspacePath } from './browser-tool-executor.mjs?v=77599d3a62544f6e';
-import { createWorkspaceDownloadSource } from './local-workspace-download-source.mjs?v=77599d3a62544f6e';
-import { createLocalWorkspaceDownloadService } from './local-workspace-download-service.mjs?v=77599d3a62544f6e';
-import { createOwnedDownloadTransport } from './owned-download-transport.mjs?v=77599d3a62544f6e';
-import { createLocalFilesService } from './local-files-service.mjs?v=77599d3a62544f6e';
-import { createLocalLibraryService } from './local-library-service.mjs?v=77599d3a62544f6e';
-import { createLibraryPublishingExecutor, normalizePublicationReceipt } from './local-library-publisher.mjs?v=77599d3a62544f6e';
-import { createPublishedResourceRehydrator } from './published-resource-rehydration.mjs?v=77599d3a62544f6e';
-import { createNativeLibraryRefresh } from './native-library-refresh.mjs?v=77599d3a62544f6e';
-import { createNativePublicationReferences } from './native-publication-references.mjs?v=77599d3a62544f6e';
-import { createNativeWorkspaceReferences } from './native-workspace-references.mjs?v=77599d3a62544f6e';
-import { createNativeFileReferenceComposition } from './native-file-reference-composition.mjs?v=77599d3a62544f6e';
-import { createLocalInputPreparer } from './local-input-preparation.mjs?v=77599d3a62544f6e';
-import { createLocalPricingAdapter } from './local-pricing.mjs?v=77599d3a62544f6e';
-import { SITE_ACCOUNT_SERVICE, getSiteAccount, getSiteSessionToken, hasModelSelectionAccess, getSitePlanCapabilities, logoutSiteAccount } from './site-account.mjs?v=77599d3a62544f6e';
-import { createLocalCodexAdapter } from './local-codex-adapter.mjs?v=77599d3a62544f6e';
-import { isOpenStreetMapTileRequest, fetchOpenStreetMapTile } from './local-map-provider.mjs?v=77599d3a62544f6e';
-import { createLocalDiscoveryAdapter } from './local-discovery.mjs?v=77599d3a62544f6e';
-import { createLocalDotAdapter } from './local-dot-adapter.mjs?v=77599d3a62544f6e';
-import { createLocalMapsService } from './local-maps-service.mjs?v=77599d3a62544f6e';
-import { createPreferredHostTransport, createPreferredCompletion, turnHostCheckpoints, cancelTurnHostRequests } from './preferred-host-transport.mjs?v=77599d3a62544f6e';
-import { createChatHistorySync, projectChatHistoryThread } from './chat-history-sync.mjs?v=77599d3a62544f6e';
-import { createAccountHistoryCoordinator } from './account-history-coordinator.mjs?v=77599d3a62544f6e';
-import { createNativeCloudSyncFeedback } from './native-cloud-sync-feedback.mjs?v=77599d3a62544f6e';
+import { nativeWebSearchHint } from './local-web-search.mjs?v=63a859e6c683b1b3';
+import { createLocalReadAloudSource } from './local-native-read-aloud.mjs?v=63a859e6c683b1b3';
+import * as modelCatalog from '../model-catalog.js?v=63a859e6c683b1b3';
+import { createModelCatalogAdapter } from './model-catalog-adapter.mjs?v=63a859e6c683b1b3';
+import { DEFAULT_SETTINGS } from '../config.js?v=63a859e6c683b1b3';
+import { streamCompletion, PythonRuntime, PYTHON_TOOL } from '../runtime.js?v=63a859e6c683b1b3';
+import { createProviderCompletionRouter } from './provider-routing.mjs?v=63a859e6c683b1b3';
+import { LocalAppServer, LocalProtocolSocket } from './local-app-server.mjs?v=63a859e6c683b1b3';
+import { getPrototypeLocalSession, getPrototypeLocalAuth, getLocalAccountCheck, getLocalOptimizedAccount, getLocalWhamAccounts, getPrototypeCurrentUser, isPrototypeLocalSession, clearPrototypeLocalSession, getLocalSignedOutUrl, getLocalAccountStorageKey } from './local-identity.mjs?v=63a859e6c683b1b3';
+import { getPrototypeConfiguration, setLocalLibraryAvailability } from './local-configuration.mjs?v=63a859e6c683b1b3';
+import { ClassicChatAdapter } from './classic-chat-adapter.mjs?v=63a859e6c683b1b3';
+import { createPortableConversationShare } from './portable-conversation-share.mjs?v=63a859e6c683b1b3';
+import { createClassicResponseActions } from './classic-response-branches.mjs?v=63a859e6c683b1b3';
+import { LocalConversationPubSub } from './local-pubsub.mjs?v=63a859e6c683b1b3';
+import { readLocalUserPreferences, updateLocalUserPreference, acknowledgeLocalAnnouncement } from './local-user-preferences.mjs?v=63a859e6c683b1b3';
+import { createLocalPersonalizationService } from './local-personalization-service.mjs?v=63a859e6c683b1b3';
+import { createPersonalizationIdentityProvider, createConversationIdentityProvider, createPersonalizedSettingsReader } from './local-personalization-context.mjs?v=63a859e6c683b1b3';
+import { createBrowserToolExecutor, workspacePath } from './browser-tool-executor.mjs?v=63a859e6c683b1b3';
+import { createWorkspaceDownloadSource } from './local-workspace-download-source.mjs?v=63a859e6c683b1b3';
+import { createLocalWorkspaceDownloadService } from './local-workspace-download-service.mjs?v=63a859e6c683b1b3';
+import { createOwnedDownloadTransport } from './owned-download-transport.mjs?v=63a859e6c683b1b3';
+import { createLocalFilesService } from './local-files-service.mjs?v=63a859e6c683b1b3';
+import { createLocalLibraryService } from './local-library-service.mjs?v=63a859e6c683b1b3';
+import { createLibraryPublishingExecutor, normalizePublicationReceipt } from './local-library-publisher.mjs?v=63a859e6c683b1b3';
+import { createPublishedResourceRehydrator } from './published-resource-rehydration.mjs?v=63a859e6c683b1b3';
+import { createNativeLibraryRefresh } from './native-library-refresh.mjs?v=63a859e6c683b1b3';
+import { createNativePublicationReferences } from './native-publication-references.mjs?v=63a859e6c683b1b3';
+import { createNativeWorkspaceReferences } from './native-workspace-references.mjs?v=63a859e6c683b1b3';
+import { createNativeFileReferenceComposition } from './native-file-reference-composition.mjs?v=63a859e6c683b1b3';
+import { createLocalInputPreparer } from './local-input-preparation.mjs?v=63a859e6c683b1b3';
+import { createLocalPricingAdapter } from './local-pricing.mjs?v=63a859e6c683b1b3';
+import { SITE_ACCOUNT_SERVICE, getSiteAccount, getSiteSessionToken, hasModelSelectionAccess, getSitePlanCapabilities, logoutSiteAccount } from './site-account.mjs?v=63a859e6c683b1b3';
+import { createLocalCodexAdapter } from './local-codex-adapter.mjs?v=63a859e6c683b1b3';
+import { isOpenStreetMapTileRequest, fetchOpenStreetMapTile } from './local-map-provider.mjs?v=63a859e6c683b1b3';
+import { createLocalDiscoveryAdapter } from './local-discovery.mjs?v=63a859e6c683b1b3';
+import { createLocalDotAdapter } from './local-dot-adapter.mjs?v=63a859e6c683b1b3';
+import { createLocalMapsService } from './local-maps-service.mjs?v=63a859e6c683b1b3';
+import { createPreferredHostTransport, createPreferredCompletion, turnHostCheckpoints, cancelTurnHostRequests } from './preferred-host-transport.mjs?v=63a859e6c683b1b3';
+import { createChatHistorySync, projectChatHistoryThread } from './chat-history-sync.mjs?v=63a859e6c683b1b3';
+import { createAccountHistoryCoordinator } from './account-history-coordinator.mjs?v=63a859e6c683b1b3';
+import { createNativeCloudSyncFeedback } from './native-cloud-sync-feedback.mjs?v=63a859e6c683b1b3';
 
 let nativeFileReferenceCodecs = null;
 export function registerNativeFileReferenceSources({ parseMarkdown, sha256Bytes } = {}) {
@@ -272,13 +272,27 @@ export function setNativeAccountHistoryToaster(provider) {
 }
 async function finishAccountHistoryBeforeLogout() {
   if (!localAccountHistory) return;
-  const controller = new AbortController(), deadline = setTimeout(() => controller.abort(), 8000);
+  const controller = new AbortController();
+  let deadline;
   try {
-    do {
-      const outcome = await localAccountHistory.synchronize({ signal: controller.signal });
-      if (!outcome.ok || outcome.deferred || outcome.conflictCount || !outcome.pending) break;
-    } while (!controller.signal.aborted);
-  } finally { clearTimeout(deadline); localAccountHistory.dispose(); historyFeedback?.dispose(); }
+    const flush = async () => {
+      do {
+        const outcome = await localAccountHistory.synchronize({ signal: controller.signal });
+        if (!outcome.ok || outcome.deferred || outcome.conflictCount || !outcome.pending) break;
+      } while (!controller.signal.aborted);
+    };
+    await Promise.race([
+      flush(),
+      new Promise(resolve => { deadline = setTimeout(() => { controller.abort(); resolve(); }, 1500); }),
+    ]);
+  } catch (error) {
+    diagnostics.push({ type: 'local-signout-history-flush-failed', code: error?.code ?? null });
+  } finally {
+    controller.abort();
+    clearTimeout(deadline);
+    localAccountHistory.dispose();
+    historyFeedback?.dispose();
+  }
 }
 export const localDotAdapter = createLocalDotAdapter({
   storage: { getItem: key => globalThis.localStorage.getItem(key), setItem: (key, value) => globalThis.localStorage.setItem(key, value) },
@@ -394,13 +408,33 @@ export function installNetworkBoundary() {
       if (body.get('csrfToken') !== localCsrfToken) return response({ error: 'Invalid local signout token' }, 403);
       const target = getLocalSignedOutUrl();
       localAppServer.interruptAll({ reason: 'logout' });
-      const stopResults = await cancelTurnHostRequests(localPreferredHostTransport, [...localAppServer.threads.values()].flatMap(thread => thread.turns), { onCheckpoint: () => localAppServer.persist() });
-      for (const result of stopResults) if (result.status === 'rejected') diagnostics.push({ type: 'local-signout-host-cancel-unconfirmed', code: result.reason?.code ?? null });
+      let cancelTimer;
+      try {
+        const stopResults = await Promise.race([
+          cancelTurnHostRequests(localPreferredHostTransport, [...localAppServer.threads.values()].flatMap(thread => thread.turns), { onCheckpoint: () => localAppServer.persist() }),
+          new Promise(resolve => { cancelTimer = setTimeout(() => resolve(null), 1500); }),
+        ]);
+        if (stopResults) {
+          for (const result of stopResults) if (result.status === 'rejected') diagnostics.push({ type: 'local-signout-host-cancel-unconfirmed', code: result.reason?.code ?? null });
+        } else {
+          diagnostics.push({ type: 'local-signout-host-cancel-timeout' });
+        }
+      } catch (error) {
+        diagnostics.push({ type: 'local-signout-host-cancel-failed', code: error?.code ?? null });
+      } finally { clearTimeout(cancelTimer); }
       await finishAccountHistoryBeforeLogout();
       localNativeLibraryRefresh.dispose();
       localLibraryService.dispose();
       localWorkspaceDownloadService.dispose();
-      await logoutSiteAccount();
+      let logoutTimer;
+      try {
+        await Promise.race([
+          logoutSiteAccount(),
+          new Promise(resolve => { logoutTimer = setTimeout(resolve, 1500); }),
+        ]);
+      } catch (error) {
+        diagnostics.push({ type: 'local-signout-account-revoke-failed', code: error?.code ?? null });
+      } finally { clearTimeout(logoutTimer); }
       clearPrototypeLocalSession({ reload: false });
       return response({ url: target });
     }
