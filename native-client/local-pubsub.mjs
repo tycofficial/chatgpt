@@ -1,7 +1,16 @@
-/** BCjz wire protocol over actual local conversation updates, never a cloud socket. */
+/** The site's WebSocket implements the original command/acknowledgement and replay format. */
+const topicKinds = new Map([
+  ['conversations', 'conversation'], ['alder-conversations', 'conversation'],
+  ['calpico-chatgpt-messaging', 'messaging'], ['calpico-chatgpt-messaging-all', 'messaging'],
+]);
+
 export class LocalConversationPubSub {
-  constructor(appServer) {
-    this.clients = new Set(); this.history = []; this.offset = 0;
+  constructor(appServer, { getOwner = () => 'local', hasRoomAccess = () => false, subscribeRoomMessages } = {}) {
+    this.getOwner = getOwner;
+    this.hasRoomAccess = hasRoomAccess;
+    this.subscribeRoomMessages = subscribeRoomMessages;
+    this.clients = new Set();
+    this.journals = new Map();
     this.unsubscribe = appServer.subscribe(event => {
       const p = event.params, id = p.threadId ?? p.thread?.id;
       if (!id) return;
@@ -14,15 +23,29 @@ export class LocalConversationPubSub {
       }
     });
   }
-  publish(type, payload) {
-    const offset = String(++this.offset), value = { type, payload };
-    this.history.push({ offset, value }); if (this.history.length > 512) this.history.shift();
-    for (const client of this.clients) if (client.readyState === 1) {
-      const messages = [...client.topics].filter(topic => topic === 'conversations' || topic === 'alder-conversations').map(topic => ({ type: 'message', topic_id: topic, offset, payload: value }));
+  journal(owner, kind) {
+    let channels = this.journals.get(owner);
+    if (!channels) this.journals.set(owner, channels = new Map());
+    let log = channels.get(kind);
+    if (!log) channels.set(kind, log = { offset: 0, history: [] });
+    return log;
+  }
+  isCurrent(client) { return Boolean(client.owner) && client.owner === this.getOwner(); }
+  publish(type, payload) { this.append('conversation', { type, payload }); }
+  append(kind, value) {
+    const owner = this.getOwner();
+    if (!owner) return;
+    const log = this.journal(owner, kind), offset = String(++log.offset);
+    log.history.push({ offset, value });
+    if (log.history.length > 512) log.history.shift();
+    for (const client of this.clients) {
+      if (client.owner !== owner || client.readyState !== 1) continue;
+      const messages = [...client.topics].filter(topic => topicKinds.get(topic) === kind)
+        .map(topic => ({ type: 'message', topic_id: topic, offset, payload: value }));
       if (messages.length) client.deliver(messages);
     }
   }
-  open(url) { return new LocalPubSubSocket(this, url); }
+  open(url) { return new LocalPubSubSocket(this, url, this.getOwner()); }
   process(client, records) {
     if (!Array.isArray(records)) throw Error('Local pubsub expects a command array');
     return records.map(record => {
@@ -32,13 +55,28 @@ export class LocalConversationPubSub {
       switch (command.type) {
         case 'connect': reply = { type: 'connect', adapter_source: 'local-conversation-pubsub' }; break;
         case 'presence': reply = { type: 'presence' }; break;
-        case 'unsubscribe': client.topics.delete(command.topic_id); reply = { type: 'unsubscribe', topic_id: command.topic_id }; break;
+        case 'unsubscribe':
+          client.topics.delete(command.topic_id);
+          if (![...client.topics].some(topic => topicKinds.get(topic) === 'messaging')) client.stopRoomMessages();
+          reply = { type: 'unsubscribe', topic_id: command.topic_id }; break;
         case 'subscribe': {
-          if (!['conversations', 'alder-conversations'].includes(command.topic_id)) { reply = { type: 'error', code: 'LOCAL_TOPIC_UNIMPLEMENTED', message: 'Only local conversation topics are implemented' }; break; }
-          client.topics.add(command.topic_id);
-          const requested = command.offset == null ? null : Number(command.offset), oldest = Number(this.history[0]?.offset ?? this.offset + 1);
-          const recovered = requested !== null && Number.isSafeInteger(requested) && requested >= oldest - 1 && requested <= this.offset;
-          reply = { type: 'subscribe', topic_id: command.topic_id, recovered, last_offset: String(this.offset), catchups: recovered ? this.history.filter(item => Number(item.offset) > requested).map(item => ({ type: 'message', topic_id: command.topic_id, offset: item.offset, payload: item.value })) : [] };
+          const topic = command.topic_id, kind = topicKinds.get(topic);
+          if (!kind || (kind === 'messaging' && (!this.hasRoomAccess() || !this.subscribeRoomMessages))) {
+            reply = { type: 'error', code: 'LOCAL_TOPIC_UNIMPLEMENTED', message: 'This topic is unavailable for the active site account' }; break;
+          }
+          client.topics.add(topic);
+          if (kind === 'messaging') {
+            client.startRoomMessages();
+            // The room's persisted GET is authoritative after reconnect. Do not keep a second history of message bodies on the socket.
+            reply = { type: 'subscribe', topic_id: topic, recovered: false, last_offset: String(client.roomOffset), catchups: [] };
+            break;
+          }
+          const log = this.journal(client.owner, kind);
+          const requested = command.offset == null ? null : Number(command.offset), oldest = Number(log.history[0]?.offset ?? log.offset + 1);
+          const recovered = requested !== null && Number.isSafeInteger(requested) && requested >= oldest - 1 && requested <= log.offset;
+          const catchups = recovered ? log.history.filter(item => Number(item.offset) > requested)
+            .map(item => ({ type: 'message', topic_id: topic, offset: item.offset, payload: item.value })) : [];
+          reply = { type: 'subscribe', topic_id: topic, recovered, last_offset: String(log.offset), catchups };
           break;
         }
         default: reply = { type: 'error', code: 'LOCAL_COMMAND_UNIMPLEMENTED', message: 'Local pubsub command is not implemented' };
@@ -49,16 +87,44 @@ export class LocalConversationPubSub {
 }
 class LocalPubSubSocket extends EventTarget {
   static CONNECTING = 0; static OPEN = 1; static CLOSING = 2; static CLOSED = 3;
-  constructor(hub, url) {
-    super(); this.hub = hub; this.url = url; this.readyState = 0; this.topics = new Set(); this.bufferedAmount = 0; this.extensions = ''; this.protocol = ''; this.binaryType = 'blob';
+  constructor(hub, url, owner) {
+    super(); this.hub = hub; this.url = url; this.owner = owner; this.readyState = 0; this.topics = new Set(); this.bufferedAmount = 0; this.extensions = ''; this.protocol = ''; this.binaryType = 'blob';
     hub.clients.add(this);
-    queueMicrotask(() => { if (this.readyState === 0) { this.readyState = 1; this.dispatchEvent(new Event('open')); } });
+    this.roomOffset = 0; this.roomSubscription = null;
+    queueMicrotask(() => { if (this.readyState === 0) { this.readyState = 1; this.emit(new Event('open')); } });
+  }
+  emit(event) { this.dispatchEvent(event); this['on' + event.type]?.call(this, event); }
+  startRoomMessages() {
+    if (this.roomSubscription) return;
+    this.roomSubscription = this.hub.subscribeRoomMessages(value => {
+      if (!this.hub.isCurrent(this) || !this.hub.hasRoomAccess() || value?.type !== 'calpico-message-add' || !value.payload?.room_id || !value.payload.message) return;
+      const offset = String(++this.roomOffset);
+      const records = [...this.topics].filter(topic => topicKinds.get(topic) === 'messaging')
+        .map(topic => ({ type: 'message', topic_id: topic, offset, payload: value }));
+      if (records.length) this.deliver(records);
+    });
+  }
+  stopRoomMessages() {
+    if (this.roomSubscription) this.roomSubscription();
+    this.roomSubscription = null;
   }
   send(data) {
     if (this.readyState !== 1) throw new DOMException('Local pubsub socket is not open', 'InvalidStateError');
+    if (!this.hub.isCurrent(this)) { this.close(); return; }
     try { this.deliver(this.hub.process(this, JSON.parse(data))); }
     catch (error) { this.deliver([{ id: -1, reply: { type: 'error', code: 'LOCAL_INVALID_FRAME', message: error.message } }]); }
   }
-  deliver(records) { queueMicrotask(() => { if (this.readyState === 1) this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(records) })); }); }
-  close() { if (this.readyState === 3) return; this.readyState = 3; this.hub.clients.delete(this); this.topics.clear(); this.dispatchEvent(new Event('close')); }
+  deliver(records) {
+    queueMicrotask(() => {
+      if (this.readyState !== 1) return;
+      if (!this.hub.isCurrent(this)) { this.close(); return; }
+      const accessible = this.hub.hasRoomAccess() ? records : records.filter(record =>
+        topicKinds.get(record.topic_id ?? record.reply?.topic_id) !== 'messaging');
+      if (accessible.length) this.emit(new MessageEvent('message', { data: JSON.stringify(accessible) }));
+    });
+  }
+  close() {
+    if (this.readyState === 3) return;
+    this.readyState = 3; this.stopRoomMessages(); this.hub.clients.delete(this); this.topics.clear(); this.emit(new Event('close'));
+  }
 }

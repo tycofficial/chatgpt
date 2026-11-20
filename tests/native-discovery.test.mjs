@@ -7,7 +7,7 @@ import vm from 'node:vm';
 import { createLocalDiscoveryAdapter } from '../src/native-client/local-discovery.mjs';
 import { PUBLIC_PLUGIN_CATALOG, PUBLIC_PLUGIN_CATALOG_PROVENANCE } from '../src/native-client/public-plugin-catalog.mjs';
 import { createLocalPricingAdapter, getLocalReferencePricingConfig, normalizeLocalMembership } from '../src/native-client/local-pricing.mjs';
-import { createLocalMapProvider, createOpenStreetMapStyle, isOpenStreetMapTileRequest, fetchOpenStreetMapTile, OSM_TILE_TEMPLATE, OSM_ATTRIBUTION } from '../src/native-client/local-map-provider.mjs';
+import { createLocalMapProvider, installDeferredMapProvider, createOpenStreetMapStyle, isOpenStreetMapTileRequest, fetchOpenStreetMapTile, OSM_TILE_TEMPLATE, OSM_ATTRIBUTION } from '../src/native-client/local-map-provider.mjs';
 
 const memory = () => {
   const values = new Map();
@@ -281,6 +281,98 @@ test('MapLibre class alias observer settles even when redundant classList.add em
     if (savedObserver === undefined) delete globalThis.MutationObserver;
     else globalThis.MutationObserver = savedObserver;
   }
+});
+
+
+async function deferredNativeMapFixture(name, beforeRendererImport = async () => {}) {
+  const assets = new URL('../original-client/public/chatgpt.com/cdn/assets/', import.meta.url);
+  const runtimeURL = new URL('633146.6428a93122.js', assets);
+  runtimeURL.searchParams.set('fixture', name);
+  const { __webpack_require__: requireOriginal } = await import(runtimeURL);
+  const originalImporter = requireOriginal.ir;
+  const requests = [];
+  let rendererModule;
+  requireOriginal.ir = async specifier => {
+    if (!String(specifier).includes('/map-vendor/maplibre-gl.mjs')) return originalImporter(specifier);
+    requests.push(new URL(specifier));
+    await beforeRendererImport(requests.length);
+    rendererModule = await originalImporter(specifier);
+    return rendererModule;
+  };
+  const bootURL = new URL('../src/native-client/boot-adapter.mjs', import.meta.url);
+  const boot = await fs.readFile(bootURL, 'utf8');
+  assert.doesNotMatch(boot, /^import [^;\r\n]* from ['"][^'"]*maplibre-gl\.mjs['"]/m);
+  const transformStart = boot.indexOf('const transforms = new Map()');
+  const transformEnd = boot.indexOf('let nativeReadAloudBindings;', transformStart);
+  const mapStart = boot.indexOf('const mapRendererURL =');
+  const mapEnd = boot.indexOf("adaptFactory('ztxE'", mapStart);
+  assert(transformStart >= 0 && transformEnd > transformStart && mapStart >= 0 && mapEnd > mapStart);
+  const context = vm.createContext({
+    URL, requireOriginal, installDeferredMapProvider, nativeAssetVersion: '1234567890abcdef',
+    boundary: { diagnostics: [] }, notifyNativeLibrarySourceReady() {},
+  });
+  const mapAdapter = boot.slice(mapStart, mapEnd).replaceAll('import.meta.url', JSON.stringify(bootURL.href));
+  new vm.Script(boot.slice(transformStart, transformEnd) + mapAdapter +
+    '\nglobalThis.fixtureMapProvider = localMapProvider;', { filename: 'native map boot fixture' }).runInContext(context);
+  return {
+    assets, requireOriginal, requests, mapProvider: context.fixtureMapProvider,
+    getRendererModule: () => rendererModule,
+  };
+}
+
+test('native map chunks share one deferred import and retain synchronous renderer and style exports', async () => {
+  let release;
+  const loading = new Promise(resolve => { release = resolve; });
+  const f = await deferredNativeMapFixture('map-lazy-cached', () => loading);
+  const native = f.requireOriginal;
+  assert.equal(f.requests.length, 0);
+  await native.e(685193);
+  assert.equal(f.requests.length, 0);
+
+  let settled = false;
+  const ready = Promise.all([native.e(728289), native.e(962984)]).then(() => { settled = true; });
+  try {
+    await Promise.resolve();
+    assert.equal(f.requests.length, 1);
+    assert.equal(f.requests[0].searchParams.get('v'), '1234567890abcdef');
+    assert.equal(settled, false);
+    assert.throws(() => f.mapProvider.renderer, /must load the renderer/);
+  } finally {
+    release();
+    await ready;
+  }
+  const chunk = await import(new URL('async/728289.8dbe1d1d50.js', f.assets));
+  assert.equal(native.m.s2JQ, chunk.__webpack_modules__.s2JQ);
+  const renderer = native('FxuF');
+  assert.equal(Object.getPrototypeOf(renderer.Map), f.getRendererModule().Map);
+  assert.match(renderer.getWorkerUrl(), /\/map-vendor\/maplibre-gl-worker\.mjs$/);
+  const style = native('eS9I');
+  assert.deepEqual(style.a.sources['local-osm-standard'].tiles, [OSM_TILE_TEMPLATE]);
+  assert.deepEqual(style.b.sources['local-osm-standard'].tiles, [OSM_TILE_TEMPLATE]);
+  assert.doesNotThrow(() => style.c(renderer));
+
+  await Promise.all([native.e(728289), native.e(962984), native.e(194313), native.e(437896)]);
+  assert.equal(f.requests.length, 1);
+  assert.equal(native('FxuF'), renderer);
+  assert.equal(typeof native.m.s2JQ, 'function');
+});
+
+test('native map renderer failures reject awaited chunks and allow a subsequent location-map retry', async () => {
+  const f = await deferredNativeMapFixture('map-lazy-retry', async attempt => {
+    if (attempt === 1) throw new TypeError('Fixture MapLibre download failure');
+  });
+  const native = f.requireOriginal;
+  await assert.rejects(Promise.all([native.e(728289), native.e(962984)]), /Fixture MapLibre download failure/);
+  assert.equal(f.requests.length, 1);
+  assert.equal(native.c.FxuF, undefined);
+  assert.throws(() => f.mapProvider.renderer, /must load the renderer/);
+
+  await Promise.all([native.e(194313), native.e(962984)]);
+  assert.equal(f.requests.length, 2);
+  assert.equal(native('FxuF'), f.mapProvider.renderer);
+  assert.equal(native('eS9I').a.name, 'OpenStreetMap');
+  const chunk = await import(new URL('async/194313.256c449d33.js', f.assets));
+  assert.equal(native.m.s2JQ, chunk.__webpack_modules__.s2JQ);
 });
 
 test('reference pricing retains real USD major units, discloses regional fallback and never invents tax or Plus annual billing', async () => {

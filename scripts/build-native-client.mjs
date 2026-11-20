@@ -8,6 +8,7 @@ const referenceInput=path.join(root,'.test-output/original-client-prototype');
 const input=path.join(root,'src/native-client');
 const output=path.join(root,'native-client');
 const helpers=['boot-adapter.mjs','startup-compatibility.mjs','image-input-compression.mjs','service-boundary.mjs','provider-routing.mjs','local-native-read-aloud.mjs','local-web-search.mjs','preferred-host-transport.mjs','synthetic-bootstrap.mjs','public-auth-envelope.mjs','local-identity.mjs','local-token-identity.mjs','site-account.mjs','chat-history-sync.mjs','account-history-coordinator.mjs','native-cloud-sync-feedback.mjs','local-model-selection-policy.mjs','local-configuration.mjs','local-user-preferences.mjs','local-personalization-service.mjs','local-personalization-context.mjs','local-host-settings.mjs','local-work-policy.mjs','local-codex-adapter.mjs','local-dot-adapter.mjs','local-map-provider.mjs','local-maps-service.mjs','local-discovery.mjs','public-plugin-catalog.mjs','local-pubsub.mjs','model-catalog-adapter.mjs','local-app-server.mjs','classic-chat-adapter.mjs','portable-conversation-share.mjs','classic-response-branches.mjs','classic-input-messages.mjs','agent-turn-runner.mjs','site-ultra-orchestrator.mjs','browser-tool-executor.mjs','local-document-extraction.mjs','document-text-worker.mjs','local-ooxml-container.mjs','local-office-xml.mjs','local-xlsx-extraction.mjs','local-pptx-extraction.mjs','local-files-service.mjs','local-library-service.mjs','local-library-publisher.mjs','published-resource-rehydration.mjs','native-library-refresh.mjs','native-publication-references.mjs','native-workspace-references.mjs','native-file-reference-composition.mjs','local-native-upload.mjs','local-native-download.mjs','local-workspace-download-source.mjs','local-workspace-download-service.mjs','owned-download-transport.mjs','local-input-preparation.mjs','local-pricing.mjs','entry-library.mjs'];
+helpers.push('native-pricing-trials.mjs', 'site-signout.mjs', 'native-site-login.mjs');
 if(new Set(helpers).size!==helpers.length)throw Error('Duplicate native helper declaration');
 if(process.argv.includes('--from-reference')){
  await fs.mkdir(input,{recursive:true});
@@ -23,6 +24,7 @@ async function collectAssets(directory){
  for(const entry of entries.sort((a,b)=>a.name.localeCompare(b.name))){const relative=directory+'/'+entry.name;if(entry.isDirectory())await collectAssets(relative);else if(entry.isFile())publicAssets.push({relative,bytes:await fs.readFile(path.join(input,relative))});else throw Error('Unexpected resource link: '+relative);}
 }
 await collectAssets('map-vendor');await collectAssets('plugin-assets');await collectAssets('dot-assets');await collectAssets('document-vendor');await collectAssets('office-vendor');await collectAssets('artifact-assets');
+await collectAssets('compat-assets');
 const supplementalManifestFile='original-client/dot-renderer-manifest.json';
 const supplementalManifestBytes=await fs.readFile(path.join(root,supplementalManifestFile));
 const supplementalManifest=JSON.parse(supplementalManifestBytes);
@@ -50,6 +52,15 @@ async function write(file,data){const temporary=file+'.'+process.pid+'.tmp';awai
 for(const asset of sharedAssets)if(asset.inputFile)await write(path.join(root,asset.file),asset.bytes);
 function replace(text,from,to){if(!text.includes(from))throw Error('Missing packaging seam: '+from);return text.replaceAll(from,()=>to);}
 for(const asset of publicAssets){const file=path.join(output,asset.relative);await fs.mkdir(path.dirname(file),{recursive:true});await write(file,asset.bytes);}
+// The archived WebGL engine resolves this module relative to its own runtime.
+// Keep the site's implementation out of the upstream archive manifest.
+const siteResourceAliases = [];
+const preparationWorker = publicAssets.find(asset => asset.relative === 'dot-assets/preparation-worker.mjs');
+if (preparationWorker) {
+ const file = '_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/single-thread/preparation-worker.mjs';
+ await write(path.join(root, file), preparationWorker.bytes);
+ siteResourceAliases.push({ file, source: preparationWorker.relative, sha256: crypto.createHash('sha256').update(preparationWorker.bytes).digest('hex') });
+}
 const provenance=[];
 for(const [name,original]of raw){
  let text=original;
@@ -75,9 +86,11 @@ for(const [name,original]of raw){
 plan.registrationEntry='./entry-library.mjs?v='+release;
 plan.status='original-module-graph-with-local-service-adapter';
 await write(path.join(output,'entry-plan.json'),JSON.stringify(plan,null,2)+'\n');
-const bootstrap=`import { installDirectAssetHost, registerOptionalAssetWorker, showStartupError } from './startup-compatibility.mjs?v=${release}';
+const bootstrap=`import { installBrowserCompatibility, installDirectAssetHost, registerOptionalAssetWorker, showStartupError } from './startup-compatibility.mjs?v=${release}';
 try {
 const rootURL = new URL('../', import.meta.url);
+document.documentElement.dataset.routerBasename = rootURL.pathname.replace(/\\/$/, '') || '/';
+await installBrowserCompatibility();
 const releaseFetch = globalThis.fetch.bind(globalThis);
 globalThis.__CHATGPT_REPLICA_ENV__ = Object.freeze({basePath:rootURL.pathname,localIdentity:true,useOriginalAuth:true,preferredHostEnabled:true,directAssetHost:true,release:${JSON.stringify(release)},sourceBuild:${JSON.stringify(sourceBuild)}});
 const workerURL = new URL('native-client-worker.js?v='+${JSON.stringify(release)}, rootURL);
@@ -86,27 +99,31 @@ installDirectAssetHost(rootURL, { fetchImpl: releaseFetch });
 void registerOptionalAssetWorker(workerURL, rootURL.pathname);
 const siteAccount = await import('./site-account.mjs?v='+${JSON.stringify(release)});
 let isBusy;
-const pagePath = location.pathname.replace(/\\/$/, '');
-if(pagePath === rootURL.pathname + 'site-plans') {
- await siteAccount.initializeSiteAccount();
- const {renderSitePlansPage} = await import('./local-pricing.mjs?v='+${JSON.stringify(release)});
- renderSitePlansPage();
- isBusy = () => Boolean(document.querySelector('.site-plans[aria-busy="true"]'));
-}
-else if(['login','auth/login','signup','auth/signup'].map(route=>rootURL.pathname+route).includes(pagePath)) {
+const pagePath = location.pathname.replace(/\\/index\\.html$/, '/').replace(/\\/$/, '');
+const signOut = await import('./site-signout.mjs?v='+${JSON.stringify(release)});
+if (signOut.isSiteSignOutPage(location.href, rootURL)) {
+ siteAccount.logoutSiteAccount();
+ location.replace(signOut.getSiteSignedOutUrl(rootURL));
+} else if(['login','auth/login','signup','auth/signup'].map(route=>rootURL.pathname+route).includes(pagePath)) {
  siteAccount.renderSiteLoginPage();
  isBusy = () => [...document.querySelectorAll('.site-login input')].some(input=>input===document.activeElement||input.value.length>0)||!!document.querySelector('.site-login button:disabled');
 }
 else {
- await siteAccount.initializeSiteAccount();
+ if (/\\/(?:site-plans(?:\\/index\\.html)?|plans|pricing-plan|purchase\\/[^/]+)$/.test(pagePath)) {
+   const pricing = await import('./native-pricing-trials.mjs?v='+${JSON.stringify(release)});
+   pricing.normalizeLegacyPricingEntry();
+ }
+ await siteAccount.initializeSiteAccountForDisplay();
  await import('./boot-adapter.mjs?v='+${JSON.stringify(release)});
  const {localAppServer} = await import('./service-boundary.mjs?v='+${JSON.stringify(release)});
- isBusy = () => localAppServer.running.size>0;
+ isBusy = () => localAppServer.running.size>0 || Boolean(document.querySelector('[aria-busy="true"]'));
 }
+if (isBusy) {
 const {createReleaseUpdater} = await import('../release-updater.js?v='+${JSON.stringify(release)});
 const updater = createReleaseUpdater({currentRelease:${JSON.stringify(release)},baseURL:rootURL,fetchImpl:releaseFetch,isBusy,interactionQuietMs:30000});
 updater.start();
 globalThis.addEventListener('pagehide',()=>updater.stop(),{once:true});
+}
 } catch (error) { showStartupError(error); }
 `;
 await write(path.join(output,'bootstrap.mjs'),bootstrap);
@@ -136,10 +153,34 @@ self.addEventListener('fetch',event=>{
    return new Response(bytes,{headers:{'Content-Type':types[name.split('.').at(-1)]||'application/octet-stream','Content-Disposition':"attachment; filename*=UTF-8''"+encodeURIComponent(name.split('/').at(-1)),'Cache-Control':'private,no-store','X-Content-Type-Options':'nosniff'}});
   }catch{return new Response('File not found in this browser workspace',{status:404});}})());return;
  }
- if(event.request.mode==='navigate'&&requested.origin===self.location.origin&&requested.pathname.startsWith(BASE)&&!requested.pathname.startsWith(BASE+'_orbit-renderer/')){
+ const subpath=requested.pathname.slice(BASE.length);
+ const uiNavigation=!/^(?:_orbit-renderer|native-client|original-client|__local_artifacts|__codex-api|backend-api|api|sync)(?:\\/|$)/.test(subpath)&&(!/\\.[a-z0-9]+$/i.test(subpath)||/\\bindex\\.html$/.test(subpath));
+ if(event.request.mode==='navigate'&&requested.origin===self.location.origin&&requested.pathname.startsWith(BASE)&&uiNavigation){
   event.respondWith((async()=>{const cache=await caches.open(SHELL_CACHE).catch(()=>null),key=new URL(BASE+'index.html',self.location.origin).href;
-   try{let page=await fetch(event.request,{cache:'no-store'});if(page.status===404)page=await fetch(key,{cache:'no-store'});if(page.ok&&cache)await cache.put(key,page.clone()).catch(()=>{});return page;}
-   catch(error){const saved=cache?await cache.match(key).catch(()=>null):null;if(saved)return saved;throw error;}
+   const saved=cache&&await cache.match(key).catch(()=>null);
+   if(saved&&!requested.searchParams.has('__native_release')&&/^(?:index\\.html)?$/.test(subpath))return saved;
+   try{let page=await fetch(event.request,{cache:'no-store'});if(page.status===404)page=await fetch(key,{cache:'no-store'});if(page.ok&&cache&&/^text\\/html(?:;|$)/i.test(page.headers.get('Content-Type')||''))await cache.put(key,page.clone()).catch(()=>{});return page;}
+   catch(error){if(saved)return saved;throw error;}
+  })());return;
+ }
+ // The import map already points most chunks directly at their Pages URLs.
+ // Only immutable public assets belong here. Keep account data and release discovery on the network.
+ const relative=requested.pathname.slice(BASE.length);
+ const own=requested.origin===self.location.origin&&requested.pathname.startsWith(BASE);
+ const revision=requested.search==='?v=${release}';
+ const nativeStatic=revision&&(/^(?:native-client\\/[a-zA-Z0-9_./-]+\\.(?:mjs|js|json|css)|(?:runtime|config|model-catalog|release-updater|python-worker)\\.js)$/.test(relative))&&!relative.endsWith('/active.json');
+ const immutable=!requested.search&&/^original-client\\/public\\/(?:chatgpt\\.com\\/cdn\\/assets|cdn\\.oaistatic\\.com\\/assets)\\/(?:[a-zA-Z0-9_-]+\\/)*(?:[a-zA-Z0-9_-]+[.-])?[0-9a-f]{8,64}\\.(?:js|mjs|json|css|woff2|png|webp|svg)$/.test(relative);
+ if(own&&(nativeStatic||immutable)&&!event.request.headers.has('authorization')&&!event.request.headers.has('range')){
+  event.respondWith((async()=>{
+   const cache=await caches.open(immutable?CACHE:SHELL_CACHE).catch(()=>null);
+   const hit=cache&&await cache.match(event.request.url).catch(()=>null);
+   if(hit)return hit;
+   const response=await fetch(event.request);
+   if(cache&&response.ok&&response.status===200){
+    const save=cache.put(event.request.url,response.clone()).catch(()=>{});
+    event.waitUntil?.(save);
+   }
+   return response;
   })());return;
  }
  const mapped=mirror(requested);if(!mapped)return;
@@ -153,14 +194,38 @@ self.addEventListener('fetch',event=>{
 });
 `;
 await write(path.join(root,'native-client-worker.js'),worker);
+const cssAsset = 'original-client/public/chatgpt.com/cdn/assets/c7fcb2505631.css';
+const originalCSS = await fs.readFile(path.join(root, cssAsset), 'utf8');
+const rootAsset = /url\((['"]?)\/cdn\//g;
+const assetOverrides = [];
+for (const rule of originalCSS.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+ const selector = rule[1].trim(), declarations = rule[2];
+ if (!declarations.match(rootAsset)) continue;
+ const local = selector === '@font-face' ? declarations : declarations.split(';').filter(value => value.match(rootAsset)).join(';');
+ assetOverrides.push(selector + '{' + local + '}');
+}
+const overrides = assetOverrides.join('\n');
+if (overrides.match(rootAsset)?.length !== originalCSS.match(rootAsset)?.length) throw Error('Incomplete stylesheet asset rebasing');
+const localCSS = overrides.replace(rootAsset, (_, quote) => 'url(' + quote + deploymentBase + 'original-client/public/chatgpt.com/cdn/');
+const primaryModules = [
+ ...['native-client/entry-library.mjs', 'native-client/boot-adapter.mjs'].map(name => deploymentBase + name + '?v=' + release),
+ ...[plan.manifest, ...Object.values(plan.initialRoutes)].map(url => deploymentBase + 'original-client/public/chatgpt.com' + url),
+];
+const primaryStyles = [deploymentBase + cssAsset, deploymentBase + 'native-client/map-vendor/maplibre-gl.css?v=' + release];
+const preload = `<script>(function(){
+ if(/\\/(?:login|signup|logout|signout)(?:\\/index\\.html|\\/)?$/i.test(location.pathname))return;
+ function load(rel,url){var link=document.createElement('link');link.rel=rel;link.href=url;if(rel==='modulepreload')link.crossOrigin='anonymous';document.head.appendChild(link)}
+ ${JSON.stringify(primaryStyles)}.forEach(function(url){load('stylesheet',url)});
+ ${JSON.stringify(primaryModules)}.forEach(function(url){load('modulepreload',url)});
+})()</script>`;
 const html=`<!DOCTYPE html>
-<html class="chatgpt-theme" lang="zh-CN" dir="ltr" data-theme="light" data-appearance-preset="codex" data-ios="false" data-build="${sourceBuild}" data-client-build-revision="${sourceBuild}" data-icon-sprite-url="${deploymentBase}original-client/public/chatgpt.com/cdn/assets/icons-65c0f11497ac4847.svg" data-codex-cli-version="0.171.0-alpha.2" data-codex-window-type="browser" data-window-type="browser" data-native-client-release="${release}">
-<head><script type="importmap">${JSON.stringify({imports:{"/cdn/":deploymentBase+"original-client/public/chatgpt.com/cdn/","https://chatgpt.com/cdn/":deploymentBase+"original-client/public/chatgpt.com/cdn/","https://cdn.oaistatic.com/":deploymentBase+"original-client/public/cdn.oaistatic.com/"}})}</script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="${deploymentBase}original-client/public/chatgpt.com/cdn/assets/c7fcb2505631.css"><link rel="stylesheet" href="${deploymentBase}native-client/map-vendor/maplibre-gl.css?v=${release}"><style data-codex-app-themes></style><title>ChatGPT</title></head>
-<body><script type="module" src="${deploymentBase}native-client/bootstrap.mjs?v=${release}"></script></body></html>
+<html class="chatgpt-theme" lang="zh-CN" dir="ltr" data-theme="light" data-appearance-preset="codex" data-ios="false" data-build="${sourceBuild}" data-client-build-revision="${sourceBuild}" data-router-basename="${deploymentBase.replace(/\/$/,'') || '/'}" data-icon-sprite-url="${deploymentBase}original-client/public/chatgpt.com/cdn/assets/icons-65c0f11497ac4847.svg" data-codex-cli-version="0.171.0-alpha.2" data-codex-window-type="browser" data-window-type="browser" data-native-client-release="${release}">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><script type="importmap">${JSON.stringify({imports:{"/cdn/":deploymentBase+"original-client/public/chatgpt.com/cdn/","https://chatgpt.com/cdn/":deploymentBase+"original-client/public/chatgpt.com/cdn/","https://cdn.oaistatic.com/":deploymentBase+"original-client/public/cdn.oaistatic.com/"}})}</script>${preload}<style data-native-asset-rebase>${localCSS}</style><style data-codex-app-themes></style><title>ChatGPT</title></head>
+<body><div id="site-start-status" role="status" style="margin:24px;font:16px system-ui">正在打开…</div><script>function siteModuleFailed(){var n=document.getElementById('site-start-status');if(n){n.textContent='此浏览器未能载入页面。';var b=document.createElement('button');b.textContent='重新加载';b.onclick=function(){location.reload()};n.appendChild(b)}}</script><script nomodule>siteModuleFailed()</script><script type="module" onerror="siteModuleFailed()" src="${deploymentBase}native-client/bootstrap.mjs?v=${release}"></script></body></html>
 `;
 await write(path.join(root,'native-client-shell.html'),html);
 const sha256=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
-await write(path.join(output,'adapter-provenance.json'),JSON.stringify({sourceBuild,release,deploymentBase,builderSha256:sha256(builderBytes),entryPlanInputSha256:sha256(entryPlanInput),sourceEntry:plan.sourceEntrySha256,runtime:plan.runtime,manifest:plan.manifest,componentFactoriesModified:false,legacyUiImported:false,serviceAdapter:'Browser-local account/storage and the explicitly configured API; no original private backend or Google authentication is claimed.',sharedAssets:sharedAssets.map(({file,bytes,inputFile})=>({file,...(inputFile?{inputFile,inputSha256:sha256(bytes)}:{}),sha256:sha256(bytes)})),resources:publicAssets.map(({relative,bytes})=>({file:relative,sha256:sha256(bytes)})),supplementalManifest:{file:supplementalManifestFile,sha256:sha256(supplementalManifestBytes)},supplementalResources:supplementalAssets.map(({file,bytes})=>({file,sha256:sha256(bytes)})),helpers:provenance},null,2)+'\n');
+await write(path.join(output,'adapter-provenance.json'),JSON.stringify({sourceBuild,release,deploymentBase,builderSha256:sha256(builderBytes),entryPlanInputSha256:sha256(entryPlanInput),sourceEntry:plan.sourceEntrySha256,runtime:plan.runtime,manifest:plan.manifest,componentFactoriesModified:false,legacyUiImported:false,serviceAdapter:'Browser-local account/storage and the explicitly configured API; no original private backend or Google authentication is claimed.',sharedAssets:sharedAssets.map(({file,bytes,inputFile})=>({file,...(inputFile?{inputFile,inputSha256:sha256(bytes)}:{}),sha256:sha256(bytes)})),resources:publicAssets.map(({relative,bytes})=>({file:relative,sha256:sha256(bytes)})),siteResourceAliases,supplementalManifest:{file:supplementalManifestFile,sha256:sha256(supplementalManifestBytes)},supplementalResources:supplementalAssets.map(({file,bytes})=>({file,sha256:sha256(bytes)})),helpers:provenance},null,2)+'\n');
 if(process.argv.includes('--activate')){
  const backup=path.join(root,'.test-output/index-before-native-client.html');
  try{await fs.access(backup);}catch{await fs.copyFile(path.join(root,'index.html'),backup);}
@@ -168,6 +233,11 @@ if(process.argv.includes('--activate')){
  await write(path.join(root,'404.html'),html);
  await fs.mkdir(path.join(root,'site-plans'),{recursive:true});
  await write(path.join(root,'site-plans','index.html'),html);
+ const planAliases = ['plus', 'pro5x', 'prolite', 'pro', 'promax'].flatMap(tier => ['purchase/' + tier, 'codex/purchase/' + tier]);
+ for (const alias of ['login', 'signup', 'auth/login', 'auth/signup', 'auth/logout', 'logout', 'plans', 'pricing-plan', ...planAliases]) {
+   await fs.mkdir(path.join(root,alias),{recursive:true});
+   await write(path.join(root,alias,'index.html'),html);
+ }
  await write(path.join(output,'active.json'),JSON.stringify({active:true,release,sourceBuild,originalComponentGraph:true,backend:'local-adapters-and-configured-api'},null,2)+'\n');
 }
 console.log(JSON.stringify({release,helpers:helpers.length,sourceBuild,activated:process.argv.includes('--activate'),shell:'native-client-shell.html'}));

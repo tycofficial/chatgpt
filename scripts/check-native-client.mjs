@@ -51,6 +51,13 @@ for(const resource of provenance.supplementalResources){
  releaseHash.update(resource.file).update(bytes);
 }
 const release=releaseHash.digest('hex').slice(0,16);
+for (const alias of provenance.siteResourceAliases ?? []) {
+ const resource = provenance.resources.find(item => item.file === alias.source);
+ if (!alias.file.startsWith('_orbit-renderer/') || alias.file.split('/').includes('..') ||
+     !resource || resource.sha256 !== alias.sha256 || sha256(await fs.readFile(path.join(root, alias.file))) !== alias.sha256) {
+  throw Error('Invalid site renderer compatibility file: ' + alias.file);
+ }
+}
 if(release!==active.release||release!==provenance.release||active.sourceBuild!==provenance.sourceBuild)throw Error('Active release does not match actual canonical inputs');
 const files=(await fs.readdir(directory)).filter(name=>name.endsWith('.mjs'));
 let ownImports=0;

@@ -7,7 +7,7 @@ import { DEFAULT_SETTINGS } from './config.js';
 import { streamCompletion, PythonRuntime, PYTHON_TOOL } from './runtime.js';
 import { createProviderCompletionRouter } from './provider-routing.mjs';
 import { LocalAppServer, LocalProtocolSocket } from './local-app-server.mjs';
-import { getPrototypeLocalSession, getPrototypeLocalAuth, getLocalAccountCheck, getLocalOptimizedAccount, getLocalWhamAccounts, getPrototypeCurrentUser, isPrototypeLocalSession, clearPrototypeLocalSession, getLocalSignedOutUrl, getLocalAccountStorageKey } from './local-identity.mjs';
+import { getPrototypeLocalSession, getPrototypeLocalAuth, getLocalAccountCheck, getLocalOptimizedAccount, getLocalWhamAccounts, getPrototypeCurrentUser, isPrototypeLocalSession, clearPrototypeLocalSession, getLocalAccountStorageKey } from './local-identity.mjs';
 import { getPrototypeConfiguration, setLocalLibraryAvailability } from './local-configuration.mjs';
 import { ClassicChatAdapter } from './classic-chat-adapter.mjs';
 import { createPortableConversationShare } from './portable-conversation-share.mjs';
@@ -30,11 +30,13 @@ import { createNativeWorkspaceReferences } from './native-workspace-references.m
 import { createNativeFileReferenceComposition } from './native-file-reference-composition.mjs';
 import { createLocalInputPreparer } from './local-input-preparation.mjs';
 import { createLocalPricingAdapter } from './local-pricing.mjs';
-import { SITE_ACCOUNT_SERVICE, getSiteAccount, getSiteSessionToken, hasModelSelectionAccess, getSitePlanCapabilities, logoutSiteAccount, getSitePlansUrl } from './site-account.mjs';
+import { SITE_ACCOUNT_SERVICE, getSiteAccount, getSiteSessionToken, hasModelSelectionAccess, getSitePlanCapabilities, logoutSiteAccount, getSiteHomeUrl, refreshSiteAccount } from './site-account.mjs';
+import { createSiteSignOutController, isNativeSignOutLink, getSiteSignOutPageUrl } from './site-signout.mjs';
+import { isSitePricingPath, nativePricingDestination } from './native-pricing-trials.mjs';
 import { createLocalCodexAdapter } from './local-codex-adapter.mjs';
 import { isOpenStreetMapTileRequest, fetchOpenStreetMapTile } from './local-map-provider.mjs';
 import { createLocalDiscoveryAdapter } from './local-discovery.mjs';
-import { createLocalDotAdapter } from './local-dot-adapter.mjs';
+import { createLocalDotAdapter, createLocalDotCompletion } from './local-dot-adapter.mjs';
 import { createLocalMapsService } from './local-maps-service.mjs';
 import { createPreferredHostTransport, createPreferredCompletion, turnHostCheckpoints, cancelTurnHostRequests } from './preferred-host-transport.mjs';
 import { createChatHistorySync, projectChatHistoryThread } from './chat-history-sync.mjs';
@@ -78,12 +80,17 @@ export const localPreferredHostTransport = createPreferredHostTransport({ baseUR
 const siteInferenceModels = new Set(['gpt-6.2-sol', 'gpt-6.2-astra']);
 function completeWithSiteInference(options) {
   if (!siteInferenceModels.has(options.settings.model)) return streamCompletion(options);
-  const directSiteResponse = (payload, { signal }) => {
+  const directSiteResponse = async (payload, { signal }) => {
+    if (!getSiteSessionToken() && getSiteAccount()?.authenticationMode === 'site-offline-cache' && navigator.onLine !== false) {
+      await refreshSiteAccount();
+    }
     const token = getSiteSessionToken();
-    if (!token) throw Object.assign(new Error('请在线验证本站账号后使用 GPT-6.2。'), { code: 'SITE_INFERENCE_SIGN_IN', retryable: false });
-    return fetch(SITE_ACCOUNT_SERVICE + '/inference/v1/responses', {
+    const localAdmin = getSiteAccount()?.authenticationMode === 'offline-administrator';
+    const provider = !token && localAdmin ? DEFAULT_SETTINGS.apiProviders.find(entry => entry.id === 'docode' && entry.supportedModels.includes(payload.model)) : null;
+    if (!token && !provider?.apiKey) throw Object.assign(new Error('请在线验证本站账号后使用 GPT-6.2。'), { code: 'SITE_INFERENCE_SIGN_IN', retryable: false });
+    return fetch(SITE_ACCOUNT_SERVICE + (token ? '/inference/v1/responses' : '/api-proxy/docode/v1/responses'), {
       method: 'POST', credentials: 'omit', redirect: 'error', signal,
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (token || provider.apiKey) },
       body: JSON.stringify(payload),
     });
   };
@@ -104,6 +111,7 @@ const localHostCompletion = createPreferredCompletion({ runtimeCompletion: local
   enabled: () => globalThis.__CHATGPT_REPLICA_ENV__?.preferredHostEnabled === true,
 });
 export function localPreferredCompletion(options) {
+  if (options.providerRoutingContext?.conversationOrigin === 'dot') return localDotAdapter.complete(options);
   if (siteInferenceModels.has(options.settings.model)) return localAPIRouter.complete(options);
   return localHostCompletion(options);
 }
@@ -212,7 +220,14 @@ export const localOwnedDownloadTransport = createOwnedDownloadTransport({
 // Keep the existing native upload/fetch wrapper's public provider identity.
 export const localLibraryByteTransport = localOwnedDownloadTransport;
 globalThis.addEventListener('pagehide', () => localWorkspaceDownloadService.dispose());
-export const localConversationPubSub = new LocalConversationPubSub(localAppServer);
+export const localConversationPubSub = new LocalConversationPubSub(localAppServer, {
+  getOwner: () => {
+    const who = getConversationIdentity();
+    return who ? JSON.stringify([who.accountId, who.userId]) : null;
+  },
+  hasRoomAccess: () => getSitePlanCapabilities().dot,
+  subscribeRoomMessages: listener => localDotAdapter.subscribeRoomMessages(listener),
+});
 const localPublishedResourceRehydrator = getPersonalizationIdentity() ? createPublishedResourceRehydrator({
   normalizeReceipt: normalizePublicationReceipt, getIdentity: getPersonalizationIdentity, projectThread: projectChatHistoryThread,
   resolvePublishedResource: (...args) => localLibraryService.resolvePublishedResource(...args),
@@ -296,24 +311,47 @@ if (historyIdentity) {
     if (getSiteSessionToken() && getHistoryIdentity()?.ownerId === historyIdentity.ownerId) void localAccountHistory.synchronize();
   });
 }
-export function initializeLocalAccountHistory() { return getSiteSessionToken() && localAccountHistory ? localAccountHistory.start() : Promise.resolve({ ok: true, localHistoryOnly: true }); }
+export async function initializeLocalAccountHistory({ threadOnEntry } = {}) {
+  if (threadOnEntry && !localAppServer.threads.has(threadOnEntry) && getSiteAccount()?.authenticationMode === 'site-offline-cache' && navigator.onLine !== false) {
+    await refreshSiteAccount();
+  }
+  return getSiteSessionToken() && localAccountHistory ? localAccountHistory.start() : { ok: true, localHistoryOnly: true };
+}
 export function setNativeAccountHistoryToaster(provider) {
   nativeHistoryToaster = typeof provider === 'function' ? provider : () => null;
   historyFeedback?.flush();
 }
-async function finishAccountHistoryBeforeLogout() {
+async function finishAccountHistoryBeforeLogout(signal) {
   if (!localAccountHistory) return;
-  const controller = new AbortController(), deadline = setTimeout(() => controller.abort(), 8000);
   try {
     do {
-      const outcome = await localAccountHistory.synchronize({ signal: controller.signal });
+      const outcome = await localAccountHistory.synchronize({ signal });
       if (!outcome.ok || outcome.deferred || outcome.conflictCount || !outcome.pending) break;
-    } while (!controller.signal.aborted);
-  } finally { clearTimeout(deadline); localAccountHistory.dispose(); historyFeedback?.dispose(); }
+    } while (!signal.aborted);
+  } finally { localAccountHistory.dispose(); historyFeedback?.dispose(); }
 }
+export const siteSignOut = createSiteSignOutController({
+  home: getSiteHomeUrl, clearSiteAccount: logoutSiteAccount, clearNativeSession: clearPrototypeLocalSession,
+  async prepare(signal) {
+    localAppServer.interruptAll({ reason: 'logout' });
+    localNativeLibraryRefresh.dispose();
+    localLibraryService.dispose();
+    localWorkspaceDownloadService.dispose();
+    if (!getSiteSessionToken()) { localAccountHistory?.dispose(); return; }
+    await Promise.allSettled([
+      cancelTurnHostRequests(localPreferredHostTransport, [...localAppServer.threads.values()].flatMap(thread => thread.turns), { onCheckpoint: () => localAppServer.persist() }),
+      finishAccountHistoryBeforeLogout(signal),
+    ]);
+  },
+});
 export const localDotAdapter = createLocalDotAdapter({
+  complete: createLocalDotCompletion({
+    complete: streamCompletion, getProviders: () => DEFAULT_SETTINGS.apiProviders, siteOrigin: SITE_ACCOUNT_SERVICE,
+    fetchDirectModels: (url, options) => globalThis.fetch(url, options),
+  }),
   storage: { getItem: key => globalThis.localStorage.getItem(key), setItem: (key, value) => globalThis.localStorage.setItem(key, value) },
-  appServer: localAppServer, getIdentity: getPrototypeLocalAuth, isLocalSession: () => isPrototypeLocalSession() && getSitePlanCapabilities().dot,
+  appServer: localAppServer, getIdentity: getPrototypeLocalAuth, isLocalSession: isPrototypeLocalSession,
+  hasDotAccess: () => getSitePlanCapabilities().dot, siteAccountsOnly: true,
   readSettings: () => ({ ...DEFAULT_SETTINGS }), getCapabilities: getLocalExecutionCapabilities, diagnostics: localProtocolDiagnostics,
 });
 const localNativePublicationReferences = createNativePublicationReferences({
@@ -398,6 +436,9 @@ export function installNetworkBoundary() {
       return originalFetch(new Request(request, { headers, credentials: 'omit' }));
     }
     if (isOpenStreetMapTileRequest(request)) return fetchOpenStreetMapTile(originalFetch, request);
+    if (url.origin === SITE_ACCOUNT_SERVICE && request.method === 'POST' && /^\/api-proxy\/(?:docode|openclawplan)\/v1\/responses$/.test(url.pathname)) {
+      return originalFetch(new Request(request, { credentials: 'omit', redirect: 'error' }));
+    }
     if (url.origin === SITE_ACCOUNT_SERVICE && /^\/(?:auth\/(?:login|register|session|logout|site-trial)|inference\/v1\/responses|bridge\/status|usage|jobs(?:\/[^/]+(?:\/events)?)?|sync\/(?:conversations(?:\/[^/]+)?|changes|batch))$/.test(url.pathname)) return originalFetch(new Request(request, {
       credentials: 'omit', redirect: url.pathname.startsWith('/auth/') ? 'manual' : 'error',
     }));
@@ -417,27 +458,11 @@ export function installNetworkBoundary() {
     diagnostics.push({ type: 'request', method: request.method, path: url.pathname });
     // Original ci3G.b validates non-empty csrfToken and signout {url};
     // AqQr then runs its existing local cleanup and same-origin navigation.
-    if (request.method === 'GET' && /\/api\/auth\/csrf$/.test(url.pathname)) return response({ csrfToken: localCsrfToken });
-    if (request.method === 'POST' && /\/api\/auth\/signout$/.test(url.pathname)) {
+    if (local && request.method === 'GET' && url.pathname === '/api/auth/csrf') return response({ csrfToken: localCsrfToken });
+    if (local && request.method === 'POST' && url.pathname === '/api/auth/signout') {
       const body = new URLSearchParams(await request.text());
       if (body.get('csrfToken') !== localCsrfToken) return response({ error: 'Invalid local signout token' }, 403);
-      const target = getLocalSignedOutUrl();
-      localAppServer.interruptAll({ reason: 'logout' });
-      if (getSiteSessionToken()) {
-        const settle = async () => {
-          const stopResults = await cancelTurnHostRequests(localPreferredHostTransport, [...localAppServer.threads.values()].flatMap(thread => thread.turns), { onCheckpoint: () => localAppServer.persist() });
-          for (const result of stopResults) if (result.status === 'rejected') diagnostics.push({ type: 'local-signout-host-cancel-unconfirmed', code: result.reason?.code ?? null });
-        };
-        let timer;
-        try { await Promise.race([Promise.allSettled([settle(), finishAccountHistoryBeforeLogout()]), new Promise(resolve => { timer = setTimeout(resolve, 1500); })]); }
-        finally { clearTimeout(timer); }
-      } else localAccountHistory?.dispose();
-      localNativeLibraryRefresh.dispose();
-      localLibraryService.dispose();
-      localWorkspaceDownloadService.dispose();
-      void logoutSiteAccount();
-      clearPrototypeLocalSession({ reload: false });
-      return response({ url: target });
+      return response({ url: await siteSignOut.complete() });
     }
     if (/\/api\/auth\/session$/.test(url.pathname)) return response(getPrototypeLocalSession() ?? {});
     if (request.method === 'GET' && /\/api\/auth\/account-picker$/.test(url.pathname)) return response({ unified_sessions: [] });
@@ -518,6 +543,9 @@ export function installNetworkBoundary() {
   const originalOpen = window.open.bind(window);
   window.open = (url, ...rest) => {
     const target = new URL(url ?? 'about:blank', location.href);
+    if (isNativeSignOutLink(target, location.href, getSiteHomeUrl())) {
+      return originalOpen(getSiteSignOutPageUrl(getSiteHomeUrl()).href, ...rest);
+    }
     if (!['http:', 'https:', 'about:'].includes(target.protocol)) {
       diagnostics.push({ type: 'navigation-unavailable', origin: target.origin });
       return null;
@@ -530,13 +558,25 @@ export function installNetworkBoundary() {
     const link = event.target instanceof Element && event.target.closest('a[href]');
     if (!link) return;
     const url = new URL(link.href, location.href);
-    const localPath = url.pathname.startsWith(globalThis.__CHATGPT_REPLICA_ENV__?.basePath ?? '/')
-      ? '/' + url.pathname.slice((globalThis.__CHATGPT_REPLICA_ENV__?.basePath ?? '/').length) : url.pathname;
+    const home = getSiteHomeUrl();
+    if (isNativeSignOutLink(url, location.href, home)) {
+      link.href = getSiteSignOutPageUrl(home).href;
+      if (event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
+        event.preventDefault(); event.stopPropagation();
+        void siteSignOut.navigateAfterSignOut();
+      }
+      return;
+    }
     if ((url.origin === location.origin || url.origin === 'https://chatgpt.com') &&
-        (/^\/(?:plans|pricing-plan|(?:codex\/)?purchase\/(?:plus|pro5x|pro|promax))\/?$/.test(localPath) || url.hash === '#pricing')) {
+        (isSitePricingPath(url.pathname, home.pathname) || url.hash === '#pricing' && (url.origin !== location.origin || !url.pathname.startsWith(home.pathname)))) {
+      const { url: destination, returnPath } = nativePricingDestination(url.href, location.href);
+      link.href = destination.href;
+      if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
       event.preventDefault();
       event.stopPropagation();
-      location.assign(getSitePlansUrl(location.href));
+      const state = { idx: (history.state?.idx ?? 0) + 1, key: crypto.randomUUID(), usr: { returnPath } };
+      history.pushState(state, '', destination.href);
+      window.dispatchEvent(new PopStateEvent('popstate', { state }));
       return;
     }
     const ownedDownload = url.protocol === 'blob:' && link.hasAttribute('download') && localOwnedDownloadTransport.ownsObjectURL(url.href);

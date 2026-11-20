@@ -1,0 +1,19 @@
+{
+  "package": "core-js",
+  "version": "3.40.0",
+  "license": "MIT",
+  "source": "https://github.com/zloirock/core-js/tree/v3.40.0",
+  "modules": [
+    "actual/array/at",
+    "actual/array/to-sorted",
+    "actual/array/to-reversed",
+    "actual/array/to-spliced",
+    "actual/array/with",
+    "actual/array/find-last",
+    "actual/array/find-last-index",
+    "actual/object/has-own",
+    "actual/promise/with-resolvers",
+    "actual/string/at",
+    "actual/structured-clone"
+  ]
+}

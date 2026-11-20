@@ -136,3 +136,43 @@ test('custom transport fallback invokes the ordinary authorized Responses reques
   t.mock.method(globalThis,'fetch',async(url,options)=>{requests++;assert.equal(url,'https://provider.example/v1/responses');assert.equal(options.headers.Authorization,'Bearer fixture-key');return Response.json(completed([textItem('fallback fixture')]));});
   const result=await streamCompletion({settings:{...settings,apiKey:'fixture-key'},messages:[],responsesTransport:(_payload,{fallbackResponses})=>fallbackResponses()});assert.equal(result.content,'fallback fixture');assert.equal(requests,1);
 });
+
+test('Chat compatibility keeps answer text and drops private reasoning from SSE and JSON', async t => {
+  const hidden = 'Fixture private reasoning must not be retained.';
+  const reply = { model: settings.model, choices: [{ finish_reason: 'stop', message: {
+    content: [{ type: 'text', text: 'Public answer.' }, { type: 'reasoning_text', text: hidden }],
+    reasoning_content: hidden,
+  } }] };
+  const fetch = t.mock.method(globalThis, 'fetch', async () => Response.json(reply));
+  const visible = [];
+  const run = () => streamCompletion({ settings: { ...settings, apiTransport: 'chat-completions' }, messages: [],
+    onDelta: (_text, output) => visible.push(structuredClone(output)),
+  });
+  assert.equal((await run()).content, 'Public answer.');
+  fetch.mock.mockImplementation(async () => eventsResponse([
+    { ...reply, choices: [{ delta: { reasoning_content: hidden } }] },
+    { ...reply, choices: [{ finish_reason: 'stop', delta: { content: 'Public answer.' } }] },
+  ]));
+  const streamed = await run();
+  assert.equal(streamed.content, 'Public answer.');
+  assert.equal(streamed.reasoning, undefined);
+  assert(!JSON.stringify({ streamed, visible }).includes(hidden));
+});
+
+test('Responses keeps only public summaries and opaque continuation data in reasoning items', async t => {
+  const reasoning = { type: 'reasoning', id: 'fixture-summary', encrypted_content: 'fixture-opaque-continuation',
+    summary: [{ type: 'summary_text', text: 'Public summary.' }, { type: 'reasoning_text', text: 'Unpublished reasoning.' }],
+    content: [{ type: 'reasoning_text', text: 'Unpublished reasoning.' }],
+    reasoning_content: 'Unpublished reasoning.',
+  };
+  t.mock.method(globalThis, 'fetch', async () => eventsResponse([
+    { type: 'response.reasoning_text.delta', delta: 'Unpublished reasoning.' },
+    { type: 'response.completed', response: completed([reasoning, textItem('Public answer.')]) },
+  ]));
+  const result = await streamCompletion({ settings, messages: [] });
+  assert.equal(result.content, 'Public answer.');
+  assert.equal(result.reasoning, 'Public summary.');
+  assert.equal(result.response_items[0].encrypted_content, reasoning.encrypted_content);
+  assert(!JSON.stringify(result).includes('Unpublished reasoning.'));
+  assert(!JSON.stringify(toResponsesInput([{ role: 'assistant', response_items: [reasoning] }])).includes('Unpublished reasoning.'));
+});

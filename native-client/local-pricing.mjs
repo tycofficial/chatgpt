@@ -1,7 +1,7 @@
 /**
  * Native billing read contracts for the locally hosted original client.
  * Quotes are verified US-dollar public reference prices, never a checkout.
- * Site trial enrollment lives on the dedicated site plans page below.
+ * The existing upgrade controls use the separate site trial action.
  *
  * Original build ef0c3fb941611420d8683bf88f61acf1a8ac6b19:
  * rLiN/smwl, 396705.00162c6ea9.js:628930-655499 (requests/price book).
@@ -11,7 +11,7 @@
  * p3vI, 396705.00162c6ea9.js:564237-564553 (payment methods).
  * wbWw/Bhuf/YoTg/JGV6, async/899311.9233e1594e.js (billing read shapes).
  */
-import { claimSiteTrial, getSiteAccount, getSiteHomeUrl, getSiteLoginUrl, getSitePlansUrl, getSiteSessionToken, getSiteTrialPlan, safeSiteReturnUrl } from './site-account.mjs?v=c992a0f3a1b8df1e';
+import { claimSiteTrial, getSiteAccount, getSiteSessionToken, getSiteTrialPlan, refreshSiteAccount } from './site-account.mjs?v=3886dd09e0b0f238';
 
 export const LOCAL_PRICING_REFERENCE = Object.freeze({
   source: 'https://learn.chatgpt.com/docs/pricing',
@@ -204,139 +204,30 @@ export function createLocalPricingAdapter({
   return Object.freeze({ handle, getMembershipView });
 }
 
+export const SITE_TRIAL_TERMS = '免费试用 30 天，权益仅在本站有效，无需付款。';
 
-const siteTrialTiers = [
-  { key: 'plus', name: 'Plus', description: '选择可用模型，并使用本站 Work 和 Codex。' },
-  { key: 'prolite', name: 'Pro Lite', description: '使用本站模型选择、Work、Codex 和 Dot。' },
-  { key: 'pro', name: 'Pro', description: '使用本站模型选择、Work、Codex 和 Dot。' },
-  { key: 'promax', name: 'Pro Max', description: '使用本站模型选择、Work、Codex 和 Dot。' },
-];
-const trialDateFormat = new Intl.DateTimeFormat('zh-CN', { dateStyle: 'long', timeStyle: 'short' });
-
-const sitePlansStyle = [
-  'html[data-site-plans],body[data-site-plans]{display:block;margin:0;height:auto;min-height:100%;overflow:auto}',
-  'body[data-site-plans]{--page:#f0f5f8;--card:#fcfefe;--text:#162c3b;--muted:#49606e;--border:#c5d5de;--accent:#124f60;--button:#096276;--button-ink:#fff;background:var(--page);color:var(--text);font:16px/1.6 system-ui,sans-serif}',
-  '.site-plans,.site-plans *{box-sizing:border-box}',
-  '.site-plans{max-width:1060px;margin:auto;padding:28px clamp(20px,5vw,56px) 64px}',
-  '.site-plans header{display:flex;justify-content:space-between;align-items:center;gap:12px}',
-  '.site-plans a{color:var(--accent);text-underline-offset:4px}',
-  '.site-plans :focus-visible{outline:2px solid var(--accent);outline-offset:4px}',
-  '.site-plans h1{font-size:clamp(2rem,6vw,3.25rem);font-weight:700;line-height:1.15;margin:56px 0 14px}',
-  '.site-plans p{color:var(--muted);margin:0}',
-  '.site-plans .site-plans-account{display:grid;gap:4px;margin:26px 0 18px;padding:16px 18px;background:var(--card);border:1px solid var(--border);border-radius:12px}',
-  '.site-plans-account [hidden]{display:none}',
-  '.site-plans-auth-links:not([hidden]){display:flex;flex-wrap:wrap;gap:16px}',
-  '.site-plans-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}',
-  '.site-plans article{display:flex;flex-direction:column;align-items:stretch;gap:12px;padding:20px;background:var(--card);border:1px solid var(--border);border-radius:14px}',
-  '.site-plans article[data-current]{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}',
-  '.site-plans h2{margin:0;font-size:1.125rem;font-weight:700}',
-  '.site-plans article p{flex:1;font-size:.9rem}',
-  '.site-plans button{display:block;margin-top:8px;width:100%;padding:10px 8px;border:1px solid transparent;border-radius:8px;background:var(--button);color:var(--button-ink);font:inherit;font-size:.9rem;font-weight:600;cursor:pointer}',
-  '.site-plans button:hover:not(:disabled){filter:brightness(.92)}',
-  '.site-plans button:disabled{opacity:.58;cursor:default}',
-  '.site-plans [role=status]{min-height:2rem;margin:16px 0 0;color:var(--accent)}',
-  '@media (max-width:800px){.site-plans-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}',
-  '@media (max-width:420px){.site-plans-grid{grid-template-columns:minmax(0,1fr)}.site-plans h1{margin-top:36px}}',
-  '@media (prefers-color-scheme:dark){body[data-site-plans]{--page:#111e27;--card:#172a35;--text:#edf8fa;--muted:#b0c7ce;--border:#42616e;--accent:#93e6ea;--button:#93e6ea;--button-ink:#10232b}}',
-].join('');
-
-export function renderSitePlansPage() {
-  const currentUrl = new URL(globalThis.location.href);
-  const returnUrl = safeSiteReturnUrl(currentUrl.searchParams.get('next'));
-  const loginReturn = getSitePlansUrl(returnUrl.href);
-  const signupUrl = new URL('signup', getSiteHomeUrl());
-  signupUrl.searchParams.set('next', loginReturn.href);
-
-  const style = document.createElement('style');
-  style.textContent = sitePlansStyle;
-  document.head.append(style);
-  document.documentElement.dataset.sitePlans = 'true';
-  document.body.dataset.sitePlans = 'true';
-  document.title = '本站会员试用';
-  const main = document.createElement('main');
-  main.className = 'site-plans';
-  main.innerHTML = [
-    '<header><a class="site-plans-back">返回</a></header>',
-    '<h1>本站会员试用</h1>',
-    '<p>各方案均可免费试用 30 天，支持手动续期和切换。权益仅在本站有效，无需付款信息。</p>',
-    '<section class="site-plans-account" aria-label="当前会员状态"><strong></strong><p></p>',
-    '<nav class="site-plans-auth-links" aria-label="本站账户"><a class="site-plans-login">登录本站账户</a>',
-    '<a class="site-plans-signup">创建本站账户</a></nav></section>',
-    '<section class="site-plans-grid" aria-label="本站试用方案"></section>',
-    '<p role="status"></p>',
-  ].join('');
-  main.querySelector('.site-plans-back').href = returnUrl.href;
-  main.querySelector('.site-plans-login').href = getSiteLoginUrl(loginReturn.href).href;
-  main.querySelector('.site-plans-signup').href = signupUrl.href;
-
-  const accountStatus = main.querySelector('.site-plans-account strong');
-  const accountHint = main.querySelector('.site-plans-account p');
-  const authLinks = main.querySelector('.site-plans-auth-links');
-  const grid = main.querySelector('.site-plans-grid');
-  const result = main.querySelector('[role=status]');
-  let pending = false;
-
-  const tiles = siteTrialTiers.map(tier => {
-    const article = document.createElement('article');
-    const title = document.createElement('h2');
-    title.textContent = '本站 ' + tier.name;
-    const description = document.createElement('p');
-    description.textContent = tier.description;
-    const button = document.createElement('button');
-    button.type = 'button';
-    button.addEventListener('click', () => void submit(tier));
-    article.append(title, description, button);
-    grid.append(article);
-    return { tier, article, button };
-  });
-
-  function update() {
-    const account = getSiteAccount();
-    const isRegistered = account?.role === 'user';
-    const eligible = isRegistered && Boolean(getSiteSessionToken());
-    const activeTier = siteTrialTiers.find(tier => tier.key === account?.siteTrial?.tier);
-    authLinks.hidden = Boolean(account);
-    if (activeTier) {
-      accountStatus.textContent = '正在试用本站 ' + activeTier.name;
-      accountHint.textContent = '有效期至 ' + trialDateFormat.format(account.siteTrial.expiresAt) +
-        (eligible ? '。' : '。联网验证后可续期或切换。');
-    } else if (account?.role === 'administrator') {
-      accountStatus.textContent = '本站管理员';
-      accountHint.textContent = '此账户已拥有本站 Pro 权益。';
-    } else {
-      accountStatus.textContent = '本站免费版';
-      accountHint.textContent = eligible ? '请选择一个方案开始试用。' :
-        isRegistered ? '联网验证后可开启试用。' : '使用本站注册账户开启试用。';
-    }
-    for (const { tier, article, button } of tiles) {
-      const current = tier.key === activeTier?.key;
-      article.toggleAttribute('data-current', current);
-      button.disabled = pending || !eligible;
-      button.textContent = current ? '续期 30 天' : activeTier ? '切换到此方案' : '开启 30 天试用';
-      button.setAttribute('aria-label', button.textContent + ' · 本站 ' + tier.name);
-    }
+export function getSiteTrialAction(tier) {
+  if (!getSiteTrialPlan(tier)) return null;
+  const account = getSiteAccount();
+  const trial = account?.siteTrial;
+  const expiresAt = trial?.tier === tier ? trial.expiresAt : null;
+  if (!account) return { status: 'login', label: '登录后试用', disabled: false, expiresAt };
+  if (account.role === 'administrator') return { status: 'administrator', label: '管理员已开通', disabled: true, expiresAt };
+  if (!getSiteSessionToken()) {
+    const offline = globalThis.navigator?.onLine === false;
+    return { status: 'offline', label: offline ? '联网后试用' : '重试验证', disabled: offline, expiresAt };
   }
+  if (expiresAt !== null) return { status: 'renew', label: '续期 30 天', disabled: false, expiresAt };
+  if (trial) return { status: 'switch', label: '切换试用', disabled: false, expiresAt };
+  return { status: 'start', label: '免费试用', disabled: false, expiresAt };
+}
 
-  async function submit(tier) {
-    if (pending) return;
-    pending = true;
-    main.setAttribute('aria-busy', 'true');
-    result.textContent = '正在保存试用方案…';
-    update();
-    try {
-      const account = await claimSiteTrial(tier.key);
-      result.textContent = '已启用本站 ' + tier.name + '，有效期至 ' + trialDateFormat.format(account.siteTrial.expiresAt) + '。';
-    } catch (error) {
-      result.textContent = error.message || '暂时无法开启试用，请重试。';
-    } finally {
-      pending = false;
-      main.removeAttribute('aria-busy');
-      update();
-    }
+export async function submitSiteTrial(tier) {
+  const action = getSiteTrialAction(tier);
+  if (action?.status === 'offline' && !action.disabled) {
+    const owner = getSiteAccount();
+    const verified = await refreshSiteAccount();
+    if (verified?.id !== owner?.id) throw Error('本站账户已变更，请重新验证后重试。');
   }
-  update();
-  document.body.replaceChildren(main);
-  globalThis.addEventListener('codex-site-account-changed', update);
-  globalThis.addEventListener('focus', update);
-  globalThis.addEventListener('pageshow', update);
+  return claimSiteTrial(tier);
 }

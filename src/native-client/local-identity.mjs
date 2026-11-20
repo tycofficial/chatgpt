@@ -97,7 +97,7 @@ export function clearPrototypeLocalSession({ reload = false } = {}) {
   if (reload) globalThis.location.reload();
 }
 export function getLocalSignedOutUrl() {
-  const fallback = globalThis.document?.documentElement?.dataset?.routerBasename || new URL('../', import.meta.url).pathname;
+  const fallback = new URL('../', import.meta.url).pathname;
   const url = getSiteHomeUrl(fallback);
   url.searchParams.set('localSession', '0');
   return url.href;

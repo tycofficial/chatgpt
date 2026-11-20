@@ -6,6 +6,19 @@ import { storedConversationOrigin, storedConversationSurface } from './local-app
 
 import { parseClassicInputMessages } from './classic-input-messages.mjs';
 export { parseClassicInputMessages, CLASSIC_CONTEXT_LIMITS } from './classic-input-messages.mjs';
+
+export function wrapNativeReasoningGroups(groupMessages) {
+  return function (items, options) {
+    const isLocal = message => message?.metadata?.adapter_source === 'local-original-client-adapter';
+    const hasLiveThoughts = options?.isStreaming && items.some(({ sourceMessage }) =>
+      isLocal(sourceMessage) && sourceMessage.content?.content_type === 'thoughts' &&
+      sourceMessage.status === 'in_progress' && sourceMessage.metadata.reasoning_status === 'is_reasoning');
+    const hasPublicProgress = hasLiveThoughts && items.some(({ sourceMessage }) =>
+      isLocal(sourceMessage) && sourceMessage.channel === 'commentary' && sourceMessage.content?.content_type === 'text');
+    return groupMessages.call(this, items, hasPublicProgress ? { ...options, preserveStreamingOrder: true } : options);
+  };
+}
+
 export class ClassicChatAdapter {
   constructor({ appServer, models, now = Date.now, uuid = () => crypto.randomUUID(), onConversationChange = () => {}, heartbeatMs = 10000, getPublishedFileReferences = () => [] }) { this.server = appServer; this.models = models; this.now = now; this.uuid = uuid; this.onConversationChange = onConversationChange; this.heartbeatMs = heartbeatMs; this.getPublishedFileReferences = getPublishedFileReferences; this.mutationQueue = Promise.resolve(); }
   json(body, status = 200) { return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }); }
@@ -15,7 +28,8 @@ export class ClassicChatAdapter {
   reasoningMetadata(turn, item = null) {
     const lifecycle = turn.adapterMetadata?.reasoningLifecycle;
     if (!lifecycle && !item) return {};
-    const terminal = turn.status !== 'inProgress', ended = lifecycle?.completedAtMs;
+    const terminal = turn.status !== 'inProgress';
+    const ended = lifecycle ? lifecycle.completedAtMs : Number.isFinite(turn.completedAt) ? turn.completedAt * 1000 : item?.completedAtMs;
     const start = lifecycle?.workStartedAtMs ?? lifecycle?.startedAtMs ?? item?.startedAtMs;
     return {
       reasoning_status: !terminal ? 'is_reasoning' : turn.status === 'completed' ? 'reasoning_ended' : 'reasoning_cancelled',
@@ -346,7 +360,6 @@ export class ClassicChatAdapter {
         // A transport disconnect detaches this reader; only the explicit stop
         // REST/RPC command cancels execution. Page lifecycle saves a checkpoint.
         const abort = () => close();
-        const assistant = () => this.server.getThread(thread.id).turns.find(turn => turn.id === turnId)?.items.findLast(item => item.type === 'agentMessage');
         const finishStream = turn => {
           // Failed/interrupted attempts must close their actual reasoning state
           // before the original error frame, just as successful turns do.
@@ -362,8 +375,8 @@ export class ClassicChatAdapter {
           const params = event.params;
           if (params.threadId !== thread.id || (params.turnId != null && params.turnId !== turnId) || (params.turn && params.turn.id !== turnId)) return;
           const turn = this.server.getThread(thread.id).turns.find(entry => entry.id === turnId);
-          if (event.method === 'item/agentMessage/delta' || event.method === 'item/started' && params.item.type === 'agentMessage') {
-            const item = assistant();
+          if (event.method === 'item/agentMessage/delta' || ['item/started', 'item/completed'].includes(event.method) && params.item?.type === 'agentMessage') {
+            const item = turn.items.find(value => value.id === (params.itemId ?? params.item?.id));
             if (item) emit({ conversation_id: thread.id, message: this.message(thread, turn, item, 'assistant') });
           }
           if (event.method === 'item/reasoning/summaryTextDelta' || ['item/started', 'item/completed'].includes(event.method) && params.item?.type === 'reasoning') {

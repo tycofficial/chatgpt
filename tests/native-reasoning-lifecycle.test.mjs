@@ -3,10 +3,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { parseHTML } from 'linkedom/worker';
 import * as catalog from '../model-catalog.js';
 import { streamCompletion } from '../runtime.js';
-import { LocalAppServer } from '../src/native-client/local-app-server.mjs';
-import { ClassicChatAdapter } from '../src/native-client/classic-chat-adapter.mjs';
+import { LocalAppServer, wrapNativeCodexWorkTiming, wrapNativeWorkedDuration } from '../src/native-client/local-app-server.mjs';
+import { ClassicChatAdapter, wrapNativeReasoningGroups } from '../src/native-client/classic-chat-adapter.mjs';
 import { createModelCatalogAdapter } from '../src/native-client/model-catalog-adapter.mjs';
 import { createBrowserToolExecutor } from '../src/native-client/browser-tool-executor.mjs';
 
@@ -230,6 +231,8 @@ test('a durably confirmed in-flight result replays its real end time after detac
     const completedWire = await response.text(), turn = restored.server.getThread(thread.id).turns[0], items = reasoning(turn);
     assert.equal(requests.length, 1); assert.equal(turn.status, 'completed'); assert.equal(items.length, 1); assert.equal(items[0].id, oldItemId); assert.equal(items[0].status, 'completed'); assert.equal(items[0].completedAtMs, 8000123 + 2250); assert.equal(items[0].durationMs, 2250);
     assert.equal(thoughts(completedWire).at(-1).metadata.finished_duration_sec, 2.25); assert.equal(thoughts(completedWire).at(-1).metadata.reasoning_status, 'reasoning_ended');
+    assert.equal(thoughts(completedWire).at(-1).metadata.reasoning_end_time, (8000123 + 2250) / 1000);
+    assert.equal(turn.completedAt, (8000123 + 2250) / 1000);
   });
 });
 
@@ -276,5 +279,149 @@ test('delta, summary done, item done, and response done merge one exact summary 
     emit('response.completed', { response: { status: 'completed', output: [summary, endMessage('Neutral final response.')] } }); close();
   }, signal), async requests => {
     await (await next(adapter)).text(); const item = reasoning(current(server).turns[0])[0]; assert.deepEqual(item.summary, ['Real summary 😀.']); assert.equal(requests.length, 1); assert.equal(item.durationMs, 1350);
+  });
+});
+
+
+async function loadNativeActivityModules(t) {
+  const { document, window } = parseHTML('<html><body></body></html>');
+  for (const [key, value] of Object.entries({ document, window, location: new URL('https://native-activity.fixture/chatgpt/') })) {
+    const previous = Object.getOwnPropertyDescriptor(globalThis, key);
+    Object.defineProperty(globalThis, key, { configurable: true, value });
+    t.after(() => previous ? Object.defineProperty(globalThis, key, previous) : Reflect.deleteProperty(globalThis, key));
+  }
+  const entry = await fs.readFile(new URL('../src/native-client/entry-library.mjs', import.meta.url), 'utf8');
+  const assets = new URL('../original-client/public/chatgpt.com/cdn/assets/', import.meta.url);
+  const chunks = await Promise.all([...entry.matchAll(/import\*as \w+ from"\/cdn\/assets\/([^"]+)"/g)].map(match => import(new URL(match[1], assets).href)));
+  const factories = Object.assign({}, ...chunks.map(chunk => chunk.__webpack_modules__));
+  const cache = new Map();
+  function requireNative(id) {
+    // The plain reasoning/text fixture does not use the native MCP resolver.
+    if (id === 'LF5P') return {};
+    if (cache.has(id)) return cache.get(id).exports;
+    assert.equal(typeof factories[id], 'function', 'Native activity factory ' + id);
+    const module = { id, exports: {} };
+    cache.set(id, module);
+    factories[id].call(module.exports, module, module.exports, requireNative);
+    return module.exports;
+  }
+  requireNative.d = (exports, getters = {}, values = {}) => {
+    for (const [name, get] of Object.entries(getters)) Object.defineProperty(exports, name, { get, enumerable: true, configurable: true });
+    Object.assign(exports, values);
+  };
+  requireNative.o = Object.hasOwn;
+  requireNative.r = exports => Object.defineProperty(exports, '__esModule', { value: true });
+  requireNative.n = module => {
+    const get = () => module?.__esModule ? module.default : module;
+    Object.defineProperty(get, 'a', { get });
+    return get;
+  };
+  requireNative.nmd = module => { module.paths = []; module.children ??= []; return module; };
+  requireNative.t = (value, mode) => {
+    if (mode & 1) value = requireNative(value);
+    return (mode & 8) || value?.__esModule ? value : { ...value, default: value };
+  };
+  requireNative.g = globalThis;
+  requireNative.m = factories;
+  return requireNative;
+}
+
+test('original Classic Work and Codex presenters retain activity across progress and freeze at the real subsecond end', async t => {
+  const native = await loadNativeActivityModules(t);
+  const group = native('hUUF');
+  Object.defineProperty(group, 'b', { value: wrapNativeReasoningGroups(group.b) });
+  const work = native('R2pa').a;
+  const codex = native('AqC0').e;
+  const durationLabel = wrapNativeWorkedDuration(native('waM8').a);
+  const nativeMessageTree = native('AuIy').a;
+  const started = 1_800_000_000_100;
+  let clock = started;
+  const { server, adapter, storage } = setup({ now: () => clock });
+  const progress = { ...endMessage('Public progress body.', 'commentary'), id: 'neutral-progress' };
+  const final = { ...endMessage('Final public answer.'), id: 'neutral-final' };
+  const publicThought = { type: 'reasoning', id: 'neutral-thought', summary: [{ type: 'summary_text', text: 'Public reasoning summary.' }] };
+  const progressDone = deferred(), finalStarted = deferred();
+  const snapshots = [];
+  function takeSnapshot(thread, adapter, server) {
+    const turn = thread.turns.at(-1);
+    const isStreaming = turn.status === 'inProgress';
+    const items = nativeMessageTree(adapter.detail(thread)).map(message => {
+      const converted = group.k(message, { isTurnActive: isStreaming, isLatestMessage: false });
+      const role = message.author.role;
+      if (converted) return { ...converted, turnId: turn.id };
+      const item = role === 'user' ? { type: 'user-message', messageId: message.id, message: message.content.parts[0] } :
+        { type: 'assistant-message', chatGptMessageId: message.id, content: message.content.parts[0], phase: 'final_answer', completed: message.status !== 'in_progress' };
+      return { item, sourceMessage: message, role, turnId: turn.id };
+    });
+    const projectedWork = work({ id: turn.id, responseTurnId: turn.id, items }, { isStreaming, isWorkConversation: true }).turn.turn;
+    const projectCodex = wrapNativeCodexWorkTiming(codex, server);
+    const projectedCodex = projectCodex({
+      params: { threadId: thread.id, input: [] }, turnId: turn.id, status: turn.status,
+      items: turn.items, turnStartedAtMs: started, firstTurnWorkItemStartedAtMs: null, finalAssistantStartedAtMs: started,
+    }, [], { includeAeonProjection: false });
+    return { projectedWork, projectedCodex };
+  }
+  const off = server.subscribe(event => {
+    const item = event.params.item;
+    const stage = event.method === 'item/completed' && item?.phase === 'commentary' ? progressDone :
+      event.method === 'item/agentMessage/delta' && event.params.delta === final.content[0].text ? finalStarted : null;
+    if (stage) {
+      try { snapshots.push(takeSnapshot(current(server), adapter, server)); stage.resolve(); }
+      catch (error) { stage.reject(error); }
+    }
+  });
+  t.after(off);
+  await withHTTP(({ signal }) => responseStream(async ({ emit, close }) => {
+    clock = started + 100;
+    emit('response.reasoning_summary_text.delta', { output_index: 0, item_id: publicThought.id, delta: publicThought.summary[0].text });
+    emit('response.output_item.added', { output_index: 1, item: { ...progress, content: [] } });
+    emit('response.output_text.delta', { output_index: 1, item_id: progress.id, delta: progress.content[0].text });
+    emit('response.output_item.done', { output_index: 1, item: progress });
+    await progressDone.promise;
+    clock = started + 325;
+    emit('response.output_item.added', { output_index: 2, item: { ...final, content: [] } });
+    emit('response.output_text.delta', { output_index: 2, item_id: final.id, delta: final.content[0].text });
+    await finalStarted.promise;
+    clock = started + 750;
+    emit('response.completed', { response: { status: 'completed', output: [publicThought, progress, final] } });
+    close();
+  }, signal), async requests => {
+    const wire = await (await next(adapter)).text();
+    assert.equal(requests.length, 1);
+    const thread = current(server);
+    const turn = thread.turns[0];
+    assert.equal(turn.status, 'completed', turn.error?.message);
+    assert.equal(turn.durationMs, 750);
+    assert.deepEqual(turn.items.filter(item => item.type === 'agentMessage').map(item => [item.phase, item.text]), [
+      ['commentary', progress.content[0].text], ['final_answer', final.content[0].text],
+    ]);
+    const assistantWire = wireMessages(wire).filter(message => ['commentary', 'final'].includes(message.channel));
+    assert(assistantWire.every(message => !message.content.parts?.[0]?.includes('Public progress body.Final public answer.')));
+    assert.equal(assistantWire.findLast(message => message.channel === 'final').end_turn, true);
+    assert.equal(snapshots.length, 2);
+    for (const { projectedWork, projectedCodex } of snapshots) {
+      assert.equal(projectedWork.status, 'in_progress');
+      assert.equal(projectedWork.workStartedAtMs, started);
+      assert.equal(projectedWork.workCompletedAtMs, undefined);
+      const thinking = projectedWork.items.find(item => item.type === 'chatgpt-reasoning-group');
+      assert.equal(thinking.completed, false);
+      assert(thinking.items.some(item => item.presentation === 'preamble' && item.content === progress.content[0].text));
+      const worked = projectedCodex.items.find(item => item.type === 'worked-for');
+      assert.equal(worked.status, 'working');
+      assert.equal(worked.completedAtMs, null);
+    }
+
+    clock += 120000;
+    const restored = setup({ now: () => clock, storage });
+    const before = takeSnapshot(thread, adapter, server);
+    const after = takeSnapshot(restored.server.getThread(thread.id), restored.adapter, restored.server);
+    for (const { projectedWork, projectedCodex } of [before, after]) {
+      assert.equal(projectedWork.status, 'complete');
+      assert.equal(projectedWork.workCompletedAtMs - projectedWork.workStartedAtMs, 750);
+      const worked = projectedCodex.items.find(item => item.type === 'worked-for');
+      assert.equal(worked.status, 'worked');
+      assert.equal(worked.completedAtMs - worked.startedAtMs, 750);
+      assert.equal(durationLabel(worked.completedAtMs - worked.startedAtMs, 'zh-CN'), '<' + native('waM8').a(1000, 'zh-CN'));
+    }
   });
 });

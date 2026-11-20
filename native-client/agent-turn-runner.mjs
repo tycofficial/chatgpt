@@ -1,14 +1,15 @@
 /** Resumable API/tool loop. Original frontend receives its existing item lifecycle. */
-import { isHostCheckpoint } from './preferred-host-transport.mjs?v=c992a0f3a1b8df1e';
-import { parseClassicInputMessages } from './classic-input-messages.mjs?v=c992a0f3a1b8df1e';
-import { webSearchRequest, updateHostedSearch, interruptHostedSearch, webSearchReferences } from './local-web-search.mjs?v=c992a0f3a1b8df1e';
+import { isHostCheckpoint } from './preferred-host-transport.mjs?v=3886dd09e0b0f238';
+import { parseClassicInputMessages } from './classic-input-messages.mjs?v=3886dd09e0b0f238';
+import { webSearchRequest, updateHostedSearch, interruptHostedSearch, webSearchReferences } from './local-web-search.mjs?v=3886dd09e0b0f238';
 const clone = value => structuredClone(value);
 const CONTINUE = 'Continue the unfinished response from the saved text, without repeating it. Preserve the requested task, model and reasoning effort. Do not claim any tool succeeded unless its recorded output confirms it.';
 const compactUsage = usage => Object.fromEntries(['input_tokens', 'output_tokens', 'total_tokens', 'prompt_tokens', 'completion_tokens', 'input_tokens_details', 'output_tokens_details', 'prompt_tokens_details', 'completion_tokens_details'].filter(key => usage[key] !== undefined).map(key => [key, clone(usage[key])]));
 const toolError = message => ({ isError: true, content: [{ type: 'text', text: message }], structuredContent: { error: message } });
 function waitForRetry(ms, signal) { return new Promise((resolve, reject) => { const abort = () => { clearTimeout(timer); reject(signal.reason); }; const timer = setTimeout(() => { signal.removeEventListener('abort', abort); resolve(); }, ms); signal.addEventListener('abort', abort, { once: true }); if (signal.aborted) abort(); }); }
 function responsePhase(result) {
-  const value = result.response_items?.findLast(item => item.type === 'message' && item.role === 'assistant')?.phase ?? result.phase;
+  const lastMessage = result.output_messages?.at(-1);
+  const value = lastMessage ? lastMessage.phase : result.response_items?.findLast(item => item.type === 'message' && item.role === 'assistant')?.phase ?? result.phase;
   return value === 'commentary' || value === 'final_answer' ? value : null;
 }
 function assistantMessage(result) {
@@ -20,10 +21,8 @@ export async function checkpoint(server, running) {
   if (server.checkpointStore?.save) await server.checkpointStore.save({ schemaVersion: 1, threadId: running.thread.id, turnId: running.turn.id, checkpoint: clone(running.turn.adapterMetadata.checkpoint), turn: clone(running.turn) });
 }
 function completeItems(server, running, reasoningStatus = 'completed', completedAtMs = server.now()) {
-  const completed = running.turn.adapterMetadata.completedItemIds ??= [];
-  for (const item of [running.reasoning, running.assistant]) if (item && !completed.includes(item.id)) completed.push(item.id);
   server.completeReasoning(running, reasoningStatus, completedAtMs);
-  if (running.assistant && !running.assistantComplete) { server.notify('item/completed', { threadId: running.thread.id, turnId: running.turn.id, item: running.assistant }); running.assistantComplete = true; }
+  for (const item of server.assistantMessages(running)) server.completeAssistant(running, item);
 }
 export async function runAgentTurn(server, running) {
   const { thread, turn, controller } = running, signal = controller.signal;
@@ -79,7 +78,7 @@ export async function runAgentTurn(server, running) {
     meta.underlyingApiEffort = turn.reasoningEffort === 'ultra' ? 'max' : turn.reasoningEffort;
     if (turn.reasoningEffort === 'ultra') {
       if (server.agentOptions.ultraOrchestration !== true) throw Object.assign(Error('Site Ultra orchestration is not enabled in this deployment. No provider request was submitted.'), { code: 'ULTRA_ORCHESTRATION_NOT_ENABLED', retryable: false });
-      const { createUltraToolExecutor } = await import('./site-ultra-orchestrator.mjs?v=c992a0f3a1b8df1e');
+      const { createUltraToolExecutor } = await import('./site-ultra-orchestrator.mjs?v=3886dd09e0b0f238');
       executor = createUltraToolExecutor({ baseExecutor: executor, streamCompletion: options => server.streamCompletion(options), turn, checkpoint: cp, save, getSettings: executionSettings, getContext: () => [...server.messages(thread, turn, { omitCurrent: true }), ...cp.transcript], getAbortMode: () => running.interruptReason === 'pagehide' ? 'pagehide' : signal.reason?.requiresTransportResume ? 'transport' : 'user', now: server.now, redact: errorText });
     }
     // A partial response is genuine saved output, not a completed tool call.
@@ -140,11 +139,12 @@ export async function runAgentTurn(server, running) {
         metric = cp.metrics[frame.metricIndex]; if (!metric) throw Error('The in-flight transport metric is missing; no replacement request was submitted');
         running.assistant = turn.items.find(item => item.id === frame.assistantItemId) ?? (cp.partialResponse?.content ? turn.items.findLast(item => item.type === 'agentMessage' && item.text === cp.partialResponse.content) : null);
         running.reasoning = turn.items.find(item => item.id === frame.reasoningItemId) ?? (cp.partialResponse?.reasoning ? turn.items.findLast(item => item.type === 'reasoning' && item.summary?.[0] === cp.partialResponse.reasoning) : null);
-        running.assistantComplete = false; running.reasoningComplete = frame.reasoningComplete === true;
+        running.legacyAssistantLayout = Boolean(running.assistant && !frame.assistantItemIds);
+        running.reasoningComplete = frame.reasoningComplete === true;
         if (frame.result && running.reasoning?.status === 'cancelled') running.reasoningComplete = false;
         metric.resumeCount = (metric.resumeCount || 0) + 1; metric.lastResumeAt = server.now();
       } else {
-        running.assistant = null; running.assistantComplete = false; running.reasoning = null; running.reasoningComplete = false;
+        running.assistant = null; running.legacyAssistantLayout = false; running.reasoning = null; running.reasoningComplete = false;
         metric = { sequence: ++cp.rounds, model: turn.model, effort: turn.reasoningEffort, underlyingApiEffort: settings.reasoningEffort, productExecutionMode: meta.productExecutionMode, startedAt: server.now(), firstOutputAt: null, transport: settings.apiTransport || 'chat/completions' }; cp.metrics.push(metric);
         frame = cp.inFlight = { metricIndex: cp.metrics.length - 1, transport: {}, assistantItemId: null, reasoningItemId: null, reasoningComplete: false };
         metric.transportCheckpoint = frame.transport;
@@ -155,14 +155,14 @@ export async function runAgentTurn(server, running) {
       let result;
       try {
         result = frame.result ? clone(frame.result) : await server.streamCompletion({ settings, messages, tools, toolChoice: searchRequest.toolChoice, signal,
-          providerRoutingContext: { isFreeChat: turn.executionSurface === 'chat' && !server.executionPolicy().modelSelection },
+          providerRoutingContext: { threadId: thread.id, conversationOrigin: thread.adapterMetadata?.conversationOrigin, isFreeChat: turn.executionSurface === 'chat' && !server.executionPolicy().modelSelection },
           transportContext: { checkpoint: frame.transport, requestId: turn.id + ':' + metric.sequence, onCheckpoint: save, reattach: isHostCheckpoint(frame.transport), savedPartial: cp.partialResponse, requiredConcurrency: turn.reasoningEffort === 'ultra' ? 3 : 1, getAbortMode: () => running.interruptReason === 'pagehide' ? 'pagehide' : signal.reason?.requiresTransportResume ? 'transport' : 'user' },
           onActivity: () => { if (metric.firstOutputAt == null) metric.firstOutputAt = server.now(); }, onDelta: (_delta, assembled) => {
           if (running.terminal) return;
           if (metric.firstOutputAt == null && (assembled.content || assembled.reasoning || assembled.tool_calls?.length)) metric.firstOutputAt = server.now();
           updateHostedSearch(server, running, assembled);
           cp.partialResponse = { content: assembled.content || '', reasoning: assembled.reasoning || '', ...(assembled.phase ? { phase: assembled.phase } : {}) };
-          server.append(running, assembled.content || '', assembled.reasoning || '', assembled.phase);
+          server.append(running, assembled.content || '', assembled.reasoning || '', assembled.phase, assembled.output_messages);
           frame.assistantItemId = running.assistant?.id ?? frame.assistantItemId; frame.reasoningItemId = running.reasoning?.id ?? frame.reasoningItemId; frame.reasoningComplete = running.reasoningComplete === true;
         } });
         metric.responseReceivedAt ??= server.now();
@@ -192,9 +192,12 @@ export async function runAgentTurn(server, running) {
       const phase = responsePhase(result);
       updateHostedSearch(server, running, result);
       if (meta.webSearchIntent?.required && !turn.items.some(item => item.type === 'webSearch' && item.responseItem?.status === 'completed')) throw Object.assign(Error('The provider did not perform the requested hosted web search. No search success or sourced answer was reported.'), { code: 'WEB_SEARCH_NOT_PERFORMED', retryable: false });
-      server.append(running, result.content || '', result.reasoning || '', phase ?? 'final_answer');
-      if (running.assistant) running.assistant.webSearchReferences = webSearchReferences(result.content || '', result.response_items || []);
-      if (running.assistant && result.tool_calls?.length && !phase) running.assistant.phase = 'commentary';
+      server.append(running, result.content || '', result.reasoning || '', phase ?? (result.tool_calls?.length ? 'commentary' : 'final_answer'), result.output_messages);
+      const responseItems = result.response_items ?? [];
+      for (const item of server.assistantMessages(running)) {
+        const message = result.output_messages?.find(value => frame.assistantItemIds?.[value.index] === item.id);
+        item.webSearchReferences = webSearchReferences(item.text, message?.id ? responseItems.filter(value => value.id === message.id) : responseItems);
+      }
       completeItems(server, running, 'completed', metric.responseReceivedAt);
       metric.endedAt = server.now(); metric.totalMs = metric.endedAt - metric.startedAt; metric.ttftMs = metric.firstOutputAt == null ? null : metric.firstOutputAt - metric.requestSentAt; metric.finishReason = result.finish_reason;
       if (result.usage) metric.usage = compactUsage(result.usage);
@@ -219,7 +222,7 @@ export async function runAgentTurn(server, running) {
           if (completed && (completed.name !== call.function.name || completed.arguments !== call.function.arguments)) throw Error('Gateway reused a tool-call ID with different arguments');
           return { call: clone(call), state: 'queued' };
         });
-        if (running.assistant && !phase) running.assistant.phase = 'commentary'; cp.state = 'tool'; await save(); continue;
+        cp.state = 'tool'; await save(); continue;
       }
       if (!result.content && result.response_items?.some(item => item.type === 'web_search_call' && item.status === 'completed')) {
         cp.searchOnlyRounds = (cp.searchOnlyRounds || 0) + 1;
@@ -242,7 +245,7 @@ export async function runAgentTurn(server, running) {
       }
       if (result.finish_reason !== 'stop') throw Error('Gateway did not confirm completion: ' + (result.finish_reason || 'missing finish signal'));
       if (!result.content) throw Error('Gateway returned no final text');
-      cp.state = 'completed'; meta.resumable = false; await save(); server.finish(running, 'completed', null); return;
+      cp.state = 'completed'; meta.resumable = false; await save(); server.finish(running, 'completed', null, metric.responseReceivedAt); return;
     }
   } catch (error) {
     if (running.terminal) return;

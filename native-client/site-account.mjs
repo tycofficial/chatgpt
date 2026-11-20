@@ -190,7 +190,7 @@ export function safeSiteReturnUrl(value) {
     const target = new URL(value || base, base.origin);
     if (target.pathname === base.pathname.replace(/\/$/, '')) target.pathname = base.pathname;
     if (target.origin === base.origin && !target.username && !target.password && target.pathname.startsWith(base.pathname) &&
-        !/(?:\/auth)?\/(?:login|signup)\/?$/.test(target.pathname)) {
+        !/(?:\/auth)?\/(?:login|signup|logout|signout)\/?$/i.test(target.pathname)) {
       for (const key of ['localSession', 'refresh_account', 'startup_account_refresh']) target.searchParams.delete(key);
       return target;
     }
@@ -285,7 +285,7 @@ async function saveSession(record, user, mode, generation, expectedToken) {
   return setAccount(user, mode === 'site-server' && isOffline() ? 'site-offline-cache' : mode);
 }
 
-async function restoreCachedAccount(candidate, generation) {
+async function restoreCachedAccount(candidate, generation, connectionError = networkUnavailable) {
   let cached = currentAccount();
   if (!cached) {
     const receipt = await accountReceipt(candidate.token).catch(() => null);
@@ -294,8 +294,8 @@ async function restoreCachedAccount(candidate, generation) {
     }
   }
   if (generation !== requestGeneration || remembered !== candidate) return null;
-  if (cached && validSession(candidate)) return setAccount(cached, 'site-offline-cache', networkUnavailable);
-  lastError = networkUnavailable;
+  if (cached && validSession(candidate)) return setAccount(cached, 'site-offline-cache', connectionError);
+  lastError = connectionError;
   return null;
 }
 
@@ -346,6 +346,17 @@ export function refreshSiteAccount() {
 }
 
 export const initializeSiteAccount = refreshSiteAccount;
+
+export async function initializeSiteAccountForDisplay() {
+  const candidate = remembered;
+  if (guestActive || !validSession(candidate) || candidate.kind === offlineAdminKind) return refreshSiteAccount();
+  const generation = requestGeneration;
+  const cached = await restoreCachedAccount(candidate, generation, isOffline() ? networkUnavailable : null);
+  if (generation !== requestGeneration) return currentAccount();
+  if (!cached) return refreshSiteAccount();
+  if (!isOffline()) void refreshSiteAccount();
+  return cached;
+}
 
 export function startSiteGuestSession() {
   requestGeneration++;
@@ -488,7 +499,7 @@ globalThis.addEventListener?.('storage', event => {
 });
 
 export function renderSiteLoginPage(){
- const registration=/(?:\/auth)?\/signup\/?$/.test(location.pathname);
+ const registration=/(?:\/auth)?\/signup\/?$/.test(location.pathname.replace(/\/index\.html$/, '/'));
  document.documentElement.dataset.siteAuth='true';
  document.body.dataset.siteAuth='true';
  const style=document.createElement('style');style.textContent="html[data-site-auth=true]{color-scheme:light}body[data-site-auth=true]{--auth-bg:#fff;--auth-text:#0d0d0d;--auth-muted:#5d5d5d;--auth-border:#8f8f8f;--auth-button:#0d0d0d;--auth-button-text:#fff;margin:0;min-height:100dvh;height:auto;overflow:auto;background:var(--auth-bg);color:var(--auth-text);font-family:\"OpenAI Sans\",ui-sans-serif,system-ui,-apple-system,\"Segoe UI\",sans-serif}.site-login{min-height:100dvh;display:flex;flex-direction:column;align-items:center;box-sizing:border-box;padding:28px 24px 22px;background:var(--auth-bg);color:var(--auth-text);font-size:16px;line-height:1.5}.site-login *{box-sizing:border-box}.site-login-brand{align-self:flex-start;font-size:22px;font-weight:600;line-height:28px;color:var(--auth-text);text-decoration:none}.site-login-panel{width:100%;max-width:400px;text-align:center;margin:auto 0;padding:44px 0}.site-login h1{color:var(--auth-text);font-size:32px;line-height:40px;letter-spacing:-.6px;margin:0 0 12px;font-weight:600}.site-login p{font-size:14px;line-height:22px;color:var(--auth-muted);margin:0 0 28px}.site-login form{margin:0;color:var(--auth-text)}.site-login label{display:block;text-align:left;font-size:14px;line-height:20px;color:var(--auth-text);margin:20px 0 8px}.site-login input{display:block;width:100%;height:54px;border:1px solid var(--auth-border);border-radius:28px;padding:0 20px;font:inherit;background:var(--auth-bg);color:var(--auth-text);-webkit-text-fill-color:var(--auth-text);caret-color:var(--auth-text);opacity:1;outline:none}.site-login input::placeholder{color:var(--auth-muted);opacity:1}.site-login input:focus-visible{outline:2px solid var(--auth-text);outline-offset:2px}.site-login input:-webkit-autofill{-webkit-text-fill-color:var(--auth-text);box-shadow:0 0 0 1000px var(--auth-bg) inset}.site-login button{display:block;width:100%;height:52px;padding:0 20px;border:0;border-radius:28px;margin-top:28px;background:var(--auth-button);color:var(--auth-button-text);-webkit-text-fill-color:var(--auth-button-text);font:inherit;font-weight:500;cursor:pointer;transition:opacity .15s ease}.site-login button:hover{opacity:.88}.site-login button:focus-visible,.site-login a:focus-visible{outline:2px solid var(--auth-text);outline-offset:3px}.site-login button:disabled{opacity:.55;cursor:wait}.site-login .site-login-error{color:#b42318;min-height:22px;margin:16px 0}.site-login-panel a{color:var(--auth-text);text-decoration:underline;font-size:14px;text-underline-offset:3px}.site-login .site-login-back{display:inline-block;margin-top:4px}.site-login footer{margin-top:auto;color:var(--auth-muted);font-size:12px;line-height:20px}@media (prefers-color-scheme:dark){html[data-site-auth=true]{color-scheme:dark}body[data-site-auth=true]{--auth-bg:#212121;--auth-text:#f3f3f3;--auth-muted:#b4b4b4;--auth-border:#8f8f8f;--auth-button:#f3f3f3;--auth-button-text:#0d0d0d}.site-login .site-login-error{color:#ff9f98}}@media (max-width:480px){.site-login{padding:24px 20px 20px}.site-login-panel{max-width:352px}.site-login h1{font-size:30px;line-height:38px}}@media (prefers-reduced-motion:reduce){.site-login button{transition:none}}";

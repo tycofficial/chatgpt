@@ -6,6 +6,8 @@
  * async/569087.5c1de81bf5.js o6Sz (PNG upload -> profile PATCH -> GET confirm).
  * hrUs -> GET /files/download/{file_id}: {status:'success',download_url}.
  */
+import { createProviderCompletionRouter } from './provider-routing.mjs?v=3886dd09e0b0f238';
+
 export const LOCAL_DOT_SOURCE = 'site-local-dot-provider';
 export const LOCAL_DOT_DEFAULT_APPEARANCE = Object.freeze({ avatar: 'sunglasses', color: 'pink' });
 export const LOCAL_DOT_PUBLIC_DEFAULT_IMAGE = 'https://persistent.oaistatic.com/images/d75c9ceb8b1f60bc8d9b54e703bc5c256f2000716d29a1a3b9b6d18ff15658e6.png';
@@ -15,6 +17,91 @@ const PREFIX = 'site-local-dot:v1:';
 const ASSET_PREFIX = 'site-local-dot-image:v1:';
 const MAX_PNG = 2 * 1024 * 1024;
 const ACCESSORIES = new Set(['sunglasses', 'bow-tie', 'balancing-ball', 'cowboy', 'beanie', 'mustache', 'pirate', 'feather', 'monocle', 'party-hat', 'bowler', 'headphones']);
+const dotDefault = Object.freeze({ model: 'gpt-6.1-terra', effort: 'medium', providerId: 'openclawplan', providerOrigin: 'https://api.openclawplan.com' });
+const dotComplex = Object.freeze({ model: 'gpt-6-astra', effort: 'high', providerId: 'docode', providerOrigin: 'https://docode.cc' });
+const dotRoutes = [dotDefault, dotComplex];
+const dotSelectionMethods = new Set(['thread/resume', 'thread/settings/update', 'turn/start', 'turn/addUserMessage']);
+const complexDotPrompt = /\b(?:use (?:gpt-6[- ]?)?astra|deep (?:analysis|research)|multi[- ]step|rigorous proof|prove that|root cause analysis|architecture trade-?offs)\b|(?:切换至|切换到|使用)\s*(?:gpt-6[- ]?)?astra\b|深入(?:分析|研究|评估)|深度(?:分析|研究)|严格证明|推导|复杂(?:难题|问题|分析)|根因分析|多步(?:分析|推理)|架构权衡/iu;
+
+export function selectLocalDotModel(input) {
+  const prompt = Array.isArray(input) ? input.filter(item => item?.type === 'text' && typeof item.text === 'string').map(item => item.text).join('\n').trim() : '';
+  return prompt.length >= 1200 || complexDotPrompt.test(prompt) ? dotComplex : dotDefault;
+}
+
+/** Dot uses the same Responses decoder, exact-model admission and request checkpoints as other surfaces. */
+export function createLocalDotCompletion({ complete, getProviders, siteOrigin, fetchDirectModels }) {
+  const site = new URL(siteOrigin);
+  if (site.protocol !== 'https:' || site.username || site.password || site.pathname !== '/' || site.search || site.hash) {
+    throw new TypeError('Dot requires the configured HTTPS site service origin');
+  }
+  if (typeof getProviders !== 'function') throw new TypeError('A configured Dot provider reader is required');
+  let directTerra = false, probe = null, probeExpiresAt = 0;
+  function configuredProvider(route, configured) {
+    const provider = configured?.find(candidate => candidate.id === route.providerId);
+    if (!provider?.supportedModels?.includes(route.model) || !provider.apiKey) return null;
+    let upstream;
+    try { upstream = new URL(provider.apiBase); } catch { return null; }
+    return upstream.origin === route.providerOrigin && !upstream.username && !upstream.password &&
+      !upstream.search && !upstream.hash ? provider : null;
+  }
+  function prepare() {
+    if (!fetchDirectModels) return false;
+    if (probe && Date.now() < probeExpiresAt) return probe;
+    const provider = configuredProvider(dotDefault, getProviders());
+    if (!provider) return false;
+    probeExpiresAt = Date.now() + 300000;
+    // Select a route before submitting the prompt, so a lost response cannot bill a second turn.
+    probe = Promise.resolve().then(() => fetchDirectModels(new URL('/v1/models', dotDefault.providerOrigin), {
+      headers: { Authorization: 'Bearer ' + provider.apiKey }, credentials: 'omit',
+      redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(3500),
+    })).then(response => {
+      if (response.body) void response.body.cancel().catch(() => {});
+      return response.ok;
+    }).catch(() => false).then(reachable => {
+      directTerra = reachable;
+      if (!reachable) probeExpiresAt = Date.now() + 60000;
+      return reachable;
+    });
+    return probe;
+  }
+  const router = createProviderCompletionRouter({
+    complete,
+    getProviders: () => {
+      const configured = getProviders();
+      return dotRoutes.flatMap(route => {
+        const provider = configuredProvider(route, configured);
+        if (!provider) return [];
+        return [{
+          id: route.providerId,
+          apiBase: route === dotDefault && directTerra ? dotDefault.providerOrigin + '/v1' :
+            new URL('/api-proxy/' + route.providerId + '/v1', site).href,
+          apiKey: provider.apiKey,
+          supportedModels: [route.model],
+          responsesModels: [route.model],
+        }];
+      });
+    },
+  });
+  const run = async options => {
+    const model = options.settings?.model, effort = options.settings?.reasoningEffort;
+    const route = dotRoutes.find(candidate => candidate.model === model && candidate.effort === effort);
+    if (!route || options.settings?.reasoningMode === 'pro') throw error('请选择新消息以使用本站 Dot 支持的模型。', 422, 'LOCAL_DOT_MODEL_UNSUPPORTED');
+    if (route === dotDefault) await prepare();
+    const result = await router.complete({
+      ...options,
+      settings: { model, reasoningEffort: effort, reasoningMode: 'standard', apiTransport: 'responses' },
+      responsesTransport: undefined,
+    });
+    if (typeof result.model !== 'string' || result.model !== model && !result.model.startsWith(model + '-') ||
+        result.actual_reasoning?.effort !== effort) {
+      throw Object.assign(error('服务商未确认 Dot 选用的模型或思考等级。', 502, 'LOCAL_DOT_MODEL_UNVERIFIED'), { retryable: false });
+    }
+    return { ...result, adapter_execution: { model: result.model, providerId: route.providerId, reasoningEffort: effort } };
+  };
+  run.prepare = prepare;
+  return run;
+}
+
 const own = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const copy = value => structuredClone(value);
@@ -91,7 +178,9 @@ export function createLocalDotAdapter({
   appServer,
   getIdentity = () => null,
   isLocalSession = () => false,
-  readSettings = () => ({}),
+  hasDotAccess = () => true,
+  siteAccountsOnly = false,
+  complete: completeDotTurn,
   getCapabilities = () => ({}),
   diagnostics = [],
   now = Date.now,
@@ -101,6 +190,7 @@ export function createLocalDotAdapter({
   makeAssetURL,
 } = {}) {
   const bootstraps = new Map();
+  const usesSitePolicy = () => siteAccountsOnly || isLocalSession() === true;
   function diagnostic(kind, details = {}) {
     diagnostics.push({ type: 'local-dot', kind, at: now(), ...details });
   }
@@ -112,7 +202,11 @@ export function createLocalDotAdapter({
       if (!required) return null;
       throw error('Sign in to this site to use local Dot profiles', 401, 'LOCAL_DOT_SIGN_IN_REQUIRED');
     }
-    return { accountId, userId };
+    if (hasDotAccess() !== true) {
+      if (!required) return null;
+      throw error('当前站内套餐不支持 Dot。', 403, 'LOCAL_DOT_PLAN_REQUIRED');
+    }
+    return { accountId, userId, accountUserId: supplied.accountUserId ?? userId, name: supplied.name ?? '' };
   }
   function assertIdentity(initial) {
     const current = identity();
@@ -139,6 +233,16 @@ export function createLocalDotAdapter({
   const save = (session, value) => writeJSON(stateKey(session), value, session);
   function publicProfile(row) {
     const { thread_ids, ...profile } = row;
+    const manifest = profile.avatar_manifest;
+    if (profile.avatar_type === 'default' && ACCESSORIES.has(profile.avatar_id ?? profile.avatar)
+      && manifest?.schema_version === 1 && manifest.tint === LOCAL_DOT_DEFAULT_APPEARANCE.color
+      && Object.keys(manifest).length === 2) {
+      profile.avatar_manifest = null;
+      profile.avatar_url = null;
+    }
+    const snapshot = profile.avatar_manifest?.snapshot;
+    if (profile.avatar_type === 'codex-pet' && profile.avatar_url == null && snapshot?.schema_version === 1
+      && /^file-service:\/\/local-dot-avatar-[A-Za-z0-9-]{1,100}$/.test(snapshot.asset_pointer)) profile.avatar_url = snapshot.asset_pointer;
     return copy(profile);
   }
   function findProfile(data, id) {
@@ -187,7 +291,9 @@ export function createLocalDotAdapter({
     const requestedAvatarType = fields.avatar_type ?? 'default';
     const requestedManifest = requestedAvatarType === 'default' ? null : validateManifest(session, requestedAvatarType, fields.avatar_manifest);
     const result = appServer.dispatch('thread/start', {
-      model: readSettings()?.model,
+      model: dotDefault.model,
+      effort: dotDefault.effort,
+      executionSurface: 'work',
       conversationOrigin: 'dot',
       responsesapiClientMetadata: { conversationOrigin: 'dot', localDotProvider: true },
     });
@@ -200,8 +306,7 @@ export function createLocalDotAdapter({
       id: 'local-dot-' + uuid(), display_name: name, description, aeon_kind: 'orbit',
       scope: 'personal', status: 'active', is_primary: primary,
       root_thread_id: threadId, active_root_thread_id: threadId, thread_ids: [threadId],
-      avatar, avatar_id: avatar, avatar_type: 'default', avatar_url: LOCAL_DOT_DEFAULT_IMAGE_URL,
-      avatar_manifest: { schema_version: 1, tint: LOCAL_DOT_DEFAULT_APPEARANCE.color },
+      avatar, avatar_id: avatar, avatar_type: 'default', avatar_url: null, avatar_manifest: null,
       created_at: timestamp, updated_at: timestamp,
       adapter_source: LOCAL_DOT_SOURCE,
       local_capabilities: { ...copy(getCapabilities() || {}), cloudComputer: false, cloudRooms: false },
@@ -209,7 +314,7 @@ export function createLocalDotAdapter({
     if (fields.avatar_type != null && fields.avatar_type !== 'default') {
       row.avatar_type = fields.avatar_type;
       row.avatar_manifest = requestedManifest;
-      row.avatar_url = null;
+      row.avatar_url = row.avatar_type === 'codex-pet' ? requestedManifest.snapshot.asset_pointer : null;
     }
     data.profiles.push(row);
     if (primary) data.primaryGeneration += 1;
@@ -250,17 +355,128 @@ export function createLocalDotAdapter({
       return result;
     } catch (cause) { if (cause.status) throw cause; throw error('Invalid JSON body'); }
   }
+  function ownedRoom(session, roomId) {
+    const data = state(session);
+    const row = data.profiles.find(profile => profile.messaging_room_id === roomId && profile.thread_ids.includes(roomId));
+    const thread = row && appServer?.threads?.get(roomId);
+    if (thread?.adapterMetadata?.conversationOrigin !== 'dot') throw error('此 Dot 会话暂不可用。', 404, 'LOCAL_DOT_ROOM_NOT_FOUND');
+    return { data, row, thread };
+  }
+  function timestamp(seconds) {
+    return new Date(seconds * 1000).toISOString();
+  }
+  function roomUserMessage(session, turn, item) {
+    const created_at = timestamp(turn.startedAt);
+    return { id: item.id, role: 'user', account_user_id: session.accountUserId, created_at, updated_at: created_at,
+      request_id: turn.clientUserMessageId, content: { text: item.content.filter(part => part.type === 'text').map(part => part.text).join('\n') } };
+  }
+  function roomAssistantMessages(turn) {
+    if (turn.status !== 'completed' && turn.status !== 'failed') return [];
+    const created_at = timestamp(turn.completedAt ?? turn.startedAt);
+    if (turn.status === 'failed') return [{ id: turn.id, role: 'system', created_at, updated_at: created_at,
+      content: { type: 'text', text: 'Dot 暂时未能完成这条回复，请重试。' }, preview: 'Dot 暂时未能完成这条回复，请重试。' }];
+    return turn.items.filter(item => item.type === 'agentMessage' && item.text).map(item => ({
+      id: item.id, role: 'assistant', created_at, updated_at: created_at, raw_messages: [{ id: item.id,
+        author: { role: 'assistant' }, channel: 'final', content: { content_type: 'text', parts: [item.text] }, metadata: {} }],
+    }));
+  }
+  function roomMessages(session, thread) {
+    return thread.turns.flatMap(turn => [
+      ...turn.items.filter(item => item.type === 'userMessage').map(item => roomUserMessage(session, turn, item)),
+      ...roomAssistantMessages(turn),
+    ]);
+  }
+  function roomPage(messages, query) {
+    const rawLimit = query.get('limit');
+    const limit = rawLimit == null ? 20 : Number(rawLimit);
+    if (!Number.isSafeInteger(limit) || limit < 1 || limit > 200) throw error('Invalid Dot message page limit');
+    const after = query.get('after'), before = query.get('before'), around = query.get('around');
+    const cursor = around ?? after ?? before;
+    const index = cursor == null ? messages.length : messages.findIndex(message => message.id === cursor);
+    if (index < 0) throw error('This Dot message cursor was not found', 404, 'LOCAL_DOT_MESSAGE_NOT_FOUND');
+    const start = around != null ? Math.max(0, Math.min(index - Math.floor(limit / 2), messages.length - limit))
+      : after != null ? index + 1 : Math.max(0, index - limit);
+    const end = after != null || around != null ? Math.min(messages.length, start + limit) : index;
+    const items = messages.slice(start, end);
+    return { items, prev_cursor: start > 0 ? items[0]?.id ?? null : null, next_cursor: end < messages.length ? items.at(-1)?.id ?? null : null };
+  }
+  function subscribeRoomMessages(listener) {
+    const session = identity(false);
+    if (!session || typeof appServer?.subscribe !== 'function') return () => {};
+    return appServer.subscribe(event => {
+      if (event.method !== 'turn/completed') return;
+      const current = identity(false);
+      if (current?.accountId !== session.accountId || current.userId !== session.userId) return;
+      const { threadId, turn } = event.params;
+      const row = state(session).profiles.find(profile => profile.messaging_room_id === threadId && profile.thread_ids.includes(threadId));
+      if (!row) return;
+      for (const message of roomAssistantMessages(turn)) listener({ type: 'calpico-message-add', payload: { room_id: threadId, message } });
+    });
+  }
   async function handle(request, canonicalPath) {
     const url = new URL(request.url), path = canonicalPath ?? url.pathname;
     const relevant = path === '/tbo' || path.startsWith('/tbo/') || path.startsWith('/cloud-aeons/avatar-snapshots')
       || path.startsWith('/local-dot/assets/') || path.startsWith('/files/download/local-dot-avatar-')
-      || path === '/pins' || path.startsWith('/pins/feature/');
+      || path === '/pins' || path.startsWith('/pins/feature/') || path.startsWith('/messaging/rooms/');
     if (!relevant) return null;
     try {
       const session = identity();
       const method = request.method.toUpperCase();
       const parts = decodePath(path);
       request.signal?.throwIfAborted();
+      if (parts[1] === 'messaging' && parts[2] === 'rooms') {
+        const id = parts[3], action = parts[4];
+        if (parts.length === 4 && method === 'GET') {
+          const { row, thread } = ownedRoom(session, id);
+          const last_read_at = row.last_read_at ?? null;
+          return json({ id, type: 'DM', app_source: 'chatgpt:messaging', aeon_id: row.id, name: row.display_name,
+            dm_lifecycle_state: 'connected', created_at: row.created_at, updated_at: timestamp(thread.updatedAt), last_read_at,
+            members: [{ account_user_id: session.accountUserId, name: session.name }, { account_user_id: row.id, aeon_id: row.id, name: row.display_name }],
+            member_profile_snapshots: [], read_receipts: last_read_at ? [{ account_user_id: session.accountUserId, last_read_at }] : [],
+            latest_messages: roomMessages(session, thread).slice(-20),
+          });
+        }
+        if (parts.length === 5 && action === 'messages' && method === 'GET') {
+          const { thread } = ownedRoom(session, id);
+          return json(roomPage(roomMessages(session, thread), url.searchParams));
+        }
+        if (parts.length === 5 && method === 'POST') {
+          ownedRoom(session, id);
+          if (action === 'responding_heartbeat') return new Response(null, { status: 204 });
+          if (action === 'messages' || action === 'read') {
+            const supplied = await body(request);
+            request.signal?.throwIfAborted();
+            assertIdentity(session);
+            const { row, data } = ownedRoom(session, id);
+            if (action === 'read') {
+              const readAt = Date.parse(safeText(supplied.last_read_at, 'Dot read time', 50));
+              if (!Number.isFinite(readAt)) throw error('Invalid Dot read time');
+              if (!(Date.parse(row.last_read_at) >= readAt)) {
+                row.last_read_at = new Date(readAt).toISOString();
+                save(session, data);
+              }
+              return new Response(null, { status: 204 });
+            }
+            const text = safeText(supplied.content?.text, 'Dot message', 100000);
+            const requestId = safeText(supplied.request_id, 'Dot request ID');
+            if (!text.trim() || !requestId || (supplied.idempotency_token != null && supplied.idempotency_token !== requestId)) throw error('Invalid Dot message or request ID');
+            if (supplied.content?.attachments?.length) throw error('当前 Dot 会话仅支持文字消息。', 422, 'LOCAL_DOT_FILES_UNAVAILABLE');
+            let started;
+            try {
+              started = createRpcFacade().dispatch('turn/start', { threadId: id, clientUserMessageId: requestId, input: [{ type: 'text', text }] });
+            } catch (cause) {
+              if (cause.code === -32000) throw error('Dot 正在处理上一条消息。', 409, 'LOCAL_DOT_TURN_RUNNING');
+              if (cause.code === -32602) throw error('此 Dot 消息请求已使用。', 409, 'LOCAL_DOT_REQUEST_CONFLICT');
+              throw cause;
+            }
+            const { turn } = started.result;
+            const accepted = roomUserMessage(session, turn, turn.items.find(item => item.type === 'userMessage'));
+            const response = json(accepted);
+            started.afterReply?.();
+            return response;
+          }
+        }
+      }
       if (path === '/cloud-aeons/avatar-snapshots' && method === 'POST') {
         let form;
         try { form = await request.formData(); } catch { throw error('A multipart PNG upload is required', 415); }
@@ -365,22 +581,24 @@ export function createLocalDotAdapter({
             }
             if (own(patch, 'description')) row.description = safeText(patch.description, 'Dot description', 4000);
             const changeAvatar = !patch.only_if_default_avatar || row.avatar_type === 'default';
-            if (changeAvatar && own(patch, 'avatar')) {
-              if (!ACCESSORIES.has(patch.avatar)) throw error('Unknown original Dot accessory');
-              row.avatar = patch.avatar; row.avatar_id = patch.avatar; row.avatar_type = 'default';
-              row.avatar_manifest = { schema_version: 1, tint: LOCAL_DOT_DEFAULT_APPEARANCE.color };
-              row.avatar_url = LOCAL_DOT_DEFAULT_IMAGE_URL;
+            if (changeAvatar && (own(patch, 'avatar') || own(patch, 'avatar_id'))) {
+              const selected = patch.avatar_id ?? patch.avatar;
+              if (!ACCESSORIES.has(selected)) throw error('Unknown original Dot accessory');
+              row.avatar = selected; row.avatar_id = selected; row.avatar_type = 'default';
+              row.avatar_manifest = null; row.avatar_url = null;
             }
             if (changeAvatar && (own(patch, 'avatar_type') || own(patch, 'avatar_manifest'))) {
               const type = patch.avatar_type ?? row.avatar_type;
-              row.avatar_manifest = validateManifest(session, type, patch.avatar_manifest ?? row.avatar_manifest);
+              row.avatar_manifest = type === 'default' && patch.avatar_manifest == null
+                ? null : validateManifest(session, type, patch.avatar_manifest ?? row.avatar_manifest);
               row.avatar_type = type;
-              row.avatar_url = null;
+              row.avatar_url = type === 'codex-pet' ? row.avatar_manifest.snapshot.asset_pointer : null;
             }
-            if (own(patch, 'avatar_url') && patch.avatar_url != null) {
+            if (changeAvatar && own(patch, 'avatar_url') && patch.avatar_url != null) {
               // Persisted snapshots are resolved locally; no arbitrary remote image fetch.
               const snapshot = validateSnapshot(session, row.avatar_manifest?.snapshot);
               if (patch.avatar_url !== snapshot.asset_pointer) throw error('Only the saved local avatar pointer is accepted');
+              row.avatar_url = snapshot.asset_pointer;
             }
             row.updated_at = new Date(now()).toISOString();
             save(session, data);
@@ -396,7 +614,17 @@ export function createLocalDotAdapter({
             return new Response(null, { status: 204 });
           }
         }
-        if (parts.length === 4 && method === 'GET' && parts[3] === 'root-thread') return json(row.active_root_thread_id);
+        if (parts.length === 4 && method === 'POST' && parts[3] === 'messaging-room') {
+          const thread = appServer?.threads?.get(row.active_root_thread_id);
+          if (thread?.adapterMetadata?.conversationOrigin !== 'dot') throw error('此 Dot 会话暂不可用。', 404, 'LOCAL_DOT_THREAD_NOT_FOUND');
+          void completeDotTurn?.prepare?.();
+          if (row.messaging_room_id !== thread.id) {
+            row.messaging_room_id = thread.id;
+            save(session, data);
+          }
+          return json(publicProfile(row));
+        }
+        if (parts.length === 4 && method === 'GET' && parts[3] === 'root-thread') return json({ root_thread_id: row.active_root_thread_id });
         if (parts.length === 4 && method === 'GET' && parts[3] === 'threads') {
           const rows = row.thread_ids.map(id => {
             let thread;
@@ -414,6 +642,41 @@ export function createLocalDotAdapter({
       return fail(cause);
     }
   }
+  function ownsThread(session, threadId) {
+    return typeof threadId === 'string' && state(session).profiles.some(profile => profile.thread_ids.includes(threadId));
+  }
+  function createRpcFacade(base = appServer) {
+    if (typeof base?.dispatch !== 'function' || typeof base?.subscribe !== 'function') throw new TypeError('Dot requires the shared conversation RPC façade');
+    return Object.freeze({
+      dispatch(method, params = {}) {
+        const thread = appServer?.threads?.get(params?.threadId);
+        if (thread?.adapterMetadata?.conversationOrigin !== 'dot') return base.dispatch(method, params);
+        const session = identity(false);
+        if (!session || !ownsThread(session, thread.id)) {
+          throw Object.assign(new Error('当前账户无法访问此 Dot 会话。'), { rpcCode: -32003 });
+        }
+        if (!dotSelectionMethods.has(method)) return base.dispatch(method, params);
+        const existing = typeof params.clientUserMessageId === 'string'
+          ? thread.turns.find(turn => turn.clientUserMessageId === params.clientUserMessageId) : null;
+        const sendsMessage = method === 'turn/start' || method === 'turn/addUserMessage';
+        const route = sendsMessage ? selectLocalDotModel(params.input) : dotRoutes.find(choice => choice.model === thread.model) ?? dotDefault;
+        const model = existing?.model ?? route.model, effort = existing?.reasoningEffort ?? route.effort;
+        if (sendsMessage) diagnostic('turn-model-selected', { model, effort });
+        return base.dispatch(method, { ...params, model, effort, executionSurface: 'work', reasoningMode: 'standard', serviceTier: 'standard' });
+      },
+      subscribe: listener => base.subscribe(listener),
+    });
+  }
+  async function complete(options) {
+    const session = identity();
+    if (!ownsThread(session, options.providerRoutingContext?.threadId)) {
+      throw error('当前账户无法运行此 Dot 会话。', 403, 'LOCAL_DOT_THREAD_FORBIDDEN');
+    }
+    if (typeof completeDotTurn !== 'function') throw error('本站 Dot 推理服务尚未接入。', 503, 'LOCAL_DOT_EXECUTOR_UNAVAILABLE');
+    const result = await completeDotTurn(options);
+    assertIdentity(session);
+    return result;
+  }
   function getLocalDotPolicy() {
     const session = identity(false);
     return {
@@ -427,24 +690,24 @@ export function createLocalDotAdapter({
     const derive = requireOriginal('BolX').c, scope = requireOriginal('OWtl').a;
     const inputs = requireOriginal('Cslg').m;
     const capable = derive(scope, ({ get }) => {
-      const originalValue = get(original.c);
-      if (isLocalSession() !== true) return originalValue;
+      if (!usesSitePolicy()) return get(original.c);
       const auth = get(inputs);
-      const authenticated = auth?.authenticatedAccountId != null && auth?.authenticatedUserId != null;
-      if (auth?.authLoading || auth?.accountLoading) return { ...originalValue, isLoading: true, isCapable: false, adapter_source: LOCAL_DOT_SOURCE };
-      const localIdentity = identity(false);
-      if (!authenticated || !localIdentity || auth.authenticatedAccountId !== localIdentity.accountId || auth.authenticatedUserId !== localIdentity.userId) return { ...originalValue, isLoading: false, isCapable: false, adapter_source: LOCAL_DOT_SOURCE };
-      return { ...originalValue, ...getLocalDotPolicy(), retainNavigation: false, unresolved: false };
+      const isLoading = auth?.authLoading === true || auth?.accountLoading === true;
+      const session = identity(false);
+      const matches = session != null && auth?.authenticatedAccountId === session.accountId && auth?.authenticatedUserId === session.userId;
+      const local = getLocalDotPolicy();
+      return { ...local, isLoading, isCapable: !isLoading && matches && local.isCapable, retainNavigation: false, unresolved: false };
     });
     const available = derive(scope, ({ get }) => get(capable).isCapable);
     return {
       a: available, c: capable, d: available, f: capable,
       b: (stateScope, accountId) => {
+        if (!usesSitePolicy()) return original.b(stateScope, accountId);
         const session = identity(false);
-        return isLocalSession() === true && session?.accountId === accountId ? getLocalDotPolicy().isCapable : original.b(stateScope, accountId);
+        return session != null && session.accountId === accountId && getLocalDotPolicy().isCapable;
       },
       i: stateScope => {
-        if (isLocalSession() === true) {
+        if (usesSitePolicy()) {
           if (!getLocalDotPolicy().isCapable) throw error('The local Dot provider is unavailable', 503);
           return;
         }
@@ -452,5 +715,5 @@ export function createLocalDotAdapter({
       },
     };
   }
-  return { handle, getLocalDotPolicy, adaptCapabilityAtoms, provenance: Object.freeze({ provider: LOCAL_DOT_SOURCE, profileNamespace: '/tbo', cloudComputer: false, defaultAppearance: LOCAL_DOT_DEFAULT_APPEARANCE }) };
+  return { handle, createRpcFacade, subscribeRoomMessages, complete, getLocalDotPolicy, adaptCapabilityAtoms, provenance: Object.freeze({ provider: LOCAL_DOT_SOURCE, profileNamespace: '/tbo', cloudComputer: false, defaultAppearance: LOCAL_DOT_DEFAULT_APPEARANCE }) };
 }

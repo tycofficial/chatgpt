@@ -146,9 +146,14 @@ export async function streamCompletion({ settings, messages, tools, toolChoice, 
     const choice = body.choices?.[0];
     if (!choice) return;
     const delta = choice.delta || choice.message || {};
-    const content = typeof delta.content === 'string' ? delta.content : Array.isArray(delta.content) ? delta.content.map(part => part.text || '').join('') : '';
+    const content = typeof delta.content === 'string' ? delta.content : Array.isArray(delta.content)
+      ? delta.content.filter(part => part && (part.type == null || part.type === 'text' || part.type === 'output_text'))
+        .map(part => typeof part.text === 'string' ? part.text : '').join('')
+      : '';
     if (content) { assembled.content += content; onActivity({type:'text_delta'}); onDelta(content, assembled); }
-    if (delta.reasoning_content) { assembled.reasoning = (assembled.reasoning || '') + delta.reasoning_content; onActivity({type:'reasoning_delta'}); onDelta('', assembled); }
+    // Some compatibility gateways send raw reasoning in a vendor extension.
+    // It marks upstream activity, but only Responses summaries reach the UI.
+    if (typeof delta.reasoning_content === 'string' && delta.reasoning_content) onActivity({type:'provider_progress'});
     for (const call of delta.tool_calls || []) {
       onActivity({type:'tool_delta'});
       const index = call.index ?? toolCalls.findIndex(t => t?.id === call.id);
@@ -190,6 +195,18 @@ export async function streamCompletion({ settings, messages, tools, toolChoice, 
   return assembled;
 }
 
+function publicReasoningItem(item) {
+  return {
+    type: 'reasoning',
+    ...(typeof item.id === 'string' ? { id: item.id } : {}),
+    summary: (Array.isArray(item.summary) ? item.summary : [])
+      .filter(part => part?.type === 'summary_text' && typeof part.text === 'string')
+      .map(part => ({ type: 'summary_text', text: part.text })),
+    ...(typeof item.encrypted_content === 'string' ? { encrypted_content: item.encrypted_content } : {}),
+    ...(['in_progress', 'completed', 'incomplete'].includes(item.status) ? { status: item.status } : {}),
+  };
+}
+
 /** Convert the app's existing Chat history, including function results and images. */
 export function toResponsesInput(messages) {
   const input = [];
@@ -200,7 +217,7 @@ export function toResponsesInput(messages) {
     }
     // Reuse complete Responses items so stateless tool turns retain encrypted reasoning.
     if (message.role === 'assistant' && Array.isArray(message.response_items) && message.response_items.length) {
-      input.push(...structuredClone(message.response_items));
+      input.push(...message.response_items.map(item => item?.type === 'reasoning' ? publicReasoningItem(item) : structuredClone(item)));
       continue;
     }
     let content = message.content;
@@ -242,19 +259,32 @@ async function streamResponses({ settings, messages, tools, toolChoice, signal, 
   if (!response.ok) throw await responseError(response);
 
   const assembled = { role: 'assistant', content: '' };
-  const texts = new Map(), reasoningTexts = new Map(), calls = new Map(), items = new Map(), itemIndexes = new Map(), searchCalls = new Map();
+  const texts = new Map(), outputMessages = new Map(), reasoningTexts = new Map(), calls = new Map(), items = new Map(), itemIndexes = new Map(), searchCalls = new Map();
   let finished = false;
   const outputIndex = event => event.output_index ?? itemIndexes.get(event.item_id) ?? 0;
   const refreshCalls = () => {
     if (!calls.size) return;
     assembled.tool_calls = [...calls.entries()].sort((a,b) => a[0]-b[0]).map(([,call]) => ({ id: call.call_id || '', type: 'function', function: { name: call.name || '', arguments: call.arguments || '' } }));
   };
+  const refreshText = () => {
+    const messages = new Map();
+    for (const part of [...texts.values()].sort((a, b) => a.index - b.index || a.contentIndex - b.contentIndex)) {
+      const message = messages.get(part.index) ?? { index: part.index, phase: null, ...outputMessages.get(part.index), text: '' };
+      message.text += part.text;
+      messages.set(part.index, message);
+    }
+    assembled.output_messages = [...messages.values()].filter(message => message.text);
+    assembled.content = assembled.output_messages.map(message => message.text).join('');
+    const phase = assembled.output_messages.at(-1)?.phase;
+    if (phase) assembled.phase = phase;
+    else delete assembled.phase;
+  };
   const textPart = (index, contentIndex, text, append = false) => {
     const key = `${index}:${contentIndex}`, previous = texts.get(key)?.text || '';
     const next = append ? previous + text : text;
     if (next === previous) return;
     texts.set(key, { index, contentIndex, text: next });
-    assembled.content = [...texts.values()].sort((a,b) => a.index-b.index || a.contentIndex-b.contentIndex).map(part => part.text).join('');
+    refreshText();
     onActivity({type:'text_delta'});
     onDelta(next.startsWith(previous) ? next.slice(previous.length) : '', assembled);
   };
@@ -284,15 +314,21 @@ async function streamResponses({ settings, messages, tools, toolChoice, signal, 
   const ingestItem = (item, index, complete = false) => {
     if (!item) return;
     if (item.id) itemIndexes.set(item.id, index);
-    if (complete) items.set(index, structuredClone(item));
-    if (item.type === 'reasoning') (item.summary || []).forEach((part, summaryIndex) => {
+    if (complete) items.set(index, item.type === 'reasoning' ? publicReasoningItem(item) : structuredClone(item));
+    if (item.type === 'reasoning' && Array.isArray(item.summary)) item.summary.forEach((part, summaryIndex) => {
       if (part?.type === 'summary_text' && typeof part.text === 'string') reasoningPart(index, summaryIndex, part.text);
     });
     if (item.type === 'web_search_call') ingestSearch(item, index);
     if (item.type === 'function_call') { onActivity({type:'tool_delta'}); ensureCall(index, item); }
     if (item.type === 'message') {
-      if (item.phase === 'commentary' || item.phase === 'final_answer') assembled.phase = item.phase;
-      else delete assembled.phase;
+      const previous = outputMessages.get(index);
+      const phase = item.phase === 'commentary' || item.phase === 'final_answer' ? item.phase : previous?.phase ?? null;
+      const completed = complete || previous?.completed === true;
+      outputMessages.set(index, { phase, id: item.id ?? previous?.id, completed });
+      if (assembled.output_messages?.some(message => message.index === index)) {
+        refreshText();
+        if (phase !== (previous?.phase ?? null) || phase === 'commentary' && completed && !previous?.completed) onDelta('', assembled);
+      }
       (item.content || []).forEach((part, contentIndex) => {
         if (part.type === 'output_text') textPart(index, contentIndex, part.text || '');
         if (part.type === 'refusal') textPart(index, contentIndex, part.refusal || '');

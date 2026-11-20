@@ -1,5 +1,5 @@
 /** Synthetic identity for this site's accounts and its separate browser guest. */
-import { getSiteAccount, getSiteHomeUrl } from './site-account.mjs?v=c992a0f3a1b8df1e';
+import { getSiteAccount, getSiteHomeUrl } from './site-account.mjs?v=3886dd09e0b0f238';
 
 const siteAccount = getSiteAccount();
 const registeredSiteUser = siteAccount?.role === 'user' ? siteAccount : null;
@@ -97,7 +97,7 @@ export function clearPrototypeLocalSession({ reload = false } = {}) {
   if (reload) globalThis.location.reload();
 }
 export function getLocalSignedOutUrl() {
-  const fallback = globalThis.document?.documentElement?.dataset?.routerBasename || new URL('../', import.meta.url).pathname;
+  const fallback = new URL('../', import.meta.url).pathname;
   const url = getSiteHomeUrl(fallback);
   url.searchParams.set('localSession', '0');
   return url.href;

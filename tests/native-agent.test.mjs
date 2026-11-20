@@ -299,7 +299,7 @@ test('an actual final message without phase never inherits an earlier commentary
     const output = [{ id: 'intermediate-in-response', type: 'message', role: 'assistant', phase: 'commentary', content: [{ type: 'output_text', text: 'Intermediate. ' }] }, { id: 'legacy-final-in-response', type: 'message', role: 'assistant', content: [{ type: 'output_text', text: 'Actual compatible final.' }] }];
     return new Response('data: ' + JSON.stringify({ type: 'response.completed', response: { id: 'legacy-phase', model: payload.model, reasoning: payload.reasoning, status: 'completed', output } }) + '\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
   };
-  try { const server = setup(streamCompletion, { toolExecutor: createBrowserToolExecutor({ storage: workspace() }) }), result = await turn(server, start(server)); assert.equal(result.status, 'completed'); assert.equal(requests, 1); assert.equal(result.items.find(item => item.type === 'agentMessage').phase, 'final_answer'); }
+  try { const server = setup(streamCompletion, { toolExecutor: createBrowserToolExecutor({ storage: workspace() }) }), result = await turn(server, start(server)); assert.equal(result.status, 'completed'); assert.equal(requests, 1); assert.deepEqual(result.items.filter(item => item.type === 'agentMessage').map(item => item.phase), ['commentary','final_answer']); }
   finally { globalThis.fetch = previous; }
 });
 

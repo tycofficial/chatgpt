@@ -4,11 +4,12 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import { pbkdf2Sync, webcrypto } from 'node:crypto';
-import { parseHTML } from 'linkedom/worker';
+import accountWorker from '../chatgpt-services/worker/service.mjs';
+import { sqliteD1 } from '../chatgpt-services/tests/fixture-db.mjs';
 const identitySource=fs.readFileSync(new URL('../src/native-client/local-identity.mjs',import.meta.url),'utf8');
 const pricingSource=fs.readFileSync(new URL('../src/native-client/local-pricing.mjs',import.meta.url),'utf8');
 const source=fs.readFileSync(new URL('../src/native-client/site-account.mjs',import.meta.url),'utf8');
-const names=['getSiteAccount','hasModelSelectionAccess','getSiteSessionToken','getSiteAccountError','initializeSiteAccount','loginSiteAccount','registerSiteAccount','logoutSiteAccount','getSiteLoginUrl','safeSiteReturnUrl','getSitePlanCapabilities','refreshSiteAccount','isSiteGuestSession','startSiteGuestSession','claimSiteTrial','getSitePlansUrl','getSiteHomeUrl'];
+const names=['getSiteAccount','hasModelSelectionAccess','getSiteSessionToken','getSiteAccountError','initializeSiteAccount','initializeSiteAccountForDisplay','loginSiteAccount','registerSiteAccount','logoutSiteAccount','getSiteLoginUrl','safeSiteReturnUrl','getSitePlanCapabilities','refreshSiteAccount','isSiteGuestSession','startSiteGuestSession','claimSiteTrial','getSiteHomeUrl'];
 // Execute the actual module in an isolated VM; only ESM export keywords change.
 // No real browser storage, password, token, account service, or network is used.
 const fixtureToken='c'.repeat(64),key='chatgpt-site-admin-session:v1',now=1800000000000;
@@ -30,7 +31,7 @@ function fixture(cached, { failWrites = false, online = true, receipts = new Map
   };
   const events = new EventTarget();
   const navigator = { onLine: online };
-  const { document } = parseHTML('<html><head></head><body></body></html>');
+  const document = { documentElement: { dataset: {} } };
   const location = { origin: new URL(href).origin, href, pathname: new URL(href).pathname, assign() {} };
   const context = vm.createContext({
     crypto: webcrypto, TextEncoder, URL, AbortController, Response, Event, setTimeout, clearTimeout, navigator, document,
@@ -70,9 +71,11 @@ function fixture(cached, { failWrites = false, online = true, receipts = new Map
       new vm.Script(code + '\nglobalThis.identityExports={' + names + '};').runInContext(context);
       return context.identityExports;
     },
-    renderPlans() {
-      const code = pricingSource.replace(/^import .*;\r?$/gm, '').replace(/^export\s+/gm, '') + '\nrenderSitePlansPage();';
-      new vm.Script(code, { filename: 'local-pricing.mjs (isolated fixture)' }).runInContext(context);
+    loadPricing() {
+      const code = pricingSource.replace(/^import .*;\r?$/gm, '').replace(/^export\s+/gm, '');
+      const names = 'getSiteTrialAction,submitSiteTrial,SITE_TRIAL_TERMS';
+      new vm.Script(code + '\nglobalThis.pricingExports={' + names + '};', { filename: 'local-pricing.mjs (isolated fixture)' }).runInContext(context);
+      return context.pricingExports;
     },
   };
 }
@@ -334,35 +337,108 @@ test('trial mutations reject mismatched identity, invalid metadata, guest, admin
   assert.equal(admin.calls.length, 1);
 });
 
-test('site plans page grants an enrolled tier and presents its status and return link', async () => {
-  const f = fixture(undefined, { href: 'https://tycofficial.github.io/chatgpt/site-plans?next=%2Fchatgpt%2Fc%2Ffixture' });
+test('the native trial action registers, claims, switches and renews against the account worker', async t => {
+  const db = sqliteD1();
+  t.after(() => db.raw.close());
+  let serverClock = now;
+  t.mock.method(Date, 'now', () => serverClock);
+  const f = fixture();
+  const pricing = f.loadPricing();
+  f.setHandler((url, options) => accountWorker.fetch(new Request(url, {
+    ...options,
+    headers: { ...options.headers, Origin: 'https://tycofficial.github.io' },
+  }), { DB: db }));
+  assert.equal(pricing.getSiteTrialAction('plus').status, 'login');
+  assert.equal(pricing.getSiteTrialAction('plus').disabled, false);
+  assert.equal(pricing.getSiteTrialAction('business'), null);
+  assert.match(pricing.SITE_TRIAL_TERMS, /免费试用 30 天.*仅在本站有效.*无需付款/);
+  assert.equal(f.calls.length, 0);
+
+  const username = 'NeutralTrialUser';
+  const password = 'neutral-test-registration';
+  const registered = await f.api.registerSiteAccount(username, password);
+  const identity = f.loadIdentity();
+  const ownerNamespace = identity.getLocalAccountStorageKey('history');
+  assert.equal(pricing.getSiteTrialAction('plus').status, 'start');
+
+  const opened = await pricing.submitSiteTrial('plus');
+  assert.equal(opened.accountId, registered.accountId);
+  assert.equal(opened.siteTrial.tier, 'plus');
+  assert.equal(opened.siteTrial.expiresAt, serverClock + trialDuration);
+  assert.equal(opened.officialSubscriptionVerified, false);
+  assert.equal(pricing.getSiteTrialAction('prolite').status, 'switch');
+
+  serverClock += 2 * 86400000;
+  f.setClock(serverClock);
+  const switched = await pricing.submitSiteTrial('prolite');
+  assert.equal(switched.siteTrial.tier, 'prolite');
+  assert.equal(switched.planType, 'pro');
+  assert.equal(pricing.getSiteTrialAction('prolite').status, 'renew');
+  assert.equal(pricing.getSiteTrialAction('prolite').expiresAt, switched.siteTrial.expiresAt);
+  assert.equal(identity.getLocalAccountStorageKey('history'), ownerNamespace);
+
+  serverClock += 1000;
+  f.setClock(serverClock);
+  const renewed = await pricing.submitSiteTrial('prolite');
+  assert.equal(renewed.siteTrial.expiresAt, serverClock + trialDuration);
+  assert.equal(renewed.siteTrial.expiresAt, switched.siteTrial.expiresAt + 1000);
+
+  serverClock = renewed.siteTrial.expiresAt - 1;
+  f.setClock(serverClock);
+  await f.api.loginSiteAccount(username, password);
+  assert.equal(pricing.getSiteTrialAction('prolite').status, 'renew');
+  f.setClock(++serverClock);
+  await f.api.refreshSiteAccount();
+  assert.equal(pricing.getSiteTrialAction('prolite').status, 'start');
+  assert.equal(pricing.getSiteTrialAction('prolite').expiresAt, null);
+  assert.equal(f.api.getSiteAccount().accountId, registered.accountId);
+  assert.equal(identity.getLocalAccountStorageKey('history'), ownerNamespace);
+  const claims = f.calls.filter(call => call.path === '/auth/site-trial');
+  assert.deepEqual(claims.map(call => call.tier), ['plus', 'prolite', 'prolite']);
+  assert(claims.every(call => call.method === 'POST' && call.authorizationPresent));
+  assert(f.calls.every(call => call.path.startsWith('/auth/')));
+});
+
+test('the trial action can revalidate and retry after a transport failure', async () => {
+  const f = fixture();
+  const pricing = f.loadPricing();
   f.setHandler(() => serverLogin(freeAccount()));
   await f.api.loginSiteAccount('Neutral', 'fixture-password');
-  f.renderPlans();
-  assert.equal(f.document.querySelector('h1').textContent, '本站会员试用');
-  assert.match(f.document.querySelector('main').textContent, /权益仅在本站有效/);
-  assert.equal(f.document.querySelector('.site-plans-back').href, 'https://tycofficial.github.io/chatgpt/c/fixture');
-  const buttons = [...f.document.querySelectorAll('article button')];
-  assert.equal(buttons.length, 4);
-  assert(buttons.every(button => !button.disabled));
-  f.setHandler(() => ({ user: trialUser('prolite') }));
-  buttons[1].click();
-  await new Promise(resolve => setImmediate(resolve));
-  assert.equal(f.api.getSiteAccount().siteTrial.tier, 'prolite');
-  assert.match(f.document.querySelector('[role=status]').textContent, /已启用本站 Pro Lite/);
-  assert.equal(buttons[1].textContent, '续期 30 天');
+  f.setHandler(fetchUnavailable);
+  await assert.rejects(pricing.submitSiteTrial('plus'), /暂时无法连接/);
+  assert.equal(pricing.getSiteTrialAction('plus').status, 'offline');
+  assert.equal(pricing.getSiteTrialAction('plus').disabled, false);
+  assert.equal(f.api.getSiteAccount().siteTrial, null);
+
+  f.setHandler(url => new URL(url).pathname === '/auth/session' ?
+    { user: freeAccount() } : { user: trialUser('plus') });
+  const retried = await pricing.submitSiteTrial('plus');
+  assert.equal(retried.siteTrial.tier, 'plus');
+  assert.deepEqual(f.calls.map(call => call.path), ['/auth/login', '/auth/site-trial', '/auth/session', '/auth/site-trial']);
   f.setOnline(false);
-  assert(buttons.every(button => button.disabled));
+  const offline = pricing.getSiteTrialAction('plus');
+  assert.equal(offline.status, 'offline');
+  assert.equal(offline.disabled, true);
+  assert.equal(offline.expiresAt, retried.siteTrial.expiresAt);
+  await assert.rejects(pricing.submitSiteTrial('plus'), /联网/);
+  assert.equal(f.calls.length, 4);
+
+  const admin = fixture(record());
+  await admin.api.initializeSiteAccount();
+  const adminPricing = admin.loadPricing();
+  assert.equal(adminPricing.getSiteTrialAction('pro').status, 'administrator');
+  assert.equal(adminPricing.getSiteTrialAction('pro').disabled, true);
+  await assert.rejects(adminPricing.submitSiteTrial('pro'), /登录/);
+  assert.equal(admin.calls.length, 1);
 });
 
-test('plans and login URLs use the application basename and discard upgrade loops', () => {
+test('trial sign-in returns to the existing pricing view in the application basename', () => {
   const f = fixture();
-  assert.equal(f.api.getSitePlansUrl('https://tycofficial.github.io/chatgpt/c/fixture#pricing').pathname, '/chatgpt/site-plans/');
-  assert.equal(f.api.getSitePlansUrl('https://tycofficial.github.io/chatgpt/c/fixture#pricing').searchParams.get('next'), 'https://tycofficial.github.io/chatgpt/c/fixture');
-  assert.equal(f.api.getSitePlansUrl('/chatgpt/site-plans/').searchParams.get('next'), null);
-  assert.equal(f.api.getSiteLoginUrl(f.api.getSitePlansUrl().href).searchParams.get('next'), 'https://tycofficial.github.io/chatgpt/site-plans/');
+  const existingPricing = 'https://tycofficial.github.io/chatgpt/#pricing';
+  const login = f.api.getSiteLoginUrl(existingPricing);
+  assert.equal(login.pathname, '/chatgpt/login');
+  assert.equal(login.searchParams.get('next'), existingPricing);
 });
-
 
 test('native account snapshots retain their owner through expiry, and logout normalizes the deployment basename', async () => {
   const f = fixture(undefined, { href: 'https://tycofficial.github.io/chatgpt/c/fixture', basePath: '/chatgpt' });
@@ -400,5 +476,90 @@ test('a trial response racing with logout cannot restore or alter the account', 
   release({ user: trialUser('pro') });
   await assert.rejects(pending, /取消/);
   assertFree(f);
+  assert.equal(f.values.has(key), false);
+});
+
+
+async function savedRegisteredSession() {
+  const original = fixture();
+  original.setHandler(() => serverLogin(freeAccount()));
+  await original.api.loginSiteAccount('Neutral', 'fixture-password');
+  return { record: original.values.get(key), receipts: original.receipts };
+}
+
+test('first display uses the verified local owner while a single background session request remains pending', async () => {
+  const saved = await savedRegisteredSession();
+  const f = fixture(saved.record, { receipts: saved.receipts });
+  let release;
+  const response = new Promise(resolve => { release = resolve; });
+  f.setHandler(() => response);
+  const cutoff = Symbol('network is still pending');
+  const firstDisplay = f.api.initializeSiteAccountForDisplay();
+  let readyEvents = 0;
+  f.events.addEventListener('codex-site-account-changed', () => {
+    if (f.api.getSiteSessionToken()) readyEvents++;
+  });
+  try {
+    const displayed = await Promise.race([firstDisplay, new Promise(resolve => setImmediate(() => resolve(cutoff)))]);
+    assert.notEqual(displayed, cutoff);
+    assert.equal(displayed.id, freeAccount().id);
+    assert.equal(displayed.authenticationMode, 'site-offline-cache');
+    assert.equal(displayed.cloudSessionVerified, false);
+    assert.equal(f.api.getSiteSessionToken(), null);
+    assert.equal(readyEvents, 0);
+    const identity = f.loadIdentity();
+    const ownerKey = 'history:account:' + freeAccount().accountId;
+    assert.equal(identity.getLocalAccountStorageKey('history'), ownerKey);
+    assert.equal(identity.getPrototypeLocalAuth().planType, 'free');
+
+    const revalidation = f.api.refreshSiteAccount();
+    assert.deepEqual(f.calls.map(call => call.path), ['/auth/session']);
+    release({ user: trialUser('plus') });
+    assert.equal((await revalidation).cloudSessionVerified, true);
+    assert.equal(f.api.getSiteSessionToken(), fixtureToken);
+    assert.equal(readyEvents, 1);
+    assert.equal(identity.getLocalAccountStorageKey('history'), ownerKey);
+    assert.equal(identity.getPrototypeLocalAuth().planType, 'plus');
+  } finally {
+    release({ user: freeAccount() });
+  }
+});
+
+test('first display keeps a verified receipt offline and reconciles a server rejection on reconnect', async () => {
+  const saved = await savedRegisteredSession();
+  const f = fixture(saved.record, { receipts: saved.receipts, online: false });
+  assert.equal((await f.api.initializeSiteAccountForDisplay()).id, freeAccount().id);
+  assert.equal(f.calls.length, 0);
+  assert.equal(f.api.getSiteSessionToken(), null);
+  const identity = f.loadIdentity();
+  assert.equal(identity.getPrototypeLocalAuth().accountId, freeAccount().accountId);
+
+  f.setHandler(() => ({ status: 401, body: { error: { code: 'SITE_AUTH_REQUIRED', message: 'Fixture session revoked' } } }));
+  f.setOnline(true);
+  await f.api.refreshSiteAccount();
+  assert.deepEqual(f.calls.map(call => call.path), ['/auth/session']);
+  assertFree(f);
+  assert.equal(f.values.has(key), false);
+  assert.equal(identity.getPrototypeLocalAuth(), null);
+});
+
+test('first display waits for server verification when the remembered profile lacks a matching receipt', async () => {
+  const saved = await savedRegisteredSession();
+  const claimed = record({ expiresAt: JSON.parse(saved.record).expiresAt + 1000 });
+  const f = fixture(claimed, { receipts: saved.receipts });
+  let release;
+  const response = new Promise(resolve => { release = resolve; });
+  f.setHandler(() => response);
+  let settled = false;
+  const firstDisplay = f.api.initializeSiteAccountForDisplay().then(account => { settled = true; return account; });
+  try {
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(settled, false);
+    assertFree(f);
+    assert.deepEqual(f.calls.map(call => call.path), ['/auth/session']);
+  } finally {
+    release({ status: 401, body: { error: { code: 'SITE_AUTH_REQUIRED' } } });
+  }
+  assert.equal(await firstDisplay, null);
   assert.equal(f.values.has(key), false);
 });

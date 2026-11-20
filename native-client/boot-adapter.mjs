@@ -1,33 +1,41 @@
-import { createBrowserReadAloudController, createNativeReadAloudBindings } from './local-native-read-aloud.mjs?v=c992a0f3a1b8df1e';
-import { normalizeWorkUIStoredPreference, WORK_DEFAULT_OPTION } from '../model-catalog.js?v=c992a0f3a1b8df1e';
-import { consolidateWorkDefaults } from './model-catalog-adapter.mjs?v=c992a0f3a1b8df1e';
+import { createBrowserReadAloudController, createNativeReadAloudBindings } from './local-native-read-aloud.mjs?v=3886dd09e0b0f238';
+import { normalizeWorkUIStoredPreference, WORK_DEFAULT_OPTION } from '../model-catalog.js?v=3886dd09e0b0f238';
+import { consolidateWorkDefaults } from './model-catalog-adapter.mjs?v=3886dd09e0b0f238';
 /**
  * Loads the public original component graph with explicit local host services.
  * Private original backend credentials are never used by this entry point.
  */
-import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter, localFilesService, localOwnedDownloadTransport, localLibraryByteTransport, initializeLocalAccountHistory, setNativeAccountHistoryToaster, initializeLocalPublishedResources, registerNativeLibrarySource, notifyNativeLibrarySourceReady, registerNativeFileReferenceSources, localReadAloudHost } from './service-boundary.mjs?v=c992a0f3a1b8df1e';
-import * as mapLibreRenderer from './map-vendor/maplibre-gl.mjs?v=c992a0f3a1b8df1e';
-import { createLocalMapProvider } from './local-map-provider.mjs?v=c992a0f3a1b8df1e';
-import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs?v=c992a0f3a1b8df1e';
-import { getPrototypeLocalSession, getPrototypeLocalAuth, isPrototypeLocalSession, getPrototypeLocalAuthGeneration, clearPrototypeLocalSession } from './local-identity.mjs?v=c992a0f3a1b8df1e';
-import { createLocalHostSettingsClass } from './local-host-settings.mjs?v=c992a0f3a1b8df1e';
-import { createLocalWorkPolicy } from './local-work-policy.mjs?v=c992a0f3a1b8df1e';
-import { hasModelSelectionAccess, getSiteLoginUrl, getSitePlansUrl } from './site-account.mjs?v=c992a0f3a1b8df1e';
-import { createNativeModelSelectionPolicy, createNativeThinkingEntryPolicy } from './local-model-selection-policy.mjs?v=c992a0f3a1b8df1e';
-import { createLocalHostClaimsReader } from './local-token-identity.mjs?v=c992a0f3a1b8df1e';
-import { wrapNativeFileUploadClass } from './local-native-upload.mjs?v=c992a0f3a1b8df1e';
-import { wrapNativeDownloadServices } from './local-native-download.mjs?v=c992a0f3a1b8df1e';
+import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter, localFilesService, localOwnedDownloadTransport, localLibraryByteTransport, initializeLocalAccountHistory, setNativeAccountHistoryToaster, initializeLocalPublishedResources, registerNativeLibrarySource, notifyNativeLibrarySourceReady, registerNativeFileReferenceSources, localReadAloudHost } from './service-boundary.mjs?v=3886dd09e0b0f238';
+import { installDeferredMapProvider } from './local-map-provider.mjs?v=3886dd09e0b0f238';
+import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs?v=3886dd09e0b0f238';
+import { getPrototypeLocalSession, getPrototypeLocalAuth, isPrototypeLocalSession, getPrototypeLocalAuthGeneration, clearPrototypeLocalSession } from './local-identity.mjs?v=3886dd09e0b0f238';
+import { createLocalHostSettingsClass } from './local-host-settings.mjs?v=3886dd09e0b0f238';
+import { createLocalWorkPolicy } from './local-work-policy.mjs?v=3886dd09e0b0f238';
+import { hasModelSelectionAccess, getSiteLoginUrl, getSiteHomeUrl } from './site-account.mjs?v=3886dd09e0b0f238';
+import { createNativeSiteTrialCard } from './native-pricing-trials.mjs?v=3886dd09e0b0f238';
+import { createNativeSiteSignOut } from './site-signout.mjs?v=3886dd09e0b0f238';
+import { createNativeSiteLoginRoute } from './native-site-login.mjs?v=3886dd09e0b0f238';
+import { localizeRouterAssets } from './startup-compatibility.mjs?v=3886dd09e0b0f238';
+import { siteSignOut, localAppServer as timingServer } from './service-boundary.mjs?v=3886dd09e0b0f238';
+import { wrapNativeReasoningGroups } from './classic-chat-adapter.mjs?v=3886dd09e0b0f238';
+import { wrapNativeCodexWorkTiming, wrapNativeWorkedDuration } from './local-app-server.mjs?v=3886dd09e0b0f238';
+import { createNativeModelSelectionPolicy, createNativeThinkingEntryPolicy } from './local-model-selection-policy.mjs?v=3886dd09e0b0f238';
+import { createLocalHostClaimsReader } from './local-token-identity.mjs?v=3886dd09e0b0f238';
+import { wrapNativeFileUploadClass } from './local-native-upload.mjs?v=3886dd09e0b0f238';
+import { wrapNativeDownloadServices } from './local-native-download.mjs?v=3886dd09e0b0f238';
 
 const boundary = installNetworkBoundary();
 globalThis.__originalClientProbe = boundary.diagnostics;
-// Restore the verified account's real durable history before native loaders
-// resolve a fresh-device conversation URL. Offline failures retain local data.
-await initializeLocalAccountHistory();
-await initializeLocalPublishedResources();
+// A fresh-device deep link needs its conversation before the router reads it.
+// A home page can render while the same owner-scoped sync and attachment restore run.
+const threadOnEntry = location.pathname.match(/\/(?:c|conversation|tasks|local)\/([^/]+)\/?$/)?.[1];
+const needsHistoryBeforeMount = threadOnEntry && !timingServer.threads.has(threadOnEntry);
+const initialHistory = initializeLocalAccountHistory({ threadOnEntry });
+void initialHistory.then(() => initializeLocalPublishedResources()).catch(() => {});
 installSyntheticDocumentState();
 if (globalThis.__CHATGPT_REPLICA_ENV__) window.__reactRouterContext.basename = globalThis.__CHATGPT_REPLICA_ENV__.basePath.replace(/\/$/, '') || '/';
 
-const plan = await (await fetch(new URL('./entry-plan.json?v=c992a0f3a1b8df1e', import.meta.url))).json();
+const plan = await (await fetch(new URL('./entry-plan.json?v=3886dd09e0b0f238', import.meta.url))).json();
 const { __webpack_require__: requireOriginal } = await import(plan.runtime);
 if (globalThis.__CHATGPT_REPLICA_ENV__?.directAssetHost) requireOriginal.p = new URL('original-client/public/chatgpt.com/cdn/', new URL(globalThis.__CHATGPT_REPLICA_ENV__.basePath, location.origin)).href;
 // One mechanical entry transform defers its terminal hxQI invocation and
@@ -189,10 +197,12 @@ const nativeAssetVersion = new URL(import.meta.url).searchParams.get('v');
 if (nativeAssetVersion) nativePdfWorker.searchParams.set('v', nativeAssetVersion);
 overrideExports('uvgn', { a: nativePdfWorker.toString() }, { deferred: true });
 
-// Only the map renderer/style provider changes. The original s2JQ React map
-// and all its surrounding controls retain their captured implementation.
-const localMapProvider = createLocalMapProvider({ renderer: mapLibreRenderer, diagnostics: boundary.diagnostics });
-localMapProvider.configureRenderer();
+// Keep native map factories synchronous after their own chunk has loaded.
+const mapRendererURL = new URL('./map-vendor/maplibre-gl.mjs', import.meta.url);
+if (nativeAssetVersion) mapRendererURL.searchParams.set('v', nativeAssetVersion);
+const localMapProvider = installDeferredMapProvider(requireOriginal, {
+  loadRenderer: () => requireOriginal.ir(mapRendererURL.href), diagnostics: boundary.diagnostics,
+});
 adaptFactory('FxuF', () => function(module) { module.exports = localMapProvider.renderer; }, { deferred: true });
 overrideExports('eS9I', { a: localMapProvider.createStyle(), b: localMapProvider.createStyle(), c: localMapProvider.configureRenderer }, { deferred: true });
 
@@ -281,7 +291,26 @@ const codexContextRpc = localCodexAdapter.createRpcFacade({
   }),
 });
 overrideExports('EAKz', {
-  b: async () => new LocalAppServerSocket(boundary.diagnostics, codexContextRpc),
+  b: async () => new LocalAppServerSocket(boundary.diagnostics, localDotAdapter.createRpcFacade(codexContextRpc)),
+});
+overrideExports('AqQr', {}, { deferred: true }, {
+  b: () => createNativeSiteSignOut({ complete: siteSignOut.complete, markBrowserSignedOut: () => requireOriginal('QdUF').markBrowserChatGptSignedOut() }),
+});
+overrideExports('waM8', {}, { deferred: true }, {
+  a: wrapNativeWorkedDuration,
+});
+overrideExports('hUUF', {}, { deferred: true }, { b: wrapNativeReasoningGroups });
+const siteLoginRoute = () => createNativeSiteLoginRoute({
+  useLocation: requireOriginal('jqIZ').Y, useEffect: requireOriginal('zd8w').useEffect,
+});
+overrideExports('mjCR', {}, { deferred: true }, { Nb: siteLoginRoute, T: siteLoginRoute });
+overrideExports('AqC0', {}, { deferred: true }, { e: original => wrapNativeCodexWorkTiming(original, timingServer) });
+overrideExports('OrBF', {}, { deferred: true }, {
+  a: frameURL => (...args) => {
+    const path = frameURL(...args);
+    if (typeof path === 'string' && path.startsWith('/_orbit-renderer/')) return new URL(path.slice(1), getSiteHomeUrl()).pathname;
+    return path;
+  },
 });
 
 // The native curated option already offers the automatic selection and slider.
@@ -292,12 +321,12 @@ overrideExports('dU23', {}, { deferred: true }, {
   },
 });
 
-function openSitePlans(options = {}) {
-  options?.event?.preventDefault?.();
-  location.assign(getSitePlansUrl(location.href));
-  if (options?.awaitNavigation) return Promise.resolve();
-}
-overrideExports('GEHh', {}, { deferred: true }, { a: () => () => openSitePlans });
+overrideExports('Y0ov', {}, { deferred: true }, {
+  b: Card => createNativeSiteTrialCard(Card, {
+    React: requireOriginal('zd8w'), Button: requireOriginal('Sm6l').a,
+    Amount: requireOriginal('EamN').a, Frequency: requireOriginal('EamN').c,
+  }),
+});
 
 // Preserve the original host class/RpcTarget inheritance and all public setting
 // definitions. Only its browser-storage implementation changes; UI/controller
@@ -370,6 +399,7 @@ boundary.diagnostics.push({ type: 'auth-state-engine', source: useOriginalAuth ?
 // Route both public login functions through the same local account boundary.
 let siteLoginRedirecting = false;
 function getSiteAuthPageUrl(name) {
+  if (name === 'logout') return new URL('auth/logout', getSiteHomeUrl());
   if (name !== 'login' && name !== 'signup') return new URL('/auth/' + name, location.origin);
   const target = new URL(getSiteLoginUrl(), location.href);
   if (name === 'signup') target.pathname = target.pathname.replace(/\/login\/?$/, '/signup');
@@ -399,6 +429,7 @@ overrideExports('QdUF', {
   getBrowserAuthPageUrl: getSiteAuthPageUrl,
   redirectToBrowserChatGptLogin: redirectToSiteLogin,
   maybeRedirectToBrowserChatGptLogin: maybeRedirectToSiteLogin,
+  maybeRedirectToBrowserChatGptLogout: () => false,
   ...(!useOriginalAuth ? {
   loadBrowserChatGptAuth: async () => getPrototypeLocalAuth(),
   getOrLoadBrowserChatGptAuth: () => getPrototypeLocalAuth(),
@@ -425,10 +456,11 @@ overrideExports('QdUF', {
 // Browser-saved HTML omits the initial module bootstrap. Reconstitute the exact
 // five-route module envelope found in chatgpt-public.html, before original hxQI.
 await import(plan.manifest);
-const routeModules = {};
-for (const [id, file] of Object.entries(plan.initialRoutes)) {
-  routeModules[id] = await import(file);
+if (globalThis.__CHATGPT_REPLICA_ENV__?.directAssetHost) {
+  const siteRoot = new URL(globalThis.__CHATGPT_REPLICA_ENV__.basePath, location.origin);
+  localizeRouterAssets(window.__reactRouterManifest, siteRoot, new URL(plan.registrationEntry, import.meta.url).href);
 }
+const routeModules = Object.fromEntries(await Promise.all(Object.entries(plan.initialRoutes).map(async ([id, file]) => [id, await import(file)])));
 window.__reactRouterRouteModules = routeModules;
 const initialHistoryToaster = requireOriginal.m.SGsN ? requireOriginal('SGsN').b() : null;
 setNativeAccountHistoryToaster(() => {
@@ -439,4 +471,5 @@ setNativeAccountHistoryToaster(() => {
 
 // This is the original entry's terminal statement. No extracted component,
 // custom UI fragment, HTML click handler, or alternate application is mounted.
+if (needsHistoryBeforeMount) await initialHistory;
 await entryLibrary.startOriginalClient();

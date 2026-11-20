@@ -61,11 +61,149 @@ test('updating waits for click inactivity and never repeatedly navigates to the 
  const updater=createReleaseUpdater(options).start();assert.equal(await updater.check(),false);clock=40000;events.dispatchEvent(new Event('pointerdown'));assert.equal(updater.applyIfSafe(),false);clock=71000;assert.equal(updater.applyIfSafe(),true);updater.stop();
  const again=createReleaseUpdater({...options,interactionQuietMs:0});assert.equal(await again.check(),false);assert.equal(navigations.length,1);again.stop();
 });
-test('generated worker returns fetched HTML and scripts even when browser caching fails',async()=>{
- const source=fs.readFileSync(new URL('../native-client-worker.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/,'');
- for(const failOpen of [false,true]){
-  const handlers={},context=vm.createContext({URL,Headers,Response,BrowserWorkspaceStore:class{},workspacePath:x=>x,self:{location:{href:'https://fixture.test/chatgpt/native-client-worker.js',origin:'https://fixture.test'},addEventListener:(name,fn)=>handlers[name]=fn},caches:{open:async()=>{if(failOpen)throw Error('Storage denied');return{match:async()=>null,put:async()=>{throw Error('Quota exceeded');}};}},fetch:async()=>new Response('Neutral fetched bytes',{status:200})});
-  new vm.Script(source).runInContext(context);
-  for(const [url,mode]of[['https://fixture.test/cdn/assets/neutral.js','cors'],['https://fixture.test/chatgpt/','navigate']]){let response;handlers.fetch({request:{url,mode,method:'GET'},respondWith:value=>response=value});assert.equal(await(await response).text(),'Neutral fetched bytes');}
- }
+
+const workerSource = fs.readFileSync(new URL('../native-client-worker.js', import.meta.url), 'utf8').replace(/^import .*;\r?\n/, '');
+const workerURL = new URL('https://fixture.test/chatgpt/native-client-worker.js');
+
+function workerFixture({ failure } = {}) {
+  const handlers = new Map();
+  const cached = new Map();
+  const operations = { opens: [], reads: [], writes: [], requests: [] };
+  let fetcher = async url => new Response('Network ' + url.pathname, {
+    headers: { 'Content-Type': url.pathname.endsWith('/') ? 'text/html; charset=utf-8' : 'application/javascript' },
+  });
+  const context = vm.createContext({
+    URL, Headers, Response,
+    BrowserWorkspaceStore: class { async read() { return new TextEncoder().encode('Fixture private artifact'); } },
+    workspacePath: path => path,
+    self: { location: workerURL, addEventListener: (name, handler) => handlers.set(name, handler) },
+    caches: {
+      async open(name) {
+        operations.opens.push(name);
+        if (failure === 'open') throw Error('Fixture storage unavailable');
+        if (!cached.has(name)) cached.set(name, new Map());
+        const values = cached.get(name);
+        return {
+          async match(key) {
+            operations.reads.push(String(key));
+            if (failure === 'read') throw Error('Fixture cache read failure');
+            return values.get(String(key))?.clone();
+          },
+          async put(key, response) {
+            operations.writes.push(String(key));
+            if (failure === 'write') throw Error('Fixture cache write failure');
+            values.set(String(key), response.clone());
+          },
+        };
+      },
+    },
+    async fetch(input) {
+      const url = new URL(input.url ?? input, workerURL);
+      operations.requests.push(url.href);
+      return fetcher(url);
+    },
+  });
+  new vm.Script(workerSource, { filename: 'generated native-client-worker.js' }).runInContext(context);
+  const release = new vm.Script('SHELL_CACHE.slice("chatgpt-native-shell-".length)').runInContext(context);
+  assert.match(release, /^[a-f0-9]{16}$/);
+  return {
+    operations,
+    release,
+    setFetch: value => { fetcher = value; },
+    async dispatch(input, { mode = 'cors', headers, method = 'GET' } = {}) {
+      const request = { url: new URL(input, workerURL).href, mode, method, headers: new Headers(headers) };
+      let response;
+      const lifetime = [];
+      handlers.get('fetch')({ request, respondWith: value => { response = value; }, waitUntil: value => lifetime.push(value) });
+      if (response === undefined) return undefined;
+      const result = await response;
+      await Promise.all(lifetime);
+      return result;
+    },
+  };
+}
+const immutableChunk = 'original-client/public/chatgpt.com/cdn/assets/807489.36023b676b.js';
+
+test('generated worker reuses release-pinned modules and direct hashed assets when the network is unavailable', async () => {
+  const f = workerFixture();
+  const paths = ['native-client/bootstrap.mjs?v=' + f.release, 'native-client/entry-plan.json?v=' + f.release,
+    'runtime.js?v=' + f.release, immutableChunk];
+  for (const path of paths) {
+    const url = new URL(path, workerURL);
+    const result = await f.dispatch(url);
+    assert.equal(await result.text(), 'Network ' + url.pathname);
+  }
+  const fetched = paths.map(path => new URL(path, workerURL).href);
+  assert.deepEqual(f.operations.requests, fetched);
+  assert.deepEqual(f.operations.writes, fetched);
+  f.setFetch(() => { throw new TypeError('Fixture network offline'); });
+  for (const path of paths) {
+    const url = new URL(path, workerURL);
+    assert.equal(await (await f.dispatch(url)).text(), 'Network ' + url.pathname);
+  }
+  assert.deepEqual(f.operations.requests, fetched);
+});
+
+test('the generated worker leaves release checks, unrelated remote requests, and account data out of cache', async () => {
+  const f = workerFixture();
+  for (const [path, options] of [
+    ['native-client/active.json?check=123'],
+    ['native-client/active.json?v=' + f.release],
+    ['native-client/active.json', { mode: 'navigate' }],
+    ['native-client/bootstrap.mjs?v=' + f.release + '&check=123'],
+    ['index.html?check_release=' + f.release + '&t=123'],
+    ['native-client/bootstrap.mjs?v=' + (f.release === 'aaaaaaaaaaaaaaaa' ? 'bbbbbbbbbbbbbbbb' : 'aaaaaaaaaaaaaaaa')],
+    [immutableChunk + '?check=123'],
+    ['native-client/bootstrap.mjs?v=' + f.release, { headers: { Authorization: 'Bearer fixture-token' } }],
+    [immutableChunk, { headers: { Range: 'bytes=0-15' } }],
+    ['https://remote.fixture/chatgpt/native-client/bootstrap.mjs?v=' + f.release],
+    ['https://remote.fixture/auth/session'],
+    ['__codex-api/conversations'],
+    ['__codex-api/conversations', { mode: 'navigate' }],
+    ['backend-api/conversation/fixture'],
+    ['api/auth/session'],
+  ]) {
+    assert.equal(await f.dispatch(path, options), undefined, new URL(path, workerURL).href);
+  }
+  const artifact = await f.dispatch('__local_artifacts/fixture/report.txt');
+  assert.equal(artifact.headers.get('Cache-Control'), 'private,no-store');
+  assert.equal(await artifact.text(), 'Fixture private artifact');
+  assert.deepEqual(f.operations.opens, []);
+  assert.deepEqual(f.operations.writes, []);
+  assert.deepEqual(f.operations.requests, []);
+});
+
+test('generated worker caches a successful HTML navigation and leaves JSON navigation responses off disk', async () => {
+  const f = workerFixture();
+  const root = await f.dispatch('./', { mode: 'navigate' });
+  assert.match(root.headers.get('Content-Type'), /^text\/html\b/);
+  const shell = new URL('index.html', workerURL).href;
+  assert.deepEqual(f.operations.writes, [shell]);
+  f.setFetch(async () => Response.json({ data: 'Fixture JSON response' }));
+  const json = await f.dispatch('unexpected-response', { mode: 'navigate' });
+  assert.deepEqual(await json.json(), { data: 'Fixture JSON response' });
+  assert.deepEqual(f.operations.writes, [shell]);
+  f.setFetch(() => { throw new TypeError('Fixture network offline'); });
+  const offline = await f.dispatch('./', { mode: 'navigate' });
+  assert.match(offline.headers.get('Content-Type'), /^text\/html\b/);
+  assert.equal(await offline.text(), 'Network /chatgpt/');
+});
+
+test('generated worker returns fetched HTML and scripts despite rejected cache opens, reads or writes', async t => {
+  for (const failure of ['open', 'read', 'write']) {
+    await t.test(failure, async () => {
+      const f = workerFixture({ failure });
+      for (const [path, mode, responsePath] of [
+        ['/cdn/assets/neutral.js', 'cors', '/chatgpt/original-client/public/chatgpt.com/cdn/assets/neutral.js'],
+        ['./', 'navigate', '/chatgpt/'],
+        ['native-client/bootstrap.mjs?v=' + f.release, 'cors', '/chatgpt/native-client/bootstrap.mjs'],
+        [immutableChunk, 'cors', '/chatgpt/' + immutableChunk],
+      ]) {
+        const response = await f.dispatch(path, { mode });
+        assert.equal(await response.text(), 'Network ' + responsePath);
+      }
+      assert.equal(f.operations.requests.length, 4);
+      assert(f.operations[{ open: 'opens', read: 'reads', write: 'writes' }[failure]].length > 0);
+    });
+  }
 });

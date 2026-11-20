@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import * as catalog from '../model-catalog.js';
 import { createModelCatalogAdapter } from '../src/native-client/model-catalog-adapter.mjs';
-import { LocalAppServer } from '../src/native-client/local-app-server.mjs';
+import { LocalAppServer, LocalProtocolSocket } from '../src/native-client/local-app-server.mjs';
+import { streamCompletion } from '../runtime.js';
 import {
-  createLocalDotAdapter, LOCAL_DOT_DEFAULT_IMAGE_URL, LOCAL_DOT_RESOURCE_BUNDLE,
+  createLocalDotAdapter, createLocalDotCompletion, LOCAL_DOT_DEFAULT_IMAGE_URL, LOCAL_DOT_RESOURCE_BUNDLE,
 } from '../src/native-client/local-dot-adapter.mjs';
 
 const memory = () => {
@@ -20,12 +21,13 @@ function fixture(options = {}) {
   const readSettings = () => ({ model: 'gpt-6.1-sol' });
   const appServer = new LocalAppServer({
     storage, models, catalog, readSettings,
-    streamCompletion: () => { throw Error('The Dot protocol tests must not call inference'); },
+    streamCompletion: options.streamCompletion ?? (() => { throw Error('The Dot protocol fixtures have no inference transport'); }),
+    getExecutionPolicy: () => ({ modelSelection: true }),
     uuid: randomUUID,
   });
   let identity = { accountId: 'neutral-site-account', userId: 'neutral-site-user' }, local = true;
   const create = extra => createLocalDotAdapter({
-    storage, appServer, readSettings, getIdentity: () => identity,
+    storage, appServer, getIdentity: () => identity,
     isLocalSession: () => local, getCapabilities: () => ({ filesystem: true, pythonExecution: true }),
     uuid: randomUUID, ...extra,
   });
@@ -65,15 +67,102 @@ test('original Dot list boots exactly one actual persisted shared-server convers
   assert.equal(profile.scope, 'personal');
   assert.equal(profile.aeon_kind, 'orbit');
   assert.equal(profile.avatar, 'sunglasses');
-  assert.equal(profile.avatar_url, LOCAL_DOT_DEFAULT_IMAGE_URL);
+  assert.equal(profile.avatar_url, null);
+  assert.equal(profile.avatar_manifest, null);
   assert.equal(env.appServer.getThread(profile.root_thread_id).adapterMetadata.conversationOrigin, 'dot');
+  assert.equal(env.appServer.getThread(profile.root_thread_id).model, 'gpt-6.1-terra');
   assert.equal(env.appServer.getThread(profile.root_thread_id).turns.length, 0);
   assert.deepEqual((await request(env.create(), '/tbo')).data, pages[0].data);
   const restored = fixture({ storage: env.storage });
   assert.equal(restored.appServer.getThread(profile.root_thread_id).id, profile.root_thread_id);
   assert.equal((await request(restored.adapter, '/tbo/by-thread/' + profile.root_thread_id)).data.id, profile.id);
-  assert.equal((await request(restored.adapter, '/tbo/' + profile.id + '/root-thread')).data, profile.root_thread_id);
+  assert.deepEqual((await request(restored.adapter, '/tbo/' + profile.id + '/root-thread')).data, { root_thread_id: profile.root_thread_id });
   assert.equal((await request(restored.adapter, '/tbo/' + profile.id + '/threads')).data.items[0].thread_id, profile.root_thread_id);
+});
+
+test('native Dot room sends a single turn, publishes the saved reply and reloads its history for the owner', async t => {
+  const inference = [];
+  let finish;
+  const execution = new Promise(resolve => { finish = resolve; });
+  const env = fixture({ streamCompletion: async ({ settings }) => {
+    inference.push([settings.model, settings.reasoningEffort]);
+    await execution;
+    return { content: 'A reply from the isolated fixture.', finish_reason: 'stop' };
+  } });
+  const profile = (await request(env.adapter, '/tbo')).data.items[0];
+  const roomPath = '/messaging/rooms/' + profile.root_thread_id;
+  assert.equal((await request(env.adapter, roomPath)).response.status, 404);
+  assert.equal((await request(env.adapter, '/tbo/' + profile.id + '/messaging-room', 'POST')).data.messaging_room_id, profile.root_thread_id);
+  const room = (await request(env.adapter, roomPath)).data;
+  assert.equal(room.type, 'DM');
+  assert.equal(room.app_source, 'chatgpt:messaging');
+  assert.equal(room.aeon_id, profile.id);
+  assert.ok(room.members.some(member => member.account_user_id === 'neutral-site-user'));
+  let publish;
+  const published = new Promise(resolve => { publish = resolve; });
+  t.after(env.adapter.subscribeRoomMessages(publish));
+  const sent = { request_id: randomUUID(), content: { text: 'Please write a greeting.' } };
+  const first = await request(env.adapter, roomPath + '/messages', 'POST', sent);
+  assert.equal(first.response.status, 200);
+  assert.equal(first.data.role, 'user');
+  assert.equal(first.data.account_user_id, 'neutral-site-user');
+  assert.equal(first.data.request_id, sent.request_id);
+  assert.deepEqual(first.data.content, sent.content);
+  assert.deepEqual((await request(env.adapter, roomPath + '/messages', 'POST', sent)).data, first.data);
+  const conflictingCopy = { ...sent, content: { text: 'Different text with the same request ID.' } };
+  assert.equal((await request(env.adapter, roomPath + '/messages', 'POST', conflictingCopy)).response.status, 409);
+  assert.deepEqual((await request(env.adapter, roomPath + '/messages')).data.items, [first.data]);
+  finish();
+  const event = await published;
+  assert.equal(event.type, 'calpico-message-add');
+  assert.equal(event.payload.room_id, profile.root_thread_id);
+  const assistant = event.payload.message;
+  assert.equal(assistant.role, 'assistant');
+  assert.equal(assistant.raw_messages[0].content.parts[0], 'A reply from the isolated fixture.');
+  assert.deepEqual(inference, [['gpt-6.1-terra', 'medium']]);
+  const restored = fixture({ storage: env.storage });
+  const tail = (await request(restored.adapter, roomPath + '/messages?limit=1')).data;
+  assert.deepEqual(tail.items, [assistant]);
+  assert.equal(tail.prev_cursor, assistant.id);
+  const earlier = (await request(restored.adapter, roomPath + '/messages?before=' + tail.prev_cursor)).data;
+  assert.deepEqual(earlier.items, [first.data]);
+  assert.equal(earlier.next_cursor, first.data.id);
+  assert.equal((await request(restored.adapter, roomPath + '/read', 'POST', { last_read_at: assistant.created_at })).response.status, 204);
+  assert.equal((await request(restored.adapter, roomPath)).data.last_read_at, assistant.created_at);
+  restored.setIdentity({ accountId: 'foreign-account', userId: 'foreign-user' });
+  assert.equal((await request(restored.adapter, roomPath)).response.status, 404);
+  assert.equal((await request(restored.adapter, roomPath + '/messages')).response.status, 404);
+  assert.equal((await request(restored.adapter, roomPath + '/messages', 'POST', sent)).response.status, 404);
+});
+
+test('native legacy selection and saved companion snapshots retain visible assets after reopening', async () => {
+  const env = fixture();
+  const profile = (await request(env.adapter, '/tbo')).data.items[0];
+  const path = '/tbo/' + profile.id;
+  const key = [...env.storage.values.keys()].find(key => key.startsWith('site-local-dot:v1:'));
+  const records = JSON.parse(env.storage.getItem(key));
+  Object.assign(records.profiles[0], { avatar_url: LOCAL_DOT_DEFAULT_IMAGE_URL, avatar_manifest: { schema_version: 1, tint: 'pink' } });
+  env.storage.setItem(key, JSON.stringify(records));
+  const legacy = (await request(env.create(), path)).data;
+  assert.equal(legacy.avatar_id, 'sunglasses');
+  assert.equal(legacy.avatar_manifest, null);
+  assert.equal(legacy.avatar_url, null);
+  const changed = (await request(env.adapter, path, 'PATCH', { avatar_id: 'headphones' })).data;
+  assert.equal(changed.avatar_id, 'headphones');
+  assert.equal(changed.avatar_manifest, null);
+  assert.equal((await request(env.create(), path)).data.avatar_id, 'headphones');
+
+  const snapshot = (await upload(env.adapter)).data.snapshot;
+  const avatar = { avatar_type: 'codex-pet', avatar_manifest: { pet_id: 'fixture-pet', snapshot }, avatar_url: snapshot.asset_pointer };
+  const saved = (await request(env.adapter, path, 'PATCH', avatar)).data;
+  assert.equal(saved.avatar_url, snapshot.asset_pointer);
+  assert.deepEqual(saved.avatar_manifest, avatar.avatar_manifest);
+  const savedRecords = JSON.parse(env.storage.getItem(key));
+  savedRecords.profiles[0].avatar_url = null;
+  env.storage.setItem(key, JSON.stringify(savedRecords));
+  const reloaded = (await request(env.create(), path)).data;
+  assert.equal(reloaded.avatar_url, snapshot.asset_pointer);
+  assert.deepEqual(reloaded.avatar_manifest, avatar.avatar_manifest);
 });
 
 test('native primary selection, profile pagination and original feature-pin DTO persist without invented pin limits', async () => {
@@ -292,4 +381,146 @@ test('real original BolX.c/UQAX factory closure invokes Dot policy with one cont
     assert.equal(scope.get(atoms.a), !loading);
     assert.equal(scope.get(atoms.f).isCapable, !loading);
   }
+});
+
+test('native Dot socket uses the exact route per turn and reloads saved replies', async t => {
+  const siteOrigin = 'https://site-proxy.fixture.test';
+  const providers = [
+    { id: 'openclawplan', apiBase: 'https://api.openclawplan.com', apiKey: 'fixture-openclawplan', supportedModels: ['gpt-6.1-terra', 'gpt-6-astra'] },
+    { id: 'docode', apiBase: 'https://docode.cc', apiKey: 'fixture-docode', supportedModels: ['gpt-6-astra'] },
+  ];
+  const requests = [];
+  t.mock.method(globalThis, 'fetch', async (input, init) => {
+    const url = new URL(input);
+    const provider = url.pathname.split('/')[2];
+    const payload = JSON.parse(init.body);
+    assert.equal(url.origin, siteOrigin);
+    assert.equal(init.method, 'POST');
+    assert.equal(url.pathname, '/api-proxy/' + provider + '/v1/responses');
+    assert.equal(new Headers(init.headers).get('Authorization'), 'Bearer fixture-' + provider);
+    assert.equal(payload.stream, true);
+    assert.equal(payload.store, false);
+    requests.push({ provider, payload });
+    const id = requests.length;
+    const output = [{
+      type: 'message', id: 'message-' + id, role: 'assistant', phase: 'final_answer',
+      content: [{ type: 'output_text', text: 'Fixture upstream reply ' + id }],
+    }];
+    const body = {
+      type: 'response.completed',
+      response: { id: 'response-' + id, status: 'completed', model: payload.model, reasoning: payload.reasoning, output },
+    };
+    return new Response('data: ' + JSON.stringify(body) + '\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
+  });
+  const completion = createLocalDotCompletion({ complete: streamCompletion, getProviders: () => providers, siteOrigin });
+  let adapter;
+  const env = fixture({ complete: completion, streamCompletion: options => adapter.complete(options) });
+  adapter = env.adapter;
+  const profile = (await request(adapter, '/tbo')).data.items[0];
+  const { root_thread_id: threadId } = (await request(adapter, '/tbo/' + profile.id + '/root-thread')).data;
+  const socket = new LocalProtocolSocket(adapter.createRpcFacade(env.appServer));
+  t.after(() => socket.close());
+  await new Promise(resolve => socket.addEventListener('open', resolve, { once: true }));
+
+  let nextRpcId = 0;
+  function messageMatching(match) {
+    return new Promise((resolve, reject) => {
+      const deadline = setTimeout(() => {
+        socket.removeEventListener('message', onMessage);
+        reject(Error('Dot RPC timed out'));
+      }, 2500);
+      function onMessage(event) {
+        const value = JSON.parse(event.data);
+        if (!match(value)) return;
+        clearTimeout(deadline);
+        socket.removeEventListener('message', onMessage);
+        resolve(value);
+      }
+      socket.addEventListener('message', onMessage);
+    });
+  }
+  async function rpc(method, params) {
+    const id = ++nextRpcId;
+    const reply = messageMatching(value => value.id === id);
+    socket.send(JSON.stringify({ id, method, params }));
+    return reply;
+  }
+
+  assert.equal((await rpc('thread/resume', { threadId })).result.model, 'gpt-6.1-terra');
+  const tasks = [
+    ['帮我写一句问候。', 'gpt-6.1-terra'],
+    ['请严格证明这条定理并推导边界条件。', 'gpt-6-astra'],
+  ];
+  for (const [text, expectedModel] of tasks) {
+    const completed = messageMatching(value => value.method === 'turn/completed' && value.params.threadId === threadId);
+    const input = [{ type: 'text', text }];
+    const started = await rpc('turn/start', { threadId, model: 'gpt-6.1-sol', effort: 'max', input, clientUserMessageId: randomUUID() });
+    const { turn } = (await completed).params;
+    assert.equal(started.error, undefined);
+    assert.equal(turn.status, 'completed', turn.error?.message);
+    assert.equal(turn.model, expectedModel);
+    assert.equal(turn.adapterMetadata.checkpoint.metrics[0].adapterExecution.model, expectedModel);
+  }
+  assert.deepEqual(requests.map(({ provider, payload }) => [provider, payload.model, payload.reasoning.effort]), [
+    ['openclawplan', 'gpt-6.1-terra', 'medium'], ['docode', 'gpt-6-astra', 'high'],
+  ]);
+  assert(JSON.stringify(requests[1].payload.input).includes('Fixture upstream reply 1'));
+  const restored = fixture({ storage: env.storage });
+  const turns = restored.appServer.getThread(threadId).turns;
+  assert.deepEqual(turns.map(turn => turn.model), ['gpt-6.1-terra', 'gpt-6-astra']);
+  assert.deepEqual(turns.map(turn => turn.items.find(item => item.type === 'agentMessage').text), [
+    'Fixture upstream reply 1', 'Fixture upstream reply 2',
+  ]);
+  env.setLocal(false);
+  assert.equal((await rpc('thread/read', { threadId })).error.code, -32003);
+  assert.equal(requests.length, 2);
+});
+
+test('the fixed Dot transport rejects a mismatched model or effort and unsupported IDs', async () => {
+  let detectedModel = 'gpt-6.1-terra';
+  let detectedEffort = 'high';
+  let requests = 0;
+  const completion = createLocalDotCompletion({
+    complete: async () => { requests++; return { model: detectedModel, actual_reasoning: { effort: detectedEffort } }; },
+    getProviders: () => [{ id: 'docode', apiBase: 'https://docode.cc', apiKey: 'fixture-dot', supportedModels: ['gpt-6-astra'] }],
+    siteOrigin: 'https://site-proxy.fixture.test',
+  });
+  const settings = { model: 'gpt-6-astra', reasoningEffort: 'high' };
+  await assert.rejects(completion({ settings }), { code: 'LOCAL_DOT_MODEL_UNVERIFIED' });
+  detectedModel = settings.model;
+  detectedEffort = 'low';
+  await assert.rejects(completion({ settings }), { code: 'LOCAL_DOT_MODEL_UNVERIFIED' });
+  await assert.rejects(completion({ settings: { ...settings, model: 'gpt-6.1-sol' } }), { code: 'LOCAL_DOT_MODEL_UNSUPPORTED' });
+  assert.equal(requests, 2);
+});
+
+test('site-owned readiness never reads native cloud entitlement during loading or on plans without Dot', async () => {
+  let access = false;
+  const env = fixture({ bootstrapDefault: false, siteAccountsOnly: true, hasDotAccess: () => access });
+  let auth = { accountLoading: true };
+  const inputs = {};
+  const original = {
+    c: {},
+    b: () => { throw Error('Native permission must stay idle'); },
+    i: () => { throw Error('Native readiness must stay idle'); },
+  };
+  const requireOriginal = id => id === 'BolX' ? { c: (_scope, evaluate) => evaluate } : id === 'OWtl' ? { a: {} } : { m: inputs };
+  const adapted = env.adapter.adaptCapabilityAtoms(original, requireOriginal);
+  const get = atom => {
+    assert.notEqual(atom, original.c, 'Native readiness must stay idle');
+    return atom === inputs ? auth : atom({ get });
+  };
+  env.setLocal(false);
+  assert.equal(get(adapted.c).isLoading, true);
+  assert.equal(get(adapted.c).isCapable, false);
+  env.setLocal(true);
+  auth = { authenticatedAccountId: 'neutral-site-account', authenticatedUserId: 'neutral-site-user', accountLoading: false };
+  assert.equal(get(adapted.c).isCapable, false);
+  assert.equal(adapted.b({}, auth.authenticatedAccountId), false);
+  assert.equal((await request(env.adapter, '/tbo')).response.status, 403);
+  access = true;
+  assert.equal(get(adapted.c).isCapable, true);
+  assert.equal(adapted.b({}, 'unexpected-account'), false);
+  assert.equal(adapted.b({}, auth.authenticatedAccountId), true);
+  assert.doesNotThrow(() => adapted.i({}));
 });

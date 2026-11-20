@@ -170,3 +170,33 @@ export function createLocalMapProvider({ renderer, diagnostics = [] } = {}) {
     }),
   });
 }
+
+
+// s2JQ is registered by three map chunks; FxuF also serves location pickers.
+const mapChunks = new Set([728289, 194313, 437896, 962984]);
+
+export function installDeferredMapProvider(requireOriginal, { loadRenderer, diagnostics } = {}) {
+  let provider;
+  let pending;
+  const readProvider = () => {
+    if (!provider) throw Error('The native map chunk must load the renderer before accessing its exports.');
+    return provider;
+  };
+  requireOriginal.f.siteMapRenderer = (chunkId, promises) => {
+    if (provider || !mapChunks.has(chunkId)) return;
+    pending ??= Promise.resolve().then(loadRenderer).then(renderer => {
+      const loaded = createLocalMapProvider({ renderer, diagnostics });
+      loaded.configureRenderer();
+      provider = loaded;
+    }).catch(error => {
+      pending = undefined;
+      throw error;
+    });
+    promises.push(pending);
+  };
+  return Object.freeze({
+    get renderer() { return readProvider().renderer; },
+    createStyle: createOpenStreetMapStyle,
+    configureRenderer() { readProvider(); },
+  });
+}

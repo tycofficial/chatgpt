@@ -1,33 +1,39 @@
-import { installDirectAssetHost, registerOptionalAssetWorker, showStartupError } from './startup-compatibility.mjs?v=c992a0f3a1b8df1e';
+import { installBrowserCompatibility, installDirectAssetHost, registerOptionalAssetWorker, showStartupError } from './startup-compatibility.mjs?v=3886dd09e0b0f238';
 try {
 const rootURL = new URL('../', import.meta.url);
+document.documentElement.dataset.routerBasename = rootURL.pathname.replace(/\/$/, '') || '/';
+await installBrowserCompatibility();
 const releaseFetch = globalThis.fetch.bind(globalThis);
-globalThis.__CHATGPT_REPLICA_ENV__ = Object.freeze({basePath:rootURL.pathname,localIdentity:true,useOriginalAuth:true,preferredHostEnabled:true,directAssetHost:true,release:"c992a0f3a1b8df1e",sourceBuild:"ef0c3fb941611420d8683bf88f61acf1a8ac6b19"});
-const workerURL = new URL('native-client-worker.js?v='+"c992a0f3a1b8df1e", rootURL);
+globalThis.__CHATGPT_REPLICA_ENV__ = Object.freeze({basePath:rootURL.pathname,localIdentity:true,useOriginalAuth:true,preferredHostEnabled:true,directAssetHost:true,release:"3886dd09e0b0f238",sourceBuild:"ef0c3fb941611420d8683bf88f61acf1a8ac6b19"});
+const workerURL = new URL('native-client-worker.js?v='+"3886dd09e0b0f238", rootURL);
 installDirectAssetHost(rootURL, { fetchImpl: releaseFetch });
 // Storage-backed hosting is optional; import maps host the original modules.
 void registerOptionalAssetWorker(workerURL, rootURL.pathname);
-const siteAccount = await import('./site-account.mjs?v='+"c992a0f3a1b8df1e");
+const siteAccount = await import('./site-account.mjs?v='+"3886dd09e0b0f238");
 let isBusy;
-const pagePath = location.pathname.replace(/\/$/, '');
-if(pagePath === rootURL.pathname + 'site-plans') {
- await siteAccount.initializeSiteAccount();
- const {renderSitePlansPage} = await import('./local-pricing.mjs?v='+"c992a0f3a1b8df1e");
- renderSitePlansPage();
- isBusy = () => Boolean(document.querySelector('.site-plans[aria-busy="true"]'));
-}
-else if(['login','auth/login','signup','auth/signup'].map(route=>rootURL.pathname+route).includes(pagePath)) {
+const pagePath = location.pathname.replace(/\/index\.html$/, '/').replace(/\/$/, '');
+const signOut = await import('./site-signout.mjs?v='+"3886dd09e0b0f238");
+if (signOut.isSiteSignOutPage(location.href, rootURL)) {
+ siteAccount.logoutSiteAccount();
+ location.replace(signOut.getSiteSignedOutUrl(rootURL));
+} else if(['login','auth/login','signup','auth/signup'].map(route=>rootURL.pathname+route).includes(pagePath)) {
  siteAccount.renderSiteLoginPage();
  isBusy = () => [...document.querySelectorAll('.site-login input')].some(input=>input===document.activeElement||input.value.length>0)||!!document.querySelector('.site-login button:disabled');
 }
 else {
- await siteAccount.initializeSiteAccount();
- await import('./boot-adapter.mjs?v='+"c992a0f3a1b8df1e");
- const {localAppServer} = await import('./service-boundary.mjs?v='+"c992a0f3a1b8df1e");
- isBusy = () => localAppServer.running.size>0;
+ if (/\/(?:site-plans(?:\/index\.html)?|plans|pricing-plan|purchase\/[^/]+)$/.test(pagePath)) {
+   const pricing = await import('./native-pricing-trials.mjs?v='+"3886dd09e0b0f238");
+   pricing.normalizeLegacyPricingEntry();
+ }
+ await siteAccount.initializeSiteAccountForDisplay();
+ await import('./boot-adapter.mjs?v='+"3886dd09e0b0f238");
+ const {localAppServer} = await import('./service-boundary.mjs?v='+"3886dd09e0b0f238");
+ isBusy = () => localAppServer.running.size>0 || Boolean(document.querySelector('[aria-busy="true"]'));
 }
-const {createReleaseUpdater} = await import('../release-updater.js?v='+"c992a0f3a1b8df1e");
-const updater = createReleaseUpdater({currentRelease:"c992a0f3a1b8df1e",baseURL:rootURL,fetchImpl:releaseFetch,isBusy,interactionQuietMs:30000});
+if (isBusy) {
+const {createReleaseUpdater} = await import('../release-updater.js?v='+"3886dd09e0b0f238");
+const updater = createReleaseUpdater({currentRelease:"3886dd09e0b0f238",baseURL:rootURL,fetchImpl:releaseFetch,isBusy,interactionQuietMs:30000});
 updater.start();
 globalThis.addEventListener('pagehide',()=>updater.stop(),{once:true});
+}
 } catch (error) { showStartupError(error); }

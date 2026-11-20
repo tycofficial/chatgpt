@@ -1,9 +1,9 @@
 /** Original app-server protocol over real, resumable local execution. */
-import { runAgentTurn } from './agent-turn-runner.mjs?v=c992a0f3a1b8df1e';
-import { readWebSearchIntent, interruptHostedSearch } from './local-web-search.mjs?v=c992a0f3a1b8df1e';
-import { readClassicBranchRequest, getClassicExecutionThread } from './classic-response-branches.mjs?v=c992a0f3a1b8df1e';
-import { parseClassicInputMessages } from './classic-input-messages.mjs?v=c992a0f3a1b8df1e';
-import { allowedReasoningEfforts } from '../runtime.js?v=c992a0f3a1b8df1e';
+import { runAgentTurn } from './agent-turn-runner.mjs?v=3886dd09e0b0f238';
+import { readWebSearchIntent, interruptHostedSearch } from './local-web-search.mjs?v=3886dd09e0b0f238';
+import { readClassicBranchRequest, getClassicExecutionThread } from './classic-response-branches.mjs?v=3886dd09e0b0f238';
+import { parseClassicInputMessages } from './classic-input-messages.mjs?v=3886dd09e0b0f238';
+import { allowedReasoningEfforts } from '../runtime.js?v=3886dd09e0b0f238';
 export class RpcError extends Error {
   constructor(code, message, data) { super(message); this.name = 'RpcError'; this.code = code; if (data !== undefined) this.data = data; }
 }
@@ -29,6 +29,31 @@ export function storedConversationOrigin(thread) {
   const surface = storedConversationSurface(thread);
   if (surface === 'work') return thread?.adapterMetadata?.conversationOrigin === 'flora' ? 'flora' : 'tpp';
   return surface === 'codex' || surface === 'dot' ? surface : null;
+}
+
+
+export function wrapNativeCodexWorkTiming(projectTurn, server) {
+  return function (turn, ...args) {
+    const thread = server.threads.get(turn?.params?.threadId);
+    const local = thread?.turns.find(value => value.id === turn.turnId);
+    const timing = local?.adapterMetadata?.reasoningLifecycle;
+    if (!Number.isFinite(timing?.workStartedAtMs)) return projectTurn.call(this, turn, ...args);
+    return projectTurn.call(this, {
+      ...turn,
+      turnStartedAtMs: timing.workStartedAtMs,
+      firstTurnWorkItemStartedAtMs: timing.startedAtMs ?? timing.workStartedAtMs,
+      finalAssistantStartedAtMs: local.status === 'inProgress' ? null : timing.completedAtMs ?? null,
+    }, ...args);
+  };
+}
+
+export function wrapNativeWorkedDuration(formatDuration) {
+  return function (durationMs, ...args) {
+    if (Number.isFinite(durationMs) && durationMs >= 0 && durationMs < 1000) {
+      return '<' + formatDuration.call(this, 1000, ...args);
+    }
+    return formatDuration.call(this, durationMs, ...args);
+  };
 }
 
 export class LocalAppServer {
@@ -75,8 +100,8 @@ export class LocalAppServer {
         for (const turn of thread.turns) if (turn.status === 'inProgress') {
           turn.status = 'interrupted';
           turn.error = null;
-          turn.completedAt = Math.floor(this.now() / 1000);
-          turn.durationMs = Math.max(0, this.now() - (turn.adapterMetadata?.startedAtMs ?? this.now()));
+          turn.completedAt = null;
+          turn.durationMs = null;
           turn.adapterMetadata = { ...turn.adapterMetadata, interruption: 'page-reload-checkpoint-saved', resumable: Boolean(turn.adapterMetadata?.checkpoint), resumePolicy: 'automatic' };
           for (const call of turn.adapterMetadata.checkpoint?.pendingCalls || []) if (call.state === 'running') call.state = 'uncertain';
           // A crash has no observed provider end time. Stop the local pending
@@ -436,7 +461,7 @@ export class LocalAppServer {
     const startedAtMs = this.now(), id = this.uuid(), userItem = { type: 'userMessage', id: this.uuid(), content: input, ...(params.clientUserMessageId ? { clientId: params.clientUserMessageId } : {}) };
     const turn = {
       id, status: 'inProgress', items: [userItem], error: null,
-      startedAt: Math.floor(startedAtMs / 1000), completedAt: null, durationMs: null,
+      startedAt: startedAtMs / 1000, completedAt: null, durationMs: null,
       model: selected.model, reasoningEffort: selected.reasoningEffort, reasoningMode: selected.reasoningMode, executionSurface: selected.executionSurface, serviceTier: selected.serviceTier,
       clientUserMessageId: params.clientUserMessageId ?? null,
       adapterMetadata: { ...(classicBranchMetadata ? { classicResponseBranch: classicBranchMetadata } : {}), startedAtMs, fingerprint, ...(webSearchIntent ? { webSearchIntent } : {}), executionPolicy: selected.executionPolicy, executionSurface: selected.executionSurface, reasoningMode: selected.reasoningMode, frontendModelSlug: selected.frontendModelSlug, chatFamily: selected.chatFamily, selectionMode: selected.selectionMode, curatedPresetMatch: selected.curatedPresetMatch, clientMetadata: copy(params.responsesapiClientMetadata ?? null), instructions: this.instructions(params), ...(params.classicUserMessage ? { classicUserMessage: copy(params.classicUserMessage) } : {}), ...(classic ? { classicInputMessages: copy(classic.originalMessages) } : {}) },
@@ -519,7 +544,43 @@ export class LocalAppServer {
     if (lifecycle) lifecycle.attemptDurationMs = turn.items.filter(value => value.type === 'reasoning' && Number.isFinite(value.durationMs)).reduce((sum, value) => sum + value.durationMs, 0);
     this.notify('item/completed', { threadId: thread.id, turnId: turn.id, item });
   }
-  append(running, text, reasoning, phase = null) {
+  assistantMessages(running) {
+    const { turn, assistant } = running;
+    const ids = Object.values(turn.adapterMetadata.checkpoint?.inFlight?.assistantItemIds ?? {});
+    return ids.length ? turn.items.filter(item => ids.includes(item.id)) : assistant ? [assistant] : [];
+  }
+  completeAssistant(running, item) {
+    const { thread, turn } = running;
+    const ids = turn.adapterMetadata.completedItemIds ??= [];
+    if (ids.includes(item.id)) return;
+    ids.push(item.id);
+    this.notify('item/completed', { threadId: thread.id, turnId: turn.id, item });
+  }
+  appendAssistant(running, text, phase, outputIndex = null) {
+    const { thread, turn } = running;
+    const frame = turn.adapterMetadata.checkpoint?.inFlight;
+    const indexed = frame && Number.isSafeInteger(outputIndex) && outputIndex >= 0 ? frame.assistantItemIds ??= {} : null;
+    const existingId = indexed && Object.hasOwn(indexed, outputIndex) ? indexed[outputIndex] : null;
+    let item = indexed ? turn.items.find(value => value.id === existingId) : running.assistant;
+    if (!item) {
+      item = { type: 'agentMessage', id: this.uuid(), text: '', phase: phase === 'commentary' ? 'commentary' : 'final_answer' };
+      turn.items.push(item);
+      if (indexed) indexed[outputIndex] = item.id;
+      if (frame) frame.assistantItemId = item.id;
+      this.notify('item/started', { threadId: thread.id, turnId: turn.id, item });
+    }
+    running.assistant = item;
+    if (phase === 'commentary' || phase === 'final_answer') item.phase = phase;
+    const old = item.text;
+    if (!text.startsWith(old)) throw Error('Gateway replaced already streamed assistant text');
+    const delta = text.slice(old.length);
+    if (delta) {
+      item.text = text;
+      this.notify('item/agentMessage/delta', { threadId: thread.id, turnId: turn.id, itemId: item.id, delta });
+    }
+    return item;
+  }
+  append(running, text, reasoning, phase = null, outputMessages = null) {
     if (running.terminal) return;
     const { thread, turn } = running;
     if (reasoning) {
@@ -532,22 +593,14 @@ export class LocalAppServer {
         this.notify('item/reasoning/summaryTextDelta', { threadId: thread.id, turnId: turn.id, itemId: running.reasoning.id, summaryIndex: 0, delta });
       }
     }
-    if (text) {
-      if (!running.assistant) {
-        running.assistant = { type: 'agentMessage', id: this.uuid(), text: '', phase: phase === 'commentary' ? 'commentary' : 'final_answer' };
-        turn.items.push(running.assistant);
-        if (turn.adapterMetadata.checkpoint?.inFlight) turn.adapterMetadata.checkpoint.inFlight.assistantItemId = running.assistant.id;
-        this.notify('item/started', { threadId: thread.id, turnId: turn.id, item: running.assistant });
+    if (outputMessages?.length && !running.legacyAssistantLayout) {
+      for (const message of outputMessages) {
+        if (!message.text) continue;
+        const last = message === outputMessages.at(-1);
+        const item = this.appendAssistant(running, message.text, message.phase ?? (last ? phase : null), message.index);
+        if (message.completed && item.phase === 'commentary') this.completeAssistant(running, item);
       }
-      if (phase === 'commentary' || phase === 'final_answer') running.assistant.phase = phase;
-      const old = running.assistant.text;
-      if (!text.startsWith(old)) throw Error('Gateway replaced already streamed assistant text');
-      const delta = text.slice(old.length);
-      if (delta) {
-        running.assistant.text = text;
-        this.notify('item/agentMessage/delta', { threadId: thread.id, turnId: turn.id, itemId: running.assistant.id, delta });
-      }
-    }
+    } else if (text) this.appendAssistant(running, text, phase);
     if (this.now() - running.lastSavedAt >= (this.agentOptions.persistIntervalMs ?? 1000)) { this.persist(); running.lastSavedAt = this.now(); }
   }
   async runTurn(running) { return runAgentTurn(this, running); }
@@ -565,18 +618,18 @@ export class LocalAppServer {
     this.running.set(thread.id, running); this.persist();
     return { result: { turn: copy(turn) }, afterReply: () => { this.notify('thread/status/changed', { threadId: thread.id, status: thread.status }); this.notify('turn/started', { threadId: thread.id, turn: copy(turn) }); this.runTurn(running).catch(error => this.diagnostics.push({ type: 'local-turn-finalization-error', message: error.message })); } };
   }
-  finish(running, status, error) {
+  finish(running, status, error, completedAtMs = this.now()) {
     if (running.terminal) return;
     if (status !== 'completed') interruptHostedSearch(this, running);
     const { thread, turn } = running;
     turn.status = status;
     if (turn.adapterMetadata?.checkpoint && status !== 'completed') { turn.adapterMetadata.resumable = true; turn.adapterMetadata.resumePolicy ??= status === 'interrupted' && running.interruptReason === 'pagehide' ? 'automatic' : 'manual'; turn.adapterMetadata.checkpoint.state = status; for (const call of turn.adapterMetadata.checkpoint.pendingCalls || []) if (call.state === 'running') call.state = 'uncertain'; }
     for (const item of turn.items) if (item.type === 'mcpToolCall' && item.status === 'inProgress') { item.status = 'failed'; item.result = { content: [{ type: 'text', text: 'Execution was interrupted; tool completion is unknown. It has not been reported as successful.' }], isError: true }; item.error = null; this.notify('item/completed', { threadId: thread.id, turnId: turn.id, item }); }
-    const finishedAtMs = this.now();
+    const finishedAtMs = Math.max(turn.adapterMetadata.startedAtMs, completedAtMs);
     const lifecycle = turn.adapterMetadata.reasoningLifecycle;
     if (lifecycle) { lifecycle.status = status === 'completed' ? 'completed' : 'cancelled'; lifecycle.completedAtMs = finishedAtMs; lifecycle.workDurationMs = Math.max(0, finishedAtMs - lifecycle.workStartedAtMs); }
     turn.error = error;
-    turn.completedAt = Math.floor(finishedAtMs / 1000);
+    turn.completedAt = finishedAtMs / 1000;
     turn.durationMs = Math.max(0, finishedAtMs - turn.adapterMetadata.startedAtMs);
     this.completeReasoning(running, status === 'completed' ? 'completed' : 'cancelled', finishedAtMs);
     thread.updatedAt = thread.recencyAt = turn.completedAt;
@@ -585,7 +638,7 @@ export class LocalAppServer {
     catch (storageError) { turn.status = 'failed'; turn.error = errorShape(storageError.message); }
     running.terminal = true;
     this.running.delete(thread.id);
-    if (running.assistant && !running.assistantComplete) this.notify('item/completed', { threadId: thread.id, turnId: turn.id, item: running.assistant });
+    for (const item of this.assistantMessages(running)) this.completeAssistant(running, item);
     if (turn.error) this.notify('error', { threadId: thread.id, turnId: turn.id, error: turn.error, willRetry: false });
     this.notify('turn/completed', { threadId: thread.id, turn: copy(turn) });
     this.notify('thread/status/changed', { threadId: thread.id, status: thread.status });
