@@ -1,8 +1,7 @@
 /**
  * The six curated positions preserve the captured first-party Work picker.
- * Manual membership uses the eight exact first-party calling-host IDs,
- * official Help model guidance and the recorded 2026-11-17 provider matches.
- * Those manual entries do not add or invent another curated slider position.
+ * Manual membership uses calling-host options and public Work/Codex
+ * listings backed by exact matches in the configured provider catalogs.
  */
 export const WORK_MODEL_IDS = Object.freeze([
   'gpt-6-luna',
@@ -13,6 +12,8 @@ export const WORK_MODEL_IDS = Object.freeze([
   'gpt-5.6-sol',
   'gpt-5.6-terra',
   'gpt-5.6-luna',
+  'gpt-6.2-sol',
+  'gpt-6.2-astra',
 ]);
 
 export const WORK_PRESETS = Object.freeze([
@@ -24,7 +25,7 @@ export const WORK_PRESETS = Object.freeze([
   Object.freeze({id:'gpt-6-astra:xhigh',model:'gpt-6-astra',effort:'xhigh',label:'极高',displayLabel:'GPT-6 Astra 极高'}),
 ]);
 
-export const WORK_MODEL_LABELS=Object.freeze({'gpt-6-luna':'GPT-6 Luna','gpt-6.1-sol':'GPT-6.1 Sol','gpt-6-astra':'GPT-6 Astra','gpt-6.1-terra':'GPT-6.1 Terra','gpt-6-sol':'GPT-6 Sol','gpt-5.6-sol':'GPT-5.6 Sol','gpt-5.6-terra':'GPT-5.6 Terra','gpt-5.6-luna':'GPT-5.6 Luna'});
+export const WORK_MODEL_LABELS=Object.freeze({'gpt-6-luna':'GPT-6 Luna','gpt-6.1-sol':'GPT-6.1 Sol','gpt-6-astra':'GPT-6 Astra','gpt-6.1-terra':'GPT-6.1 Terra','gpt-6-sol':'GPT-6 Sol','gpt-5.6-sol':'GPT-5.6 Sol','gpt-5.6-terra':'GPT-5.6 Terra','gpt-5.6-luna':'GPT-5.6 Luna','gpt-6.2-sol':'GPT-6.2 Sol','gpt-6.2-astra':'GPT-6.2 Astra'});
 // Exact public locale IDs: composer.mode.local.reasoning.{none,low,medium,
 // high,xhigh,max}.label (low uses .low.label.v2). These are original labels.
 export const WORK_EFFORT_LABELS=Object.freeze({none:'无',low:'轻度',medium:'中',high:'高',xhigh:'极高',max:'Max',ultra:'Ultra'});
@@ -35,8 +36,7 @@ export const WORK_DEFAULT_OPTION=Object.freeze({
 
 // Work/Codex UI membership is a subset of API capability, not its full enum.
 // Luna starts at low per the user's requirement and the connected first-party
-// calling-host declaration. API none remains valid in runtime.js. Other model
-// entries and site Ultra stay unchanged; this is not a captured Web-account list.
+// calling-host declaration. API none remains valid for Luna in runtime.js.
 // Original TFzY uses thinking_efforts labels; TWUU.d uses supportedReasoningEfforts.
 export const WORK_PINNED_EFFORTS=Object.freeze({
   'gpt-6-luna':Object.freeze(['low','medium','high','xhigh','max']),
@@ -47,9 +47,10 @@ export const WORK_PINNED_EFFORTS=Object.freeze({
   'gpt-5.6-sol':Object.freeze(['low','medium','high','xhigh','max','ultra']),
   'gpt-5.6-terra':Object.freeze(['low','medium','high','xhigh','max','ultra']),
   'gpt-5.6-luna':Object.freeze(['low','medium','high','xhigh','max']),
+  'gpt-6.2-sol':Object.freeze(['low','medium','high','xhigh','max','ultra']),
+  'gpt-6.2-astra':Object.freeze(['low','medium','high','xhigh','max','ultra']),
 });
-// This manual addition has a public release and an exact provider catalog match.
-// Model membership is not proof that the provider currently permits inference.
+// Evidence for manual additions includes any completed provider inference checks.
 export const WORK_ADDITIONAL_MODEL_PROVENANCE=Object.freeze({
   'gpt-6.1-terra':Object.freeze({
     officialModelId:'gpt-6.1-terra',providerExactModelId:'gpt-6.1-terra',
@@ -59,12 +60,28 @@ export const WORK_ADDITIONAL_MODEL_PROVENANCE=Object.freeze({
     surfaces:Object.freeze(['work','codex']),manualOnly:true,curatedPreset:false,
     inferenceVerified:false,siteUltraEnabled:true,
   }),
+  'gpt-6.2-sol':Object.freeze({
+    officialModelId:'gpt-6.2-sol',providerExactModelId:'gpt-6.2-sol',providerId:'docode',
+    officialRelease:'https://learn.chatgpt.com/docs/models#recommended-models',
+    officialCapabilities:'https://developers.openai.com/api/docs/models/gpt-6.2-sol',
+    providerModelsCheckedAt:'2026-11-20',providerModelsStatus:200,
+    surfaces:Object.freeze(['work','codex']),manualOnly:true,curatedPreset:false,
+    inferenceVerified:true,providerVerifiedEffort:'max',siteUltraEnabled:true,
+  }),
+  'gpt-6.2-astra':Object.freeze({
+    officialModelId:'gpt-6.2-astra',providerExactModelId:'gpt-6.2-astra',providerId:'docode',
+    officialRelease:'https://learn.chatgpt.com/docs/models#recommended-models',
+    officialCapabilities:'https://developers.openai.com/api/docs/models/gpt-6.2-astra',
+    providerModelsCheckedAt:'2026-11-20',providerModelsStatus:200,
+    surfaces:Object.freeze(['work','codex']),manualOnly:true,curatedPreset:false,
+    inferenceVerified:true,providerVerifiedEffort:'max',siteUltraEnabled:true,
+  }),
 });
 // Ultra is a site execution mode; it is never a provider reasoning_effort enum.
 // The runner must execute genuine parallel delegation with the same base family.
 export const SITE_ULTRA_ORCHESTRATION=Object.freeze({
   effort:'ultra',mode:'parallel-agents',baseReasoningEffort:'max',
-  models:Object.freeze(['gpt-6.1-sol','gpt-6-astra','gpt-6.1-terra','gpt-6-sol','gpt-5.6-sol','gpt-5.6-terra']),providerReasoningEffort:false,
+  models:Object.freeze(['gpt-6.1-sol','gpt-6-astra','gpt-6.1-terra','gpt-6-sol','gpt-5.6-sol','gpt-5.6-terra','gpt-6.2-sol','gpt-6.2-astra']),providerReasoningEffort:false,
 });
 
 // Frontend aliases are presentation choices, never provider model slugs.
@@ -91,7 +108,7 @@ export function resolveChatSelection(model='auto',{effort,reasoningMode}={}){
 }
 export const WORK_CATALOG_PROVENANCE=Object.freeze({
   auto:'signed-in-first-party-six-position-capture',
-  pinned:'first-party-calling-host-supported-efforts-plus-explicit-site-orchestration',
+  pinned:'verified-calling-host-and-provider-capabilities-plus-site-ultra',
   ultra:'site-parallel-agent-orchestration-not-provider-reasoning-enum',
   originalManualMembershipCaptured:false,
   labels:'public-original-zh-CN-locale',

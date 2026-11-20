@@ -1,6 +1,7 @@
 import { isHostCheckpoint } from './preferred-host-transport.mjs';
+import { SITE_ULTRA_ORCHESTRATION } from './model-catalog.js';
 /** Site-provided Ultra orchestration. This is not an OpenAI provider effort enum. */
-export const ULTRA_MODELS = Object.freeze(['gpt-6.1-sol', 'gpt-6-astra', 'gpt-6.1-terra', 'gpt-6-sol', 'gpt-5.6-sol', 'gpt-5.6-terra']);
+export const ULTRA_MODELS = SITE_ULTRA_ORCHESTRATION.models;
 export const ULTRA_TOOL = Object.freeze({
   type: 'function', function: {
     name: 'delegate_tasks',
@@ -15,7 +16,7 @@ const providerFatal = error => [400, 401, 402, 403, 404, 422, 429].includes(erro
 const workerPolicy = 'You are an analysis worker in this application\'s Ultra orchestration. Analyze only the provided request and context. No execution tools are available to you: never claim to run Python, shell commands, file operations, browser actions or external research. Return concrete findings, evidence, uncertainties and recommendations to the parent, which owns actual tools. This application is coordinating independent API calls; do not claim to be OpenAI\'s private Ultra backend.';
 
 export function createUltraToolExecutor({ baseExecutor=null,streamCompletion,turn,checkpoint,save,getSettings,getContext=()=>[],getAbortMode=()=> 'user',now=Date.now,redact=value=>String(value) }) {
- if(!ULTRA_MODELS.includes(turn.model)||turn.reasoningEffort!=='ultra')throw Object.assign(Error('Ultra orchestration is available only for the six declared non-Luna Work/Codex models.'),{code:'ULTRA_MODEL_NOT_SUPPORTED',retryable:false});
+ if(!ULTRA_MODELS.includes(turn.model)||turn.reasoningEffort!=='ultra')throw Object.assign(Error('Ultra orchestration is available for eligible Work and Codex models.'),{code:'ULTRA_MODEL_NOT_SUPPORTED',retryable:false});
  const state=checkpoint.ultra??={schemaVersion:1,productExecutionMode:'ultra',orchestration:'site-parallel-agents',underlyingModel:turn.model,underlyingReasoningEffort:'max',officialPrivateUltra:false,calls:[]};
  if(state.underlyingModel!==turn.model||state.underlyingReasoningEffort!=='max')throw Object.assign(Error('The saved Ultra checkpoint does not match this turn selection.'),{code:'ULTRA_CHECKPOINT_MISMATCH',retryable:false});
  let queue=Promise.resolve();const persist=()=>{const next=queue.then(save);queue=next.catch(()=>{});return next;};

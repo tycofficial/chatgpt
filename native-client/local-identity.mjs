@@ -1,67 +1,111 @@
-/** Explicit prototype-local identity; never a Google/OpenAI authentication. */
-import { getSiteAccount } from './site-account.mjs?v=9e6124f65633571c';
+/** Synthetic identity for this site's accounts and its separate browser guest. */
+import { getSiteAccount, getSiteHomeUrl } from './site-account.mjs?v=c992a0f3a1b8df1e';
+
 const siteAccount = getSiteAccount();
-const registeredSiteUser = siteAccount?.role === 'user' && siteAccount.planType === 'free' ? siteAccount : null;
-const administrator = siteAccount?.role === 'administrator' && siteAccount.planType === 'pro' ? siteAccount : null;
-export const LOCAL_ACCOUNT_ID = registeredSiteUser?.accountId ?? '00000000-0000-4000-8000-000000000001';
-export const LOCAL_USER_ID = registeredSiteUser?.id ?? 'user-local-prototype';
-export const LOCAL_ACCOUNT_USER_ID = registeredSiteUser?.id ?? 'local-prototype-account-owner';
+const registeredSiteUser = siteAccount?.role === 'user' ? siteAccount : null;
+const administrator = siteAccount?.role === 'administrator' ? siteAccount : null;
+const guestAccountId = '00000000-0000-4000-8000-000000000002';
+
+export const LOCAL_ACCOUNT_ID = registeredSiteUser?.accountId ?? (administrator ? '00000000-0000-4000-8000-000000000001' : guestAccountId);
+export const LOCAL_USER_ID = registeredSiteUser?.id ?? (administrator ? 'user-local-prototype' : 'user-local-guest');
+export const LOCAL_ACCOUNT_USER_ID = registeredSiteUser?.id ?? (administrator ? 'local-prototype-account-owner' : 'local-guest-account-owner');
+
 const toggleKey = 'original-client-prototype-local-session';
 let enabled = false;
-let option;
 try {
-  option = new URL(globalThis.location.href).searchParams.get('localSession');
+  const option = new URL(globalThis.location.href).searchParams.get('localSession');
   enabled = option === '1';
   if (option === '1' || option === '0') globalThis.sessionStorage.setItem(toggleKey, option);
   if (option !== '1' && option !== '0') enabled = globalThis.sessionStorage.getItem(toggleKey) === '1' || (globalThis.sessionStorage.getItem(toggleKey) === null && globalThis.__CHATGPT_REPLICA_ENV__?.localIdentity === true);
 } catch {}
 let generation = 1;
-if (siteAccount) enabled = true;
+
 const marker = 'local-prototype-not-an-openai-token';
-const account = { id: LOCAL_ACCOUNT_ID, userId: LOCAL_ACCOUNT_USER_ID, planType: 'free', structure: 'personal', workspaceType: null, organizationId: null, computeResidency: null, isFedrampCompliantWorkspace: false, isDelinquent: false };
-const user = { id: LOCAL_USER_ID, name: '本地账户', email: 'local-prototype@example.invalid', created: Math.floor(Date.now() / 1000), is_test_user: false };
 const context = { locale: 'zh-CN', deviceId: 'local-prototype' };
-if (siteAccount) { account.planType = siteAccount.planType; user.name = siteAccount.username; user.email = administrator ? administrator.username.toLowerCase() + '@local.invalid' : undefined; user.created = Math.floor(siteAccount.createdAt / 1000); }
-const session = { accessToken: marker, sessionToken: 'site-account-reference:' + LOCAL_USER_ID, authProvider: 'local-username-password', account, user, statsigContext: context, adapterIdentity: 'prototype-local-only' };
-const snapshot = {
-  accessToken: marker, accountId: LOCAL_ACCOUNT_ID, accountUserId: LOCAL_ACCOUNT_USER_ID,
-  userId: LOCAL_USER_ID, userCreated: user.created, isTestUser: false, isSignup: false,
-  email: user.email, name: user.name, picture: undefined, planType: account.planType, computeResidency: null,
-  source: 'localAdapter', targetingAccount: account, targetingRequest: context,
-  adapterIdentity: 'prototype-local-only', googleAuthenticated: false, openaiAuthenticated: false,
-};
-// Native browser-auth cleanup must not revoke a separately verified site login.
-const isActive = () => siteAccount ? getSiteAccount()?.id === siteAccount.id : enabled;
-export const isPrototypeLocalSession = isActive;
-/** Admin keeps existing storage; registered and guest accounts never read it. */
-export function getLocalAccountStorageKey(key) { return administrator ? key : registeredSiteUser ? key + ':account:' + LOCAL_ACCOUNT_ID : key + ':guest'; }
-export const getPrototypeLocalSession = () => isActive() ? session : null;
-export const getPrototypeLocalAuth = () => isActive() ? snapshot : null;
-export const getPrototypeLocalAuthGeneration = () => generation;
+const guestCreated = Math.floor(Date.now() / 1000);
+
+function createIdentity(site) {
+  const account = {
+    id: LOCAL_ACCOUNT_ID, userId: LOCAL_ACCOUNT_USER_ID, planType: site?.planType ?? 'free',
+    structure: 'personal', workspaceType: null, organizationId: null, computeResidency: null,
+    isFedrampCompliantWorkspace: false, isDelinquent: false,
+  };
+  const user = {
+    id: LOCAL_USER_ID,
+    name: site?.username ?? '本机访客',
+    email: administrator ? administrator.username.toLowerCase() + '@local.invalid' : site ? undefined : 'local-guest@example.invalid',
+    created: site ? Math.floor(site.createdAt / 1000) : guestCreated,
+    is_test_user: false,
+  };
+  const session = {
+    accessToken: marker, sessionToken: 'site-account-reference:' + LOCAL_USER_ID,
+    authProvider: 'local-username-password', account, user, statsigContext: context,
+    adapterIdentity: 'prototype-local-only',
+  };
+  const snapshot = {
+    accessToken: marker, accountId: LOCAL_ACCOUNT_ID, accountUserId: LOCAL_ACCOUNT_USER_ID,
+    userId: LOCAL_USER_ID, userCreated: user.created, isTestUser: false, isSignup: false,
+    email: user.email, name: user.name, picture: undefined, planType: account.planType, computeResidency: null,
+    source: 'localAdapter', targetingAccount: account, targetingRequest: context,
+    adapterIdentity: 'prototype-local-only', googleAuthenticated: false, openaiAuthenticated: false,
+  };
+  return { account, user, session, snapshot };
+}
+
+let observedAccount = siteAccount;
+let identity = createIdentity(siteAccount);
+
+function getActiveIdentity() {
+  const liveAccount = getSiteAccount();
+  const sameOwner = liveAccount?.id === siteAccount?.id && liveAccount?.accountId === siteAccount?.accountId &&
+    liveAccount?.role === siteAccount?.role;
+  if (liveAccount !== observedAccount) {
+    observedAccount = liveAccount;
+    generation++;
+    if (sameOwner) identity = createIdentity(liveAccount);
+  }
+  return sameOwner && (siteAccount || enabled) ? identity : null;
+}
+
+// A native browser-auth cleanup changes the guest toggle and leaves site verification in its own module.
+export const isPrototypeLocalSession = () => !!getActiveIdentity();
+/** The storage namespace is bound to the verified owner at startup. */
+export function getLocalAccountStorageKey(key) {
+  return administrator ? key : registeredSiteUser ? key + ':account:' + LOCAL_ACCOUNT_ID : key + ':guest';
+}
+export const getPrototypeLocalSession = () => getActiveIdentity()?.session ?? null;
+export const getPrototypeLocalAuth = () => getActiveIdentity()?.snapshot ?? null;
+export function getPrototypeLocalAuthGeneration() {
+  getActiveIdentity();
+  return generation;
+}
 export function getPrototypeCurrentUser() {
-  return isActive() ? { id: user.id, created: user.created, email: user.email, name: user.name, first_name: user.name, email_domain_type: null, phone_number: null, picture: null } : null;
+  const user = getActiveIdentity()?.user;
+  return user ? { id: user.id, created: user.created, email: user.email, name: user.name, first_name: user.name, email_domain_type: null, phone_number: null, picture: null } : null;
 }
 export function clearPrototypeLocalSession({ reload = false } = {}) {
-  enabled = false; generation++;
+  enabled = false;
+  generation++;
+  try { globalThis.sessionStorage.setItem(toggleKey, '0'); } catch {}
   try {
-    globalThis.sessionStorage.setItem(toggleKey, '0');
-    const url = new URL(globalThis.location.href); url.searchParams.delete('localSession');
+    const url = new URL(globalThis.location.href);
+    url.searchParams.delete('localSession');
     globalThis.history.replaceState(globalThis.history.state, '', url.href);
-    globalThis.dispatchEvent(new Event('codex-browser-auth-changed'));
-    globalThis.dispatchEvent(new Event('codex-browser-auth-context-changed'));
-    if (reload) globalThis.location.reload();
   } catch {}
+  globalThis.dispatchEvent?.(new Event('codex-browser-auth-changed'));
+  globalThis.dispatchEvent?.(new Event('codex-browser-auth-context-changed'));
+  if (reload) globalThis.location.reload();
 }
 export function getLocalSignedOutUrl() {
-  const fallback = new URL('../', import.meta.url).pathname;
-  const basename = globalThis.document?.documentElement?.dataset?.routerBasename ?? fallback;
-  const candidate = new URL(basename, globalThis.location.origin);
-  const url = candidate.origin === globalThis.location.origin ? candidate : new URL(fallback, globalThis.location.origin);
+  const fallback = globalThis.document?.documentElement?.dataset?.routerBasename || new URL('../', import.meta.url).pathname;
+  const url = getSiteHomeUrl(fallback);
   url.searchParams.set('localSession', '0');
   return url.href;
 }
 export function getLocalAccountCheck() {
-  if (!isActive()) return { account_ordering: [], accounts: {} };
+  const active = getActiveIdentity();
+  if (!active) return { account_ordering: [], accounts: {} };
+  const { account, user } = active;
   return {
     account_ordering: [LOCAL_ACCOUNT_ID],
     accounts: {
@@ -72,12 +116,11 @@ export function getLocalAccountCheck() {
           name: user.name, display_name: user.name, is_zdr: false, is_openai_internal: false,
           is_deactivated: false, is_most_recent_expired_subscription_gratis: false,
           is_fedramp_compliant_workspace: false,
-          tbo_config: { tbo_available: siteAccount?.planType === 'pro', adapter_source: 'site-local-dot-provider' },
+          tbo_config: { tbo_available: account.planType === 'pro', adapter_source: 'site-local-dot-provider' },
           adapter_identity: 'prototype-local-only',
         },
-        // Native account-refresh shape for this site's membership, not a cloud entitlement.
         entitlement: { has_active_subscription: ['plus','pro'].includes(account.planType), is_delinquent: false, grace_period_id: null, adapter_source: 'site-membership' },
-        // TPx7/m0qY dereference this envelope even for a local Free account.
+        // The native account adapter reads this envelope for Free too.
         last_active_subscription: { purchase_origin_platform: null, will_renew: false },
         features: ['dot_account_access_policy'],
         can_access_with_session: true, sso_connection_name: null,
@@ -102,14 +145,15 @@ export function getLocalWhamAccounts() {
   return {
     accounts: check.account_ordering.map(id => ({ ...check.accounts[id].account, id, can_access_with_session: true, sso_connection_name: null })),
     account_ordering: check.account_ordering,
-    default_account_id: isPrototypeLocalSession() ? LOCAL_ACCOUNT_ID : null,
+    default_account_id: check.account_ordering[0] ?? null,
     adapter_identity: 'prototype-local-only',
   };
 }
 export function getPrototypeStatsigUser() {
+  const active = isPrototypeLocalSession();
   return {
-    userID: isActive() ? LOCAL_USER_ID : 'local-prototype-anonymous',
+    userID: active ? LOCAL_USER_ID : 'local-prototype-anonymous',
     appVersion: 'local-original-probe', locale: 'zh-CN',
-    customIDs: { stableID: 'local-prototype', ...(isActive() ? { account_id: LOCAL_ACCOUNT_ID, account_user_id: LOCAL_ACCOUNT_USER_ID } : {}) },
+    customIDs: { stableID: 'local-prototype', ...(active ? { account_id: LOCAL_ACCOUNT_ID, account_user_id: LOCAL_ACCOUNT_USER_ID } : {}) },
   };
 }

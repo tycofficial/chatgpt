@@ -13,7 +13,7 @@ const [source, manifest] = await Promise.all([
 ]);
 JSON.parse(manifest);
 
-// Validate the actual ESM module graph, including its relative sync helper.
+// Validate the built ESM module graph, including its relative imports.
 const workerModule = await import(pathToFileURL(workerPath).href);
 assert.equal(
   typeof workerModule.default?.fetch,

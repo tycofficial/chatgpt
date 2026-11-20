@@ -1,4 +1,5 @@
 import {handleChatSync} from './chat-sync.mjs';
+import {proxyDocodeResponses} from './site-inference.mjs';
 /** Username/password auth is local to this site; no original account token is used. */
 const encoder=new TextEncoder();
 const hex=bytes=>Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,'0')).join('');
@@ -12,9 +13,72 @@ export async function passwordHash(password,salt){const key=await crypto.subtle.
 export async function userPasswordHash(password,salt){const key=await crypto.subtle.importKey('raw',encoder.encode(String(password).normalize('NFKC')),{name:'PBKDF2'},false,['deriveBits']);return hex(await crypto.subtle.deriveBits({name:'PBKDF2',hash:'SHA-256',salt:Uint8Array.from(salt.match(/../g),x=>parseInt(x,16)),iterations:100000},key,256));}
 function equal(a,b){if(typeof a!=='string'||typeof b!=='string'||a.length!==b.length)return false;let difference=0;for(let i=0;i<a.length;i++)difference|=a.charCodeAt(i)^b.charCodeAt(i);return difference===0;}
 async function configured(env){if(!env.DB)throw Error('DB unavailable');if(env.ADMIN_USERNAME&&env.ADMIN_PASSWORD_HASH&&env.ADMIN_PASSWORD_SALT)await query(env,'INSERT OR IGNORE INTO administrators(id,username,password_hash,password_salt,created_at) VALUES(1,?,?,?,?)',normalize(env.ADMIN_USERNAME),env.ADMIN_PASSWORD_HASH,env.ADMIN_PASSWORD_SALT,Date.now()).run();return query(env,'SELECT id,username,created_at FROM administrators WHERE id=1').first();}
-async function session(request,env){const token=(request.headers.get('authorization')||'').replace(/^Bearer\s+/i,'');if(!/^[a-f0-9]{64}$/.test(token))return null;const tokenHash=await digest(token);const admin=await query(env,"SELECT a.id,a.username,a.created_at,s.expires_at AS sessionExpiresAt,'administrator' AS role FROM sessions s JOIN administrators a ON a.id=s.admin_id WHERE s.token_hash=? AND s.expires_at>?",tokenHash,Date.now()).first();if(admin)return admin;return query(env,"SELECT u.id,u.username,u.display_name,u.created_at,s.expires_at AS sessionExpiresAt,'user' AS role FROM user_sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>?",tokenHash,Date.now()).first();}
-const account=record=>record.role==='user'?{id:'site-user:'+record.id,accountId:record.id,username:record.display_name||record.username,name:record.display_name||record.username,role:'user',planType:'free',membershipSource:'site-registration',createdAt:record.created_at,officialSubscriptionVerified:false}:{id:'site-admin',username:record.username.toUpperCase(),name:record.username.toUpperCase(),role:'administrator',planType:'pro',membershipSource:'site-administrator',createdAt:record.created_at,officialSubscriptionVerified:false};
+const siteTrialDuration=30*86400000;
+const siteTrialPlanTypes=new Map([
+ ['plus','plus'],
+ ['prolite','pro'],
+ ['pro','pro'],
+ ['promax','pro'],
+]);
+async function session(request,env){
+ const token=(request.headers.get('authorization')||'').replace(/^Bearer\s+/i,'');
+ if(!/^[a-f0-9]{64}$/.test(token))return null;
+ const tokenHash=await digest(token);
+ const admin=await query(env,"SELECT a.id,a.username,a.created_at,s.expires_at AS sessionExpiresAt,'administrator' AS role FROM sessions s JOIN administrators a ON a.id=s.admin_id WHERE s.token_hash=? AND s.expires_at>?",tokenHash,Date.now()).first();
+ if(admin)return admin;
+ return query(env,`
+  SELECT u.id,u.username,u.display_name,u.created_at,s.expires_at AS sessionExpiresAt,'user' AS role,
+         t.tier AS site_trial_tier,t.expires_at AS site_trial_expires_at
+  FROM user_sessions s JOIN users u ON u.id=s.user_id
+  LEFT JOIN site_trials t ON t.user_id=u.id
+  WHERE s.token_hash=? AND s.expires_at>?`,tokenHash,Date.now()).first();
+}
+function account(record){
+ if(record.role!=='user'){
+  const name=record.username.toUpperCase();
+  return {id:'site-admin',username:name,name,role:'administrator',planType:'pro',membershipSource:'site-administrator',createdAt:record.created_at,officialSubscriptionVerified:false};
+ }
+ const name=record.display_name||record.username;
+ const siteTrial=hasActiveSiteTrial(record)
+  ? {tier:record.site_trial_tier,expiresAt:record.site_trial_expires_at}
+  : null;
+ return {
+  id:'site-user:'+record.id,accountId:record.id,username:name,name,role:'user',
+  planType:siteTrial?siteTrialPlanTypes.get(siteTrial.tier):'free',
+  membershipSource:'site-registration',createdAt:record.created_at,officialSubscriptionVerified:false,siteTrial,
+ };
+}
+const hasActiveSiteTrial=record=>record.site_trial_expires_at>Date.now()&&siteTrialPlanTypes.has(record.site_trial_tier);
 async function issueUserSession(env,user){const token=hex(crypto.getRandomValues(new Uint8Array(32))),expiresAt=Date.now()+30*86400000;await query(env,'INSERT INTO user_sessions(token_hash,user_id,expires_at,created_at) VALUES(?,?,?,?)',await digest(token),user.id,expiresAt,Date.now()).run();return json({token,expiresAt,user:account({...user,role:'user'})});}
+function postRequired(message){
+ const response=fail(405,'METHOD_NOT_ALLOWED',message);
+ response.headers.set('Allow','POST');
+ return response;
+}
+async function claimSiteTrial(request,env,actor){
+ if(request.method!=='POST')return postRequired('请使用 POST 申请站内试用。');
+ if(!actor)return fail(401,'SITE_AUTH_REQUIRED','请先登录本站账户。');
+ if(actor.role!=='user')return fail(403,'SITE_TRIAL_USER_REQUIRED','站内试用仅面向本站注册用户。');
+ const data=await readBody(request).catch(()=>null);
+ const tier=data?.tier;
+ if(!siteTrialPlanTypes.has(tier))return fail(400,'INVALID_SITE_TRIAL_TIER','请选择有效的站内试用方案。');
+
+ const expiresAt=Date.now()+siteTrialDuration;
+ await query(env,`
+  INSERT INTO site_trials (user_id,tier,expires_at) VALUES (?,?,?)
+  ON CONFLICT(user_id) DO UPDATE SET tier=excluded.tier,expires_at=excluded.expires_at`,
+ actor.id,tier,expiresAt).run();
+ return json({
+  user:account({...actor,site_trial_tier:tier,site_trial_expires_at:expiresAt}),
+  expiresAt:actor.sessionExpiresAt,
+ });
+}
+async function siteInference(request,env,actor){
+ if(request.method!=='POST')return postRequired('请使用 POST 发送模型请求。');
+ if(!actor)return fail(401,'SITE_AUTH_REQUIRED','请先登录本站账户。');
+ if(actor.role!=='administrator'&&!hasActiveSiteTrial(actor))return fail(403,'SITE_INFERENCE_PLAN_REQUIRED','此模型需要有效的站内试用。');
+ return proxyDocodeResponses(request,env.DOCODE_API_KEY);
+}
 async function largeBody(request,limit=2000000){if(Number(request.headers.get('Content-Length'))>limit)throw Error('Request too large');const text=await request.text();if(text.length>limit)throw Error('Request too large');return JSON.parse(text||'{}');}
 async function bridgeIdentity(request,env){const token=(request.headers.get('authorization')||'').replace(/^Bearer\s+/i,'');if(!/^[a-f0-9]{64}$/.test(token))return null;return query(env,'SELECT * FROM bridges WHERE token_hash=? AND revoked=0',await digest(token)).first();}
 const leaseMs=30000;
@@ -93,17 +157,26 @@ async function route(request,env){const path=new URL(request.url).pathname;
   await query(env,'INSERT INTO login_limits(key,attempts,expires_at) VALUES(?,1,?) ON CONFLICT(key) DO UPDATE SET attempts=attempts+1',bucket,Date.now()+900000).run();
   const limit=await query(env,'SELECT attempts FROM login_limits WHERE key=?',bucket).first();if(limit.attempts>12)return fail(429,'LOGIN_RATE_LIMIT','尝试次数过多，请稍后再试。');
   const admin=await query(env,'SELECT * FROM administrators WHERE id=1 AND username=?',username).first();
-  if(!admin){const user=await query(env,'SELECT * FROM users WHERE username=?',username).first();if(!user||!equal(await userPasswordHash(data.password,user.password_salt),user.password_hash))return fail(401,'INVALID_CREDENTIALS','用户名或密码不正确。');return issueUserSession(env,user);}
+  if(!admin){
+   const user=await query(env,`
+    SELECT u.*,t.tier AS site_trial_tier,t.expires_at AS site_trial_expires_at
+    FROM users u LEFT JOIN site_trials t ON t.user_id=u.id WHERE u.username=?`,username).first();
+   if(!user||!equal(await userPasswordHash(data.password,user.password_salt),user.password_hash))return fail(401,'INVALID_CREDENTIALS','用户名或密码不正确。');
+   return issueUserSession(env,user);
+  }
   if(!equal(await passwordHash(data.password,admin.password_salt),admin.password_hash))return fail(401,'INVALID_CREDENTIALS','用户名或密码不正确。');
   const token=hex(crypto.getRandomValues(new Uint8Array(32))),expiresAt=Date.now()+30*86400000;
   await env.DB.batch([query(env,'INSERT INTO sessions(token_hash,admin_id,expires_at,created_at) VALUES(?,1,?,?)',await digest(token),expiresAt,Date.now()),query(env,'DELETE FROM login_limits WHERE expires_at<?',Date.now()),query(env,'DELETE FROM sessions WHERE expires_at<?',Date.now())]);return json({token,expiresAt,user:account(admin)});
  }
  if(path.startsWith('/bridge/')&&!['/bridge/pair','/bridge/status','/bridge/revoke'].includes(path))return bridgeRoute(request,env,path);
  if(path.startsWith('/sync/'))return handleChatSync(request,env,await session(request,env));
- const admin=await session(request,env);if(!admin)return fail(401,'ADMIN_AUTH_REQUIRED','请先登录管理员账户。');
- if(path==='/auth/session')return json({user:account(admin),expiresAt:admin.sessionExpiresAt});
+ const actor=await session(request,env);
+ if(path==='/auth/site-trial')return claimSiteTrial(request,env,actor);
+ if(path==='/inference/v1/responses')return siteInference(request,env,actor);
+ if(!actor)return fail(401,'ADMIN_AUTH_REQUIRED','请先登录管理员账户。');
+ if(path==='/auth/session')return json({user:account(actor),expiresAt:actor.sessionExpiresAt});
  if(path==='/auth/logout'&&request.method==='POST'){const tokenHash=await digest(request.headers.get('authorization').replace(/^Bearer\s+/i,''));await env.DB.batch([query(env,'DELETE FROM sessions WHERE token_hash=?',tokenHash),query(env,'DELETE FROM user_sessions WHERE token_hash=?',tokenHash)]);return json({signedOut:true});}
- if(admin.role!=='administrator')return fail(403,'ADMIN_MEMBERSHIP_REQUIRED','此功能需要管理员 Pro 账户。');
+ if(actor.role!=='administrator')return fail(403,'ADMIN_MEMBERSHIP_REQUIRED','此功能需要管理员 Pro 账户。');
  if(path==='/bridge/status')return json(await bridgeStatus(env));
  if(path==='/bridge/pair'&&request.method==='POST'){const id=crypto.randomUUID(),token=hex(crypto.getRandomValues(new Uint8Array(32)));await query(env,'INSERT INTO bridges(id,token_hash,last_seen,profile) VALUES(?,?,?,?)',id,await digest(token),0,'{}').run();return json({bridgeId:id,bridgeToken:token});}
  if(path==='/bridge/revoke'&&request.method==='POST'){const data=await readBody(request),id=String(data.bridgeId||'');await env.DB.batch([query(env,'UPDATE bridges SET revoked=1 WHERE id=?',id),query(env,"INSERT OR IGNORE INTO job_cancellations(job_id,created_at) SELECT id,? FROM jobs WHERE bridge_id=? AND status NOT IN ('complete','failed','cancelled')",Date.now(),id),query(env,"UPDATE jobs SET status='cancelled',updated_at=? WHERE bridge_id=? AND status NOT IN ('complete','failed','cancelled')",Date.now(),id)]);return json({revoked:true});}

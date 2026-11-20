@@ -1,9 +1,9 @@
 /** Original app-server protocol over real, resumable local execution. */
-import { runAgentTurn } from './agent-turn-runner.mjs?v=9e6124f65633571c';
-import { readWebSearchIntent, interruptHostedSearch } from './local-web-search.mjs?v=9e6124f65633571c';
-import { readClassicBranchRequest, getClassicExecutionThread } from './classic-response-branches.mjs?v=9e6124f65633571c';
-import { parseClassicInputMessages } from './classic-input-messages.mjs?v=9e6124f65633571c';
-import { allowedReasoningEfforts } from '../runtime.js?v=9e6124f65633571c';
+import { runAgentTurn } from './agent-turn-runner.mjs?v=c992a0f3a1b8df1e';
+import { readWebSearchIntent, interruptHostedSearch } from './local-web-search.mjs?v=c992a0f3a1b8df1e';
+import { readClassicBranchRequest, getClassicExecutionThread } from './classic-response-branches.mjs?v=c992a0f3a1b8df1e';
+import { parseClassicInputMessages } from './classic-input-messages.mjs?v=c992a0f3a1b8df1e';
+import { allowedReasoningEfforts } from '../runtime.js?v=c992a0f3a1b8df1e';
 export class RpcError extends Error {
   constructor(code, message, data) { super(message); this.name = 'RpcError'; this.code = code; if (data !== undefined) this.data = data; }
 }
@@ -13,6 +13,23 @@ const idle = () => ({ type: 'idle' });
 const active = () => ({ type: 'active', activeFlags: [] });
 const errorShape = message => ({ message, codexErrorInfo: null, additionalDetails: null, misalignment: null });
 const defaultCollaboration = model => ({ mode: 'default', settings: { model, reasoning_effort: null, developer_instructions: null } });
+
+/** Stored conversation ownership survives route switches and older snapshots. */
+export function storedConversationSurface(thread) {
+  const origin = thread?.adapterMetadata?.conversationOrigin;
+  const surface = thread?.executionSurface ?? thread?.adapterMetadata?.executionSurface;
+  if (origin === 'dot') return 'dot';
+  if (origin === 'codex' || surface === 'codex') return 'codex';
+  if (origin === 'tpp' || origin === 'flora' || surface === 'work') return 'work';
+  if (surface === 'chat' || thread?.adapterMetadata?.classicRootId) return 'chat';
+  return null;
+}
+
+export function storedConversationOrigin(thread) {
+  const surface = storedConversationSurface(thread);
+  if (surface === 'work') return thread?.adapterMetadata?.conversationOrigin === 'flora' ? 'flora' : 'tpp';
+  return surface === 'codex' || surface === 'dot' ? surface : null;
+}
 
 export class LocalAppServer {
   constructor({ storage, streamCompletion, readSettings, models, catalog, diagnostics = [], now = Date.now, uuid = () => crypto.randomUUID(), toolExecutor = null, checkpointStore = null, agentOptions = {}, getExecutionPolicy = null, onIdleTurnInterrupt = null, prepareUserInput = null, onPersist = null }) {
@@ -269,6 +286,7 @@ export class LocalAppServer {
       case 'model/list': return { result: this.models.getRpcModelList(params) };
       case 'thread/list': {
         let rows = [...this.threads.values()].filter(thread => !thread.ephemeral && !!thread.archived === !!params.archived);
+        if (['work', 'codex', 'chat'].includes(params.conversationSurface)) rows = rows.filter(thread => storedConversationSurface(thread) === params.conversationSurface);
         if (Array.isArray(params.modelProviders) && params.modelProviders.length) rows = rows.filter(thread => params.modelProviders.includes(thread.modelProvider));
         if (Array.isArray(params.originators) && params.originators.length) rows = rows.filter(thread => params.originators.includes(thread.originator));
         if (Array.isArray(params.sourceKinds) && params.sourceKinds.length) rows = rows.filter(thread => params.sourceKinds.includes(thread.source));
@@ -284,7 +302,7 @@ export class LocalAppServer {
         rows.sort((a, b) => ((a[sortField] ?? a.updatedAt) - (b[sortField] ?? b.updatedAt)) * (params.sortDirection === 'asc' ? 1 : -1));
         return { result: this.pagination(rows.map(thread => this.snapshot(thread, false)), params, 'local-threads') };
       }
-      case 'thread/loaded/list': return { result: { data: [...this.threads.keys()], nextCursor: null } };
+      case 'thread/loaded/list': return { result: { data: [...this.threads.values()].filter(thread => !params.conversationSurface || storedConversationSurface(thread) === params.conversationSurface).map(thread => thread.id), nextCursor: null } };
       case 'thread/start': {
         if (params.dynamicTools?.length) throw new RpcError(-32601, 'Dynamic tool registration is not implemented by the local text adapter');
         const selected = this.selection(params), timestamp = Math.floor(this.now() / 1000), id = this.uuid();
@@ -298,7 +316,7 @@ export class LocalAppServer {
           parentThreadId: params.parentThreadId ?? null, forkedFromId: null, gitInfo: null, environments: [], turns: [],
           approvalPolicy: params.approvalPolicy ?? 'never',
           collaborationMode: copy(params.collaborationMode ?? defaultCollaboration(selected.model)),
-          adapterMetadata: { source: 'local-original-client-adapter', conversationOrigin: params.conversationOrigin ?? 'tpp', executionSurface: selected.executionSurface, reasoningMode: selected.reasoningMode, frontendModelSlug: selected.frontendModelSlug, chatFamily: selected.chatFamily, selectionMode: selected.selectionMode, curatedPresetMatch: selected.curatedPresetMatch, instructions: this.instructions(params), clientMetadata: copy(params.responsesapiClientMetadata ?? null) },
+          adapterMetadata: { source: 'local-original-client-adapter', conversationOrigin: params.conversationOrigin ?? (selected.executionSurface === 'chat' ? null : selected.executionSurface === 'codex' ? 'codex' : 'tpp'), executionSurface: selected.executionSurface, reasoningMode: selected.reasoningMode, frontendModelSlug: selected.frontendModelSlug, chatFamily: selected.chatFamily, selectionMode: selected.selectionMode, curatedPresetMatch: selected.curatedPresetMatch, instructions: this.instructions(params), clientMetadata: copy(params.responsesapiClientMetadata ?? null) },
         };
         thread.collaborationMode.settings = { ...thread.collaborationMode.settings, model: selected.model, reasoning_effort: selected.reasoningEffort };
         this.threads.set(id, thread);
@@ -617,7 +635,7 @@ export class LocalProtocolSocket extends EventTarget {
         // The native RPC transport is the Work/Codex surface. Classic Chat
         // reaches the shared engine through its separately declared REST seam.
         const mutation = ['thread/start', 'thread/resume', 'thread/settings/update', 'turn/start', 'turn/addUserMessage'].includes(message.method);
-        const dispatchParams = mutation ? { ...(message.params ?? {}), executionSurface: 'work' } : message.params;
+        const dispatchParams = mutation ? { ...(message.params ?? {}), executionSurface: message.params?.executionSurface === 'codex' ? 'codex' : 'work' } : message.params;
         const transaction = this.server.dispatch(message.method, dispatchParams);
         if (message.id != null) this.reply({ id: message.id, result: transaction.result });
         if (transaction.afterReply) setTimeout(transaction.afterReply, 0);

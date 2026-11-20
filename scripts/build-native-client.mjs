@@ -86,7 +86,14 @@ installDirectAssetHost(rootURL, { fetchImpl: releaseFetch });
 void registerOptionalAssetWorker(workerURL, rootURL.pathname);
 const siteAccount = await import('./site-account.mjs?v='+${JSON.stringify(release)});
 let isBusy;
-if(['login','auth/login','signup','auth/signup'].map(route=>rootURL.pathname+route).includes(location.pathname.replace(/\\/$/,''))) {
+const pagePath = location.pathname.replace(/\\/$/, '');
+if(pagePath === rootURL.pathname + 'site-plans') {
+ await siteAccount.initializeSiteAccount();
+ const {renderSitePlansPage} = await import('./local-pricing.mjs?v='+${JSON.stringify(release)});
+ renderSitePlansPage();
+ isBusy = () => Boolean(document.querySelector('.site-plans[aria-busy="true"]'));
+}
+else if(['login','auth/login','signup','auth/signup'].map(route=>rootURL.pathname+route).includes(pagePath)) {
  siteAccount.renderSiteLoginPage();
  isBusy = () => [...document.querySelectorAll('.site-login input')].some(input=>input===document.activeElement||input.value.length>0)||!!document.querySelector('.site-login button:disabled');
 }
@@ -159,6 +166,8 @@ if(process.argv.includes('--activate')){
  try{await fs.access(backup);}catch{await fs.copyFile(path.join(root,'index.html'),backup);}
  await write(path.join(root,'index.html'),html);
  await write(path.join(root,'404.html'),html);
+ await fs.mkdir(path.join(root,'site-plans'),{recursive:true});
+ await write(path.join(root,'site-plans','index.html'),html);
  await write(path.join(output,'active.json'),JSON.stringify({active:true,release,sourceBuild,originalComponentGraph:true,backend:'local-adapters-and-configured-api'},null,2)+'\n');
 }
 console.log(JSON.stringify({release,helpers:helpers.length,sourceBuild,activated:process.argv.includes('--activate'),shell:'native-client-shell.html'}));

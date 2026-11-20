@@ -65,12 +65,12 @@ async function upload(env) {
   assert.equal(processed.status, 200); await processed.text(); return { id: allocated.file_id, bytes };
 }
 
-test('actual boundary denies both guest prototype flags even when their prototype account ID aliases admin', async () => {
+test('actual boundary denies both guest prototype flags and uses an account ID distinct from admin', async () => {
   const shared = { metadata: new Map(), raw: store() }, owner = environment(admin, shared), file = await upload(owner);
   assert.equal((await list(owner)).body.items[0].id, file.id);
   for (const options of [{}, { localFlag: '1' }, { query: '?localSession=1' }]) {
     const guest = environment(null, shared, options), listing = await list(guest);
-    if (options.localFlag || options.query) assert.equal(guest.identity.getPrototypeLocalAuth().accountId, owner.identity.getPrototypeLocalAuth().accountId);
+    if (options.localFlag || options.query) assert.notEqual(guest.identity.getPrototypeLocalAuth().accountId, owner.identity.getPrototypeLocalAuth().accountId);
     assert.equal(listing.response.status, 401); assert.equal(listing.body.items, undefined);
     await assert.rejects(guest.files.readFile(file.id), error => error.status === 401);
     const resource = await guest.library.handle(request('/files/library/files/' + file.id + '/download_url'), '/files/library/files/' + file.id + '/download_url');

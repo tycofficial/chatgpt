@@ -10,6 +10,12 @@ export const RAW_TO_FRONTEND_EFFORT = Object.freeze(Object.fromEntries(
   Object.entries(FRONTEND_TO_RAW_EFFORT).map(([frontend, raw]) => [raw, frontend]),
 ));
 
+export function consolidateWorkDefaults(modelList, curatedLabel) {
+  if (!modelList?.defaultOption) return modelList;
+  const options = modelList.options.filter(option => option.id !== 'latest' || option.label !== curatedLabel);
+  return options.length === modelList.options.length ? modelList : { ...modelList, options };
+}
+
 export function createModelCatalogAdapter(catalog) {
   const ids = [...catalog.WORK_MODEL_IDS];
   // Preserve the original Fast UI and preference even when this host cannot
@@ -38,7 +44,7 @@ export function createModelCatalogAdapter(catalog) {
     fastMode: { originalServiceTierId: 'fast', originalPreferenceKey: 'chatgpt-tpp-cloud-service-tier-v1', uiPreference: true, providerPriorityVerified: false },
     siteUltraOrchestration: catalog.SITE_ULTRA_ORCHESTRATION,
     frontendChatAlias: { defaultSlug: 'auto', families: catalog.CHAT_FAMILIES, meaning: 'Chat aliases route to explicit models and reasoning modes; aliases are not gateway models' },
-    description: 'The captured six presets remain unchanged. Manual Work/Codex efforts follow the first-party calling-host declaration plus explicit site Ultra; Chat uses two official families. These are not captured private account responses.',
+    description: 'Work has six curated presets. Work and Codex share the verified manual catalog and site Ultra delegation. Chat has two model families.',
   });
   function preset(choice) {
     return {

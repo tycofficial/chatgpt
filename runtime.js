@@ -11,6 +11,8 @@ function requestHeaders(settings) {
 // Verified against the exact model's official capability documentation.
 // Do not guess effort support for provider aliases or other model families.
 const VERIFIED_REASONING_EFFORTS = Object.freeze({
+  'gpt-6.2-sol': Object.freeze(['low', 'medium', 'high', 'xhigh', 'max']),
+  'gpt-6.2-astra': Object.freeze(['low', 'medium', 'high', 'xhigh', 'max']),
   'gpt-6.1-sol': Object.freeze(['low', 'medium', 'high', 'xhigh', 'max']),
   'gpt-6.1-terra': Object.freeze(['none', 'low', 'medium', 'high', 'xhigh', 'max']),
   'gpt-6-astra': Object.freeze(['low', 'medium', 'high', 'xhigh', 'max']),

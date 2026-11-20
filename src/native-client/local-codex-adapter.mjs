@@ -244,13 +244,13 @@ export function createLocalCodexAdapter({
   /** Supply the real provider default only to native Codex workspace context.
    * Keep the global project selection unchanged so Chat and Work can retain
    * their native run location. Missing raw selection may use the sole ready
-   * provider mount; explicit null, query errors and user choices are preserved.
+   * provider mount. Query failures and explicit directory choices are preserved.
    */
   const projectContextDiagnostics = new Set();
   function resolveBrowserWorkspaceSelection(originalSelection, { inputs, routeKind, productMode, selection, projects, selectionPending = false, projectsPending = false, selectionError = false, projectsError = false } = {}) {
     const current = state();
     const expectedId = current.identity?.accountId ? 'site-browser-workspace:' + current.identity.accountId : null, candidate = expectedId ? projects?.[expectedId] : null;
-    const providerDefault = selection === undefined && productMode === 'codex' && object(projects) && Object.keys(projects).length === 1 && !!candidate && candidate.id === expectedId;
+    const providerDefault = selection == null && productMode === 'codex' && object(projects) && Object.keys(projects).length === 1 && !!candidate && candidate.id === expectedId;
     const effectiveSelection = providerDefault ? { type: 'local', projectId: expectedId } : selection;
     const diagnostic = { type: 'local-codex-project-context', productMode, providerDefault, original: originalSelection === null ? 'null' : typeof originalSelection,
       routeKind: ['home','local-thread','client-local-thread','other'].includes(routeKind) ? routeKind : 'unknown',
@@ -299,7 +299,7 @@ export function createLocalCodexAdapter({
         existingRootAbsent: request?.existingWorkspaceRoot == null, remoteProjectAbsent: request?.homeRemoteProject == null };
       const diagnosticKey = JSON.stringify(diagnostic);
       if (projectContextDiagnostics.size < 40 && !projectContextDiagnostics.has(diagnosticKey)) { projectContextDiagnostics.add(diagnosticKey); diagnostics.push(diagnostic); }
-      if (scope.value.kind !== 'new' || !object(request) || request.useScopedProject === true ||
+      if (scope.value.kind !== 'new' || !object(request) || (request.useScopedProject === true && request.selectedProject != null) ||
           request.defaultCwd != null || request.existingWorkspaceRoot != null || request.homeRemoteProject != null) return get(originalAtom, request);
       const selection = resolveBrowserWorkspaceSelection(null, {
         inputs: get(inputsAtom), routeKind: get(routeKindAtom), productMode: get(requireOriginal('pasN').a),
@@ -363,13 +363,14 @@ export function createLocalCodexAdapter({
     return statements.join('\n');
   }
 
-  /** Read only the original native navigation context for a new user task.
-   * The same transport also carries ephemeral text-generation work; those and
-   * explicit origins are never relabelled. Runtime requests keep their own IDs.
-   */
+  const threadLists = new Set(['thread/list', 'thread/loaded/list']);
+  const threadMutations = new Set(['thread/resume', 'thread/settings/update', 'turn/start', 'turn/addUserMessage']);
+  const isBrowserDirectory = value => value == null || value === '/' || value === '/mnt/data';
+
   function getBrowserRequestContext(method, params, { sidebarProductMode } = {}) {
+    if (threadLists.has(method) && ['work', 'codex'].includes(sidebarProductMode)) return { productMode: sidebarProductMode };
     if (method !== 'thread/start' || !object(params) || params.ephemeral === true ||
-        params.conversationOrigin != null || sidebarProductMode !== 'codex' || params.cwd !== '/mnt/data' ||
+        (params.conversationOrigin != null && params.conversationOrigin !== 'codex') || sidebarProductMode !== 'codex' || !isBrowserDirectory(params.cwd) ||
         !supportsBrowserOriginExecution()) return {};
     return { productMode: 'codex', executionSource: 'local-app-server' };
   }
@@ -380,18 +381,29 @@ export function createLocalCodexAdapter({
    */
   function dispatch(method, params = {}, requestContext = {}) {
     let forwarded = params;
+    if (threadLists.has(method) && ['work', 'codex'].includes(requestContext?.productMode)) {
+      forwarded = { ...params, conversationSurface: requestContext.productMode };
+    }
     if (method === 'thread/start' && requestContext?.productMode === 'codex' && object(params) &&
-        params.ephemeral !== true && params.conversationOrigin == null && params.cwd === '/mnt/data' && supportsBrowserOriginExecution()) {
+        params.ephemeral !== true && (params.conversationOrigin == null || params.conversationOrigin === 'codex') && isBrowserDirectory(params.cwd) && supportsBrowserOriginExecution()) {
       const metadata = object(params.responsesapiClientMetadata) ? params.responsesapiClientMetadata : {};
       forwarded = {
         ...params,
+        cwd: '/mnt/data',
         conversationOrigin: 'codex',
+        executionSurface: 'codex',
         developerInstructions: [params.developerInstructions, providerInstructions()]
           .filter(value => typeof value === 'string' && value.trim()).join('\n\n'),
         responsesapiClientMetadata: {
           ...metadata, localProductSurface: 'codex', localExecutionSource: 'local-app-server',
         },
       };
+    }
+    if (threadMutations.has(method) && object(params)) {
+      const stored = appServer.threads?.get(params.threadId);
+      if (stored?.executionSurface === 'codex' || stored?.adapterMetadata?.conversationOrigin === 'codex') {
+        forwarded = { ...params, executionSurface: 'codex' };
+      }
     }
     diagnostics.push({
       type: 'local-codex-rpc', method: typeof method === 'string' ? method : 'invalid-method',

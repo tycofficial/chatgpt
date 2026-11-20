@@ -4,12 +4,26 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import * as catalog from '../src/native-client/model-catalog.js';
-import {createModelCatalogAdapter,FRONTEND_TO_RAW_EFFORT} from '../src/native-client/model-catalog-adapter.mjs';
+import {consolidateWorkDefaults,createModelCatalogAdapter,FRONTEND_TO_RAW_EFFORT} from '../src/native-client/model-catalog-adapter.mjs';
 import {allowedReasoningEfforts} from '../runtime.js';
 const adapter=createModelCatalogAdapter(catalog);
+
+test('the curated auto row keeps its callback while the redundant plain Work default is hidden', () => {
+  const curated = { onSelect() {}, selected: true };
+  const latest = { id: 'latest', label: catalog.WORK_DEFAULT_OPTION.label };
+  const manual = { id: 'gpt-6.2-sol', label: 'GPT-6.2 Sol' };
+  const modelList = { defaultOption: curated, options: [latest, manual] };
+  const displayed = consolidateWorkDefaults(modelList, latest.label);
+  assert.deepEqual(displayed.options, [manual]);
+  assert.equal(displayed.defaultOption, curated);
+  assert.equal(displayed.defaultOption.onSelect, curated.onSelect);
+  const loneDefault = { options: [latest, manual] };
+  assert.equal(consolidateWorkDefaults(loneDefault, latest.label), loneDefault);
+});
+
 test('TFzY raw effort semantics keep zero/none, max and ultra distinct',()=>{assert.equal(FRONTEND_TO_RAW_EFFORT.none,'zero');assert.equal(FRONTEND_TO_RAW_EFFORT.max,'max');assert.equal(FRONTEND_TO_RAW_EFFORT.ultra,'ultra');assert.notEqual(FRONTEND_TO_RAW_EFFORT.max,FRONTEND_TO_RAW_EFFORT.ultra);});
 test('both Luna manual catalogs start at Low and end at Max without site Ultra',()=>{for(const model of ['gpt-6-luna','gpt-5.6-luna']){const raw=adapter.getWorkModels().models.find(m=>m.slug===model),rpc=adapter.getRpcModelList().data.find(m=>m.model===model);assert.equal(raw.thinking_efforts[0].thinking_effort,'min');assert.equal(raw.thinking_efforts[0].short_label,'轻度');assert.equal(rpc.supportedReasoningEfforts[0].reasoningEffort,'low');assert.equal(rpc.supportedReasoningEfforts.at(-1).reasoningEffort,'max');assert(!rpc.supportedReasoningEfforts.some(e=>e.reasoningEffort==='ultra'));}});
-test('six non-Luna models expose separate site Ultra above their API Max effort',()=>{for(const model of catalog.SITE_ULTRA_ORCHESTRATION.models){const row=adapter.getRpcModelList().data.find(m=>m.model===model),top=row.supportedReasoningEfforts.at(-1);assert.equal(top.reasoningEffort,'ultra');assert.equal(top.adapterExecutionMode.mode,'parallel-agents');assert.equal(top.adapterExecutionMode.baseReasoningEffort,'max');assert.equal(top.adapterExecutionMode.providerReasoningEffort,false);assert(row.supportedReasoningEfforts.some(e=>e.reasoningEffort==='max'));assert.equal(adapter.getWorkModels().models.find(m=>m.slug===model).thinking_efforts.at(-1).short_label,'Ultra');}});
+test('non-Luna models expose separate site Ultra above their API Max effort',()=>{for(const model of catalog.SITE_ULTRA_ORCHESTRATION.models){const row=adapter.getRpcModelList().data.find(m=>m.model===model),top=row.supportedReasoningEfforts.at(-1);assert.equal(top.reasoningEffort,'ultra');assert.equal(top.adapterExecutionMode.mode,'parallel-agents');assert.equal(top.adapterExecutionMode.baseReasoningEffort,'max');assert.equal(top.adapterExecutionMode.providerReasoningEffort,false);assert(row.supportedReasoningEfforts.some(e=>e.reasoningEffort==='max'));assert.equal(adapter.getWorkModels().models.find(m=>m.slug===model).thinking_efforts.at(-1).short_label,'Ultra');}});
 test('Ultra is never advertised as a provider reasoning_effort value',()=>{for(const model of catalog.WORK_MODEL_IDS)assert(!allowedReasoningEfforts(model).includes('ultra'));});
 test('raw display title contains only thinking option and each Chat family owns its version field',()=>{const raw=adapter.getChatGptModels();for(const version of raw.versions){for(const preset of version.intelligence_presets){assert.equal(preset.selected_display_title,preset.title);assert(!/GPT|Luna|Sol|Astra/.test(preset.selected_display_title));assert.equal(preset.selected_display_version,version.display_text);}}});
 test('legacy auto remains GPT-6 standard and Chat never gains Work orchestration',()=>{const raw=adapter.getChatGptModels();assert(!raw.models.find(m=>m.slug==='auto').thinking_efforts.some(e=>e.thinking_effort==='ultra'));assert(raw.versions.every(v=>v.intelligence_presets.every(e=>e.thinking_effort!=='ultra')));assert.equal(catalog.resolveChatSelection('auto').model,'gpt-6-sol');});
@@ -45,6 +59,22 @@ test('dual-matched Terra stays manual with declared host Ultra and no Chat or cu
   assert.equal(catalog.WORK_ADDITIONAL_MODEL_PROVENANCE[id].manualOnly,true);
   assert.equal(catalog.WORK_ADDITIONAL_MODEL_PROVENANCE[id].inferenceVerified,false);
 });
+test('GPT-6.2 Sol and Astra have verified Work/Codex capabilities and exact API efforts',()=>{
+  const models=[['gpt-6.2-sol','GPT-6.2 Sol'],['gpt-6.2-astra','GPT-6.2 Astra']];
+  const apiEfforts=['low','medium','high','xhigh','max'];
+  const work=adapter.getWorkModels(),chat=adapter.getChatGptModels(),rpc=adapter.getRpcModelList();
+  for(const [id,label] of models){
+    assert.deepEqual(allowedReasoningEfforts(id),apiEfforts);
+    assert.equal(work.models.find(row=>row.slug===id).title,label);
+    const model=rpc.data.find(row=>row.model===id);
+    assert.equal(model.displayName,label);
+    assert.deepEqual(model.supportedReasoningEfforts.map(choice=>choice.reasoningEffort),[...apiEfforts,'ultra']);
+    assert(!work.versions.find(version=>version.id==='latest').slugs.includes(id));
+    assert(!chat.categories.some(category=>category.supported_models.includes(id)));
+    assert(!chat.versions.some(version=>version.slugs.includes(id)));
+  }
+});
+
 test('Codex accepts exactly the shared verified manual catalog and rejects provider extras',()=>{
   const source=fs.readFileSync(new URL('../src/native-client/local-codex-adapter.mjs',import.meta.url),'utf8').replace(/^import .*;$/gm,'').replace(/^export\s+/gm,'');
   const context=vm.createContext({WORK_MODEL_IDS:catalog.WORK_MODEL_IDS,Object,Set,Map,TypeError,RangeError,structuredClone});

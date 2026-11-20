@@ -106,7 +106,7 @@ test('only an explicitly selected exact local mount fills the settled native nul
 });
 test('native loading, unselected projects and unrelated routes or directories remain unchanged',()=>{
  const {adapter}=workspaceFixture();
- for(const patch of [{selectionPending:true},{projectsPending:true},{routeKind:'local-thread'},{selection:null},{selection:{type:'remote',projectId:'other'}},{selection:{type:'local',projectId:'other'}},{inputs:{...inputs,authLoading:true}},{inputs:{...inputs,userId:'another'}}])assert.equal(adapter.resolveBrowserWorkspaceSelection(null,{...selectedWorkspace(),...patch}),null);
+ for(const patch of [{selectionPending:true},{projectsPending:true},{routeKind:'local-thread'},{selection:{type:'remote',projectId:'other'}},{selection:{type:'local',projectId:'other'}},{inputs:{...inputs,authLoading:true}},{inputs:{...inputs,userId:'another'}}])assert.equal(adapter.resolveBrowserWorkspaceSelection(null,{...selectedWorkspace(),...patch}),null);
  const value=selectedWorkspace();value.projects[value.selection.projectId].rootPaths=['/other'];assert.equal(adapter.resolveBrowserWorkspaceSelection(null,value),null);
  value.projects[value.selection.projectId].rootPaths=['/mnt/data','/other'];assert.equal(adapter.resolveBrowserWorkspaceSelection(null,value),null);
 });
@@ -128,9 +128,9 @@ test('the source HSUP parameterized resolver receives a real selected mount with
  const forwarded=[],get=(atom,param)=>{if(atom===inputsAtom)return inputs;if(atom===productModeAtom)return'codex';if(atom===query)return{isPending:false,isError:false,data:{value:param==='selected'?value.selection:value.projects}};if(atom===routeKind)return'home';if(atom===originalAtom){forwarded.push(param);return param;}throw Error('Unknown atom');};
  const request={selectedProject:undefined,useScopedProject:false,defaultCwd:undefined,existingWorkspaceRoot:null},scope={value:{kind:'new'}};
  const result=resolveWorkspace(request,{get,scope});assert.notEqual(result,request);assert.equal(result.selectedProject,value.selection);assert.equal(result.useScopedProject,true);assert.equal(request.useScopedProject,false);assert.equal(resolveWorkspace(request,{get,scope}),result);
- for(const request of [{selectedProject:{type:'local',projectId:'other'}},{defaultCwd:'/other'},{existingWorkspaceRoot:'/other'},{homeRemoteProject:{id:'remote'}},{useScopedProject:true}])assert.equal(resolveWorkspace(request,{get,scope}),request);
- for(const optional of [{selectedProject:null,defaultCwd:null},{selectedProject:value.selection,useScopedProject:false}]){const resolved=resolveWorkspace(optional,{get,scope});assert.equal(resolved.useScopedProject,true);assert.equal(resolved.selectedProject,value.selection);}
- value.selection=null;const cleared={selectedProject:null};assert.equal(resolveWorkspace(cleared,{get,scope}),cleared);value.selection=selectedWorkspace().selection;
+ for(const request of [{selectedProject:{type:'local',projectId:'other'}},{defaultCwd:'/other'},{existingWorkspaceRoot:'/other'},{homeRemoteProject:{id:'remote'}},{useScopedProject:true,selectedProject:{type:'local',projectId:'other'}}])assert.equal(resolveWorkspace(request,{get,scope}),request);
+ for(const optional of [{selectedProject:null,defaultCwd:null},{selectedProject:value.selection,useScopedProject:false},{useScopedProject:true}]){const resolved=resolveWorkspace(optional,{get,scope});assert.equal(resolved.useScopedProject,true);assert.equal(resolved.selectedProject,value.selection);}
+ const selectedId=value.selection.projectId;value.selection=null;const cleared={selectedProject:null};assert.equal(resolveWorkspace(cleared,{get,scope}).selectedProject.projectId,selectedId);value.selection=selectedWorkspace().selection;
  assert.equal(resolveWorkspace(request,{get,scope:{value:{kind:'local'}}}),request);
  state.modelSelection=false;assert.equal(resolveWorkspace(request,{get,scope}),request);
 });
@@ -138,6 +138,8 @@ test('the source HSUP parameterized resolver receives a real selected mount with
 test('native request context identifies only verified non-ephemeral new Codex workspace tasks',()=>{
  const {adapter,state}=workspaceFixture(),params={cwd:'/mnt/data',model:'gpt-6.1-sol'};
  assert.equal(adapter.getBrowserRequestContext('thread/start',params,{sidebarProductMode:'codex'}).productMode,'codex');
+ assert.equal(adapter.getBrowserRequestContext('thread/start',{model:params.model},{sidebarProductMode:'codex'}).productMode,'codex');
+ assert.equal(adapter.getBrowserRequestContext('thread/list',{}, {sidebarProductMode:'codex'}).productMode,'codex');
  for(const method of ['turn/start','thread/resume','thread/read','model/list'])assert.equal(Object.keys(adapter.getBrowserRequestContext(method,params,{sidebarProductMode:'codex'})).length,0);
  for(const patch of [{ephemeral:true},{conversationOrigin:'tpp'},{cwd:'/other'}])assert.equal(Object.keys(adapter.getBrowserRequestContext('thread/start',{...params,...patch},{sidebarProductMode:'codex'})).length,0);
  assert.equal(Object.keys(adapter.getBrowserRequestContext('thread/start',params,{sidebarProductMode:'work'})).length,0);
@@ -147,8 +149,10 @@ test('the scoped socket facade keeps one real server, preserves Work/resume/ephe
  const calls=[],server={dispatch(method,params){calls.push({method,params});return{result:{fixture:true}};},subscribe(listener){calls.push({subscribe:listener});return listener;},streamCompletion(){},toolExecutor:{execute(){},tools:[],storage:{}}};
  const adapter=context.createAdapter({appServer:server,models:createModelCatalogAdapter(catalog),readSettings:()=>({apiBase:'https://fixture.invalid',apiKey:'fixture-only'}),getIdentity:()=>identity,isLocalSession:()=>true,getCapabilities:()=>({executionSource:'local-app-server',textConversations:true,modelSelection:true})});
  const facade=adapter.createRpcFacade({getRequestContext:(method,params)=>adapter.getBrowserRequestContext(method,params,{sidebarProductMode:'codex'})});
- const request={cwd:'/mnt/data',model:'gpt-6.1-sol',ephemeral:false};facade.dispatch('thread/start',request);
+ const request={model:'gpt-6.1-sol',ephemeral:false};facade.dispatch('thread/start',request);
  const tagged=calls.at(-1).params;assert.equal(tagged.conversationOrigin,'codex');assert.equal(tagged.responsesapiClientMetadata.localProductSurface,'codex');assert.match(tagged.developerInstructions,/browser storage/);assert.equal(request.conversationOrigin,undefined);
+ assert.equal(tagged.cwd,'/mnt/data');assert.equal(tagged.executionSurface,'codex');
+ facade.dispatch('thread/list',{});assert.equal(calls.at(-1).params.conversationSurface,'codex');
  for(const [method,params] of [['turn/start',{threadId:'old-work',model:'gpt-6-luna'}],['thread/resume',{threadId:'old-work',cwd:'/mnt/data'}],['thread/start',{...request,conversationOrigin:'tpp'}],['thread/start',{...request,ephemeral:true}]]){facade.dispatch(method,params);assert.equal(calls.at(-1).params,params);}
  const listener=()=>{};assert.equal(facade.subscribe(listener),listener);assert.equal(calls.at(-1).subscribe,listener);
 });
@@ -177,19 +181,19 @@ test('the implicit provider default is scoped to Codex and never selects a globa
  const selected=adapter.resolveBrowserWorkspaceSelection(null,value);
  assert.equal(selected.type,'local');assert.equal(selected.projectId,Object.keys(value.projects)[0]);
  for(const productMode of ['chatgpt','work','chat',undefined,null])assert.equal(adapter.resolveBrowserWorkspaceSelection(null,{...value,productMode}),null);
- for(const patch of [{selection:null},{selectionPending:true},{projectsPending:true},{selectionError:true},{projectsError:true}])assert.equal(adapter.resolveBrowserWorkspaceSelection(null,{...value,...patch}),null);
+ for(const patch of [{selectionPending:true},{projectsPending:true},{selectionError:true},{projectsError:true}])assert.equal(adapter.resolveBrowserWorkspaceSelection(null,{...value,...patch}),null);
  const id=Object.keys(value.projects)[0];
  assert.equal(adapter.resolveBrowserWorkspaceSelection(null,{...value,projects:{...value.projects,other:{id:'other',rootPaths:['/elsewhere']}}}),null);
  assert.equal(adapter.resolveBrowserWorkspaceSelection(null,{...value,projects:{[id]:{...value.projects[id],rootPaths:['/elsewhere']}}}),null);
 });
-test('native project wrappers read raw query values so an explicit null never becomes a default',()=>{
+test('an empty Codex project selection can use the ready sole browser mount',()=>{
  const {adapter}=workspaceFixture(),original={},routeScope={},inputsAtom={},modeAtom={},query={},keys={SELECTED_PROJECT:'selected',LOCAL_PROJECTS:'projects'},value=selectedWorkspace();
  let callback,productMode='codex',rawSelection=null;
  const requireOriginal=id=>({'BolX':{c:(scope,fn)=>{assert.equal(scope,routeScope);callback=fn;return fn;}},'tSEg':{a:routeScope},'PFP1':{c:(_get,key)=>key==='selected'?(rawSelection??undefined):value.projects,d:query},'I07G':{kc:keys},'Cslg':{m:inputsAtom},'pasN':{a:modeAtom}}[id]);
  adapter.adaptBrowserWorkspaceSelectionAtom(original,requireOriginal);
  const get=(atom,key)=>atom===original?null:atom===inputsAtom?inputs:atom===modeAtom?productMode:atom===query?{isPending:false,isError:false,data:{value:key==='selected'?rawSelection:value.projects}}:assert.fail('Unexpected atom');
  const scope={value:{routeKind:'home'}};
- assert.equal(callback({get,scope}),null);
+ assert.equal(callback({get,scope}).projectId,Object.keys(value.projects)[0]);
  rawSelection=undefined;assert.equal(callback({get,scope}).projectId,Object.keys(value.projects)[0]);
  productMode='chatgpt';assert.equal(callback({get,scope}),null);
  productMode='codex';rawSelection={type:'local',projectId:'user-chosen'};assert.equal(callback({get,scope}),null);

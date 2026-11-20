@@ -1,5 +1,6 @@
 import { createBrowserReadAloudController, createNativeReadAloudBindings } from './local-native-read-aloud.mjs';
-import { normalizeWorkUIStoredPreference } from './model-catalog.js';
+import { normalizeWorkUIStoredPreference, WORK_DEFAULT_OPTION } from './model-catalog.js';
+import { consolidateWorkDefaults } from './model-catalog-adapter.mjs';
 /**
  * Loads the public original component graph with explicit local host services.
  * Private original backend credentials are never used by this entry point.
@@ -11,7 +12,7 @@ import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs';
 import { getPrototypeLocalSession, getPrototypeLocalAuth, isPrototypeLocalSession, getPrototypeLocalAuthGeneration, clearPrototypeLocalSession } from './local-identity.mjs';
 import { createLocalHostSettingsClass } from './local-host-settings.mjs';
 import { createLocalWorkPolicy } from './local-work-policy.mjs';
-import { hasModelSelectionAccess, getSiteLoginUrl } from './site-account.mjs';
+import { hasModelSelectionAccess, getSiteLoginUrl, getSitePlansUrl } from './site-account.mjs';
 import { createNativeModelSelectionPolicy, createNativeThinkingEntryPolicy } from './local-model-selection-policy.mjs';
 import { createLocalHostClaimsReader } from './local-token-identity.mjs';
 import { wrapNativeFileUploadClass } from './local-native-upload.mjs';
@@ -281,6 +282,21 @@ const codexContextRpc = localCodexAdapter.createRpcFacade({
 overrideExports('EAKz', {
   b: async () => new LocalAppServerSocket(boundary.diagnostics, codexContextRpc),
 });
+
+// The native curated option already offers the automatic selection and slider.
+overrideExports('dU23', {}, { deferred: true }, {
+  a: NativePicker => function SiteWorkModelPicker(props) {
+    const modelListConfig = consolidateWorkDefaults(props.modelListConfig, WORK_DEFAULT_OPTION.label);
+    return requireOriginal('ABep').jsx(NativePicker, { ...props, modelListConfig });
+  },
+});
+
+function openSitePlans(options = {}) {
+  options?.event?.preventDefault?.();
+  location.assign(getSitePlansUrl(location.href));
+  if (options?.awaitNavigation) return Promise.resolve();
+}
+overrideExports('GEHh', {}, { deferred: true }, { a: () => () => openSitePlans });
 
 // Preserve the original host class/RpcTarget inheritance and all public setting
 // definitions. Only its browser-storage implementation changes; UI/controller

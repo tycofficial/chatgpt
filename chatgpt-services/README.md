@@ -1,8 +1,12 @@
 # ChatGPT site account service
 
-Cloudflare Worker ESM with a Sites-provisioned D1 database. The public GitHub Pages frontend uses this service for its administrator and registered Free accounts, plus an authorized local-host relay.
+Cloudflare Worker ESM with a Sites-provisioned D1 database. The public GitHub Pages frontend uses this service for its administrator and registered site accounts, plus an authorized local-host relay.
 
-Edit `worker/service.mjs`; `node scripts/build.mjs` creates the standalone `dist/server/index.js`. Run `node --test tests/*.test.mjs` and `node scripts/validate-artifact.mjs`. Schema migrations live in `drizzle/`.
+Run `node scripts/build.mjs` to package the worker entry point at `dist/server/index.js` with its imports. Run `node --test tests/*.test.mjs` and `node scripts/validate-artifact.mjs` to verify it. Schema migrations live in `drizzle/`.
+
+Registered accounts start on Free. An authenticated `POST /auth/site-trial` accepts a `tier` of `plus`, `prolite`, `pro`, or `promax`. Each selection or renewal sets the account's current trial to 30 days from the server time. Login and session responses include `user.siteTrial` with its tier and expiration in epoch milliseconds while it is active. Migration `0004_site_trials` adds trial storage.
+
+An administrator or an account with an active trial can send a stateless Responses request to `POST /inference/v1/responses`. This endpoint supports `gpt-6.2-sol` and `gpt-6.2-astra` and forwards requests of up to 8 MiB to Docode. Configure `DOCODE_API_KEY` as a Sites runtime secret to enable the route.
 
 Runtime secret names: `ADMIN_PASSWORD_HASH`, `ADMIN_PASSWORD_SALT`; runtime setting `ADMIN_USERNAME`. Plaintext passwords and OpenAI OAuth credentials must never enter this repository. Username and password matching is case insensitive by explicit owner request. Administrator sessions are random opaque credentials, hashed in D1, expire after 30 days and can be revoked.
 

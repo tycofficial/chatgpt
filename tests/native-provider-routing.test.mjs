@@ -88,7 +88,7 @@ test('diagnostics/allowlist expose no credentials and all thrown provider messag
  assert.equal(r.getAllowedRequests().length,6);assert.ok(r.getAllowedRequests().every(row=>Object.keys(row).sort().join(',')==='id,method,origin,path'));assert.equal(requests.length,1);
 }));
 test('malformed trusted configuration and unsupported saved route fail closed',()=>fixture(()=>{throw Error('No request expected');},async requests=>{
- for(const change of [p=>{p[0].apiBase='http://primary.fixture.test';},p=>{p[0].apiBase=primary+'?credential=forbidden';},p=>{p[0].supportedModels=[];},p=>{p[1].id='primary';}]){const p=providers();change(p);assert.throws(()=>getProviderRequestAllowlist(p),{code:'API_PROVIDER_CONFIG_INVALID'});}
+ for(const change of [p=>{p[0].apiBase='http://primary.fixture.test';},p=>{p[0].apiBase=primary+'?credential=forbidden';},p=>{p[0].supportedModels=[];},p=>{p[0].responsesModels=['unadvertised-model'];},p=>{p[1].id='primary';}]){const p=providers();change(p);assert.throws(()=>getProviderRequestAllowlist(p),{code:'API_PROVIDER_CONFIG_INVALID'});}
  await assert.rejects(router().complete(options({transportContext:{checkpoint:{apiProviderId:'removed-provider'}}})),{code:'API_SAVED_PROVIDER_UNAVAILABLE'});assert.equal(requests.length,0);
  assert.equal(isExplicitQuotaExhaustion({status:401,providerCode:'insufficient_quota'}),false);
  assert.equal(isExplicitQuotaExhaustion({transportStatus:401,providerCode:'insufficient_quota'}),false);
@@ -119,4 +119,31 @@ test('browser Responses restriction leaves ordinary primary Chat Completions ena
 test('browser Responses restriction does not block an available real host transport',()=>fixture(()=>{throw Error('No direct request expected');},async requests=>{
  let hosted=0;await router({getProviders:browserCompatibleProviders}).complete(options({settings:{...settings,model:'gpt-6-astra',reasoningMode:'pro'},responsesTransport:async payload=>{hosted++;return success(payload);}}));
  assert.equal(hosted,1);assert.equal(requests.length,0);
+}));
+
+test('GPT-6.2 uses the injected Responses transport with the exact model and effort',()=>fixture(()=>{
+ throw Error('No direct browser request expected');
+},async requests=>{
+ const models=['gpt-6.2-sol','gpt-6.2-astra'];
+ const config=browserCompatibleProviders();
+ config[0].supportedModels.push(...models);
+ config[0].responsesModels=models;
+ config[0].browserChatCompletions=false;
+ const service=router({getProviders:()=>config});
+ for(const model of models){
+  const settings62={...settings,model,reasoningEffort:'max',reasoningMode:'standard',apiTransport:'chat-completions'};
+  const payloads=[];
+  const result=await service.complete(options({settings:settings62,responsesTransport:async payload=>{
+   payloads.push(payload);
+   return success(payload);
+  }}));
+  assert.equal(result.model,model);
+  assert.equal(payloads.length,1);
+  assert.equal(payloads[0].model,model);
+  assert.equal(payloads[0].reasoning.effort,'max');
+  assert.equal(payloads[0].stream,true);
+  assert(Array.isArray(payloads[0].input));
+  await assert.rejects(service.complete(options({settings:settings62})),{code:'API_BROWSER_RESPONSES_UNAVAILABLE'});
+ }
+ assert.equal(requests.length,0);
 }));

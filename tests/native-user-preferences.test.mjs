@@ -95,12 +95,14 @@ test('a late-loaded preference module cannot inherit an identity namespace belon
   }
 });
 
-test('clearing the original local-session identity blocks the old authenticated provider even before its verified account is removed', () => {
+test('native browser cleanup preserves verified preferences while site logout revokes them', () => {
   const values = new Map([[baseKey, JSON.stringify({ settings: { chat_theme: 'purple' } })]]), before = [...values], f = fixture(admin, values);
   f.clearSession();
+  assert.equal(f.api.readLocalUserPreferences().settings.chat_theme, 'purple');
+  f.setAccount(null);
   assert.deepEqual(plain(f.api.readLocalUserPreferences()), empty());
   assert.throws(() => f.api.updateLocalUserPreference('chat_theme', 'blue'), error => error.status === 409);
-  assert.deepEqual([...values], before); assert.equal(f.reads(), 0); assert.equal(f.writes(), 0);
+  assert.deepEqual([...values], before); assert.equal(f.reads(), 1); assert.equal(f.writes(), 0);
 });
 
 test('an account change triggered while serializing a value cannot copy old state into the new account', () => {

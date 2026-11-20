@@ -2,6 +2,7 @@
 import { FRONTEND_TO_RAW_EFFORT } from './model-catalog-adapter.mjs';
 import { hostedSearchMessage, mergeWebSearchReferences } from './local-web-search.mjs';
 import { turnHostCheckpoints } from './preferred-host-transport.mjs';
+import { storedConversationOrigin, storedConversationSurface } from './local-app-server.mjs';
 
 import { parseClassicInputMessages } from './classic-input-messages.mjs';
 export { parseClassicInputMessages, CLASSIC_CONTEXT_LIMITS } from './classic-input-messages.mjs';
@@ -9,7 +10,7 @@ export class ClassicChatAdapter {
   constructor({ appServer, models, now = Date.now, uuid = () => crypto.randomUUID(), onConversationChange = () => {}, heartbeatMs = 10000, getPublishedFileReferences = () => [] }) { this.server = appServer; this.models = models; this.now = now; this.uuid = uuid; this.onConversationChange = onConversationChange; this.heartbeatMs = heartbeatMs; this.getPublishedFileReferences = getPublishedFileReferences; this.mutationQueue = Promise.resolve(); }
   json(body, status = 200) { return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }); }
   summary(thread) {
-    return { id: thread.id, title: thread.name || 'New chat', create_time: new Date(thread.createdAt * 1000).toISOString(), update_time: new Date(thread.updatedAt * 1000).toISOString(), conversation_origin: thread.adapterMetadata.conversationOrigin ?? null, gizmo_id: null, is_archived: !!thread.archived, is_starred: !!thread.adapterMetadata.isStarred };
+    return { id: thread.id, title: thread.name || 'New chat', create_time: new Date(thread.createdAt * 1000).toISOString(), update_time: new Date(thread.updatedAt * 1000).toISOString(), conversation_origin: storedConversationOrigin(thread), gizmo_id: null, is_archived: !!thread.archived, is_starred: !!thread.adapterMetadata.isStarred };
   }
   reasoningMetadata(turn, item = null) {
     const lifecycle = turn.adapterMetadata?.reasoningLifecycle;
@@ -103,7 +104,7 @@ export class ClassicChatAdapter {
     }
     return {
       title: thread.name || 'New chat', create_time: thread.createdAt, update_time: thread.updatedAt,
-      mapping, moderation_results: [], current_node: parent, conversation_id: thread.id,
+      mapping, moderation_results: [], current_node: parent, conversation_id: thread.id, conversation_origin: storedConversationOrigin(thread),
       is_archived: !!thread.archived, is_starred: !!thread.adapterMetadata.isStarred,
       default_model_slug: thread.adapterMetadata.frontendModelSlug ?? thread.model, gizmo_id: null, plugin_ids: null, safe_urls: [], blocked_urls: [],
       conversation_template_id: null, async_status: null,
@@ -111,10 +112,10 @@ export class ClassicChatAdapter {
     };
   }
   list(url) {
-    let threads = [...this.server.threads.values()].filter(thread => !thread.ephemeral && !['dot', 'codex'].includes(thread.adapterMetadata.conversationOrigin) && !!thread.archived === (url.searchParams.get('is_archived') === 'true'));
+    let threads = [...this.server.threads.values()].filter(thread => !thread.ephemeral && !['dot', 'codex'].includes(storedConversationSurface(thread)) && !!thread.archived === (url.searchParams.get('is_archived') === 'true'));
     const origin = url.searchParams.get('conversation_origin'), excluded = url.searchParams.get('exclude_conversation_origin');
-    if (origin) threads = threads.filter(thread => thread.adapterMetadata.conversationOrigin === origin);
-    if (excluded) threads = threads.filter(thread => thread.adapterMetadata.conversationOrigin !== excluded);
+    if (origin) threads = threads.filter(thread => storedConversationOrigin(thread) === origin);
+    if (excluded) threads = threads.filter(thread => storedConversationOrigin(thread) !== excluded);
     if (url.searchParams.get('is_starred') === 'true') threads = threads.filter(thread => thread.adapterMetadata.isStarred);
     threads.sort((a, b) => b.updatedAt - a.updatedAt);
     const offset = Math.max(0, Number(url.searchParams.get('offset') || 0) || 0), limit = Math.min(200, Math.max(1, Number(url.searchParams.get('limit') || 20) || 20));
@@ -273,12 +274,16 @@ export class ClassicChatAdapter {
   }
   /** Shared normal-send/regenerate decode. Core alone resolves aliases/access. */
   decodeModelRequest(body, existing = null) {
-    const origin = Object.hasOwn(body, 'conversation_origin') ? body.conversation_origin : existing?.adapterMetadata?.conversationOrigin;
-    const executionSurface = ['tpp', 'flora', 'codex'].includes(origin) ? 'work' : 'chat';
+    const stored = storedConversationSurface(existing);
+    const origin = body.conversation_origin;
+    const executionSurface = ['work', 'codex', 'chat'].includes(stored) ? stored : origin === 'codex' ? 'codex' : ['tpp', 'flora'].includes(origin) ? 'work' : 'chat';
     const raw = body.thinking_effort ?? body.reasoning_effort;
     const map = { zero: 'none', min: 'low', standard: 'medium', extended: 'high', xhigh: 'xhigh', max: 'max', ultra: 'ultra' };
-    return { model: body.model, effort: raw == null ? undefined : map[raw] ?? raw,
-      reasoningMode: body.reasoning_mode ?? body.reasoningMode ?? (body.reasoning_type === 'pro' ? 'pro' : undefined),
+    // A reopened Work route can briefly carry the Chat picker's cached alias.
+    // Reuse the stored model and effort until the correct picker has loaded.
+    const staleChatAlias = existing && executionSurface !== 'chat' && (body.model === 'auto' || /^chat-gpt-/.test(body.model ?? ''));
+    return { model: staleChatAlias ? undefined : body.model, effort: staleChatAlias || raw == null ? undefined : map[raw] ?? raw,
+      reasoningMode: executionSurface === 'chat' ? body.reasoning_mode ?? body.reasoningMode ?? (body.reasoning_type === 'pro' ? 'pro' : undefined) : undefined,
       executionSurface, frontendModelSlug: executionSurface === 'chat' ? body.model : undefined };
   }
   stream(request, body) {

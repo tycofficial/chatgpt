@@ -8,8 +8,14 @@ function routes(value){
   let url;try{url=new URL(entry.apiBase);}catch{throw routeError('API_PROVIDER_CONFIG_INVALID','An API provider URL is invalid.');}
   if(url.protocol!=='https:'||url.username||url.password||url.search||url.hash||typeof entry.apiKey!=='string'||!entry.apiKey.trim())throw routeError('API_PROVIDER_CONFIG_INVALID','Each API provider needs an HTTPS base and a configured credential.');
   if(!Array.isArray(entry.supportedModels)||!entry.supportedModels.length||entry.supportedModels.length>500||new Set(entry.supportedModels).size!==entry.supportedModels.length||entry.supportedModels.some(model=>typeof model!=='string'||!model||model.length>160))throw routeError('API_PROVIDER_CONFIG_INVALID','Each API provider needs an exact recorded supported-model list.');
+  const responsesModels=entry.responsesModels??[];
+  if (!Array.isArray(responsesModels) || responsesModels.length > entry.supportedModels.length ||
+      new Set(responsesModels).size !== responsesModels.length ||
+      responsesModels.some(model => !entry.supportedModels.includes(model))) {
+    throw routeError('API_PROVIDER_CONFIG_INVALID', 'Responses-only models must be a unique subset of the provider model list.');
+  }
   const base=url.href.replace(/\/+$/,''),path=url.pathname.replace(/\/+$/,'');
-  return{id:entry.id,apiBase:base,apiKey:entry.apiKey,supportedModels:[...entry.supportedModels],apiKeyHeader:entry.apiKeyHeader==='x-api-key'?'x-api-key':undefined,freeChatTransport:entry.freeChatTransport,standardTransport:entry.standardTransport,browserResponses:entry.browserResponses,browserChatCompletions:entry.browserChatCompletions,proExecution:entry.proExecution,fallbackOnRejected:entry.fallbackOnRejected===true,index,origin:url.origin,apiPath:path.endsWith('/v1')?path:path+'/v1'};
+  return{id:entry.id,apiBase:base,apiKey:entry.apiKey,supportedModels:[...entry.supportedModels],responsesModels:[...responsesModels],apiKeyHeader:entry.apiKeyHeader==='x-api-key'?'x-api-key':undefined,freeChatTransport:entry.freeChatTransport,standardTransport:entry.standardTransport,browserResponses:entry.browserResponses,browserChatCompletions:entry.browserChatCompletions,proExecution:entry.proExecution,fallbackOnRejected:entry.fallbackOnRejected===true,index,origin:url.origin,apiPath:path.endsWith('/v1')?path:path+'/v1'};
  });
 }
 export function getProviderRequestAllowlist(providers){return routes(providers).flatMap(route=>[
@@ -71,7 +77,13 @@ export function createProviderCompletionRouter({complete,getProviders,isCurrent=
     const provider=eligible[index];
     const proMax=provider.proExecution==='astra-max'&&options.settings.reasoningMode==='pro'&&options.settings.model==='gpt-6-astra';
     const selectedSettings=proMax?{...options.settings,reasoningMode:'standard',reasoningEffort:'max'}:options.settings;
-    const freeChat=(provider.standardTransport==='chat-completions'||options.providerRoutingContext?.isFreeChat===true&&provider.freeChatTransport==='chat-completions')&&selectedSettings.reasoningMode!=='pro'&&!(options.tools??[]).some(tool=>tool.type&&tool.type!=='function');let directUsed=freeChat||typeof originalTransport!=='function'||index>start;
+    const requiresResponses=provider.responsesModels.includes(selectedSettings.model);
+    const preferChatCompletions = provider.standardTransport === 'chat-completions' ||
+      (options.providerRoutingContext?.isFreeChat === true && provider.freeChatTransport === 'chat-completions');
+    const useChatCompletions = !requiresResponses && preferChatCompletions && selectedSettings.reasoningMode !== 'pro' &&
+      !(options.tools ?? []).some(tool => tool.type && tool.type !== 'function');
+    const transportOverride = requiresResponses ? 'responses' : useChatCompletions ? 'chat-completions' : undefined;
+    let directUsed=useChatCompletions||typeof originalTransport!=='function'||index>start;
     const activity=event=>{observed=true;options.onActivity?.(event);};
     const delta=(text,assembled)=>{if(text||assembled?.content||assembled?.reasoning||assembled?.tool_calls?.length)observed=true;options.onDelta?.(text,assembled);};
     const responsesTransport=originalTransport&&index===start?async(payload,transport)=>originalTransport(payload,{...transport,fallbackResponses:async()=>{
@@ -81,7 +93,21 @@ export function createProviderCompletionRouter({complete,getProviders,isCurrent=
     if(directUsed)await pin(provider);
     emit({type:'api-provider-attempt',providerId:provider.id,model:options.settings.model,reason:index>start?'explicit-quota-fallback':provider.index?'model-admission-or-saved-route':'configured-primary'});
     try{
-     const result=await complete({...options,settings:{...selectedSettings,apiBase:provider.apiBase,apiKey:provider.apiKey,apiKeyHeader:provider.apiKeyHeader,browserResponses:provider.browserResponses,browserChatCompletions:provider.browserChatCompletions,...(freeChat?{apiTransport:'chat-completions'}:{})},onActivity:activity,onDelta:delta,responsesTransport:freeChat?undefined:responsesTransport});
+     const result = await complete({
+      ...options,
+      settings: {
+       ...selectedSettings,
+       apiBase: provider.apiBase,
+       apiKey: provider.apiKey,
+       apiKeyHeader: provider.apiKeyHeader,
+       browserResponses: provider.browserResponses,
+       browserChatCompletions: provider.browserChatCompletions,
+       ...(transportOverride ? { apiTransport: transportOverride } : {}),
+      },
+      onActivity: activity,
+      onDelta: delta,
+      responsesTransport: useChatCompletions ? undefined : responsesTransport,
+     });
      return proMax?{...result,adapter_execution:{presentationReasoningMode:'pro',actualRequestedReasoningMode:'standard',actualRequestedEffort:'max',model:'gpt-6-astra'}}:result;
     }catch(error){
      options.signal?.throwIfAborted();if(!isCurrent())throw routeError('API_ROUTE_OWNER_CHANGED','The active account changed during the API request.');
