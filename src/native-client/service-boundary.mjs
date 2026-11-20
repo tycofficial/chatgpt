@@ -1,3 +1,4 @@
+import { originalAssetURL } from './startup-compatibility.mjs';
 import { nativeWebSearchHint } from './local-web-search.mjs';
 import { createLocalReadAloudSource } from './local-native-read-aloud.mjs';
 import * as modelCatalog from './model-catalog.js';
@@ -358,6 +359,10 @@ export function installNetworkBoundary() {
     const request = new Request(input, init);
     const url = new URL(request.url, location.href);
     const local = url.origin === location.origin;
+    if (globalThis.__CHATGPT_REPLICA_ENV__?.directAssetHost && ['GET', 'HEAD'].includes(request.method)) {
+      const asset = originalAssetURL(url.href, new URL(globalThis.__CHATGPT_REPLICA_ENV__.basePath, location.origin));
+      if (asset !== url.href) { const headers = new Headers(request.headers); headers.delete('Authorization'); headers.delete('Cookie'); return originalFetch(new Request(asset, { method: request.method, headers, credentials: 'omit', signal: request.signal })); }
+    }
     if (url.protocol === 'blob:' && ['GET', 'HEAD'].includes(request.method) && localOwnedDownloadTransport.ownsObjectURL(url.href)) {
       const headers = new Headers(request.headers); headers.delete('Authorization'); headers.delete('Cookie');
       return originalFetch(new Request(request, { headers, credentials: 'omit' }));

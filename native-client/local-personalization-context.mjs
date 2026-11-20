@@ -1,5 +1,5 @@
 /** Apply browser-local custom instructions only to original Classic Chat/Work. */
-import { USER_SYSTEM_MESSAGES_STORAGE_KEY } from './local-personalization-service.mjs?v=77599d3a62544f6e';
+import { USER_SYSTEM_MESSAGES_STORAGE_KEY } from './local-personalization-service.mjs?v=9e6124f65633571c';
 
 const identityFields = ['accountId', 'userId', 'accountUserId'];
 const copyIdentity = value => value && Object.fromEntries(identityFields.map(key => [key, value[key] ?? null]));

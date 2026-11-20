@@ -7,7 +7,7 @@ const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const referenceInput=path.join(root,'.test-output/original-client-prototype');
 const input=path.join(root,'src/native-client');
 const output=path.join(root,'native-client');
-const helpers=['boot-adapter.mjs','service-boundary.mjs','provider-routing.mjs','local-native-read-aloud.mjs','local-web-search.mjs','preferred-host-transport.mjs','synthetic-bootstrap.mjs','public-auth-envelope.mjs','local-identity.mjs','local-token-identity.mjs','site-account.mjs','chat-history-sync.mjs','account-history-coordinator.mjs','native-cloud-sync-feedback.mjs','local-model-selection-policy.mjs','local-configuration.mjs','local-user-preferences.mjs','local-personalization-service.mjs','local-personalization-context.mjs','local-host-settings.mjs','local-work-policy.mjs','local-codex-adapter.mjs','local-dot-adapter.mjs','local-map-provider.mjs','local-maps-service.mjs','local-discovery.mjs','public-plugin-catalog.mjs','local-pubsub.mjs','model-catalog-adapter.mjs','local-app-server.mjs','classic-chat-adapter.mjs','portable-conversation-share.mjs','classic-response-branches.mjs','classic-input-messages.mjs','agent-turn-runner.mjs','site-ultra-orchestrator.mjs','browser-tool-executor.mjs','local-document-extraction.mjs','document-text-worker.mjs','local-ooxml-container.mjs','local-office-xml.mjs','local-xlsx-extraction.mjs','local-pptx-extraction.mjs','local-files-service.mjs','local-library-service.mjs','local-library-publisher.mjs','published-resource-rehydration.mjs','native-library-refresh.mjs','native-publication-references.mjs','native-workspace-references.mjs','native-file-reference-composition.mjs','local-native-upload.mjs','local-native-download.mjs','local-workspace-download-source.mjs','local-workspace-download-service.mjs','owned-download-transport.mjs','local-input-preparation.mjs','local-pricing.mjs','entry-library.mjs'];
+const helpers=['boot-adapter.mjs','startup-compatibility.mjs','image-input-compression.mjs','service-boundary.mjs','provider-routing.mjs','local-native-read-aloud.mjs','local-web-search.mjs','preferred-host-transport.mjs','synthetic-bootstrap.mjs','public-auth-envelope.mjs','local-identity.mjs','local-token-identity.mjs','site-account.mjs','chat-history-sync.mjs','account-history-coordinator.mjs','native-cloud-sync-feedback.mjs','local-model-selection-policy.mjs','local-configuration.mjs','local-user-preferences.mjs','local-personalization-service.mjs','local-personalization-context.mjs','local-host-settings.mjs','local-work-policy.mjs','local-codex-adapter.mjs','local-dot-adapter.mjs','local-map-provider.mjs','local-maps-service.mjs','local-discovery.mjs','public-plugin-catalog.mjs','local-pubsub.mjs','model-catalog-adapter.mjs','local-app-server.mjs','classic-chat-adapter.mjs','portable-conversation-share.mjs','classic-response-branches.mjs','classic-input-messages.mjs','agent-turn-runner.mjs','site-ultra-orchestrator.mjs','browser-tool-executor.mjs','local-document-extraction.mjs','document-text-worker.mjs','local-ooxml-container.mjs','local-office-xml.mjs','local-xlsx-extraction.mjs','local-pptx-extraction.mjs','local-files-service.mjs','local-library-service.mjs','local-library-publisher.mjs','published-resource-rehydration.mjs','native-library-refresh.mjs','native-publication-references.mjs','native-workspace-references.mjs','native-file-reference-composition.mjs','local-native-upload.mjs','local-native-download.mjs','local-workspace-download-source.mjs','local-workspace-download-service.mjs','owned-download-transport.mjs','local-input-preparation.mjs','local-pricing.mjs','entry-library.mjs'];
 if(new Set(helpers).size!==helpers.length)throw Error('Duplicate native helper declaration');
 if(process.argv.includes('--from-reference')){
  await fs.mkdir(input,{recursive:true});
@@ -75,16 +75,15 @@ for(const [name,original]of raw){
 plan.registrationEntry='./entry-library.mjs?v='+release;
 plan.status='original-module-graph-with-local-service-adapter';
 await write(path.join(output,'entry-plan.json'),JSON.stringify(plan,null,2)+'\n');
-const bootstrap=`const rootURL = new URL('../', import.meta.url);
+const bootstrap=`import { installDirectAssetHost, registerOptionalAssetWorker, showStartupError } from './startup-compatibility.mjs?v=${release}';
+try {
+const rootURL = new URL('../', import.meta.url);
 const releaseFetch = globalThis.fetch.bind(globalThis);
-globalThis.__CHATGPT_REPLICA_ENV__ = Object.freeze({basePath:rootURL.pathname,localIdentity:true,useOriginalAuth:true,preferredHostEnabled:true,release:${JSON.stringify(release)},sourceBuild:${JSON.stringify(sourceBuild)}});
+globalThis.__CHATGPT_REPLICA_ENV__ = Object.freeze({basePath:rootURL.pathname,localIdentity:true,useOriginalAuth:true,preferredHostEnabled:true,directAssetHost:true,release:${JSON.stringify(release)},sourceBuild:${JSON.stringify(sourceBuild)}});
 const workerURL = new URL('native-client-worker.js?v='+${JSON.stringify(release)}, rootURL);
-if (!navigator.serviceWorker) throw Error('This browser does not support the original-client asset host');
-await navigator.serviceWorker.register(workerURL,{scope:rootURL.pathname,type:'module',updateViaCache:'none'});
-await navigator.serviceWorker.ready;
-if (!navigator.serviceWorker.controller || !new URL(navigator.serviceWorker.controller.scriptURL).pathname.endsWith('/native-client-worker.js')) {
- await new Promise((resolve,reject)=>{const done=()=>{clearTimeout(timer);navigator.serviceWorker.removeEventListener('controllerchange',done);resolve();};const timer=setTimeout(()=>reject(Error('Original asset host did not become ready')),20000);navigator.serviceWorker.addEventListener('controllerchange',done);if(navigator.serviceWorker.controller)done();});
-}
+installDirectAssetHost(rootURL, { fetchImpl: releaseFetch });
+// Storage-backed hosting is optional; import maps host the original modules.
+void registerOptionalAssetWorker(workerURL, rootURL.pathname);
 const siteAccount = await import('./site-account.mjs?v='+${JSON.stringify(release)});
 let isBusy;
 if(['login','auth/login','signup','auth/signup'].map(route=>rootURL.pathname+route).includes(location.pathname.replace(/\\/$/,''))) {
@@ -101,6 +100,7 @@ const {createReleaseUpdater} = await import('../release-updater.js?v='+${JSON.st
 const updater = createReleaseUpdater({currentRelease:${JSON.stringify(release)},baseURL:rootURL,fetchImpl:releaseFetch,isBusy,interactionQuietMs:30000});
 updater.start();
 globalThis.addEventListener('pagehide',()=>updater.stop(),{once:true});
+} catch (error) { showStartupError(error); }
 `;
 await write(path.join(output,'bootstrap.mjs'),bootstrap);
 const worker=`import {BrowserWorkspaceStore,workspacePath} from './native-client/browser-tool-executor.mjs?v=${release}';
@@ -147,8 +147,8 @@ self.addEventListener('fetch',event=>{
 `;
 await write(path.join(root,'native-client-worker.js'),worker);
 const html=`<!DOCTYPE html>
-<html class="chatgpt-theme" lang="zh-CN" dir="ltr" data-theme="light" data-appearance-preset="codex" data-ios="false" data-build="${sourceBuild}" data-client-build-revision="${sourceBuild}" data-icon-sprite-url="/cdn/assets/icons-65c0f11497ac4847.svg" data-codex-cli-version="0.171.0-alpha.2" data-codex-window-type="browser" data-window-type="browser" data-native-client-release="${release}">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="${deploymentBase}original-client/public/chatgpt.com/cdn/assets/c7fcb2505631.css"><link rel="stylesheet" href="${deploymentBase}native-client/map-vendor/maplibre-gl.css?v=${release}"><style data-codex-app-themes></style><title>ChatGPT</title></head>
+<html class="chatgpt-theme" lang="zh-CN" dir="ltr" data-theme="light" data-appearance-preset="codex" data-ios="false" data-build="${sourceBuild}" data-client-build-revision="${sourceBuild}" data-icon-sprite-url="${deploymentBase}original-client/public/chatgpt.com/cdn/assets/icons-65c0f11497ac4847.svg" data-codex-cli-version="0.171.0-alpha.2" data-codex-window-type="browser" data-window-type="browser" data-native-client-release="${release}">
+<head><script type="importmap">${JSON.stringify({imports:{"/cdn/":deploymentBase+"original-client/public/chatgpt.com/cdn/","https://chatgpt.com/cdn/":deploymentBase+"original-client/public/chatgpt.com/cdn/","https://cdn.oaistatic.com/":deploymentBase+"original-client/public/cdn.oaistatic.com/"}})}</script><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="${deploymentBase}original-client/public/chatgpt.com/cdn/assets/c7fcb2505631.css"><link rel="stylesheet" href="${deploymentBase}native-client/map-vendor/maplibre-gl.css?v=${release}"><style data-codex-app-themes></style><title>ChatGPT</title></head>
 <body><script type="module" src="${deploymentBase}native-client/bootstrap.mjs?v=${release}"></script></body></html>
 `;
 await write(path.join(root,'native-client-shell.html'),html);

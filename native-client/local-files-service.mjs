@@ -1,10 +1,11 @@
+import { compressImageInput } from './image-input-compression.mjs?v=9e6124f65633571c';
 /**
  * Real origin-local file storage behind the original PYGO/LulU contracts.
  * Original UI and event pipeline remain unchanged; no Azure/cookie/private API.
  * POST /files -> upload URL -> actual bytes -> process NDJSON/uploaded.
  */
-import { workspacePath } from './browser-tool-executor.mjs?v=77599d3a62544f6e';
-import { createLocalDocumentExtractor } from './local-document-extraction.mjs?v=77599d3a62544f6e';
+import { workspacePath } from './browser-tool-executor.mjs?v=9e6124f65633571c';
+import { createLocalDocumentExtractor } from './local-document-extraction.mjs?v=9e6124f65633571c';
 export const LOCAL_FILES_SOURCE = 'browser-origin-file-storage';
 export const LOCAL_FILE_PREFIX = 'file_local_';
 /** Pure transport classification: no current-account or metadata dependency. */
@@ -966,8 +967,11 @@ export function createLocalFilesService({
     } else throw issue('An original image or localImage input is required');
     cancellation(signal); assertOwner(id);
     if (!bytes || bytes.length > maxFileBytes) throw issue('Image bytes are missing or too large', 413, 'file_too_large');
-    const info = imageInfo(bytes);
-    return { input: { type: 'image', url: 'data:' + info.mimeType + ';base64,' + base64(bytes) }, ...info, size: bytes.length, sha256: record?.sha256 ?? await hash(bytes) };
+    const originalInfo = imageInfo(bytes);
+    const resized = await compressImageInput(bytes, originalInfo, { signal });
+    cancellation(signal); assertOwner(id);
+    const info = imageInfo(resized.bytes); bytes = resized.bytes;
+    return { input: { type: 'image', url: 'data:' + info.mimeType + ';base64,' + base64(bytes) }, ...info, size: bytes.length, sha256: resized.compressed ? await hash(bytes) : record?.sha256 ?? await hash(bytes), compressed: resized.compressed };
   }
   async function resolveChatAttachments(messages, { threadId, signal } = {}) {
     if (!Array.isArray(messages)) throw issue('Original Chat messages are required');

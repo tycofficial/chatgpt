@@ -27,6 +27,7 @@ installSyntheticDocumentState();
 
 const plan = await (await fetch('/__prototype/entry-plan.json')).json();
 const { __webpack_require__: requireOriginal } = await import(plan.runtime);
+if (globalThis.__CHATGPT_REPLICA_ENV__?.directAssetHost) requireOriginal.p = new URL('original-client/public/chatgpt.com/cdn/', new URL(globalThis.__CHATGPT_REPLICA_ENV__.basePath, location.origin)).href;
 // One mechanical entry transform defers its terminal hxQI invocation and
 // rebases its relative imports. All original factories and chunks are retained.
 const entryLibrary = await import(plan.registrationEntry);
