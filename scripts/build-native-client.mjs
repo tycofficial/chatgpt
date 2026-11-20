@@ -7,10 +7,13 @@ const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const referenceInput=path.join(root,'.test-output/original-client-prototype');
 const input=path.join(root,'src/native-client');
 const output=path.join(root,'native-client');
+const servicesOnly = process.argv.includes('--services-only');
+const sha256 = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const helpers=['boot-adapter.mjs','startup-compatibility.mjs','image-input-compression.mjs','service-boundary.mjs','provider-routing.mjs','local-native-read-aloud.mjs','local-web-search.mjs','preferred-host-transport.mjs','synthetic-bootstrap.mjs','public-auth-envelope.mjs','local-identity.mjs','local-token-identity.mjs','site-account.mjs','chat-history-sync.mjs','account-history-coordinator.mjs','native-cloud-sync-feedback.mjs','local-model-selection-policy.mjs','local-configuration.mjs','local-user-preferences.mjs','local-personalization-service.mjs','local-personalization-context.mjs','local-host-settings.mjs','local-work-policy.mjs','local-codex-adapter.mjs','local-dot-adapter.mjs','local-map-provider.mjs','local-maps-service.mjs','local-discovery.mjs','public-plugin-catalog.mjs','local-pubsub.mjs','model-catalog-adapter.mjs','local-app-server.mjs','classic-chat-adapter.mjs','portable-conversation-share.mjs','classic-response-branches.mjs','classic-input-messages.mjs','agent-turn-runner.mjs','site-ultra-orchestrator.mjs','browser-tool-executor.mjs','local-document-extraction.mjs','document-text-worker.mjs','local-ooxml-container.mjs','local-office-xml.mjs','local-xlsx-extraction.mjs','local-pptx-extraction.mjs','local-files-service.mjs','local-library-service.mjs','local-library-publisher.mjs','published-resource-rehydration.mjs','native-library-refresh.mjs','native-publication-references.mjs','native-workspace-references.mjs','native-file-reference-composition.mjs','local-native-upload.mjs','local-native-download.mjs','local-workspace-download-source.mjs','local-workspace-download-service.mjs','owned-download-transport.mjs','local-input-preparation.mjs','local-pricing.mjs','entry-library.mjs'];
-helpers.push('native-pricing-trials.mjs', 'site-signout.mjs', 'native-site-login.mjs');
+helpers.push('native-pricing-trials.mjs', 'site-signout.mjs', 'native-site-login.mjs', 'site-paths.mjs', 'prepared-input-store.mjs');
 if(new Set(helpers).size!==helpers.length)throw Error('Duplicate native helper declaration');
 if(process.argv.includes('--from-reference')){
+ if (servicesOnly) throw Error('A service update requires a previously published client');
  await fs.mkdir(input,{recursive:true});
  for(const name of [...helpers,'entry-plan.json']){const file=path.join(input,name),temporary=file+'.'+process.pid+'.tmp';await fs.writeFile(temporary,await fs.readFile(path.join(referenceInput,name)));await fs.rename(temporary,file);}
 }
@@ -37,33 +40,59 @@ for(const asset of supplementalManifest.assets){
  supplementalAssets.push({file:asset.path,bytes});
 }
 const deploymentBase='/'+(process.env.PUBLIC_BASE_PATH||'chatgpt').replace(/^\/+|\/+$/g,'')+'/';
+const prior = servicesOnly ? JSON.parse(await fs.readFile(path.join(output, 'adapter-provenance.json'), 'utf8')) : null;
+const priorPlan = servicesOnly ? JSON.parse(await fs.readFile(path.join(output, 'entry-plan.json'), 'utf8')) : null;
+if (servicesOnly && (prior.deploymentBase !== deploymentBase || prior.sourceBuild !== sourceBuild ||
+  !/^\.\/entry-library\.mjs\?v=[a-f0-9]{16}$/.test(priorPlan.registrationEntry))) {
+  throw Error('The existing page and module entry must belong to this deployment');
+}
 const originalOnSite = url => deploymentBase + 'original-client/public/chatgpt.com' + url;
 const builderBytes=await fs.readFile(fileURLToPath(import.meta.url));
 const sharedAssetInputs=['config.js','model-catalog.js','runtime.js','python-worker.js','release-updater.js'].map(file=>({file,...(['python-worker.js','model-catalog.js'].includes(file)?{inputFile:'src/native-client/'+file}:{})}));
 const sharedAssets=await Promise.all(sharedAssetInputs.map(async asset=>({...asset,bytes:await fs.readFile(path.join(root,asset.inputFile??asset.file))})));
 const releaseHash=crypto.createHash('sha256').update([...raw.values()].join('\n')).update(builderBytes).update(entryPlanInput).update(deploymentBase);
+if (priorPlan) releaseHash.update('\0preserved-registration:').update(priorPlan.registrationEntry);
 for(const asset of sharedAssets)releaseHash.update(asset.file).update(asset.bytes);
 for(const asset of publicAssets)releaseHash.update(asset.relative).update(asset.bytes);
 releaseHash.update(supplementalManifestFile).update(supplementalManifestBytes);
 for(const asset of supplementalAssets)releaseHash.update(asset.file).update(asset.bytes);
 const release=releaseHash.digest('hex').slice(0,16);
+const registrationEntry = priorPlan?.registrationEntry ?? './entry-library.mjs?v=' + release;
 await fs.mkdir(output,{recursive:true});
 async function write(file,data){const temporary=file+'.'+process.pid+'.tmp';await fs.writeFile(temporary,data);await fs.rename(temporary,file);}
 // Migrated shared assets have one canonical input; root URLs remain build-derived.
 for(const asset of sharedAssets)if(asset.inputFile)await write(path.join(root,asset.file),asset.bytes);
 function replace(text,from,to){if(!text.includes(from))throw Error('Missing packaging seam: '+from);return text.replaceAll(from,()=>to);}
-for(const asset of publicAssets){const file=path.join(output,asset.relative);await fs.mkdir(path.dirname(file),{recursive:true});await write(file,asset.bytes);}
+for(const asset of publicAssets){
+ const file=path.join(output,asset.relative);
+ if (servicesOnly) {
+  if (sha256(await fs.readFile(file)) !== sha256(asset.bytes)) throw Error('Shared page asset differs: ' + asset.relative);
+ } else {
+  await fs.mkdir(path.dirname(file),{recursive:true});await write(file,asset.bytes);
+ }
+}
 // The archived WebGL engine resolves this module relative to its own runtime.
 // Keep the site's implementation out of the upstream archive manifest.
 const siteResourceAliases = [];
 const preparationWorker = publicAssets.find(asset => asset.relative === 'dot-assets/preparation-worker.mjs');
 if (preparationWorker) {
  const file = '_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/single-thread/preparation-worker.mjs';
- await write(path.join(root, file), preparationWorker.bytes);
+ if (servicesOnly) {
+  if (sha256(await fs.readFile(path.join(root, file))) !== sha256(preparationWorker.bytes)) throw Error('Renderer asset differs: ' + file);
+ } else await write(path.join(root, file), preparationWorker.bytes);
  siteResourceAliases.push({ file, source: preparationWorker.relative, sha256: crypto.createHash('sha256').update(preparationWorker.bytes).digest('hex') });
 }
 const provenance=[];
 for(const [name,original]of raw){
+ if (servicesOnly && name === 'entry-library.mjs') {
+  const registration = prior.helpers.find(helper => helper.file === name);
+  const deployed = await fs.readFile(path.join(output, name));
+  if (registration?.inputSha256 !== sha256(original) || registration.publishedSha256 !== sha256(deployed)) {
+   throw Error('The site service update cannot modify the existing module entry');
+  }
+  provenance.push(registration);
+  continue;
+ }
  let text=original;
  if(name==='boot-adapter.mjs'){
   const initialRoutes = Object.fromEntries(Object.entries(plan.initialRoutes).map(([id, url]) => [id, originalOnSite(url)]));
@@ -72,7 +101,7 @@ for(const [name,original]of raw){
    runtime: originalOnSite(plan.runtime),
    manifest: originalOnSite(plan.manifest),
    initialRoutes,
-   registrationEntry: './entry-library.mjs?v=' + release,
+   registrationEntry,
   };
   text=replace(text,"await (await fetch('/__prototype/entry-plan.json')).json()",JSON.stringify(bootPlan));
   text=replace(text,'installSyntheticDocumentState();',"installSyntheticDocumentState();\nif (globalThis.__CHATGPT_REPLICA_ENV__) window.__reactRouterContext.basename = globalThis.__CHATGPT_REPLICA_ENV__.basePath.replace(/\\/$/, '') || '/';");
@@ -95,7 +124,7 @@ for(const [name,original]of raw){
  await write(path.join(output,name),text);
  provenance.push({file:name,inputSha256:crypto.createHash('sha256').update(original).digest('hex'),publishedSha256:crypto.createHash('sha256').update(text).digest('hex')});
 }
-plan.registrationEntry='./entry-library.mjs?v='+release;
+plan.registrationEntry=registrationEntry;
 plan.status='original-module-graph-with-local-service-adapter';
 await write(path.join(output,'entry-plan.json'),JSON.stringify(plan,null,2)+'\n');
 const bootstrap=`import { installBrowserCompatibility, installDirectAssetHost, registerOptionalAssetWorker, showStartupError } from './startup-compatibility.mjs?v=${release}';
@@ -109,14 +138,19 @@ const workerURL = new URL('native-client-worker.js?v='+${JSON.stringify(release)
 installDirectAssetHost(rootURL, { fetchImpl: releaseFetch });
 // Storage-backed hosting is optional; import maps host the original modules.
 void registerOptionalAssetWorker(workerURL, rootURL.pathname);
-const siteAccount = await import('./site-account.mjs?v='+${JSON.stringify(release)});
+const [siteAccount, signOut, {getSiteAuthEntryKind}] = await Promise.all([
+ import('./site-account.mjs?v='+${JSON.stringify(release)}),
+ import('./site-signout.mjs?v='+${JSON.stringify(release)}),
+ import('./site-paths.mjs?v='+${JSON.stringify(release)}),
+]);
+signOut.installSiteSignOutRestore({home:()=>rootURL});
 let isBusy;
 const pagePath = location.pathname.replace(/\\/index\\.html$/, '/').replace(/\\/$/, '');
-const signOut = await import('./site-signout.mjs?v='+${JSON.stringify(release)});
-if (signOut.isSiteSignOutPage(location.href, rootURL)) {
+const authEntry = getSiteAuthEntryKind(location.href, rootURL);
+if (authEntry === 'logout') {
  siteAccount.logoutSiteAccount();
  location.replace(signOut.getSiteSignedOutUrl(rootURL));
-} else if(['login','auth/login','signup','auth/signup'].map(route=>rootURL.pathname+route).includes(pagePath)) {
+} else if(authEntry === 'login' || authEntry === 'signup') {
  siteAccount.renderSiteLoginPage();
  isBusy = () => [...document.querySelectorAll('.site-login input')].some(input=>input===document.activeElement||input.value.length>0)||!!document.querySelector('.site-login button:disabled');
 }
@@ -217,6 +251,16 @@ self.addEventListener('fetch',event=>{
 `;
 await write(path.join(root,'native-client-worker.js'),worker);
 const cssAsset = 'original-client/public/chatgpt.com/cdn/assets/c7fcb2505631.css';
+let html;
+if (servicesOnly) {
+ const existing = await fs.readFile(path.join(root, 'native-client-shell.html'), 'utf8');
+ const entry = priorPlan.registrationEntry.slice(2);
+ if (!existing.includes('data-native-client-release="' + prior.release + '"') || !existing.includes(entry)) {
+  throw Error('The existing page is out of sync with its metadata');
+ }
+ html = existing.replaceAll(prior.release, release)
+  .replaceAll('entry-library.mjs?v=' + release, entry);
+} else {
 const originalCSS = await fs.readFile(path.join(root, cssAsset), 'utf8');
 const rootAsset = /url\((['"]?)\/cdn\//g;
 const assetOverrides = [];
@@ -251,14 +295,14 @@ const preload = `<script>(function(){
  ${JSON.stringify(primaryStyles)}.forEach(function(url){load('stylesheet',url)});
  ${JSON.stringify(primaryModules)}.forEach(function(url){load('modulepreload',url)});
 })()</script>`;
-const html=`<!DOCTYPE html>
+html=`<!DOCTYPE html>
 <html class="chatgpt-theme" lang="zh-CN" dir="ltr" data-theme="light" data-appearance-preset="codex" data-ios="false" data-build="${sourceBuild}" data-client-build-revision="${sourceBuild}" data-router-basename="${deploymentBase.replace(/\/$/,'') || '/'}" data-icon-sprite-url="${deploymentBase}original-client/public/chatgpt.com/cdn/assets/icons-65c0f11497ac4847.svg" data-codex-cli-version="0.171.0-alpha.2" data-codex-window-type="browser" data-window-type="browser" data-native-client-release="${release}">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><script type="importmap">${JSON.stringify({imports:{"/cdn/":deploymentBase+"original-client/public/chatgpt.com/cdn/","https://chatgpt.com/cdn/":deploymentBase+"original-client/public/chatgpt.com/cdn/","https://cdn.oaistatic.com/":deploymentBase+"original-client/public/cdn.oaistatic.com/"}})}</script>${preload}<style data-native-asset-rebase>${localCSS}</style><style data-codex-app-themes></style><title>ChatGPT</title></head>
 <body><div id="site-start-status" role="status" style="margin:24px;font:16px system-ui">正在打开…</div><script>function siteModuleFailed(){var n=document.getElementById('site-start-status');if(n){n.textContent='此浏览器未能载入页面。';var b=document.createElement('button');b.textContent='重新加载';b.onclick=function(){location.reload()};n.appendChild(b)}}</script><script nomodule>siteModuleFailed()</script><script type="module" onerror="siteModuleFailed()" src="${deploymentBase}native-client/bootstrap.mjs?v=${release}"></script></body></html>
 `;
+}
 await write(path.join(root,'native-client-shell.html'),html);
-const sha256=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
-await write(path.join(output,'adapter-provenance.json'),JSON.stringify({sourceBuild,release,deploymentBase,builderSha256:sha256(builderBytes),entryPlanInputSha256:sha256(entryPlanInput),sourceEntry:plan.sourceEntrySha256,runtime:plan.runtime,manifest:plan.manifest,componentFactoriesModified:false,legacyUiImported:false,serviceAdapter:'Browser-local account/storage and the explicitly configured API; no original private backend or Google authentication is claimed.',sharedAssets:sharedAssets.map(({file,bytes,inputFile})=>({file,...(inputFile?{inputFile,inputSha256:sha256(bytes)}:{}),sha256:sha256(bytes)})),resources:publicAssets.map(({relative,bytes})=>({file:relative,sha256:sha256(bytes)})),siteResourceAliases,supplementalManifest:{file:supplementalManifestFile,sha256:sha256(supplementalManifestBytes)},supplementalResources:supplementalAssets.map(({file,bytes})=>({file,sha256:sha256(bytes)})),helpers:provenance},null,2)+'\n');
+await write(path.join(output,'adapter-provenance.json'),JSON.stringify({sourceBuild,release,deploymentBase,...(priorPlan?{preservedRegistrationEntry:registrationEntry}:{}),builderSha256:sha256(builderBytes),entryPlanInputSha256:sha256(entryPlanInput),sourceEntry:plan.sourceEntrySha256,runtime:plan.runtime,manifest:plan.manifest,componentFactoriesModified:false,legacyUiImported:false,serviceAdapter:'Browser-local account/storage and the explicitly configured API; no original private backend or Google authentication is claimed.',sharedAssets:sharedAssets.map(({file,bytes,inputFile})=>({file,...(inputFile?{inputFile,inputSha256:sha256(bytes)}:{}),sha256:sha256(bytes)})),resources:publicAssets.map(({relative,bytes})=>({file:relative,sha256:sha256(bytes)})),siteResourceAliases,supplementalManifest:{file:supplementalManifestFile,sha256:sha256(supplementalManifestBytes)},supplementalResources:supplementalAssets.map(({file,bytes})=>({file,sha256:sha256(bytes)})),helpers:provenance},null,2)+'\n');
 if(process.argv.includes('--activate')){
  const backup=path.join(root,'.test-output/index-before-native-client.html');
  try{await fs.access(backup);}catch{await fs.copyFile(path.join(root,'index.html'),backup);}

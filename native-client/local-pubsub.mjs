@@ -97,7 +97,11 @@ class LocalPubSubSocket extends EventTarget {
   startRoomMessages() {
     if (this.roomSubscription) return;
     this.roomSubscription = this.hub.subscribeRoomMessages(value => {
-      if (!this.hub.isCurrent(this) || !this.hub.hasRoomAccess() || value?.type !== 'calpico-message-add' || !value.payload?.room_id || !value.payload.message) return;
+      if (!this.hub.isCurrent(this) || !this.hub.hasRoomAccess() || !value?.payload?.room_id) return;
+      const { type, payload } = value;
+      const messageEvent = type === 'calpico-message-add' && payload.message ||
+        type === 'calpico-message-update' && typeof payload.message_id === 'string' && payload.message_id.length > 0;
+      if (!messageEvent) return;
       const offset = String(++this.roomOffset);
       const records = [...this.topics].filter(topic => topicKinds.get(topic) === 'messaging')
         .map(topic => ({ type: 'message', topic_id: topic, offset, payload: value }));

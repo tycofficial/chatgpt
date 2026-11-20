@@ -1,4 +1,5 @@
-const signOutPaths = new Set(['/logout', '/auth/logout', '/signout', '/auth/signout', '/api/auth/signout']);
+import { getSiteAuthEntryKind, isHistoricalSitePath, resolveSiteHomeUrl, siteRelativePath } from './site-paths.mjs?v=39c29eae31156e71';
+
 const originalOrigin = 'https://chatgpt.com';
 
 function resolveUrl(value, base) {
@@ -10,22 +11,9 @@ function resolveUrl(value, base) {
   }
 }
 
-const withoutTrailingSlash = path => path.replace(/\/+$/, '') || '/';
-
 function appHome(value) {
   const home = new URL(value);
-  home.pathname = home.pathname.replace(/\/+$/, '') + '/';
-  home.search = '';
-  home.hash = '';
-  return home;
-}
-
-function appPath(url, home) {
-  if (!url || url.origin !== home.origin) return null;
-  const basename = home.pathname.replace(/\/+$/, '');
-  if (url.pathname === basename) return '/';
-  if (!url.pathname.startsWith(basename + '/')) return null;
-  return withoutTrailingSlash(url.pathname.slice(basename.length).replace(/\/index\.html$/, '/'));
+  return resolveSiteHomeUrl(home.origin, home.pathname);
 }
 
 export function getSiteSignOutPageUrl(home) {
@@ -39,17 +27,52 @@ export function getSiteSignedOutUrl(home) {
 }
 
 export function isSiteSignOutPage(value, homeUrl) {
-  const home = appHome(homeUrl);
-  return signOutPaths.has(appPath(resolveUrl(value, home), home));
+  return getSiteAuthEntryKind(value, appHome(homeUrl)) === 'logout';
 }
 
 export function isNativeSignOutLink(href, currentUrl, homeUrl) {
   const home = appHome(homeUrl);
   const current = resolveUrl(currentUrl, home);
-  if (!appPath(current, home)) return false;
+  if (!current || current.origin !== home.origin ||
+      !(siteRelativePath(current.pathname, home.pathname) || isHistoricalSitePath(current.pathname) || getSiteAuthEntryKind(current, home))) return false;
   const target = resolveUrl(href, current);
   if (!target || (target.origin !== home.origin && target.origin !== originalOrigin)) return false;
-  return signOutPaths.has(appPath(target, home)) || signOutPaths.has(withoutTrailingSlash(target.pathname));
+  if (target.origin === originalOrigin && target.origin !== home.origin) {
+    return getSiteAuthEntryKind(target, new URL('/', originalOrigin)) === 'logout';
+  }
+  return getSiteAuthEntryKind(target, home) === 'logout' || getSiteAuthEntryKind(href, home) === 'logout';
+}
+
+/** Keep the archived logout account-switch return on the repository's home. */
+export function installSiteSignOutRestore({ home, scope = globalThis.window }) {
+  function legacyLogoutHome() {
+    const base = appHome(home());
+    const current = resolveUrl(scope.location.href, base);
+    if (current?.origin !== base.origin || siteRelativePath(current.pathname, base.pathname) !== '/auth/logout') return null;
+    const action = current.searchParams.get('account_switch_action');
+    return action === 'logout' || action === 'resume' ? base : null;
+  }
+  const restore = event => {
+    if (!event.persisted || scope.history?.state?.usr === 'complete-browser-logout') return;
+    const base = legacyLogoutHome();
+    if (!base) return;
+    event.stopImmediatePropagation();
+    scope.location.replace(base.href);
+  };
+  const replaceOriginRoot = event => {
+    if (!event.cancelable || event.defaultPrevented || event.navigationType !== 'replace') return;
+    const base = legacyLogoutHome();
+    if (!base || event.destination.url !== new URL('/', base).href) return;
+    event.preventDefault();
+    queueMicrotask(() => scope.location.replace(base.href));
+  };
+  const options = { capture: true };
+  scope.addEventListener('pageshow', restore, options);
+  scope.navigation?.addEventListener('navigate', replaceOriginRoot);
+  return () => {
+    scope.removeEventListener('pageshow', restore, options);
+    scope.navigation?.removeEventListener('navigate', replaceOriginRoot);
+  };
 }
 
 async function runBounded(operation, timeoutMs) {

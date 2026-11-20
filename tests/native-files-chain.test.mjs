@@ -14,12 +14,19 @@ before(() => { globalThis.fetch = async () => { throw Error('External network is
 after(() => { globalThis.fetch = originalFetch; });
 const memory = () => { const data = new Map(); return { getItem: key => data.get(key) ?? null, setItem: (key, value) => data.set(key, value) }; };
 const workspace = () => { const bytes = new Map(); return { bytes, async read(key) { if (!bytes.has(key)) throw Error('File not found'); return new Uint8Array(bytes.get(key)); }, async write(key, value) { bytes.set(key, new Uint8Array(value)); }, async remove(key) { if (!bytes.delete(key)) throw Error('File not found'); }, async list(prefix) { return [...bytes].filter(([key]) => key.startsWith(prefix + '/')).map(([key, value]) => ({ name: key.slice(prefix.length + 1), size: value.length })); } }; };
-function fixture({ storage = memory(), workspaceStore = workspace(), free = false, transport } = {}) {
+const preparedInputs = () => {
+  const entries = new Map();
+  const key = (location, ref) => JSON.stringify([location.threadId, location.turnId, ref]);
+  return { entries, async save(location, content) { const ref = crypto.randomUUID(); entries.set(key(location, ref), structuredClone(content)); return ref; },
+    async load(location, ref) { return structuredClone(entries.get(key(location, ref))); }, async remove(location, ref) { entries.delete(key(location, ref)); },
+    async removeThread(threadId) { for (const stored of entries.keys()) if (JSON.parse(stored)[0] === threadId) entries.delete(stored); } };
+};
+function fixture({ storage = memory(), workspaceStore = workspace(), free = false, transport, preparedInputStore } = {}) {
   const models = createModelCatalogAdapter(catalog), metadataStorage = memory(); let account = 'neutral-account', preparations = 0;
   const executor = createBrowserToolExecutor({ storage: workspaceStore, getWorkspaceNamespace: () => account });
   const files = createLocalFilesService({ storage: workspaceStore, metadataStorage, getAccountId: () => account, getWorkspacePrefix: executor.getWorkspacePrefix });
   const prepare = createLocalInputPreparer({ files });
-  const server = new LocalAppServer({ storage, models, catalog, toolExecutor: executor, getExecutionPolicy: () => ({ modelSelection: !free }), prepareUserInput: async context => { preparations++; return prepare(context); }, streamCompletion: transport ?? streamCompletion, readSettings: () => ({ apiBase: 'https://file-gateway.fixture', apiKey: 'fixture-only', model: 'gpt-6.1-sol', apiTransport: 'responses' }), agentOptions: { streamRetries: 0 } });
+  const server = new LocalAppServer({ storage, models, catalog, toolExecutor: executor, preparedInputStore, getExecutionPolicy: () => ({ modelSelection: !free }), prepareUserInput: async context => { preparations++; return prepare(context); }, streamCompletion: transport ?? streamCompletion, readSettings: () => ({ apiBase: 'https://file-gateway.fixture', apiKey: 'fixture-only', model: 'gpt-6.1-sol', apiTransport: 'responses' }), agentOptions: { streamRetries: 0 } });
   const classic = new ClassicChatAdapter({ appServer: server, models });
   return { server, classic, files, executor, workspaceStore, storage, free, setAccount: value => { account = value; }, get preparations() { return preparations; } };
 }
@@ -213,13 +220,18 @@ test('ordinary uploaded-file log examples outside the exact native Files block r
   });
 });
 
-test('history quota failure rolls back large prepared image input and never poisons follow-up or new-thread saves', async () => {
+async function checkpointImage() {
   const raw = new Uint8Array(await fs.readFile(new URL('../src/native-client/dot-assets/default-dot.png', import.meta.url)));
   const crc = bytes => { let value = 0xffffffff; for (const byte of bytes) { value ^= byte; for (let bit = 0; bit < 8; bit++) value = value & 1 ? 0xedb88320 ^ value >>> 1 : value >>> 1; } return (value ^ 0xffffffff) >>> 0; };
   // Ancillary PNG text does not change the actual pixels and keeps valid CRCs.
   const data = new TextEncoder().encode('fixture\0' + 'N'.repeat(110000)), chunk = new Uint8Array(data.length + 12), view = new DataView(chunk.buffer);
   view.setUint32(0, data.length); chunk.set(new TextEncoder().encode('tEXt'), 4); chunk.set(data, 8); view.setUint32(chunk.length - 4, crc(chunk.subarray(4, chunk.length - 4)));
   const image = new Uint8Array(raw.length + chunk.length); image.set(raw.subarray(0, raw.length - 12)); image.set(chunk, raw.length - 12); image.set(raw.subarray(raw.length - 12), image.length - 12);
+  return image;
+}
+
+test('history quota failure rolls back large prepared image input and never poisons follow-up or new-thread saves', async () => {
+  const image = await checkpointImage();
   const dataStore = memory(), boundedStorage = { ...dataStore, setItem(key, value) { if (value.length > 100000) throw new DOMException('Fixture bounded history storage', 'QuotaExceededError'); dataStore.setItem(key, value); } };
   let modelCalls = 0; const env = fixture({ storage: boundedStorage, transport: async () => { modelCalls++; return { content: 'A separate valid follow-up completed.', finish_reason: 'stop' }; } });
   const attachment = await ready(env, image, 'valid-large.png', 'image/png');
@@ -232,4 +244,185 @@ test('history quota failure rolls back large prepared image input and never pois
   const sourceUser = Object.values(env.classic.detail(thread).mapping).find(row => row.message?.author.role === 'user').message; assert.deepEqual(sourceUser.metadata.attachments, [attachment]);
   assert.match(await send(env, { conversation_id: thread.id, parts: ['A separate neutral follow-up.'] }), /message_stream_complete/); assert.equal(modelCalls, 1);
   const other = env.server.dispatch('thread/start', { model: 'gpt-6.1-sol', effort: 'low' }); assert(other.result.thread.id); env.server.persist();
+});
+
+test('a regular uploaded image fits compact history and makes one real Responses request with its exact bytes', async () => {
+  const image = await checkpointImage(), dataStore = memory(), preparedInputStore = preparedInputs(), workspaceStore = workspace();
+  const storage = { ...dataStore, setItem(key, value) { if (value.length > 30000) throw new DOMException('Fixture tight history storage', 'QuotaExceededError'); dataStore.setItem(key, value); } };
+  const env = fixture({ storage, preparedInputStore, workspaceStore });
+  const attachment = await ready(env, image, 'neutral.png', 'image/png');
+  const read = workspaceStore.read; let originalReads = 0;
+  workspaceStore.read = key => { if (!key.includes('/attachments/')) originalReads++; return read(key); };
+  await withGateway(async requests => {
+    const pointer = { content_type: 'image_asset_pointer', asset_pointer: 'sediment://' + attachment.id };
+    assert.match(await send(env, { attachment, content_type: 'multimodal_text', parts: [pointer, 'Inspect this actual upload.'] }), /message_stream_complete/);
+    const thread = [...env.server.threads.values()][0], turn = thread.turns[0], imageParts = requests[0].input.find(row => row.role === 'user').content.filter(part => part.type === 'input_image');
+    assert.equal(requests.length, 1);
+    assert.equal(imageParts.length, 1);
+    assert.deepEqual(new Uint8Array(Buffer.from(imageParts[0].image_url.split(',')[1], 'base64')), image);
+    assert.equal(originalReads, 2, 'one read for input and one for attaching verified original bytes');
+    assert.match(storage.getItem(env.server.storageKey), /Inspect this actual upload/);
+    assert(!storage.getItem(env.server.storageKey).includes('data:image'));
+    assert.ok(turn.adapterMetadata.checkpoint.preparedInput.contentReference);
+    assert.equal(preparedInputStore.entries.size, 1);
+    assert.equal(env.server.dispatch('turn/resume', { threadId: thread.id, turnId: turn.id }).afterReply, undefined);
+    assert.deepEqual((await env.files.readFile(attachment.id)).bytes, image);
+    assert.match(await send(env, { conversation_id: thread.id, parts: ['What is in the picture?'] }), /message_stream_complete/);
+    const followupImages = requests[1].input.flatMap(row => Array.isArray(row.content) ? row.content.filter(part => part.type === 'input_image') : []);
+    assert.deepEqual(followupImages, imageParts);
+    assert.equal(env.preparations, 2, 'the historical image was not prepared again');
+    assert(!storage.getItem(env.server.storageKey).includes('data:image'));
+  });
+});
+
+test('the same prepared image survives reload, appears once per request, and falls back to compact text when bytes are absent', async () => {
+  const storage = memory(), inputStore = preparedInputs(), image = await checkpointImage();
+  const env = fixture({ storage, preparedInputStore: inputStore });
+  const first = await ready(env, image, 'first.png', 'image/png');
+  await withGateway(async requests => {
+    await send(env, { attachment: first, parts: ['Submit the initial image.'] });
+    const thread = [...env.server.threads.values()][0], restored = fixture({ storage, preparedInputStore: inputStore });
+    const record = () => requests.at(-1).input.flatMap(row => Array.isArray(row.content) ? row.content.filter(part => part.type === 'input_image') : []);
+    const expected = record();
+    assert.equal(expected.length, 1);
+    assert.match(await send(restored, { conversation_id: thread.id, parts: ['Describe that same image after reload.'] }), /message_stream_complete/);
+    assert.deepEqual(record(), expected);
+    const repeated = await ready(restored, image, 'second.png', 'image/png');
+    const pointer = { content_type: 'image_asset_pointer', asset_pointer: 'sediment://' + repeated.id };
+    assert.match(await send(restored, { conversation_id: thread.id, attachment: repeated, content_type: 'multimodal_text', parts: [pointer, pointer, 'Review this same image again.'] }), /message_stream_complete/);
+    assert.deepEqual(record(), expected);
+    const current = requests.at(-1).input.findLast(row => row.role === 'user');
+    assert.ok(current.content.some(part => part.type === 'input_image'));
+    const otherDisk = memory();
+    otherDisk.setItem(restored.server.storageKey, storage.getItem(restored.server.storageKey));
+    const withoutBytes = fixture({ storage: otherDisk, preparedInputStore: preparedInputs() });
+    assert.match(await send(withoutBytes, { conversation_id: thread.id, parts: ['Continue from the available text.'] }), /message_stream_complete/);
+    assert.deepEqual(record(), []);
+    assert.match(JSON.stringify(requests.at(-1).input), /Submit the initial image/);
+    assert(!storage.getItem(restored.server.storageKey).includes('data:image'));
+    const deletionPath = '/conversation/' + thread.id;
+    const deletion = await restored.classic.handle(new Request('https://local.fixture' + deletionPath, { method: 'PATCH', body: JSON.stringify({ is_visible: false }) }), deletionPath);
+    assert.equal(deletion.status, 200);
+    assert.equal(inputStore.entries.size, 0);
+    assert.equal(restored.server.threads.has(thread.id), false);
+    assert.equal((await restored.files.readFile(repeated.id)).bytes.length, image.length);
+  });
+});
+
+test('historical extracted text is reused and a formerly released snapshot can be rebuilt from its verified uploaded bytes', async () => {
+  const inputStore = preparedInputs(), env = fixture({ preparedInputStore: inputStore });
+  const text = 'Original file-only marker from the test attachment.';
+  const attachment = await ready(env, text);
+  await withGateway(async requests => {
+    await send(env, { attachment, parts: ['Read the file.'] });
+    const thread = [...env.server.threads.values()][0], turn = thread.turns[0];
+    const saved = turn.adapterMetadata.checkpoint.preparedInput;
+    assert(!env.storage.getItem(env.server.storageKey).includes(text));
+    assert.match(await send(env, { conversation_id: thread.id, parts: ['Recall the text.'] }), /message_stream_complete/);
+    assert.match(JSON.stringify(requests.at(-1).input), /Original file-only marker/);
+    await inputStore.remove({ threadId: thread.id, turnId: turn.id }, saved.contentReference);
+    delete saved.contentReference;
+    saved.contentReleased = true;
+    env.server.persist();
+    assert.match(await send(env, { conversation_id: thread.id, parts: ['Recover the older prepared text.'] }), /message_stream_complete/);
+    assert.match(JSON.stringify(requests.at(-1).input), /Original file-only marker/);
+    assert(!env.storage.getItem(env.server.storageKey).includes(text));
+    assert.equal(env.preparations, 4, 'only the pre-upgrade former snapshot needed current byte verification');
+  });
+});
+
+test('a completely full history fails before sending and the exact turn can continue after releasing space', async () => {
+  const dataStore = memory(), inputStore = preparedInputs(); let full = false, fillOnce = true;
+  const storage = { ...dataStore, setItem(key, value) { if (full) throw new DOMException('Quota exhausted', 'QuotaExceededError'); dataStore.setItem(key, value); } };
+  const env = fixture({ storage, preparedInputStore: inputStore });
+  const prepare = env.server.prepareUserInput;
+  env.server.prepareUserInput = async options => {
+    const result = await prepare(options);
+    if (fillOnce) { fillOnce = false; full = true; }
+    return result;
+  };
+  const attachment = await ready(env, 'Actual attachment survives exhausted history quota.');
+  await withGateway(async requests => {
+    const failed = await send(env, { attachment });
+    assert.match(failed, /LOCAL_INPUT_CHECKPOINT_STORAGE/);
+    assert.equal(requests.length, 0);
+    assert.equal(inputStore.entries.size, 0);
+    const thread = [...env.server.threads.values()][0], turn = thread.turns[0];
+    assert.equal(turn.status, 'failed');
+    assert.equal(thread.status.type, 'idle');
+    assert.throws(() => env.server.dispatch('turn/resume', { threadId: thread.id, turnId: turn.id }), /history could not be saved/);
+    assert.equal(turn.status, 'failed');
+    assert.equal(env.server.running.size, 0);
+    assert.equal(new TextDecoder().decode((await env.files.readFile(attachment.id)).bytes), 'Actual attachment survives exhausted history quota.');
+    full = false;
+    const tx = env.server.dispatch('turn/resume', { threadId: thread.id, turnId: turn.id }), done = waitTurn(env.server, thread.id);
+    tx.afterReply();
+    assert.equal((await done).id, turn.id);
+    assert.equal(turn.status, 'completed');
+    assert.equal(requests.length, 1);
+    assert.match(requests[0].input.find(row => row.role === 'user').content, /Actual attachment survives exhausted history quota/);
+    assert.equal(thread.turns.length, 1);
+  });
+});
+
+test('old inline prepared attachments migrate losslessly and continue the same accepted host job', async () => {
+  const storage = memory(), inputStore = preparedInputs(); let enter, jobId, exactContent;
+  const started = new Promise(resolve => { enter = resolve; });
+  const legacy = fixture({ storage, transport: async options => {
+    exactContent = options.messages.findLast(row => row.role === 'user').content;
+    const pending = options.transportContext.checkpoint;
+    jobId = pending.jobId = crypto.randomUUID(); pending.route = 'host'; pending.accepted = true;
+    await options.transportContext.onCheckpoint(); enter();
+    return new Promise((_resolve, reject) => options.signal.addEventListener('abort', () => reject(options.signal.reason), { once: true }));
+  } });
+  const image = await checkpointImage(), attachment = await ready(legacy, image, 'legacy-input.png', 'image/png');
+  const response = send(legacy, { attachment }); await started;
+  legacy.server.interruptAll({ reason: 'pagehide' }); await response;
+  assert.match(storage.getItem(legacy.server.storageKey), /data:image/);
+  let reattachments = 0;
+  const restored = fixture({ storage, preparedInputStore: inputStore, transport: async options => {
+    reattachments++;
+    assert.equal(options.transportContext.reattach, true);
+    assert.equal(options.transportContext.checkpoint.jobId, jobId);
+    assert.deepEqual(options.messages.findLast(message => message.role === 'user').content, exactContent);
+    return { content: 'Accepted host result resumed.', finish_reason: 'stop' };
+  } });
+  await restored.server.migratePreparedInputs();
+  assert(!storage.getItem(restored.server.storageKey).includes('data:image'));
+  assert.equal(inputStore.entries.size, 1);
+  restored.server.prepareUserInput = async () => { throw Error('A saved prepared input must not be recreated'); };
+  const thread = [...restored.server.threads.values()][0], turn = thread.turns[0];
+  const resumed = restored.server.dispatch('turn/resume', { threadId: thread.id, turnId: turn.id }), done = waitTurn(restored.server, thread.id);
+  resumed.afterReply();
+  const finished = await done;
+  assert.equal(finished.status, 'completed');
+  assert.equal(finished.id, turn.id);
+  assert.equal(finished.adapterMetadata.checkpoint.rounds, 1);
+  assert.equal(reattachments, 1);
+  assert.equal(inputStore.entries.size, 1);
+});
+
+test('a failed final history commit keeps the accepted provider result for a continuation without another submission', async () => {
+  const dataStore = memory(); let rejectFinal = true;
+  const storage = { ...dataStore, setItem(key, value) {
+    if (rejectFinal && JSON.parse(value).threads.some(thread => thread.turns.some(turn => turn.adapterMetadata?.checkpoint?.state === 'completed'))) {
+      rejectFinal = false;
+      throw new DOMException('Quota on completion', 'QuotaExceededError');
+    }
+    dataStore.setItem(key, value);
+  } };
+  const env = fixture({ storage, preparedInputStore: preparedInputs() });
+  const attachment = await ready(env, 'Prepared once for the original submission.');
+  await withGateway(async requests => {
+    assert.match(await send(env, { attachment }), /history could not be saved/);
+    assert.equal(requests.length, 1);
+    const thread = [...env.server.threads.values()][0], turn = thread.turns[0];
+    assert.equal(turn.status, 'failed');
+    assert.ok(turn.adapterMetadata.checkpoint.inFlight.result);
+    const tx = env.server.dispatch('turn/resume', { threadId: thread.id, turnId: turn.id }), done = waitTurn(env.server, thread.id);
+    tx.afterReply();
+    assert.equal((await done).status, 'completed');
+    assert.equal(requests.length, 1);
+    assert.equal(turn.adapterMetadata.checkpoint.transcript.filter(row => row.role === 'assistant').length, 1);
+  });
 });

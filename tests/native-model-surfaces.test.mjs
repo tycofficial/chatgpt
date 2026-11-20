@@ -20,7 +20,7 @@ test('Work/Codex ten exact IDs, Luna five levels, non-Luna six and one original 
  assert.deepEqual(catalog.WORK_MODEL_IDS,expected);assert.deepEqual(models.getRpcModelList().data.map(row=>row.model),expected);
  for(const row of models.getRpcModelList().data)assert.deepEqual(row.supportedReasoningEfforts.map(value=>value.reasoningEffort),row.model.endsWith('-luna')?['low','medium','high','xhigh','max']:['low','medium','high','xhigh','max','ultra']);
  const work=models.getWorkModels();assert.equal(work.models.length,expected.length);assert.equal(work.versions.filter(value=>value.display_text==='默认').length,1);assert.equal(work.versions.length,expected.length+1);
- assert.deepEqual(models.getSliderModelsConfig().presets[0].map(value=>value.model+':'+value.reasoning_effort),['gpt-6-luna:high','gpt-6.1-sol:low','gpt-6.1-sol:medium','gpt-6-astra:low','gpt-6-astra:medium','gpt-6-astra:xhigh']);
+ assert.deepEqual(models.getSliderModelsConfig().presets[0].map(value=>value.model+':'+value.reasoning_effort),['gpt-6-luna:high','gpt-6.2-sol:low','gpt-6.2-sol:medium','gpt-6.2-astra:low','gpt-6.2-astra:medium','gpt-6.2-astra:xhigh']);
  assert(!work.models.some(row=>row.thinking_efforts.some(value=>value.thinking_effort==='zero')));
 });
 test('Chat exposes only GPT-6/GPT-5.6 Sol families, each Pro row stays in the same version with a legal raw effort',()=>{
@@ -54,6 +54,15 @@ test('paid Chat rejects Work-only families without mutating data',()=>{
  }
  assert.throws(()=>f.server.selection({executionSurface:'work',model:'auto',effort:'medium'}),{code:-32602});
  for(const model of ['gpt-6-luna','gpt-5.6-luna','gpt-6-sol','gpt-5.6-terra']){assert(allowedReasoningEfforts(model).includes('none'));assert.equal(f.server.selection({executionSurface:'work',model,effort:'none'}).reasoningEffort,'none');}
+});
+test('implicit new Work and Codex RPC turns use Sol Light and inherited threads keep their model', () => {
+  const {server} = fixture();
+  for (const executionSurface of ['work', 'codex']) {
+    const selected = server.selection({executionSurface});
+    assert.deepEqual([selected.model, selected.reasoningEffort], ['gpt-6.2-sol', 'low']);
+    const inherited = server.selection({executionSurface}, {model:'gpt-6.1-sol', reasoningEffort:'high'});
+    assert.deepEqual([inherited.model, inherited.reasoningEffort], ['gpt-6.1-sol', 'high']);
+  }
 });
 test('Free Chat uses 5.6 Luna Instant or explicit Think and cannot obtain Work/Pro/Ultra',async()=>{
  const f=fixture({privileged:false});const first=await classicTurn(f,nextBody('chat-gpt-6-pro','ultra'));assert.equal(first.turn.model,'gpt-5.6-luna');assert.equal(first.turn.reasoningEffort,'none');assert.equal(first.turn.reasoningMode,'standard');assert.equal(first.turn.adapterMetadata.frontendModelSlug,'auto');

@@ -24,6 +24,10 @@ for(const helper of provenance.helpers){
  helperInputs.push(original);
 }
 const releaseHash=crypto.createHash('sha256').update(helperInputs.join('\n')).update(builderBytes).update(planInput).update(provenance.deploymentBase);
+if (provenance.preservedRegistrationEntry) {
+ if (!/^\.\/entry-library\.mjs\?v=[a-f0-9]{16}$/.test(provenance.preservedRegistrationEntry)) throw Error('Invalid retained module entry');
+ releaseHash.update('\0preserved-registration:').update(provenance.preservedRegistrationEntry);
+}
 for(const asset of provenance.sharedAssets){
  const expectedInput=['python-worker.js','model-catalog.js'].includes(asset.file)?'src/native-client/'+asset.file:null;
  if(expectedInput){
@@ -72,6 +76,7 @@ for(const name of files){
  }
 }
 const plan=JSON.parse(await fs.readFile(path.join(directory,'entry-plan.json'),'utf8'));
+if (provenance.preservedRegistrationEntry && plan.registrationEntry !== provenance.preservedRegistrationEntry) throw Error('Retained module entry changed');
 const urls=[plan.runtime,plan.manifest,...plan.registrationChunks,...Object.values(plan.initialRoutes)];
 for(const url of urls){if(!url.startsWith('/cdn/assets/'))throw Error('Unexpected original entry URL');await fs.access(path.join(root,'original-client/public/chatgpt.com',url));}
 const html=await fs.readFile(path.join(root,'index.html'),'utf8');

@@ -1,7 +1,6 @@
 /**
- * The six curated positions preserve the captured first-party Work picker.
- * Manual membership uses calling-host options and public Work/Codex
- * listings backed by exact matches in the configured provider catalogs.
+ * Work and Codex share their Power presets and a separate manual catalog.
+ * GPT-6.2 Sol Light is the documented consumer default in ChatGPT Work.
  */
 export const WORK_MODEL_IDS = Object.freeze([
   'gpt-6-luna',
@@ -18,11 +17,16 @@ export const WORK_MODEL_IDS = Object.freeze([
 
 export const WORK_PRESETS = Object.freeze([
   Object.freeze({id:'gpt-6-luna:high',model:'gpt-6-luna',effort:'high',label:'高',displayLabel:'GPT-6 Luna 高'}),
-  Object.freeze({id:'gpt-6.1-sol:low',model:'gpt-6.1-sol',effort:'low',label:'轻度',displayLabel:'GPT-6.1 Sol 轻度'}),
-  Object.freeze({id:'gpt-6.1-sol:medium',model:'gpt-6.1-sol',effort:'medium',label:'中',displayLabel:'GPT-6.1 Sol 中'}),
-  Object.freeze({id:'gpt-6-astra:low',model:'gpt-6-astra',effort:'low',label:'轻度',displayLabel:'GPT-6 Astra 轻度'}),
-  Object.freeze({id:'gpt-6-astra:medium',model:'gpt-6-astra',effort:'medium',label:'中',displayLabel:'GPT-6 Astra 中'}),
-  Object.freeze({id:'gpt-6-astra:xhigh',model:'gpt-6-astra',effort:'xhigh',label:'极高',displayLabel:'GPT-6 Astra 极高'}),
+  Object.freeze({id:'gpt-6.2-sol:low',model:'gpt-6.2-sol',effort:'low',label:'轻度',displayLabel:'GPT-6.2 Sol 轻度'}),
+  Object.freeze({id:'gpt-6.2-sol:medium',model:'gpt-6.2-sol',effort:'medium',label:'中',displayLabel:'GPT-6.2 Sol 中'}),
+  Object.freeze({id:'gpt-6.2-astra:low',model:'gpt-6.2-astra',effort:'low',label:'轻度',displayLabel:'GPT-6.2 Astra 轻度'}),
+  Object.freeze({id:'gpt-6.2-astra:medium',model:'gpt-6.2-astra',effort:'medium',label:'中',displayLabel:'GPT-6.2 Astra 中'}),
+  Object.freeze({id:'gpt-6.2-astra:xhigh',model:'gpt-6.2-astra',effort:'xhigh',label:'极高',displayLabel:'GPT-6.2 Astra 极高'}),
+]);
+const defaultWorkPreset = WORK_PRESETS[1];
+const upgradedWorkPreset = new Map([
+  ['gpt-6.1-sol', 'gpt-6.2-sol'],
+  ['gpt-6-astra', 'gpt-6.2-astra'],
 ]);
 
 export const WORK_MODEL_LABELS=Object.freeze({'gpt-6-luna':'GPT-6 Luna','gpt-6.1-sol':'GPT-6.1 Sol','gpt-6-astra':'GPT-6 Astra','gpt-6.1-terra':'GPT-6.1 Terra','gpt-6-sol':'GPT-6 Sol','gpt-5.6-sol':'GPT-5.6 Sol','gpt-5.6-terra':'GPT-5.6 Terra','gpt-5.6-luna':'GPT-5.6 Luna','gpt-6.2-sol':'GPT-6.2 Sol','gpt-6.2-astra':'GPT-6.2 Astra'});
@@ -65,7 +69,7 @@ export const WORK_ADDITIONAL_MODEL_PROVENANCE=Object.freeze({
     officialRelease:'https://learn.chatgpt.com/docs/models#recommended-models',
     officialCapabilities:'https://developers.openai.com/api/docs/models/gpt-6.2-sol',
     providerModelsCheckedAt:'2026-11-20',providerModelsStatus:200,
-    surfaces:Object.freeze(['work','codex']),manualOnly:true,curatedPreset:false,
+    surfaces:Object.freeze(['work','codex']),manualOnly:false,curatedPreset:true,
     inferenceVerified:true,providerVerifiedEffort:'max',siteUltraEnabled:true,
   }),
   'gpt-6.2-astra':Object.freeze({
@@ -73,7 +77,7 @@ export const WORK_ADDITIONAL_MODEL_PROVENANCE=Object.freeze({
     officialRelease:'https://learn.chatgpt.com/docs/models#recommended-models',
     officialCapabilities:'https://developers.openai.com/api/docs/models/gpt-6.2-astra',
     providerModelsCheckedAt:'2026-11-20',providerModelsStatus:200,
-    surfaces:Object.freeze(['work','codex']),manualOnly:true,curatedPreset:false,
+    surfaces:Object.freeze(['work','codex']),manualOnly:false,curatedPreset:true,
     inferenceVerified:true,providerVerifiedEffort:'max',siteUltraEnabled:true,
   }),
 });
@@ -107,7 +111,7 @@ export function resolveChatSelection(model='auto',{effort,reasoningMode}={}){
   return{model:pro?family.proModel:family.model,effort:selected,reasoningMode:mode,frontendModelSlug:pro?family.proAlias:family.standardAlias,chatFamily:family.id};
 }
 export const WORK_CATALOG_PROVENANCE=Object.freeze({
-  auto:'signed-in-first-party-six-position-capture',
+  auto:'https://learn.chatgpt.com/docs/models?surface=app',
   pinned:'verified-calling-host-and-provider-capabilities-plus-site-ultra',
   ultra:'site-parallel-agent-orchestration-not-provider-reasoning-enum',
   originalManualMembershipCaptured:false,
@@ -157,7 +161,7 @@ export function normalizeWorkUISelection(value){
   return {...value,...patch};
 }
 /** Original pQ72.b preference DTO, after its normal decoder has read it.
- * Only deprecated Luna UI effort values are changed; no past turn is rewritten.
+ * Migrate legacy Luna effort and automatically selected model presets.
  */
 export function normalizeWorkUIStoredPreference(value){
   if(!value||typeof value!=='object'||Array.isArray(value))return value;
@@ -172,17 +176,34 @@ export function normalizeWorkUIStoredPreference(value){
   if(['gpt-6-luna','gpt-5.6-luna'].includes(canonicalModel(last?.modelSlug))&&last.thinkingEffort==='zero'){
     result={...result,lastStartedModelConfig:{...last,thinkingEffort:'min'}};
   }
+  if (result.selectionMode === 'default' && result.modelSettings) {
+    const modelSettings = { ...result.modelSettings };
+    let upgraded = false;
+    for (const key of ['defaultModelSlug', 'lastUsedModelSlug']) {
+      const slug = modelSettings[key];
+      if (typeof slug !== 'string') continue;
+      const replacement = upgradedWorkPreset.get(canonicalModel(slug));
+      if (!replacement) continue;
+      modelSettings[key] = slug.endsWith('-wm') ? replacement + '-wm' : replacement;
+      upgraded = true;
+    }
+    if (upgraded) result = { ...result, modelSettings };
+  }
   return result;
 }
 
 export function normalizeWorkSelection(value={},options={}){
-  if(value.selectionMode==='pinned')value=normalizeWorkUISelection(value);
-  const available=availableModels(options),requested=canonicalModel(value.model);
-  const model=available.includes(requested)?requested:available.includes('gpt-6.1-sol')?'gpt-6.1-sol':available[0]??WORK_MODEL_IDS[1];
-  const state={...value,model,effort:canonicalEffort(value.effort)??'low',fast:!!value.fast,selectionMode:value.selectionMode==='pinned'?'pinned':'auto'};
+  const selectionMode = value.selectionMode === 'pinned' ? 'pinned' : 'auto';
+  if (selectionMode === 'pinned') value = normalizeWorkUISelection(value);
+  const available = availableModels(options);
+  const savedModel = canonicalModel(value.model);
+  const requested = selectionMode === 'auto' ? upgradedWorkPreset.get(savedModel) ?? savedModel : savedModel;
+  const model = available.includes(requested) ? requested :
+    available.includes(defaultWorkPreset.model) ? defaultWorkPreset.model : available[0] ?? defaultWorkPreset.model;
+  const state = {...value,model,effort:canonicalEffort(value.effort)??defaultWorkPreset.effort,fast:!!value.fast,selectionMode};
   const choices=getWorkSelectionCatalog(state,options);
   if(choices.some(p=>p.model===state.model&&p.effort===state.effort))return state;
-  const next=choices.find(p=>p.model===state.model&&p.effort==='medium')??choices.find(p=>p.model===state.model)??choices.find(p=>p.model==='gpt-6.1-sol'&&p.effort==='medium')??choices[0];
+  const next=choices.find(p=>p.model===state.model&&p.effort==='medium')??choices.find(p=>p.model===state.model)??choices.find(p=>p.id===defaultWorkPreset.id)??choices[0];
   return next?{...state,model:next.model,effort:next.effort}:state;
 }
 
@@ -195,7 +216,7 @@ export function selectWorkModel(value,model,options={}){
 }
 
 export function selectWorkDefault(value,options={}){
-  return normalizeWorkSelection({...value,selectionMode:'auto'},options);
+  return normalizeWorkSelection({...value,model:defaultWorkPreset.model,effort:defaultWorkPreset.effort,selectionMode:'auto'},options);
 }
 
 export function selectWorkTier(value,index,options={}){

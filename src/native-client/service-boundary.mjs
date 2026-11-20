@@ -29,6 +29,7 @@ import { createNativePublicationReferences } from './native-publication-referenc
 import { createNativeWorkspaceReferences } from './native-workspace-references.mjs';
 import { createNativeFileReferenceComposition } from './native-file-reference-composition.mjs';
 import { createLocalInputPreparer } from './local-input-preparation.mjs';
+import { createPreparedInputStore } from './prepared-input-store.mjs';
 import { createLocalPricingAdapter } from './local-pricing.mjs';
 import { SITE_ACCOUNT_SERVICE, getSiteAccount, getSiteSessionToken, hasModelSelectionAccess, getSitePlanCapabilities, logoutSiteAccount, getSiteHomeUrl, refreshSiteAccount } from './site-account.mjs';
 import { createSiteSignOutController, isNativeSignOutLink, getSiteSignOutPageUrl } from './site-signout.mjs';
@@ -193,10 +194,12 @@ export const localAppServer = new LocalAppServer({
   diagnostics: localProtocolDiagnostics,
   toolExecutor: localToolExecutor,
   prepareUserInput: createLocalInputPreparer({ files: localFilesService }),
+  preparedInputStore: createPreparedInputStore({ namespace: getLocalAccountStorageKey('cg-original-app-server:v1') }),
   agentOptions: { toolTransport: 'responses', verifiedPriority: false, ultraOrchestration: true },
   getExecutionPolicy: () => ({ modelSelection: hasModelSelectionAccess(), freeChatModel: DEFAULT_SETTINGS.freeChatModel }),
   onPersist: threads => localAccountHistory?.capture(threads),
 });
+await localAppServer.migratePreparedInputs();
 // Transient sandbox files keep their exact assistant/producer context and real
 // workspace bytes. They never enter the permanent Library publication registry.
 export const localWorkspaceDownloadSource = createWorkspaceDownloadSource({
@@ -543,8 +546,9 @@ export function installNetworkBoundary() {
   const originalOpen = window.open.bind(window);
   window.open = (url, ...rest) => {
     const target = new URL(url ?? 'about:blank', location.href);
-    if (isNativeSignOutLink(target, location.href, getSiteHomeUrl())) {
-      return originalOpen(getSiteSignOutPageUrl(getSiteHomeUrl()).href, ...rest);
+    const home = getSiteHomeUrl();
+    if (isNativeSignOutLink(url ?? target, location.href, home)) {
+      return originalOpen(getSiteSignOutPageUrl(home).href, ...rest);
     }
     if (!['http:', 'https:', 'about:'].includes(target.protocol)) {
       diagnostics.push({ type: 'navigation-unavailable', origin: target.origin });
@@ -559,7 +563,7 @@ export function installNetworkBoundary() {
     if (!link) return;
     const url = new URL(link.href, location.href);
     const home = getSiteHomeUrl();
-    if (isNativeSignOutLink(url, location.href, home)) {
+    if (isNativeSignOutLink(link.getAttribute('href'), location.href, home)) {
       link.href = getSiteSignOutPageUrl(home).href;
       if (event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) {
         event.preventDefault(); event.stopPropagation();

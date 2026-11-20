@@ -1,9 +1,10 @@
 /** Original app-server protocol over real, resumable local execution. */
-import { runAgentTurn } from './agent-turn-runner.mjs?v=3b6d1479ff957dc6';
-import { readWebSearchIntent, interruptHostedSearch } from './local-web-search.mjs?v=3b6d1479ff957dc6';
-import { readClassicBranchRequest, getClassicExecutionThread } from './classic-response-branches.mjs?v=3b6d1479ff957dc6';
-import { parseClassicInputMessages } from './classic-input-messages.mjs?v=3b6d1479ff957dc6';
-import { allowedReasoningEfforts } from '../runtime.js?v=3b6d1479ff957dc6';
+import { runAgentTurn } from './agent-turn-runner.mjs?v=39c29eae31156e71';
+import { readWebSearchIntent, interruptHostedSearch } from './local-web-search.mjs?v=39c29eae31156e71';
+import { readClassicBranchRequest, getClassicExecutionThread } from './classic-response-branches.mjs?v=39c29eae31156e71';
+import { parseClassicInputMessages } from './classic-input-messages.mjs?v=39c29eae31156e71';
+import { compactPreparedUserContent, isProviderContent, needsPreparedInputStorage } from './prepared-input-store.mjs?v=39c29eae31156e71';
+import { allowedReasoningEfforts } from '../runtime.js?v=39c29eae31156e71';
 export class RpcError extends Error {
   constructor(code, message, data) { super(message); this.name = 'RpcError'; this.code = code; if (data !== undefined) this.data = data; }
 }
@@ -57,11 +58,12 @@ export function wrapNativeWorkedDuration(formatDuration) {
 }
 
 export class LocalAppServer {
-  constructor({ storage, streamCompletion, readSettings, models, catalog, diagnostics = [], now = Date.now, uuid = () => crypto.randomUUID(), toolExecutor = null, checkpointStore = null, agentOptions = {}, getExecutionPolicy = null, onIdleTurnInterrupt = null, prepareUserInput = null, onPersist = null }) {
+  constructor({ storage, streamCompletion, readSettings, models, catalog, diagnostics = [], now = Date.now, uuid = () => crypto.randomUUID(), toolExecutor = null, checkpointStore = null, preparedInputStore = null, agentOptions = {}, getExecutionPolicy = null, onIdleTurnInterrupt = null, prepareUserInput = null, onPersist = null }) {
     this.storage = storage;
     this.toolExecutor = toolExecutor;
     this.prepareUserInput = prepareUserInput;
     this.checkpointStore = checkpointStore;
+    this.preparedInputStore = preparedInputStore;
     this.agentOptions = agentOptions;
     this.onIdleTurnInterrupt = onIdleTurnInterrupt;
     this.onPersist = onPersist;
@@ -82,6 +84,10 @@ export class LocalAppServer {
   }
   subscribe(listener) { this.listeners.add(listener); return () => this.listeners.delete(listener); }
   notify(method, params) {
+    if (method === 'thread/deleted' && !this.threads.has(params.threadId)) {
+      const cleanup = this.preparedInputStore?.removeThread?.(params.threadId);
+      if (cleanup) void cleanup.catch(() => this.diagnostics.push({ type: 'prepared-input-cleanup-error' }));
+    }
     const event = { method, params: copy(params) };
     for (const listener of this.listeners) {
       try { listener(event); }
@@ -113,11 +119,52 @@ export class LocalAppServer {
         thread.status = idle();
         this.threads.set(thread.id, thread);
       }
-      if (changed) this.persist();
     } catch (error) {
       this.loadError = new RpcError(-32000, `Local conversation storage could not be loaded: ${error.message}`);
       this.diagnostics.push({ type: 'local-history-storage-error', message: this.loadError.message });
     }
+    if (changed && !this.loadError) {
+      try { this.persist(); }
+      catch { this.diagnostics.push({ type: 'restored-checkpoint-storage-error' }); }
+    }
+  }
+  async migratePreparedInputs() {
+    if (this.loadError || !this.storage || !this.preparedInputStore) return;
+    const pending = [];
+    try {
+      const initialHistory = this.storage.getItem(this.storageKey);
+      for (const thread of this.threads.values()) {
+        if (thread.ephemeral || this.running.has(thread.id)) continue;
+        for (const turn of thread.turns) {
+          const checkpoint = turn.adapterMetadata?.checkpoint, previous = checkpoint?.preparedInput;
+          const user = Array.isArray(checkpoint?.transcript) ? checkpoint.transcript.find(message => message?.role === 'user') : null;
+          if (!isProviderContent(user?.content) || previous?.contentReference || previous?.contentReleased || !needsPreparedInputStorage(user.content, previous)) continue;
+          const location = { threadId: thread.id, turnId: turn.id };
+          const reference = await this.preparedInputStore.save(location, user.content);
+          pending.push({ checkpoint, previous, user, originalContent: user.content, historyContent: compactPreparedUserContent(turn, previous?.files), location, reference });
+        }
+      }
+      if (!pending.length) return;
+      if (this.storage.getItem(this.storageKey) !== initialHistory || pending.some(({ location }) => this.running.has(location.threadId))) throw Error('Local history changed during prepared input migration');
+      for (const update of pending) {
+        update.checkpoint.preparedInput = { ...update.previous, contentReference: update.reference };
+        update.user.content = update.historyContent;
+      }
+      this.persist();
+    } catch {
+      for (const update of pending) {
+        if (update.checkpoint.preparedInput?.contentReference === update.reference) {
+          if (update.previous === undefined) delete update.checkpoint.preparedInput;
+          else update.checkpoint.preparedInput = update.previous;
+          update.user.content = update.originalContent;
+        }
+        this.discardPreparedInput(update.location, update.reference);
+      }
+      this.diagnostics.push({ type: 'prepared-input-migration-error' });
+    }
+  }
+  discardPreparedInput(location, reference) {
+    if (this.preparedInputStore && reference) void this.preparedInputStore.remove(location, reference).catch(() => this.diagnostics.push({ type: 'prepared-input-cleanup-error' }));
   }
   persist() {
     if (this.loadError) throw this.loadError;
@@ -233,6 +280,7 @@ export class LocalAppServer {
   }
   selection(params, previous = {}) {
     const policy = this.executionPolicy();
+    const availableModels = this.models.getRpcModelList().data;
     const surface = params.executionSurface ?? previous.executionSurface ?? previous.adapterMetadata?.executionSurface ?? null;
     if (surface != null && !['chat', 'work', 'codex'].includes(surface)) throw new RpcError(-32602, 'Unknown model execution surface');
     const supplied = params.effort ?? params.reasoningEffort ?? params.config?.model_reasoning_effort ?? params.collaborationMode?.settings?.reasoning_effort;
@@ -251,10 +299,11 @@ export class LocalAppServer {
       ({ model, effort, reasoningMode, frontendModelSlug, chatFamily } = resolved);
       if (!this.catalog.CHAT_API_MODEL_IDS.includes(model)) throw new RpcError(-32602, 'This model is not offered in Chat');
     } else {
-      model = params.model ?? params.collaborationMode?.settings?.model ?? previous.model ?? this.readSettings().model;
+      const defaultModel = surface ? availableModels.find(entry => entry.isDefault)?.model : null;
+      model = params.model ?? params.collaborationMode?.settings?.model ?? previous.model ?? defaultModel ?? this.readSettings().model;
       if (params.reasoningMode != null && params.reasoningMode !== 'standard') throw new RpcError(-32602, 'Work/Codex Pro is not a separate picker execution mode');
     }
-    const catalog = this.models.getRpcModelList().data.find(entry => entry.model === model);
+    const catalog = availableModels.find(entry => entry.model === model);
     if (!catalog) throw new RpcError(-32602, `The local adapter does not offer model ${String(model)}`);
     effort ??= supplied ?? previous.reasoningEffort ?? catalog.defaultReasoningEffort;
     const apiEfforts = allowedReasoningEfforts(model), ultra = this.catalog.SITE_ULTRA_ORCHESTRATION;
@@ -491,14 +540,50 @@ export class LocalAppServer {
       },
     };
   }
-  messages(thread, turn, { omitCurrent = false } = {}) {
+  async restoreHistoryInputs(thread, turn, signal) {
+    const inputs = new Map();
+    for (const previous of getClassicExecutionThread(thread, turn).turns) {
+      if (previous.id === turn.id) break;
+      const saved = previous.adapterMetadata?.checkpoint?.preparedInput;
+      signal.throwIfAborted();
+      try {
+        let content;
+        if (saved?.contentReference && this.preparedInputStore) {
+          content = await this.preparedInputStore.load({ threadId: thread.id, turnId: previous.id }, saved.contentReference);
+        } else if (saved?.contentReleased && this.prepareUserInput) {
+          // An earlier release discarded completed snapshots. The original
+          // local attachments can still restore the historical context.
+          const user = previous.items.find(item => item.type === 'userMessage');
+          if (user) {
+            const restored = await this.prepareUserInput({ input: copy(user.content), threadId: thread.id, turnId: previous.id, thread, turn: previous, signal });
+            content = restored.content;
+          }
+        }
+        if (isProviderContent(content)) inputs.set(previous.id, content);
+      } catch { /* The compact recorded history remains available on devices without the bytes. */ }
+      signal.throwIfAborted();
+    }
+    return inputs;
+  }
+  messages(thread, turn, { omitCurrent = false, preparedInputs = null } = {}) {
     thread = getClassicExecutionThread(thread, turn);
     const instructions = [...new Set([this.readSettings({ thread, turn }).customInstructions, ...thread.adapterMetadata.instructions, ...turn.adapterMetadata.instructions].filter(value => typeof value === 'string' && value.trim()))];
     const messages = instructions.length ? [{ role: 'system', content: instructions.join('\n\n') }] : [];
     for (const entry of thread.turns) {
       if (entry.id === turn.id && omitCurrent) break;
       const transcript = entry.adapterMetadata?.checkpoint?.transcript ?? entry.adapterMetadata?.apiTranscript;
-      if (transcript?.length) { messages.push(...copy(transcript)); const partial = entry.adapterMetadata?.checkpoint?.partialResponse?.content; if (entry.id !== turn.id && partial) messages.push({ role: 'assistant', content: partial, ...(entry.adapterMetadata.checkpoint.partialResponse.phase ? { phase: entry.adapterMetadata.checkpoint.partialResponse.phase } : {}) }); if (entry.id === turn.id) break; continue; }
+      if (transcript?.length) {
+        const records = copy(transcript);
+        if (preparedInputs?.has(entry.id)) {
+          const user = records.find(message => message.role === 'user');
+          if (user) user.content = copy(preparedInputs.get(entry.id));
+        }
+        messages.push(...records);
+        const partial = entry.adapterMetadata?.checkpoint?.partialResponse;
+        if (entry.id !== turn.id && partial?.content) messages.push({ role: 'assistant', content: partial.content, ...(partial.phase ? { phase: partial.phase } : {}) });
+        if (entry.id === turn.id) break;
+        continue;
+      }
       for (const item of entry.items) {
         if (item.type === 'userMessage') messages.push({ role: 'user', content: item.content.map(part => part.text).join('\n') });
         if (item.type === 'agentMessage' && item.text) messages.push({ role: 'assistant', content: item.text, ...(entry.adapterMetadata.gatewayResponseItems ? { response_items: copy(entry.adapterMetadata.gatewayResponseItems) } : {}) });
@@ -608,14 +693,17 @@ export class LocalAppServer {
     const thread = this.getThread(params.threadId), turn = params.turnId ? thread.turns.find(value => value.id === params.turnId) : thread.turns.at(-1);
     if (!turn) throw new RpcError(-32001, 'turn_not_found');
     if (this.running.has(thread.id)) return { result: { turn: copy(this.running.get(thread.id).turn) } };
-    if (turn.status === 'completed') return { result: { turn: copy(turn) } };
+    if (turn.status === 'completed' || turn.adapterMetadata?.checkpoint?.state === 'completed') return { result: { turn: copy(turn) } };
     this.assertExecutionAllowed(turn);
     if (!turn.adapterMetadata?.checkpoint) throw new RpcError(-32602, 'No resumable execution checkpoint exists');
     if (params.model && params.model !== turn.model) throw new RpcError(-32602, 'Resume preserves the original turn model');
+    const previousTurn = copy(turn), previousThreadStatus = thread.status;
     turn.status = 'inProgress'; turn.error = null; turn.completedAt = null; turn.durationMs = null; thread.status = active();
     for (const call of turn.adapterMetadata.checkpoint.pendingCalls || []) if (call.state === 'running') call.state = 'uncertain';
     const running = { thread, turn, controller: new AbortController(), terminal: false, assistant: null, reasoning: null, lastSavedAt: this.now() };
-    this.running.set(thread.id, running); this.persist();
+    try { this.persist(); }
+    catch (error) { Object.assign(turn, previousTurn); thread.status = previousThreadStatus; throw error; }
+    this.running.set(thread.id, running);
     return { result: { turn: copy(turn) }, afterReply: () => { this.notify('thread/status/changed', { threadId: thread.id, status: thread.status }); this.notify('turn/started', { threadId: thread.id, turn: copy(turn) }); this.runTurn(running).catch(error => this.diagnostics.push({ type: 'local-turn-finalization-error', message: error.message })); } };
   }
   finish(running, status, error, completedAtMs = this.now()) {
@@ -635,7 +723,7 @@ export class LocalAppServer {
     thread.updatedAt = thread.recencyAt = turn.completedAt;
     thread.status = idle();
     try { this.persist(); }
-    catch (storageError) { turn.status = 'failed'; turn.error = errorShape(storageError.message); }
+    catch (storageError) { turn.status = 'failed'; turn.error ??= errorShape(storageError.message); }
     running.terminal = true;
     this.running.delete(thread.id);
     for (const item of this.assistantMessages(running)) this.completeAssistant(running, item);

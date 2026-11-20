@@ -168,6 +168,139 @@ test('native legacy selection and saved companion snapshots retain visible asset
   assert.deepEqual(reloaded.avatar_manifest, avatar.avatar_manifest);
 });
 
+function waitDotTurn(appServer, threadId) {
+  return new Promise(resolve => {
+    const unsubscribe = appServer.subscribe(event => {
+      if (event.method === 'turn/completed' && event.params.threadId === threadId) {
+        unsubscribe();
+        resolve(event.params.turn);
+      }
+    });
+  });
+}
+
+test('native Dot preserves reply references and message reactions across reload, removal and repeated clicks', { timeout: 3000 }, async () => {
+  const env = fixture({ streamCompletion: async () => ({ content: 'Neutral authored reply.', finish_reason: 'stop' }) });
+  const profile = (await request(env.adapter, '/tbo')).data.items[0];
+  const threadId = profile.root_thread_id, path = '/messaging/rooms/' + threadId;
+  await request(env.adapter, '/tbo/' + profile.id + '/messaging-room', 'POST');
+  assert.deepEqual((await request(env.adapter, path + '/journal/eligibility')).data, { enabled: false });
+  const firstTerminated = waitDotTurn(env.appServer, threadId);
+  await request(env.adapter, path + '/messages', 'POST', { request_id: 'root-neutral', content: { text: 'Please greet me.' } });
+  await firstTerminated;
+  const initial = (await request(env.adapter, path + '/messages')).data.items;
+  const assistant = initial.at(-1), reactionPath = path + '/messages/' + assistant.id + '/reactions';
+  const expectedUpdate = { type: 'calpico-message-update', payload: { room_id: threadId, message_id: assistant.id } };
+  const updates = [];
+  const unsubscribe = env.adapter.subscribeRoomMessages(value => updates.push(value));
+  assert.equal((await request(env.adapter, reactionPath, 'POST', { reaction: '👍' })).response.status, 204);
+  assert.equal((await request(env.adapter, reactionPath, 'POST', { reaction: '👍' })).response.status, 204);
+  assert.deepEqual(updates, [expectedUpdate]);
+  unsubscribe();
+  const restored = fixture({ storage: env.storage, streamCompletion: async () => ({ content: 'Neutral follow-up.', finish_reason: 'stop' }) });
+  const reacted = (await request(restored.adapter, path + '/messages')).data.items.at(-1);
+  assert.deepEqual(reacted.reactions, { 'neutral-site-user': '👍' });
+  assert(Date.parse(reacted.updated_at) > Date.parse(assistant.updated_at));
+  const sent = { request_id: 'quoted-neutral', content: { text: 'Please continue.' }, reply_to: { message_id: assistant.id } };
+  const secondTerminated = waitDotTurn(restored.appServer, threadId);
+  const accepted = await request(restored.adapter, path + '/messages', 'POST', sent);
+  assert.equal(accepted.response.status, 200);
+  assert.equal(accepted.data.reply_to.message_id, assistant.id);
+  assert.equal(accepted.data.reply_to.message.raw_messages[0].content.parts[0], 'Neutral authored reply.');
+  assert.equal((await request(restored.adapter, path + '/messages', 'POST', { ...sent, reply_to: { message_id: initial[0].id } })).response.status, 409);
+  await secondTerminated;
+  const reopened = fixture({ storage: env.storage });
+  assert.equal((await request(reopened.adapter, path + '/messages')).data.items.find(item => item.id === accepted.data.id).reply_to.message_id, assistant.id);
+  const thread = (await request(reopened.adapter, path + '/messages?reply_root_message_id=' + assistant.id)).data.items;
+  assert.deepEqual(thread.map(item => item.role), ['user', 'assistant']);
+  assert.ok(thread.every(item => item.reply_root_message_id === assistant.id));
+  assert.equal(thread[0].id, accepted.data.id);
+  const removed = [];
+  const stopUpdates = reopened.adapter.subscribeRoomMessages(value => removed.push(value));
+  assert.equal((await request(reopened.adapter, reactionPath, 'DELETE')).response.status, 204);
+  assert.equal((await request(reopened.adapter, reactionPath, 'DELETE')).response.status, 204);
+  assert.deepEqual(removed, [expectedUpdate]);
+  stopUpdates();
+  const cleared = (await request(reopened.adapter, path + '/messages')).data.items.find(item => item.id === assistant.id);
+  assert.deepEqual(cleared.reactions, {});
+  assert(Date.parse(cleared.updated_at) > Date.parse(reacted.updated_at));
+  reopened.setIdentity({ accountId: 'foreign', userId: 'foreign' });
+  assert.equal((await request(reopened.adapter, reactionPath, 'POST', { reaction: '👍' })).response.status, 404);
+});
+
+test('native Dot settings preserve concurrent changes and refuse stale-account writes', async () => {
+  const env = fixture();
+  const profile = (await request(env.adapter, '/tbo')).data.items[0], route = '/tbo/' + profile.id;
+  let release;
+  const delayed = new Promise(resolve => { release = resolve; });
+  const optimistic = env.adapter.handle({
+    url: 'https://site.invalid' + route, method: 'PATCH',
+    async json() { await delayed; return { description: 'Neutral saved note' }; },
+  }, route);
+  assert.equal((await request(env.adapter, route, 'PATCH', { display_name: 'Named Dot' })).response.status, 200);
+  release();
+  assert.equal((await optimistic).status, 200);
+  const preserved = (await request(env.create(), route)).data;
+  assert.equal(preserved.display_name, 'Named Dot');
+  assert.equal(preserved.description, 'Neutral saved note');
+  const racing = env.adapter.handle({
+    url: 'https://site.invalid' + route, method: 'PATCH',
+    async json() { env.setIdentity({ accountId: 'different', userId: 'different' }); return { display_name: 'Changed by old account' }; },
+  }, route);
+  assert.equal((await racing).status, 409);
+  env.setIdentity({ accountId: 'neutral-site-account', userId: 'neutral-site-user' });
+  assert.equal((await request(env.create(), route)).data.display_name, 'Named Dot');
+});
+
+test('existing Dot RPC stops and resumes a turn and room delivery retries never replay an uncertain gateway request', { timeout: 4000 }, async () => {
+  let adapter, started, signal;
+  const entered = new Promise(resolve => { started = resolve; });
+  const calls = [];
+  const env = fixture({
+    streamCompletion: options => adapter.complete(options),
+    async complete(options) {
+      calls.push([options.settings.model, options.settings.reasoningEffort]);
+      if (calls.length === 1) {
+        signal = options.signal;
+        started();
+        return new Promise((resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }));
+      }
+      if (calls.length === 2) throw Object.assign(Error('Neutral unresolved gateway failure'), { retryable: true, status: 502 });
+      return { content: 'Reply confirmed after explicit resume.', finish_reason: 'stop' };
+    },
+  });
+  adapter = env.adapter;
+  const profile = (await request(adapter, '/tbo')).data.items[0];
+  const threadId = profile.root_thread_id, messages = '/messaging/rooms/' + threadId + '/messages';
+  await request(adapter, '/tbo/' + profile.id + '/messaging-room', 'POST');
+  const input = { request_id: 'neutral-interrupted-retry', content: { text: 'Please write a greeting.' } };
+  const accepted = await request(adapter, messages, 'POST', input);
+  await entered;
+  const turnId = env.appServer.getThread(threadId).turns[0].id;
+  const rpc = adapter.createRpcFacade();
+  rpc.dispatch('turn/interrupt', { threadId, turnId }).afterReply();
+  assert.equal(signal.aborted, true);
+  assert.equal(env.appServer.getThread(threadId).turns[0].status, 'interrupted');
+  assert.deepEqual((await request(adapter, messages, 'POST', input)).data, accepted.data);
+  assert.equal(calls.length, 1);
+  const failed = waitDotTurn(env.appServer, threadId);
+  rpc.dispatch('turn/resume', { threadId, turnId }).afterReply();
+  assert.equal((await failed).status, 'failed');
+  assert.equal(calls.length, 2);
+  assert.deepEqual((await request(adapter, messages, 'POST', input)).data, accepted.data);
+  assert.equal(calls.length, 2);
+  const done = waitDotTurn(env.appServer, threadId);
+  rpc.dispatch('turn/resume', { threadId, turnId }).afterReply();
+  assert.equal(rpc.dispatch('turn/resume', { threadId, turnId }).afterReply, undefined);
+  const completed = await done;
+  assert.equal(completed.id, turnId);
+  assert.equal(completed.status, 'completed');
+  assert.deepEqual(calls, Array.from({ length: 3 }, () => ['gpt-6.1-terra', 'medium']));
+  const saved = (await request(fixture({ storage: env.storage }).adapter, messages)).data.items;
+  assert.deepEqual(saved.map(item => item.role), ['user', 'assistant']);
+  assert.equal(saved[0].id, accepted.data.id);
+});
+
 test('native primary selection, profile pagination and original feature-pin DTO persist without invented pin limits', async () => {
   const env = fixture({ bootstrapDefault: false });
   const first = (await request(env.adapter, '/tbo', 'POST', { display_name: 'Local one' })).data;

@@ -11,6 +11,7 @@ test('the native messaging topics deliver room updates only to their subscribed 
   });
   const topic = 'calpico-chatgpt-messaging', other = topic + '-all';
   const incoming = { type: 'calpico-message-add', payload: { room_id: 'room-A', message: { id: 'reply' } } };
+  const update = { type: 'calpico-message-update', payload: { room_id: 'room-A', message_id: 'reply' } };
   const tick = () => new Promise(resolve => setImmediate(resolve));
   const start = async () => {
     const socket = hub.open('wss://fixture.test/local');
@@ -24,13 +25,16 @@ test('the native messaging topics deliver room updates only to their subscribed 
   const a = await start();
   a.command('subscribe', topic); a.command('subscribe', other);
   await tick(); assert.equal(listeners.size, 1);
-  for (const listener of listeners) listener(incoming);
+  for (const listener of listeners) {
+    listener(incoming); listener(update);
+    listener({ type: update.type, payload: { room_id: 'room-A' } });
+  }
   await tick();
-  assert.deepEqual(a.frames.filter(x => x.type === 'message').map(x => [x.topic_id, x.payload]), [[topic, incoming], [other, incoming]]);
+  assert.deepEqual(a.frames.filter(x => x.type === 'message').map(x => [x.topic_id, x.payload]), [[topic, incoming], [other, incoming], [topic, update], [other, update]]);
   a.command('unsubscribe', other); await tick(); assert.equal(listeners.size, 1);
   for (const listener of listeners) listener(incoming);
   owner = 'account-B'; await tick();
-  assert.equal(a.frames.filter(x => x.type === 'message').length, 2);
+  assert.equal(a.frames.filter(x => x.type === 'message').length, 4);
   assert.equal(listeners.size, 0);
   const b = await start();
   b.command('subscribe', topic, 0); await tick();

@@ -2,9 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import { getSiteAuthEntryKind } from '../src/native-client/site-paths.mjs';
 import {
   createNativeSiteSignOut, createSiteSignOutController, getSiteSignOutPageUrl,
-  getSiteSignedOutUrl, isNativeSignOutLink, isSiteSignOutPage,
+  getSiteSignedOutUrl, installSiteSignOutRestore, isNativeSignOutLink, isSiteSignOutPage,
 } from '../src/native-client/site-signout.mjs';
 
 const home = 'https://tycofficial.github.io/chatgpt/';
@@ -96,7 +97,7 @@ test('direct saved logout URLs and in-app root links are scoped to this applicat
     assert.equal(isSiteSignOutPage(home + path + '?next=https://untrusted.invalid/', home), true);
     assert.equal(isNativeSignOutLink('/' + path, conversation, home), true);
     assert.equal(isNativeSignOutLink(home + path, conversation, home), true);
-    assert.equal(isSiteSignOutPage(origin + '/' + path, home), false);
+    assert.equal(isSiteSignOutPage(origin + '/' + path, home), true);
   }
   assert.equal(isNativeSignOutLink('https://chatgpt.com/auth/logout', conversation, home), true);
   for (const url of [
@@ -111,6 +112,91 @@ test('direct saved logout URLs and in-app root links are scoped to this applicat
   const baseWithoutSlash = home.slice(0, -1);
   assert.equal(getSiteSignOutPageUrl(baseWithoutSlash).href, home + 'auth/logout');
   assert.equal(getSiteSignedOutUrl(baseWithoutSlash + '?next=/logout#old'), signedOut);
+});
+
+test('historical pages and cached auth aliases recover when the router supplies the origin root', async () => {
+  const uninitialized = origin + '/?legacy=1#router';
+  assert.equal(getSiteSignOutPageUrl(uninitialized).href, home + 'auth/logout');
+  assert.equal(getSiteSignedOutUrl(uninitialized), signedOut);
+  for (const path of ['c/neutral-fixture', 'work/neutral-fixture', 'dots/neutral-fixture']) {
+    const current = origin + '/' + path;
+    assert.equal(isNativeSignOutLink('/auth/logout', current, uninitialized), true);
+    assert.equal(isNativeSignOutLink('auth/logout/index.html?legacy=1', current, uninitialized), true);
+  }
+  assert.equal(isSiteSignOutPage(origin + '/auth/logout/index.html', uninitialized), true);
+  assert.equal(isSiteSignOutPage(origin + '/other-project/auth/logout/index.html', uninitialized), false);
+  assert.equal(getSiteAuthEntryKind('/auth/signup/index.html', home), 'signup');
+  assert.equal(getSiteAuthEntryKind('/other-project/signup', home), null);
+
+  const destinations = [];
+  const controller = createSiteSignOutController({
+    home: () => uninitialized,
+    clearSiteAccount() {},
+    clearNativeSession() {},
+    navigate: url => destinations.push(url),
+  });
+  await controller.navigateAfterSignOut();
+  assert.deepEqual(destinations, [signedOut]);
+});
+
+test('only persisted legacy account-switch logout pages suppress the archived origin-root redirect', () => {
+  const scope = new EventTarget();
+  const redirects = [];
+  let nativeEvents = 0;
+  scope.location = { href: '', replace: url => redirects.push(url) };
+  scope.history = { state: null };
+  const dispose = installSiteSignOutRestore({ home: () => home, scope });
+  scope.addEventListener('pageshow', () => nativeEvents++);
+  const show = (href, persisted, state = null) => {
+    scope.location.href = href;
+    scope.history.state = state;
+    scope.dispatchEvent(Object.assign(new Event('pageshow'), { persisted }));
+  };
+
+  show(home + 'auth/logout?account_switch_action=resume', false);
+  show(home + 'c/neutral-fixture?account_switch_action=logout', true);
+  show(home + 'auth/logout', true, { usr: { intent: 'confirm-browser-logout' } });
+  show(home + 'auth/logout?account_switch_action=logout', true, { usr: 'complete-browser-logout' });
+  show(origin + '/other-project/auth/logout?account_switch_action=resume', true);
+  assert.equal(nativeEvents, 5);
+  assert.deepEqual(redirects, []);
+
+  show(home + 'auth/logout?account_switch_action=resume', true);
+  show(home + 'auth/logout?account_switch_action=logout', true);
+  assert.equal(nativeEvents, 5);
+  assert.deepEqual(redirects, [home, home]);
+  dispose();
+  show(home + 'auth/logout?account_switch_action=resume', true);
+  assert.equal(nativeEvents, 6);
+});
+
+test('the native cancel action replaces only an origin-root navigation on the legacy account-switch logout route', async () => {
+  const scope = new EventTarget();
+  scope.navigation = new EventTarget();
+  const redirects = [];
+  scope.location = { href: home + 'auth/logout?account_switch_action=resume', replace: url => redirects.push(url) };
+  const dispose = installSiteSignOutRestore({ home: () => home, scope });
+  const navigate = (url, navigationType = 'replace', cancelable = true) => scope.navigation.dispatchEvent(Object.assign(
+    new Event('navigate', { cancelable }), { destination: { url }, navigationType },
+  ));
+
+  assert.equal(navigate(origin + '/', 'traverse'), true);
+  assert.equal(navigate(origin + '/', 'replace', false), true);
+  assert.equal(navigate(origin + '/another-project/'), true);
+  assert.equal(navigate(signedOut), true);
+  assert.equal(navigate(origin + '/'), false);
+  await Promise.resolve();
+  assert.deepEqual(redirects, [home]);
+
+  scope.location.href = home + 'auth/logout';
+  assert.equal(navigate(origin + '/'), true);
+  scope.location.href = home + 'work/neutral-fixture?account_switch_action=resume';
+  assert.equal(navigate(origin + '/'), true);
+  dispose();
+  scope.location.href = home + 'auth/logout?account_switch_action=resume';
+  assert.equal(navigate(origin + '/'), true);
+  await Promise.resolve();
+  assert.deepEqual(redirects, [home]);
 });
 
 test('failed sync cannot retain an account or follow the supplied native callback URL', async () => {

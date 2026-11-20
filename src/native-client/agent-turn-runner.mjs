@@ -1,9 +1,11 @@
 /** Resumable API/tool loop. Original frontend receives its existing item lifecycle. */
 import { isHostCheckpoint } from './preferred-host-transport.mjs';
 import { parseClassicInputMessages } from './classic-input-messages.mjs';
+import { compactPreparedUserContent, deduplicateProviderImages, isProviderContent, needsPreparedInputStorage } from './prepared-input-store.mjs';
 import { webSearchRequest, updateHostedSearch, interruptHostedSearch, webSearchReferences } from './local-web-search.mjs';
 const clone = value => structuredClone(value);
 const CONTINUE = 'Continue the unfinished response from the saved text, without repeating it. Preserve the requested task, model and reasoning effort. Do not claim any tool succeeded unless its recorded output confirms it.';
+const inputStorageError = (message, cause) => Object.assign(Error(message), { code: 'LOCAL_INPUT_CHECKPOINT_STORAGE', status: 507, retryable: false, cause });
 const compactUsage = usage => Object.fromEntries(['input_tokens', 'output_tokens', 'total_tokens', 'prompt_tokens', 'completion_tokens', 'input_tokens_details', 'output_tokens_details', 'prompt_tokens_details', 'completion_tokens_details'].filter(key => usage[key] !== undefined).map(key => [key, clone(usage[key])]));
 const toolError = message => ({ isError: true, content: [{ type: 'text', text: message }], structuredContent: { error: message } });
 function waitForRetry(ms, signal) { return new Promise((resolve, reject) => { const abort = () => { clearTimeout(timer); reject(signal.reason); }; const timer = setTimeout(() => { signal.removeEventListener('abort', abort); resolve(); }, ms); signal.addEventListener('abort', abort, { once: true }); if (signal.aborted) abort(); }); }
@@ -28,6 +30,13 @@ export async function runAgentTurn(server, running) {
   const { thread, turn, controller } = running, signal = controller.signal;
   const meta = turn.adapterMetadata;
   const cp = meta.checkpoint ??= { schemaVersion: 1, state: 'model', rounds: 0, transcript: [], pendingCalls: [], completedCalls: {}, metrics: [], interruptedAttempts: [] };
+  const inputLocation = { threadId: thread.id, turnId: turn.id };
+  let preparedContent, preparedUserIndex;
+  const modelTranscript = () => {
+    const transcript = clone(cp.transcript);
+    if (preparedContent !== undefined) transcript[preparedUserIndex].content = clone(preparedContent);
+    return transcript;
+  };
   let executor = server.toolExecutor;
   const save = () => checkpoint(server, running);
   const errorText = error => String(error?.message || error).replaceAll(server.readSettings().apiKey || '\0NO_KEY\0', '[redacted]');
@@ -53,25 +62,53 @@ export async function runAgentTurn(server, running) {
         ? await server.prepareUserInput({ input: clone(input), threadId: thread.id, turnId: turn.id, thread, turn, signal })
         : { content: input.map(part => part.text).join('\n'), source: 'original-text-input', files: [], images: [] };
       signal.throwIfAborted(); server.assertExecutionAllowed(turn);
-      if (typeof prepared?.content !== 'string' && !Array.isArray(prepared?.content)) throw Object.assign(Error('The local input resolver returned invalid provider content'), { code: 'INVALID_PREPARED_INPUT', retryable: false });
+      if (!isProviderContent(prepared?.content)) throw Object.assign(Error('The local input resolver returned invalid provider content'), { code: 'INVALID_PREPARED_INPUT', retryable: false });
       const previousInput = { transcript: cp.transcript, preparedInput: cp.preparedInput, materializedFiles: meta.materializedFiles };
-      cp.transcript = classic ? classic.originalMessages.map(message => message.author.role === 'user'
-        ? { role: 'user', content: clone(prepared.content) }
-        : { role: 'system', content: message.content.parts.join('\n') }) : [{ role: 'user', content: clone(prepared.content) }];
-      cp.preparedInput = { source: prepared.source, files: clone(prepared.files ?? []), images: clone(prepared.images ?? []) };
-      meta.materializedFiles = clone(prepared.files ?? []);
-      try { await save(); delete meta.inputPreparationFailure; }
+      const metadata = { source: prepared.source, files: clone(prepared.files ?? []), images: clone(prepared.images ?? []) };
+      let reference;
+      if (!thread.ephemeral && server.preparedInputStore && needsPreparedInputStorage(prepared.content, metadata)) {
+        try { reference = await server.preparedInputStore.save(inputLocation, prepared.content); }
+        catch { server.diagnostics.push({ type: 'prepared-input-store-unavailable' }); }
+      }
+      try { signal.throwIfAborted(); server.assertExecutionAllowed(turn); }
+      catch (cause) { server.discardPreparedInput(inputLocation, reference); throw cause; }
+      try {
+        const user = { role: 'user', content: reference ? compactPreparedUserContent(turn, metadata.files) : clone(prepared.content) };
+        cp.transcript = classic ? classic.originalMessages.map(message => message.author.role === 'user'
+          ? user : { role: 'system', content: message.content.parts.join('\n') }) : [user];
+        cp.preparedInput = reference ? { ...metadata, contentReference: reference } : metadata;
+        meta.materializedFiles = clone(metadata.files);
+        await save(); delete meta.inputPreparationFailure;
+        if (reference) {
+          preparedUserIndex = cp.transcript.indexOf(user);
+          preparedContent = prepared.content;
+        }
+      }
       catch (cause) {
-        // A dataURL may fit OPFS but exceed the local history quota. Do not leave
-        // its uncommitted large transcript in memory, poisoning every later save.
         cp.transcript = previousInput.transcript;
         if (previousInput.preparedInput === undefined) delete cp.preparedInput; else cp.preparedInput = previousInput.preparedInput;
         if (previousInput.materializedFiles === undefined) delete meta.materializedFiles; else meta.materializedFiles = previousInput.materializedFiles;
-        meta.inputPreparationFailure = { code: 'LOCAL_INPUT_CHECKPOINT_STORAGE', files: clone(prepared.files ?? []), images: clone(prepared.images ?? []), at: server.now() };
-        try { server.persist(); } catch { /* The normal failure path reports any remaining storage error. */ }
-        throw Object.assign(Error('The prepared input could not be saved in browser history. Actual uploaded file bytes were preserved and no model request was submitted. Free browser storage or use a smaller image, then retry.'), { code: 'LOCAL_INPUT_CHECKPOINT_STORAGE', status: 507, retryable: false, cause });
+        if (!signal.aborted) meta.inputPreparationFailure = { code: 'LOCAL_INPUT_CHECKPOINT_STORAGE', ...metadata, at: server.now() };
+        let canDiscard = !server.checkpointStore?.save;
+        try { server.persist(); canDiscard = true; } catch { /* An auxiliary save may have failed after history was committed. */ }
+        if (canDiscard) server.discardPreparedInput(inputLocation, reference);
+        signal.throwIfAborted();
+        throw inputStorageError('The prepared input could not be saved in browser history. Actual uploaded file bytes were preserved and no model request was submitted. Free browser storage, then continue this turn.', cause);
+      }
+    } else if (cp.preparedInput?.contentReference) {
+      preparedUserIndex = cp.transcript.findIndex(message => message.role === 'user');
+      try {
+        if (preparedUserIndex < 0 || !server.preparedInputStore) throw Error('Saved prepared input is unavailable');
+        preparedContent = await server.preparedInputStore.load(inputLocation, cp.preparedInput.contentReference);
+        if (!isProviderContent(preparedContent)) throw Error('Saved prepared input is invalid');
+      } catch (cause) {
+        throw inputStorageError('The saved prepared input could not be reopened. This continuation made no model request.', cause);
       }
     }
+    const preparedInputs = await server.restoreHistoryInputs(thread, turn, signal);
+    const providerContext = () => deduplicateProviderImages([
+      ...server.messages(thread, turn, { omitCurrent: true, preparedInputs }), ...modelTranscript(),
+    ]);
     meta.requestedEffort = turn.reasoningEffort;
     meta.reasoningMode = turn.reasoningMode ?? 'standard';
     meta.productExecutionMode = turn.reasoningEffort === 'ultra' ? 'ultra' : 'standard';
@@ -79,7 +116,7 @@ export async function runAgentTurn(server, running) {
     if (turn.reasoningEffort === 'ultra') {
       if (server.agentOptions.ultraOrchestration !== true) throw Object.assign(Error('Site Ultra orchestration is not enabled in this deployment. No provider request was submitted.'), { code: 'ULTRA_ORCHESTRATION_NOT_ENABLED', retryable: false });
       const { createUltraToolExecutor } = await import('./site-ultra-orchestrator.mjs');
-      executor = createUltraToolExecutor({ baseExecutor: executor, streamCompletion: options => server.streamCompletion(options), turn, checkpoint: cp, save, getSettings: executionSettings, getContext: () => [...server.messages(thread, turn, { omitCurrent: true }), ...cp.transcript], getAbortMode: () => running.interruptReason === 'pagehide' ? 'pagehide' : signal.reason?.requiresTransportResume ? 'transport' : 'user', now: server.now, redact: errorText });
+      executor = createUltraToolExecutor({ baseExecutor: executor, streamCompletion: options => server.streamCompletion(options), turn, checkpoint: cp, save, getSettings: executionSettings, getContext: providerContext, getAbortMode: () => running.interruptReason === 'pagehide' ? 'pagehide' : signal.reason?.requiresTransportResume ? 'transport' : 'user', now: server.now, redact: errorText });
     }
     // A partial response is genuine saved output, not a completed tool call.
     const reattachFrame = cp.inFlight && (isHostCheckpoint(cp.inFlight.transport) || cp.inFlight.result);
@@ -133,7 +170,7 @@ export async function runAgentTurn(server, running) {
       const searchRequest = webSearchRequest(meta.webSearchIntent, turn.items, executor?.tools || []);
       const tools = searchRequest.tools, instruction = (executor?.tools?.length || 0) ? [{ role: 'system', content: 'Execute requested work using the available real tools instead of only announcing a plan. For a multi-step job, persist running progress with task_status and mark complete only after the deliverables exist. Continue correcting actual tool errors. Python runs in a browser Pyodide environment, not a hosted shell; only workspace files persist after reload. Never claim unexecuted shell, network or file operations. Return real artifact download URLs supplied by tools.' }] : [];
       if (turn.reasoningEffort === 'ultra') instruction.push({ role: 'system', content: 'This is the site-provided Ultra execution mode. Use delegate_tasks for independent analysis when it benefits the task; it runs1–3 real parallel workers from the same selected family at API max effort. Inspect their actual results and reconcile differences. You own the real file/Python tools and final synthesis. This is application orchestration, not OpenAI private Ultra infrastructure. Never claim a worker or tool succeeded when its result reports failure.' });
-      const messages = [...instruction, ...server.messages(thread, turn, { omitCurrent: true }), ...clone(cp.transcript)];
+      const messages = [...instruction, ...providerContext()];
       let frame = cp.inFlight, metric;
       if (frame && (isHostCheckpoint(frame.transport) || frame.result)) {
         metric = cp.metrics[frame.metricIndex]; if (!metric) throw Error('The in-flight transport metric is missing; no replacement request was submitted');
@@ -208,7 +245,8 @@ export async function runAgentTurn(server, running) {
         if (result.content) cp.transcript.push({ role: 'assistant', content: result.content });
         cp.transcript.push({ role: 'user', content: 'The previous output was truncated during a function call. No incomplete call has been executed. Reissue complete tool calls with valid JSON, then continue the task.' }); cp.state = 'continuing'; await save(); continue;
       }
-      cp.transcript.push(assistantMessage(result)); 
+      const transcriptBeforeResult = cp.transcript.length;
+      cp.transcript.push(assistantMessage(result));
       if (result.usage) meta.gatewayUsage = compactUsage(result.usage);
       if (result.actual_reasoning) meta.actualReasoning = clone(result.actual_reasoning);
       if (result.response_items) meta.gatewayResponseItems = clone(result.response_items);
@@ -245,7 +283,16 @@ export async function runAgentTurn(server, running) {
       }
       if (result.finish_reason !== 'stop') throw Error('Gateway did not confirm completion: ' + (result.finish_reason || 'missing finish signal'));
       if (!result.content) throw Error('Gateway returned no final text');
-      cp.state = 'completed'; meta.resumable = false; await save(); server.finish(running, 'completed', null, metric.responseReceivedAt); return;
+      cp.state = 'completed'; meta.resumable = false;
+      try { await save(); }
+      catch (cause) {
+        // The provider result is already checkpointed. Retry this commit through
+        // the saved result so a local storage failure cannot submit it twice.
+        cp.transcript.length = transcriptBeforeResult;
+        cp.inFlight = frame;
+        throw cause;
+      }
+      server.finish(running, 'completed', null, metric.responseReceivedAt); return;
     }
   } catch (error) {
     if (running.terminal) return;

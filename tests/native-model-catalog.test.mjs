@@ -69,7 +69,7 @@ test('GPT-6.2 Sol and Astra have verified Work/Codex capabilities and exact API 
     const model=rpc.data.find(row=>row.model===id);
     assert.equal(model.displayName,label);
     assert.deepEqual(model.supportedReasoningEfforts.map(choice=>choice.reasoningEffort),[...apiEfforts,'ultra']);
-    assert(!work.versions.find(version=>version.id==='latest').slugs.includes(id));
+    assert(work.versions.find(version=>version.id==='latest').slugs.includes(id));
     assert(!chat.categories.some(category=>category.supported_models.includes(id)));
     assert(!chat.versions.some(version=>version.slugs.includes(id)));
   }
@@ -88,9 +88,10 @@ test('Codex accepts exactly the shared verified manual catalog and rejects provi
   assert.throws(()=>context.fixtureFactory({...options,models:wrongModel}),/explicit verified model catalog/);
 });
 
-test('Work default uses the original curated latest version and never the Chat alias',()=>{
+test('Work uses the GPT-6.2 Sol Light default without changing the Chat alias',()=>{
   const work=adapter.getWorkModels(),chat=adapter.getChatGptModels(),selection=catalog.normalizeWorkSelection({});
   assert.equal(chat.default_model_slug,'auto');
+  assert.deepEqual([selection.model, selection.effort], ['gpt-6.2-sol', 'low']);
   assert.equal(work.default_model_slug,selection.model);
   assert.equal(work.models.find(m=>m.slug===selection.model).default_thinking_effort,FRONTEND_TO_RAW_EFFORT[selection.effort]);
   assert(!work.models.some(m=>m.slug==='auto'));
@@ -103,4 +104,24 @@ test('Work default uses the original curated latest version and never the Chat a
   assert.equal(latest.intelligence_presets.length,6);
   assert(!latest.slugs.includes('gpt-6.1-terra'));
   assert(work.versions.some(v=>v.id==='gpt-6.1-terra'));
+});
+
+test('stored selections retain the automatic slider rank and explicit model pins', () => {
+  const automatic = catalog.normalizeWorkSelection({ model: 'gpt-6-astra', effort: 'xhigh', selectionMode: 'auto' });
+  assert.deepEqual([automatic.model, automatic.effort], ['gpt-6.2-astra', 'xhigh']);
+  const manual = catalog.normalizeWorkSelection({ model: 'gpt-6-astra', effort: 'xhigh', selectionMode: 'pinned' });
+  assert.deepEqual([manual.model, manual.effort], ['gpt-6-astra', 'xhigh']);
+  const reset = catalog.selectWorkDefault(manual);
+  assert.deepEqual([reset.model, reset.effort], ['gpt-6.2-sol', 'low']);
+  const stored = {
+    selectionMode: 'default', defaultSliderFraction: 1,
+    modelSettings: { defaultModelSlug: 'gpt-6.1-sol', lastUsedModelSlug: 'gpt-6-astra' },
+    lastStartedModelConfig: { modelSlug: 'gpt-6-astra', thinkingEffort: 'xhigh' },
+  };
+  const migrated = catalog.normalizeWorkUIStoredPreference(stored);
+  assert.deepEqual(migrated.modelSettings, { defaultModelSlug: 'gpt-6.2-sol', lastUsedModelSlug: 'gpt-6.2-astra' });
+  assert.equal(migrated.defaultSliderFraction, 1);
+  assert.equal(migrated.lastStartedModelConfig, stored.lastStartedModelConfig);
+  const pinned = { ...stored, selectionMode: 'model' };
+  assert.equal(catalog.normalizeWorkUIStoredPreference(pinned), pinned);
 });

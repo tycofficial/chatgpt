@@ -6,7 +6,7 @@
  * async/569087.5c1de81bf5.js o6Sz (PNG upload -> profile PATCH -> GET confirm).
  * hrUs -> GET /files/download/{file_id}: {status:'success',download_url}.
  */
-import { createProviderCompletionRouter } from './provider-routing.mjs?v=3b6d1479ff957dc6';
+import { createProviderCompletionRouter } from './provider-routing.mjs?v=39c29eae31156e71';
 
 export const LOCAL_DOT_SOURCE = 'site-local-dot-provider';
 export const LOCAL_DOT_DEFAULT_APPEARANCE = Object.freeze({ avatar: 'sunglasses', color: 'pink' });
@@ -110,8 +110,8 @@ function json(value, status = 200) {
   return new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' } });
 }
 function fail(cause) {
-  const message = cause?.message || 'The local Dot operation failed';
-  const code = cause?.code || 'LOCAL_DOT_ERROR';
+  const message = cause?.status && cause.message ? cause.message : '本站暂时无法完成 Dot 操作。请重试。';
+  const code = typeof cause?.code === 'string' ? cause.code : 'LOCAL_DOT_ERROR';
   return json({ detail: { error_type: code.toLowerCase(), message }, error: { code, message }, adapter_source: LOCAL_DOT_SOURCE }, cause?.status || 500);
 }
 function safeText(value, name, limit = 200) {
@@ -190,6 +190,7 @@ export function createLocalDotAdapter({
   makeAssetURL,
 } = {}) {
   const bootstraps = new Map();
+  const roomMessageUpdates = new Set();
   const usesSitePolicy = () => siteAccountsOnly || isLocalSession() === true;
   function diagnostic(kind, details = {}) {
     diagnostics.push({ type: 'local-dot', kind, at: now(), ...details });
@@ -232,7 +233,7 @@ export function createLocalDotAdapter({
   }
   const save = (session, value) => writeJSON(stateKey(session), value, session);
   function publicProfile(row) {
-    const { thread_ids, ...profile } = row;
+    const { thread_ids, room_reactions, ...profile } = row;
     const manifest = profile.avatar_manifest;
     if (profile.avatar_type === 'default' && ACCESSORIES.has(profile.avatar_id ?? profile.avatar)
       && manifest?.schema_version === 1 && manifest.tint === LOCAL_DOT_DEFAULT_APPEARANCE.color
@@ -359,26 +360,45 @@ export function createLocalDotAdapter({
   function timestamp(seconds) {
     return new Date(seconds * 1000).toISOString();
   }
-  function roomUserMessage(session, turn, item) {
+  const roomReplyId = turn => turn.adapterMetadata?.clientMetadata?.dotReplyMessageId ?? null;
+  const roomReplyRoot = turn => turn.adapterMetadata?.clientMetadata?.dotReplyRootMessageId ?? roomReplyId(turn);
+  function roomUserMessage(session, turn, item, replyTarget) {
     const created_at = timestamp(turn.startedAt);
+    const replyId = roomReplyId(turn);
     return { id: item.id, role: 'user', account_user_id: session.accountUserId, created_at, updated_at: created_at,
-      request_id: turn.clientUserMessageId, content: { text: item.content.filter(part => part.type === 'text').map(part => part.text).join('\n') } };
+      request_id: turn.clientUserMessageId, content: { text: item.content.filter(part => part.type === 'text').map(part => part.text).join('\n') },
+      ...(replyId ? { reply_root_message_id: roomReplyRoot(turn), reply_to: { message_id: replyId, ...(replyTarget && { message: { ...replyTarget, reply_to: undefined } }) } } : {}),
+    };
   }
   function roomAssistantMessages(turn) {
     if (turn.status !== 'completed' && turn.status !== 'failed') return [];
     const created_at = timestamp(turn.completedAt ?? turn.startedAt);
-    if (turn.status === 'failed') return [{ id: turn.id, role: 'system', created_at, updated_at: created_at,
+    const replyRoot = roomReplyRoot(turn), replyThread = replyRoot ? { reply_root_message_id: replyRoot } : {};
+    if (turn.status === 'failed') return [{ id: turn.id, role: 'system', created_at, updated_at: created_at, ...replyThread,
       content: { type: 'text', text: 'Dot 暂时未能完成这条回复，请重试。' }, preview: 'Dot 暂时未能完成这条回复，请重试。' }];
     return turn.items.filter(item => item.type === 'agentMessage' && item.text).map(item => ({
-      id: item.id, role: 'assistant', created_at, updated_at: created_at, raw_messages: [{ id: item.id,
+      id: item.id, role: 'assistant', created_at, updated_at: created_at, ...replyThread, raw_messages: [{ id: item.id,
         author: { role: 'assistant' }, channel: 'final', content: { content_type: 'text', parts: [item.text] }, metadata: {} }],
     }));
   }
-  function roomMessages(session, thread) {
-    return thread.turns.flatMap(turn => [
-      ...turn.items.filter(item => item.type === 'userMessage').map(item => roomUserMessage(session, turn, item)),
-      ...roomAssistantMessages(turn),
-    ]);
+  function roomMessages(session, thread, row) {
+    const messages = new Map();
+    const reactions = row.room_reactions ?? {};
+    function add(message) {
+      const record = own(reactions, message.id) ? reactions[message.id] : undefined;
+      if (record === undefined) { messages.set(message.id, message); return; }
+      const reaction = typeof record === 'string' ? record : record?.reaction;
+      const updatedAt = record?.updatedAt ?? message.updated_at;
+      messages.set(message.id, { ...message, updated_at: updatedAt, reactions: reaction ? { [session.accountUserId]: reaction } : {} });
+    }
+    for (const turn of thread.turns) {
+      const target = messages.get(roomReplyId(turn));
+      for (const item of turn.items) {
+        if (item.type === 'userMessage') add(roomUserMessage(session, turn, item, target));
+      }
+      for (const message of roomAssistantMessages(turn)) add(message);
+    }
+    return [...messages.values()];
   }
   function roomPage(messages, query) {
     const rawLimit = query.get('limit');
@@ -397,15 +417,19 @@ export function createLocalDotAdapter({
   function subscribeRoomMessages(listener) {
     const session = identity(false);
     if (!session || typeof appServer?.subscribe !== 'function') return () => {};
-    return appServer.subscribe(event => {
-      if (event.method !== 'turn/completed') return;
+    function deliver(value) {
       const current = identity(false);
       if (current?.accountId !== session.accountId || current.userId !== session.userId) return;
+      const roomId = value.payload.room_id;
+      if (state(session).profiles.some(row => row.messaging_room_id === roomId && row.thread_ids.includes(roomId))) listener(value);
+    }
+    const unsubscribe = appServer.subscribe(event => {
+      if (event.method !== 'turn/completed') return;
       const { threadId, turn } = event.params;
-      const row = state(session).profiles.find(profile => profile.messaging_room_id === threadId && profile.thread_ids.includes(threadId));
-      if (!row) return;
-      for (const message of roomAssistantMessages(turn)) listener({ type: 'calpico-message-add', payload: { room_id: threadId, message } });
+      for (const message of roomAssistantMessages(turn)) deliver({ type: 'calpico-message-add', payload: { room_id: threadId, message } });
     });
+    roomMessageUpdates.add(deliver);
+    return () => { roomMessageUpdates.delete(deliver); unsubscribe(); };
   }
   async function handle(request, canonicalPath) {
     const url = new URL(request.url), requestPath = canonicalPath ?? url.pathname;
@@ -429,12 +453,40 @@ export function createLocalDotAdapter({
             dm_lifecycle_state: 'connected', created_at: row.created_at, updated_at: timestamp(thread.updatedAt), last_read_at,
             members: [{ account_user_id: session.accountUserId, name: session.name }, { account_user_id: row.id, aeon_id: row.id, name: row.display_name }],
             member_profile_snapshots: [], read_receipts: last_read_at ? [{ account_user_id: session.accountUserId, last_read_at }] : [],
-            latest_messages: roomMessages(session, thread).slice(-20),
+            latest_messages: roomMessages(session, thread, row).slice(-20),
           });
         }
         if (parts.length === 5 && action === 'messages' && method === 'GET') {
-          const { thread } = ownedRoom(session, id);
-          return json(roomPage(roomMessages(session, thread), url.searchParams));
+          const { row, thread } = ownedRoom(session, id);
+          const messages = roomMessages(session, thread, row), replyRoot = url.searchParams.get('reply_root_message_id');
+          if (replyRoot != null && !messages.some(message => message.id === replyRoot)) throw error('找不到要回复的 Dot 消息。', 404, 'LOCAL_DOT_MESSAGE_NOT_FOUND');
+          const scope = replyRoot == null ? messages : messages.filter(message => message.reply_root_message_id === replyRoot);
+          return json(roomPage(scope, url.searchParams));
+        }
+        if (parts.length === 6 && action === 'journal' && parts[5] === 'eligibility' && method === 'GET') {
+          ownedRoom(session, id);
+          return json({ enabled: false });
+        }
+        if (parts.length === 7 && action === 'messages' && parts[6] === 'reactions' && ['POST', 'DELETE'].includes(method)) {
+          ownedRoom(session, id);
+          const supplied = method === 'POST' ? await body(request) : null;
+          request.signal?.throwIfAborted();
+          assertIdentity(session);
+          const { data, row, thread } = ownedRoom(session, id), messageId = parts[5];
+          const message = roomMessages(session, thread, row).find(item => item.id === messageId && item.role !== 'system');
+          if (!message) throw error('找不到这条 Dot 消息。', 404, 'LOCAL_DOT_MESSAGE_NOT_FOUND');
+          const reaction = supplied ? safeText(supplied.reaction, 'Dot reaction', 128).trim() : null;
+          if (reaction === '') throw error('请选择一个表情。');
+          if (reaction !== (message.reactions?.[session.accountUserId] ?? null)) {
+            const updatedAt = new Date(Math.max(now(), Date.parse(message.updated_at) + 1)).toISOString();
+            row.room_reactions = { ...row.room_reactions, [messageId]: { reaction, updatedAt } };
+            save(session, data);
+            const update = { type: 'calpico-message-update', payload: { room_id: id, message_id: messageId } };
+            for (const deliver of roomMessageUpdates) {
+              try { deliver(update); } catch { diagnostic('room-message-update-listener-error'); }
+            }
+          }
+          return new Response(null, { status: 204 });
         }
         if (parts.length === 5 && method === 'POST') {
           ownedRoom(session, id);
@@ -443,7 +495,7 @@ export function createLocalDotAdapter({
             const supplied = await body(request);
             request.signal?.throwIfAborted();
             assertIdentity(session);
-            const { row, data } = ownedRoom(session, id);
+            const { row, data, thread } = ownedRoom(session, id);
             if (action === 'read') {
               const readAt = Date.parse(safeText(supplied.last_read_at, 'Dot read time', 50));
               if (!Number.isFinite(readAt)) throw error('Invalid Dot read time');
@@ -457,16 +509,23 @@ export function createLocalDotAdapter({
             const requestId = safeText(supplied.request_id, 'Dot request ID');
             if (!text.trim() || !requestId || (supplied.idempotency_token != null && supplied.idempotency_token !== requestId)) throw error('Invalid Dot message or request ID');
             if (supplied.content?.attachments?.length) throw error('当前 Dot 会话仅支持文字消息。', 422, 'LOCAL_DOT_FILES_UNAVAILABLE');
-            let started;
-            try {
-              started = createRpcFacade().dispatch('turn/start', { threadId: id, clientUserMessageId: requestId, input: [{ type: 'text', text }] });
-            } catch (cause) {
-              if (cause.code === -32000) throw error('Dot 正在处理上一条消息。', 409, 'LOCAL_DOT_TURN_RUNNING');
-              if (cause.code === -32602) throw error('此 Dot 消息请求已使用。', 409, 'LOCAL_DOT_REQUEST_CONFLICT');
-              throw cause;
+            const replyId = supplied.reply_to == null ? null : safeText(supplied.reply_to.message_id, 'Dot reply message ID');
+            const replyTarget = replyId == null ? null : roomMessages(session, thread, row).find(message => message.id === replyId && message.role !== 'system');
+            if (replyId != null && !replyTarget) throw error('找不到要回复的 Dot 消息。', 404, 'LOCAL_DOT_MESSAGE_NOT_FOUND');
+            const prior = thread.turns.find(turn => turn.clientUserMessageId === requestId);
+            if (prior) {
+              const message = roomUserMessage(session, prior, prior.items.find(item => item.type === 'userMessage'), replyTarget);
+              if (message.content.text !== text || roomReplyId(prior) !== replyId) throw error('此 Dot 消息请求已使用。', 409, 'LOCAL_DOT_REQUEST_CONFLICT');
+              return json(message);
             }
+            if (appServer.running?.has(id)) throw error('Dot 正在处理上一条消息。', 409, 'LOCAL_DOT_TURN_RUNNING');
+            const started = createRpcFacade().dispatch('turn/start', {
+              threadId: id, clientUserMessageId: requestId, input: [{ type: 'text', text }],
+              ...(replyTarget && { responsesapiClientMetadata: { conversationOrigin: 'dot', localDotProvider: true, dotReplyMessageId: replyId,
+                dotReplyRootMessageId: replyTarget.reply_root_message_id ?? replyId } }),
+            });
             const { turn } = started.result;
-            const accepted = roomUserMessage(session, turn, turn.items.find(item => item.type === 'userMessage'));
+            const accepted = roomUserMessage(session, turn, turn.items.find(item => item.type === 'userMessage'), replyTarget);
             const response = json(accepted);
             started.afterReply?.();
             return response;
@@ -537,19 +596,25 @@ export function createLocalDotAdapter({
         assertIdentity(session);
         return json(pagination(state(session).profiles.map(publicProfile), url));
       }
-      if (path === '/tbo' && method === 'POST') return json(await createProfile(session, await body(request)));
+      if (path === '/tbo' && method === 'POST') {
+        const fields = await body(request);
+        request.signal?.throwIfAborted();
+        assertIdentity(session);
+        return json(await createProfile(session, fields));
+      }
       if (path === '/tbo/primary') {
-        const data = state(session);
         if (method === 'PUT') {
           const supplied = await body(request);
-          const selected = findProfile(data, supplied.tbo_id);
+          request.signal?.throwIfAborted();
+          assertIdentity(session);
+          const data = state(session), selected = findProfile(data, supplied.tbo_id);
           for (const row of data.profiles) row.is_primary = row === selected;
           data.primaryGeneration += 1;
           save(session, data);
           return json({ selection: { available: true, aeon_id: selected.id }, profile: publicProfile(selected) });
         }
         if (method === 'DELETE') {
-          const generation = url.searchParams.get('generation');
+          const data = state(session), generation = url.searchParams.get('generation');
           // The original generation is a provider token, not this local store's counter.
           // No cloud generation token is fabricated or compared to unrelated local state.
           if (generation != null && generation.length > 200) throw error('Invalid generation token');
@@ -570,6 +635,9 @@ export function createLocalDotAdapter({
           if (method === 'GET') return json(publicProfile(row));
           if (method === 'PATCH') {
             const patch = await body(request);
+            request.signal?.throwIfAborted();
+            assertIdentity(session);
+            const data = state(session), row = findProfile(data, parts[2]);
             const supported = new Set(nativePetUpdate ? ['avatar_type', 'avatar_manifest', 'avatar_url']
               : ['display_name', 'description', 'avatar', 'avatar_id', 'avatar_type', 'avatar_manifest', 'avatar_url', 'only_if_default_avatar']);
             if (nativePetUpdate && patch.avatar_type !== 'codex-pet') throw error('Only native pet appearances can use this Dot profile route', 422);
@@ -649,8 +717,8 @@ export function createLocalDotAdapter({
       return fail(cause);
     }
   }
-  function ownsThread(session, threadId) {
-    return typeof threadId === 'string' && state(session).profiles.some(profile => profile.thread_ids.includes(threadId));
+  function profileForThread(session, threadId) {
+    return typeof threadId === 'string' ? state(session).profiles.find(profile => profile.thread_ids.includes(threadId)) : undefined;
   }
   function createRpcFacade(base = appServer) {
     if (typeof base?.dispatch !== 'function' || typeof base?.subscribe !== 'function') throw new TypeError('Dot requires the shared conversation RPC façade');
@@ -659,7 +727,8 @@ export function createLocalDotAdapter({
         const thread = appServer?.threads?.get(params?.threadId);
         if (thread?.adapterMetadata?.conversationOrigin !== 'dot') return base.dispatch(method, params);
         const session = identity(false);
-        if (!session || !ownsThread(session, thread.id)) {
+        const profile = session && profileForThread(session, thread.id);
+        if (!profile) {
           throw Object.assign(new Error('当前账户无法访问此 Dot 会话。'), { rpcCode: -32003 });
         }
         if (!dotSelectionMethods.has(method)) return base.dispatch(method, params);
@@ -676,11 +745,20 @@ export function createLocalDotAdapter({
   }
   async function complete(options) {
     const session = identity();
-    if (!ownsThread(session, options.providerRoutingContext?.threadId)) {
+    if (!profileForThread(session, options.providerRoutingContext?.threadId)) {
       throw error('当前账户无法运行此 Dot 会话。', 403, 'LOCAL_DOT_THREAD_FORBIDDEN');
     }
     if (typeof completeDotTurn !== 'function') throw error('本站 Dot 推理服务尚未接入。', 503, 'LOCAL_DOT_EXECUTOR_UNAVAILABLE');
-    const result = await completeDotTurn(options);
+    let result;
+    try { result = await completeDotTurn(options); }
+    catch (cause) {
+      options.signal?.throwIfAborted();
+      // The gateways do not guarantee idempotent inference after a lost response.
+      const failure = new Error(cause?.message || 'Dot inference failed', { cause });
+      for (const key of ['code', 'status', 'transportStatus', 'requestId']) if (cause?.[key] != null) failure[key] = cause[key];
+      failure.retryable = false;
+      throw failure;
+    }
     assertIdentity(session);
     return result;
   }

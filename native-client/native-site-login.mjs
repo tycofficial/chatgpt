@@ -1,4 +1,4 @@
-import { getSiteLoginUrl } from './site-account.mjs?v=3b6d1479ff957dc6';
+import { getSiteLoginUrl } from './site-account.mjs?v=39c29eae31156e71';
 
 /** Hand off the native router's login path to the site's document entry. */
 export function createNativeSiteLoginRoute({ useLocation, useEffect }) {

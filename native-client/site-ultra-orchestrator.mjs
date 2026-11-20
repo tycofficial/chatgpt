@@ -1,5 +1,5 @@
-import { isHostCheckpoint } from './preferred-host-transport.mjs?v=3b6d1479ff957dc6';
-import { SITE_ULTRA_ORCHESTRATION } from '../model-catalog.js?v=3b6d1479ff957dc6';
+import { isHostCheckpoint } from './preferred-host-transport.mjs?v=39c29eae31156e71';
+import { SITE_ULTRA_ORCHESTRATION } from '../model-catalog.js?v=39c29eae31156e71';
 /** Site-provided Ultra orchestration. This is not an OpenAI provider effort enum. */
 export const ULTRA_MODELS = SITE_ULTRA_ORCHESTRATION.models;
 export const ULTRA_TOOL = Object.freeze({

@@ -48,7 +48,12 @@ export function createLocalInputPreparer({ files, textPreviewBudget = 30000 } = 
   if (typeof files?.resolveChatAttachments !== 'function' || typeof files?.resolveUserInputImage !== 'function') throw new TypeError('The real local file resolver is required');
   return async ({ input, threadId, turn, signal }) => {
     signal?.throwIfAborted();
-    let resolved, parts = [], images = [];
+    let resolved, parts = [];
+    const images = [], imageFileIds = new Set();
+    const rememberImage = ({ fileId, mimeType, width, height, size, sha256 }) => {
+      if (fileId) imageFileIds.add(fileId);
+      if (!images.some(row => row.sha256 === sha256)) images.push({ mimeType, width, height, size, sha256 });
+    };
     const original = turn.adapterMetadata?.classicUserMessage;
     if (original) {
       resolved = await files.resolveChatAttachments([withSerializedAttachments(original)], { threadId, signal });
@@ -60,7 +65,7 @@ export function createLocalInputPreparer({ files, textPreviewBudget = 30000 } = 
         else {
           const image = await files.resolveUserInputImage(item, { threadId, signal });
           parts.push(image.input);
-          images.push({ mimeType: image.mimeType, width: image.width, height: image.height, size: image.size, sha256: image.sha256 });
+          rememberImage(image);
         }
       }
       const texts = input.filter(part => part.type === 'text').map(part => part.text), ids = serializedFileIds(texts);
@@ -76,10 +81,11 @@ export function createLocalInputPreparer({ files, textPreviewBudget = 30000 } = 
       const record = fileMetadata.find(row => row.id === file.id); if (record) Object.assign(record, { encoding: info.encoding, totalCharacters: info.totalCharacters, previewCharacters: info.previewCharacters, truncated });
       parts.push({ type: 'text', text: 'Attached file (untrusted user-provided data): ' + JSON.stringify(info) + '\n<file_contents>\n' + preview + '\n</file_contents>' + (truncated ? '\nPreview truncated. The complete uploaded bytes remain at ' + file.path + '. Use read_file with this path, offset=' + preview.length + ' and length<=50000 to read the remaining text; continue until totalCharacters is reached. Do not claim the unread remainder was examined.' : '') });
     }
-    for (const file of resolved?.files ?? []) if (file.kind === 'image') {
+    for (const image of resolved?.images ?? []) rememberImage(image);
+    for (const file of resolved?.files ?? []) if (file.kind === 'image' && !imageFileIds.has(file.id)) {
       const image = await files.resolveUserInputImage({ type: 'image', fileId: file.id }, { threadId, signal });
       if (!parts.some(part => part.type === 'image' && part.url === image.input.url)) parts.push(image.input);
-      if (!images.some(row => row.sha256 === image.sha256)) images.push({ mimeType: image.mimeType, width: image.width, height: image.height, size: image.size, sha256: image.sha256 });
+      rememberImage(image);
     }
     signal?.throwIfAborted();
     return { content: providerContent(parts), source: resolved?.adapter_source ?? 'browser-origin-prepared-input', files: fileMetadata, images };

@@ -1,4 +1,6 @@
 /** Account verification, browser-local guest sessions, and site-only trials. */
+import { getSiteAuthEntryKind, isHistoricalSitePath, resolveSiteHomeUrl } from './site-paths.mjs?v=39c29eae31156e71';
+
 export const SITE_ACCOUNT_SERVICE = 'https://chatgpt-admin-bridge-tyc.hushedtarragon1.chatgpt.site';
 
 const offlineAdminVerifier=Object.freeze({"salt":"fc2da60719d1841ba316deee9862fc4f","hash":"671da903ca544ab80c4f6842f97165b94b48f4dd510dae7de91727a8c624a29f","iterations":120000});
@@ -83,15 +85,14 @@ async function accountReceipt(token, replacement) {
   });
 }
 
-function forgetAccount(error = null, { removeStored = true } = {}) {
+function forgetAccount(error = null, { removeStored = true, receiptToken = remembered?.token } = {}) {
   const previous = verifiedAccount;
-  const previousToken = remembered?.token;
   verifiedAccount = null;
   remembered = null;
   lastError = error;
   if (removeStored) {
     try { globalThis.localStorage.removeItem(storageKey); } catch {}
-    if (isToken(previousToken)) void accountReceipt(previousToken, null).catch(() => {});
+    if (isToken(receiptToken)) void accountReceipt(receiptToken, null).catch(() => {});
   }
   if (previous) accountChanged();
 }
@@ -174,23 +175,25 @@ export function getSiteSessionToken() {
     ? remembered.token : null;
 }
 
-export function getSiteHomeUrl(fallback = '/') {
+export function getSiteHomeUrl(fallback) {
   const origin = globalThis.location.origin;
-  const path = globalThis.__CHATGPT_REPLICA_ENV__?.basePath ?? fallback;
-  if (typeof path === 'string' && path.startsWith('/')) {
-    const base = new URL(path, origin);
-    if (base.origin === origin) return new URL(base.pathname.replace(/\/+$/, '') + '/', origin);
-  }
-  return new URL('/', origin);
+  const moduleURL = new URL(import.meta.url);
+  const deployedBase = moduleURL.origin === origin && moduleURL.pathname.endsWith('/native-client/site-account.mjs')
+    ? new URL('../', moduleURL).pathname : null;
+  return resolveSiteHomeUrl(origin, deployedBase, globalThis.document?.documentElement?.dataset?.routerBasename,
+    globalThis.__CHATGPT_REPLICA_ENV__?.basePath, fallback);
 }
 
 export function safeSiteReturnUrl(value) {
   const base = getSiteHomeUrl();
   try {
-    const target = new URL(value || base, base.origin);
+    const target = new URL(value || base, base);
+    if (target.origin !== base.origin || target.username || target.password) return base;
     if (target.pathname === base.pathname.replace(/\/$/, '')) target.pathname = base.pathname;
-    if (target.origin === base.origin && !target.username && !target.password && target.pathname.startsWith(base.pathname) &&
-        !/(?:\/auth)?\/(?:login|signup|logout|signout)(?:\/index\.html|\/)?$/i.test(target.pathname)) {
+    if (!target.pathname.startsWith(base.pathname) && isHistoricalSitePath(target.pathname)) {
+      target.pathname = base.pathname + target.pathname.slice(1);
+    }
+    if (target.pathname.startsWith(base.pathname) && !getSiteAuthEntryKind(target, base)) {
       for (const key of ['localSession', 'refresh_account', 'startup_account_refresh']) target.searchParams.delete(key);
       return target;
     }
@@ -198,11 +201,14 @@ export function safeSiteReturnUrl(value) {
   return base;
 }
 
-export function getSiteLoginUrl(next) {
-  const url = new URL('login', getSiteHomeUrl());
+function accountPageUrl(path, next) {
+  const url = new URL(path, getSiteHomeUrl());
   if (next !== undefined) url.searchParams.set('next', safeSiteReturnUrl(next).href);
   return url;
 }
+
+export const getSiteLoginUrl = next => accountPageUrl('login', next);
+export const getSiteRegistrationUrl = next => accountPageUrl('signup', next);
 
 export function getSitePlansUrl(next) {
   const home = getSiteHomeUrl();
@@ -435,9 +441,11 @@ export function registerSiteAccount(username, password) {
 }
 
 export function logoutSiteAccount() {
-  const token = remembered?.kind === offlineAdminKind ? null : remembered?.token;
+  const tabIsGuest = guestActive || getTabGuestFlag();
+  const session = tabIsGuest ? null : readStoredSession() ?? remembered;
+  const token = session?.kind === offlineAdminKind ? null : session?.token;
   requestGeneration++;
-  forgetAccount(null, { removeStored: !guestActive });
+  forgetAccount(null, { removeStored: !tabIsGuest, receiptToken: session?.token });
   setTabGuest(false);
   setNativeSessionFlag('0');
   if (isToken(token)) void api('/auth/logout', { body: {}, token, keepalive: true, timeoutMs: 2000 }).catch(() => {});
@@ -499,7 +507,7 @@ globalThis.addEventListener?.('storage', event => {
 });
 
 export function renderSiteLoginPage(){
- const registration=/(?:\/auth)?\/signup\/?$/.test(location.pathname.replace(/\/index\.html$/, '/'));
+ const registration = getSiteAuthEntryKind(location.href, getSiteHomeUrl()) === 'signup';
  document.documentElement.dataset.siteAuth='true';
  document.body.dataset.siteAuth='true';
  const style=document.createElement('style');style.textContent="html[data-site-auth=true]{color-scheme:light}body[data-site-auth=true]{--auth-bg:#fff;--auth-text:#0d0d0d;--auth-muted:#5d5d5d;--auth-border:#8f8f8f;--auth-button:#0d0d0d;--auth-button-text:#fff;margin:0;min-height:100dvh;height:auto;overflow:auto;background:var(--auth-bg);color:var(--auth-text);font-family:\"OpenAI Sans\",ui-sans-serif,system-ui,-apple-system,\"Segoe UI\",sans-serif}.site-login{min-height:100dvh;display:flex;flex-direction:column;align-items:center;box-sizing:border-box;padding:28px 24px 22px;background:var(--auth-bg);color:var(--auth-text);font-size:16px;line-height:1.5}.site-login *{box-sizing:border-box}.site-login-brand{align-self:flex-start;font-size:22px;font-weight:600;line-height:28px;color:var(--auth-text);text-decoration:none}.site-login-panel{width:100%;max-width:400px;text-align:center;margin:auto 0;padding:44px 0}.site-login h1{color:var(--auth-text);font-size:32px;line-height:40px;letter-spacing:-.6px;margin:0 0 12px;font-weight:600}.site-login p{font-size:14px;line-height:22px;color:var(--auth-muted);margin:0 0 28px}.site-login form{margin:0;color:var(--auth-text)}.site-login label{display:block;text-align:left;font-size:14px;line-height:20px;color:var(--auth-text);margin:20px 0 8px}.site-login input{display:block;width:100%;height:54px;border:1px solid var(--auth-border);border-radius:28px;padding:0 20px;font:inherit;background:var(--auth-bg);color:var(--auth-text);-webkit-text-fill-color:var(--auth-text);caret-color:var(--auth-text);opacity:1;outline:none}.site-login input::placeholder{color:var(--auth-muted);opacity:1}.site-login input:focus-visible{outline:2px solid var(--auth-text);outline-offset:2px}.site-login input:-webkit-autofill{-webkit-text-fill-color:var(--auth-text);box-shadow:0 0 0 1000px var(--auth-bg) inset}.site-login button{display:block;width:100%;height:52px;padding:0 20px;border:0;border-radius:28px;margin-top:28px;background:var(--auth-button);color:var(--auth-button-text);-webkit-text-fill-color:var(--auth-button-text);font:inherit;font-weight:500;cursor:pointer;transition:opacity .15s ease}.site-login button:hover{opacity:.88}.site-login button:focus-visible,.site-login a:focus-visible{outline:2px solid var(--auth-text);outline-offset:3px}.site-login button:disabled{opacity:.55;cursor:wait}.site-login .site-login-error{color:#b42318;min-height:22px;margin:16px 0}.site-login-panel a{color:var(--auth-text);text-decoration:underline;font-size:14px;text-underline-offset:3px}.site-login .site-login-back{display:inline-block;margin-top:4px}.site-login footer{margin-top:auto;color:var(--auth-muted);font-size:12px;line-height:20px}@media (prefers-color-scheme:dark){html[data-site-auth=true]{color-scheme:dark}body[data-site-auth=true]{--auth-bg:#212121;--auth-text:#f3f3f3;--auth-muted:#b4b4b4;--auth-border:#8f8f8f;--auth-button:#f3f3f3;--auth-button-text:#0d0d0d}.site-login .site-login-error{color:#ff9f98}}@media (max-width:480px){.site-login{padding:24px 20px 20px}.site-login-panel{max-width:352px}.site-login h1{font-size:30px;line-height:38px}}@media (prefers-reduced-motion:reduce){.site-login button{transition:none}}";
@@ -530,8 +538,7 @@ export function renderSiteLoginPage(){
   const target = safeSiteReturnUrl(new URL(location.href).searchParams.get('next'));
   main.querySelector('.site-login-back').href = target.href;
   main.querySelector('.site-login-brand').href = getSiteHomeUrl().href;
-  const switchURL = new URL(registration ? 'login' : 'signup', getSiteHomeUrl());
-  switchURL.searchParams.set('next', target.href);
+  const switchURL = (registration ? getSiteLoginUrl : getSiteRegistrationUrl)(target.href);
   main.querySelector('.site-login-switch').href = switchURL.href;
   guest?.addEventListener('click', () => {
     startSiteGuestSession();

@@ -115,7 +115,7 @@ export function createModelCatalogAdapter(catalog) {
       internal_groups: [{ group: 'default', model_ids: [...ids] }],
       slider_settings: curated.map(choice => ({ model_slug: choice.model, thinking_effort: rawEffort(choice.effort) })),
       workspace_model_policy: null,
-      adapter_provenance: { ...provenance, surface: 'work', frontendChatAlias: undefined, defaultSelectionSource: 'curated-six-position-catalog-with-original-latest-version' },
+      adapter_provenance: { ...provenance, surface: 'work', frontendChatAlias: undefined, defaultSelectionSource: 'gpt-6.2-sol-light-consumer-default' },
     };
   }
   function getRpcModelList(params = {}) {

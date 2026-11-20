@@ -6,15 +6,16 @@ import vm from 'node:vm';
 import { pbkdf2Sync, webcrypto } from 'node:crypto';
 import accountWorker from '../chatgpt-services/worker/service.mjs';
 import { sqliteD1 } from '../chatgpt-services/tests/fixture-db.mjs';
+import { getSiteAuthEntryKind, isHistoricalSitePath, resolveSiteHomeUrl } from '../src/native-client/site-paths.mjs';
 const identitySource=fs.readFileSync(new URL('../src/native-client/local-identity.mjs',import.meta.url),'utf8');
 const pricingSource=fs.readFileSync(new URL('../src/native-client/local-pricing.mjs',import.meta.url),'utf8');
 const source=fs.readFileSync(new URL('../src/native-client/site-account.mjs',import.meta.url),'utf8');
-const names=['getSiteAccount','hasModelSelectionAccess','getSiteSessionToken','getSiteAccountError','initializeSiteAccount','initializeSiteAccountForDisplay','loginSiteAccount','registerSiteAccount','logoutSiteAccount','getSiteLoginUrl','safeSiteReturnUrl','getSitePlanCapabilities','refreshSiteAccount','isSiteGuestSession','startSiteGuestSession','claimSiteTrial','getSiteHomeUrl'];
-// Execute the actual module in an isolated VM; only ESM export keywords change.
+const names=['getSiteAccount','hasModelSelectionAccess','getSiteSessionToken','getSiteAccountError','initializeSiteAccount','initializeSiteAccountForDisplay','loginSiteAccount','registerSiteAccount','logoutSiteAccount','getSiteLoginUrl','getSiteRegistrationUrl','safeSiteReturnUrl','getSitePlanCapabilities','refreshSiteAccount','isSiteGuestSession','startSiteGuestSession','claimSiteTrial','getSiteHomeUrl'];
+// Execute the actual module in an isolated VM with the deployment module URL and URL helpers.
 // No real browser storage, password, token, account service, or network is used.
 const fixtureToken='c'.repeat(64),key='chatgpt-site-admin-session:v1',now=1800000000000;
 const user=()=>({id:'site-admin',username:'TYC',name:'TYC',role:'administrator',planType:'pro',membershipSource:'site-administrator',createdAt:now-10000,officialSubscriptionVerified:false});
-function fixture(cached, { failWrites = false, online = true, receipts = new Map(), tab = new Map(), href = 'https://tycofficial.github.io/chatgpt/', basePath = '/chatgpt/', verifierPassword } = {}) {
+function fixture(cached, { failWrites = false, online = true, receipts = new Map(), tab = new Map(), href = 'https://tycofficial.github.io/chatgpt/', basePath = '/chatgpt/', routerBasename, modulePath = '/chatgpt/native-client/site-account.mjs?v=fixture', verifierPassword } = {}) {
   let clock = now;
   let handler = async () => ({ user: user() });
   const calls = [];
@@ -31,13 +32,14 @@ function fixture(cached, { failWrites = false, online = true, receipts = new Map
   };
   const events = new EventTarget();
   const navigator = { onLine: online };
-  const document = { documentElement: { dataset: {} } };
+  const document = { documentElement: { dataset: { routerBasename } } };
   const location = { origin: new URL(href).origin, href, pathname: new URL(href).pathname, assign() {} };
   const context = vm.createContext({
     crypto: webcrypto, TextEncoder, URL, AbortController, Response, Event, setTimeout, clearTimeout, navigator, document,
     Date: class extends Date { static now() { return clock; } },
     localStorage, sessionStorage, location, indexedDB: makeIndexedDB(receipts),
-    __CHATGPT_REPLICA_ENV__: { basePath },
+    __CHATGPT_REPLICA_ENV__: basePath === null ? undefined : { basePath },
+    getSiteAuthEntryKind, isHistoricalSitePath, resolveSiteHomeUrl,
     addEventListener: (...args) => events.addEventListener(...args),
     removeEventListener: (...args) => events.removeEventListener(...args),
     dispatchEvent: event => events.dispatchEvent(event),
@@ -58,7 +60,8 @@ function fixture(cached, { failWrites = false, online = true, receipts = new Map
     const hash = pbkdf2Sync(verifierPassword, Buffer.from(salt, 'hex'), iterations, 32, 'sha256').toString('hex');
     authSource = authSource.replace(/^const offlineAdminVerifier\s*=.*$/m, 'const offlineAdminVerifier = ' + JSON.stringify({ salt, iterations, hash }) + ';');
   }
-  const executable = authSource.replace(/^export\s+/gm, '') + '\nglobalThis.fixtureExports={' + names.join(',') + '};';
+  const executable = authSource.replace(/^import .*;\r?$/gm, '').replace(/^export\s+/gm, '')
+    .replaceAll('import.meta.url', JSON.stringify(new URL(modulePath, href).href)) + '\nglobalThis.fixtureExports={' + names.join(',') + '};';
   new vm.Script(executable, { filename: 'site-account.mjs (isolated fixture)' }).runInContext(context);
   return {
     api: context.fixtureExports, values, calls, receipts, tab, events, document,
@@ -109,6 +112,29 @@ test('a successful sign-in cannot redirect to a static login or logout alias', (
   for (const target of ['login/index.html', 'auth/logout/index.html', 'signup/index.html']) {
     assert.equal(f.api.safeSiteReturnUrl('/chatgpt/' + target).pathname, '/chatgpt/');
   }
+});
+
+test('login and registration recover the repository basename before the router initializes', () => {
+  const origin = 'https://tycofficial.github.io';
+  for (const basePath of [null, '/', '//untrusted.invalid/']) {
+    const f = fixture(undefined, { href: origin + '/c/neutral-history?draft=1#tail', basePath, modulePath: '/native-client/site-account.mjs?v=cached' });
+    const next = '/c/neutral-history?draft=1&localSession=1#tail';
+    const target = origin + '/chatgpt/c/neutral-history?draft=1#tail';
+    assert.equal(f.api.getSiteHomeUrl().href, origin + '/chatgpt/');
+    assert.equal(f.api.getSiteLoginUrl(next).pathname, '/chatgpt/login');
+    assert.equal(f.api.getSiteRegistrationUrl(next).pathname, '/chatgpt/signup');
+    assert.equal(f.api.getSiteRegistrationUrl(next).searchParams.get('next'), target);
+    assert.equal(f.api.safeSiteReturnUrl('work/neutral-task?draft=1').pathname, '/chatgpt/work/neutral-task');
+    assert.equal(f.api.safeSiteReturnUrl('/another-repository/c/neutral').pathname, '/chatgpt/');
+    assert.equal(f.api.safeSiteReturnUrl('https://untrusted.invalid/c/neutral').href, origin + '/chatgpt/');
+  }
+});
+
+test('the packaged account module retains its explicit deployment path on cached documents', () => {
+  const f = fixture(undefined, { href: 'https://fixture.test/auth/signup/index.html', basePath: '/', routerBasename: '/', modulePath: '/preview/chatgpt/native-client/site-account.mjs?v=cached' });
+  assert.equal(f.api.getSiteHomeUrl().pathname, '/preview/chatgpt/');
+  assert.equal(f.api.getSiteRegistrationUrl().pathname, '/preview/chatgpt/signup');
+  assert.equal(f.api.safeSiteReturnUrl('/preview/chatgpt/auth/signup/index.html').pathname, '/preview/chatgpt/');
 });
 function assertFree(f){assert.equal(f.api.getSiteAccount(),null);assert.equal(f.api.hasModelSelectionAccess(),false);assert.equal(f.api.getSiteSessionToken(),null);}
 test('no session stays Free and never contacts the account service',async()=>{const f=fixture();assertFree(f);assert.equal(await f.api.initializeSiteAccount(),null);assert.equal(f.calls.length,0);});
@@ -273,6 +299,38 @@ test('local logout returns immediately while the server logout is still pending'
   assert.equal(f.calls[1].path, '/auth/logout');
   assert.equal(f.calls[1].keepalive, true);
   release({ ok: true });
+});
+
+test('a cached logout revokes the current registered session and clears its browser receipt', async () => {
+  const currentSession = record({ token: 'd'.repeat(64), user: freeAccount() });
+  const f = fixture(record(), { basePath: null, href: 'https://tycofficial.github.io/auth/logout/index.html' });
+  f.values.set(key, JSON.stringify(currentSession));
+  f.receipts.set(currentSession.token, { identity: currentSession.user });
+  let usedCurrentToken = false;
+  f.setHandler(async (_url, request) => {
+    usedCurrentToken = request.headers.Authorization === 'Bearer ' + currentSession.token;
+    return { ok: true };
+  });
+  f.api.logoutSiteAccount();
+  assertFree(f);
+  assert.equal(f.values.has(key), false);
+  assert.equal(usedCurrentToken, true);
+  assert.deepEqual(f.calls, [{ path: '/auth/logout', method: 'POST', authorizationPresent: true, keepalive: true }]);
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(f.receipts.has(currentSession.token), false);
+});
+
+test('signing out from a cached guest tab preserves the registered account in another browser tab', async () => {
+  const f = fixture(record({ user: freeAccount() }));
+  const registered = f.values.get(key);
+  f.receipts.set(fixtureToken, { identity: freeAccount() });
+  f.tab.set('chatgpt-site-local-guest:v1', '1');
+  f.api.logoutSiteAccount();
+  assertFree(f);
+  assert.equal(f.calls.length, 0);
+  assert.equal(f.values.get(key), registered);
+  assert.equal(f.receipts.has(fixtureToken), true);
+  assert.equal(f.tab.get('original-client-prototype-local-session'), '0');
 });
 
 test('all four site trial tiers can be claimed and manually renewed on the same registered account', async () => {

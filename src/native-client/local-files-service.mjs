@@ -971,11 +971,11 @@ export function createLocalFilesService({
     const resized = await compressImageInput(bytes, originalInfo, { signal });
     cancellation(signal); assertOwner(id);
     const info = imageInfo(resized.bytes); bytes = resized.bytes;
-    return { input: { type: 'image', url: 'data:' + info.mimeType + ';base64,' + base64(bytes) }, ...info, size: bytes.length, sha256: resized.compressed ? await hash(bytes) : record?.sha256 ?? await hash(bytes), compressed: resized.compressed };
+    return { input: { type: 'image', url: 'data:' + info.mimeType + ';base64,' + base64(bytes) }, ...info, size: bytes.length, sha256: resized.compressed ? await hash(bytes) : record?.sha256 ?? await hash(bytes), compressed: resized.compressed, ...(record ? { fileId: record.fileId } : {}) };
   }
   async function resolveChatAttachments(messages, { threadId, signal } = {}) {
     if (!Array.isArray(messages)) throw issue('Original Chat messages are required');
-    const inputs = [], ids = new Set(), attachments = [];
+    const inputs = [], ids = new Set(), attachments = [], preparedImages = new Map();
     for (const message of messages) {
       if (message?.author?.role !== 'user') continue;
       for (const attachment of message.metadata?.attachments ?? []) {
@@ -988,7 +988,8 @@ export function createLocalFilesService({
           const pointer = /^(?:file-service|sediment):\/\/(.+)$/.exec(part.asset_pointer ?? '')?.[1];
           if (!pointer) throw issue('Invalid original image asset pointer', 422, 'unsupported_image_source');
           ids.add(pointer);
-          inputs.push((await resolveUserInputImage({ type: 'image', fileId: pointer }, { threadId, signal })).input);
+          if (!preparedImages.has(pointer)) preparedImages.set(pointer, await resolveUserInputImage({ type: 'image', fileId: pointer }, { threadId, signal }));
+          inputs.push(preparedImages.get(pointer).input);
         } else throw issue('This original media input format is not supported locally', 422, 'unsupported_media_input');
       }
     }
@@ -1004,7 +1005,8 @@ export function createLocalFilesService({
         textFiles.push({ id: file.id, name: file.name, path: file.textPath, rawPath: file.rawPath, text: decoded.text, encoding: 'utf-8', truncated: record.extraction.truncated, partial: record.extraction.partial, extraction: copy(record.extraction) });
       }
     }
-    return { input: inputs, files, textFiles, attachments, adapter_source: LOCAL_FILES_SOURCE };
+    const images = [...preparedImages.values()].map(({ fileId, mimeType, width, height, size, sha256 }) => ({ fileId, mimeType, width, height, size, sha256 }));
+    return { input: inputs, files, textFiles, images, attachments, adapter_source: LOCAL_FILES_SOURCE };
   }
 
   // Internal presentation provenance only. These descriptions never issue a
