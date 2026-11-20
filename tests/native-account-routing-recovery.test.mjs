@@ -207,3 +207,16 @@ test('generated worker returns fetched HTML and scripts despite rejected cache o
     });
   }
 });
+
+test('the service worker retries a transient static asset response once without reissuing API requests', async () => {
+  const f = workerFixture();
+  let requests = 0;
+  f.setFetch(() => ++requests === 1 ? new Response('', { status: 503 }) : Response.json({ value: 'ready' }));
+  const asset = 'native-client/entry-plan.json?v=' + f.release;
+  const response = await f.dispatch(asset);
+  assert.deepEqual(await response.json(), { value: 'ready' });
+  assert.equal(requests, 2);
+  await f.dispatch(asset);
+  assert.equal(requests, 2);
+  assert.equal(await f.dispatch('api/auth/session'), undefined);
+});

@@ -1,9 +1,9 @@
-import {BrowserWorkspaceStore,workspacePath} from './native-client/browser-tool-executor.mjs?v=3886dd09e0b0f238';
+import {BrowserWorkspaceStore,workspacePath} from './native-client/browser-tool-executor.mjs?v=d54056d29411fe79';
 const workspace=new BrowserWorkspaceStore();
 const SOURCE_BUILD="ef0c3fb941611420d8683bf88f61acf1a8ac6b19";
 const BASE=new URL('./',self.location.href).pathname;
 const CACHE='chatgpt-original-assets-'+SOURCE_BUILD;
-const SHELL_CACHE='chatgpt-native-shell-3886dd09e0b0f238';
+const SHELL_CACHE='chatgpt-native-shell-d54056d29411fe79';
 self.addEventListener('install',event=>event.waitUntil(self.skipWaiting()));
 self.addEventListener('activate',event=>event.waitUntil(self.clients.claim()));
 function mirror(url){
@@ -11,6 +11,16 @@ function mirror(url){
  if(url.origin==='https://chatgpt.com'&&url.pathname.startsWith('/cdn/assets/'))return new URL(BASE+'original-client/public/chatgpt.com'+url.pathname,self.location.origin);
  if(url.origin==='https://cdn.oaistatic.com')return new URL(BASE+'original-client/public/cdn.oaistatic.com'+url.pathname,self.location.origin);
  return null;
+}
+async function fetchPublicAsset(request){
+ try{
+  const page=await fetch(request);
+  if(![502,503,504].includes(page.status)||request.signal?.aborted||self.navigator?.onLine===false)return page;
+  if(page.body)void page.body.cancel().catch(()=>{});
+ }catch(error){
+  if(request.signal?.aborted||self.navigator?.onLine===false)throw error;
+ }
+ return fetch(request,{cache:'reload'});
 }
 self.addEventListener('fetch',event=>{
  if(event.request.method!=='GET')return;
@@ -38,7 +48,7 @@ self.addEventListener('fetch',event=>{
  // Only immutable public assets belong here. Keep account data and release discovery on the network.
  const relative=requested.pathname.slice(BASE.length);
  const own=requested.origin===self.location.origin&&requested.pathname.startsWith(BASE);
- const revision=requested.search==='?v=3886dd09e0b0f238';
+ const revision=requested.search==='?v=d54056d29411fe79';
  const nativeStatic=revision&&(/^(?:native-client\/[a-zA-Z0-9_./-]+\.(?:mjs|js|json|css)|(?:runtime|config|model-catalog|release-updater|python-worker)\.js)$/.test(relative))&&!relative.endsWith('/active.json');
  const immutable=!requested.search&&/^original-client\/public\/(?:chatgpt\.com\/cdn\/assets|cdn\.oaistatic\.com\/assets)\/(?:[a-zA-Z0-9_-]+\/)*(?:[a-zA-Z0-9_-]+[.-])?[0-9a-f]{8,64}\.(?:js|mjs|json|css|woff2|png|webp|svg)$/.test(relative);
  if(own&&(nativeStatic||immutable)&&!event.request.headers.has('authorization')&&!event.request.headers.has('range')){
@@ -46,7 +56,7 @@ self.addEventListener('fetch',event=>{
    const cache=await caches.open(immutable?CACHE:SHELL_CACHE).catch(()=>null);
    const hit=cache&&await cache.match(event.request.url).catch(()=>null);
    if(hit)return hit;
-   const response=await fetch(event.request);
+   const response=await fetchPublicAsset(event.request);
    if(cache&&response.ok&&response.status===200){
     const save=cache.put(event.request.url,response.clone()).catch(()=>{});
     event.waitUntil?.(save);

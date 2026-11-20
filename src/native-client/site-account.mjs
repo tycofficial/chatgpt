@@ -190,7 +190,7 @@ export function safeSiteReturnUrl(value) {
     const target = new URL(value || base, base.origin);
     if (target.pathname === base.pathname.replace(/\/$/, '')) target.pathname = base.pathname;
     if (target.origin === base.origin && !target.username && !target.password && target.pathname.startsWith(base.pathname) &&
-        !/(?:\/auth)?\/(?:login|signup|logout|signout)\/?$/i.test(target.pathname)) {
+        !/(?:\/auth)?\/(?:login|signup|logout|signout)(?:\/index\.html|\/)?$/i.test(target.pathname)) {
       for (const key of ['localSession', 'refresh_account', 'startup_account_refresh']) target.searchParams.delete(key);
       return target;
     }

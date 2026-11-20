@@ -37,6 +37,7 @@ for(const asset of supplementalManifest.assets){
  supplementalAssets.push({file:asset.path,bytes});
 }
 const deploymentBase='/'+(process.env.PUBLIC_BASE_PATH||'chatgpt').replace(/^\/+|\/+$/g,'')+'/';
+const originalOnSite = url => deploymentBase + 'original-client/public/chatgpt.com' + url;
 const builderBytes=await fs.readFile(fileURLToPath(import.meta.url));
 const sharedAssetInputs=['config.js','model-catalog.js','runtime.js','python-worker.js','release-updater.js'].map(file=>({file,...(['python-worker.js','model-catalog.js'].includes(file)?{inputFile:'src/native-client/'+file}:{})}));
 const sharedAssets=await Promise.all(sharedAssetInputs.map(async asset=>({...asset,bytes:await fs.readFile(path.join(root,asset.inputFile??asset.file))})));
@@ -65,10 +66,15 @@ const provenance=[];
 for(const [name,original]of raw){
  let text=original;
  if(name==='boot-adapter.mjs'){
-  text=replace(text,"fetch('/__prototype/entry-plan.json')","fetch(new URL('./entry-plan.json?v="+release+"', import.meta.url))");
+  const initialRoutes = Object.fromEntries(Object.entries(plan.initialRoutes).map(([id, url]) => [id, originalOnSite(url)]));
+  const bootPlan = { runtime: originalOnSite(plan.runtime), manifest: originalOnSite(plan.manifest), initialRoutes, registrationEntry: './entry-library.mjs?v=' + release };
+  text=replace(text,"await (await fetch('/__prototype/entry-plan.json')).json()",JSON.stringify(bootPlan));
   text=replace(text,'installSyntheticDocumentState();',"installSyntheticDocumentState();\nif (globalThis.__CHATGPT_REPLICA_ENV__) window.__reactRouterContext.basename = globalThis.__CHATGPT_REPLICA_ENV__.basePath.replace(/\\/$/, '') || '/';");
  }
- if(name==='entry-library.mjs')text=replace(text,'/__prototype/entry-library.mjs','./entry-library.mjs?v='+release);
+ if(name==='entry-library.mjs'){
+  text=replace(text,'/__prototype/entry-library.mjs','./entry-library.mjs?v='+release);
+  text=replace(text,'"/cdn/assets/', '"' + originalOnSite('/cdn/assets/'));
+ }
  if(name==='local-identity.mjs'){
   text=replace(text,"enabled = globalThis.sessionStorage.getItem(toggleKey) === '1';","enabled = globalThis.sessionStorage.getItem(toggleKey) === '1' || (globalThis.sessionStorage.getItem(toggleKey) === null && globalThis.__CHATGPT_REPLICA_ENV__?.localIdentity === true);");
   text=text.replaceAll('本地原型','本地账户');
@@ -141,6 +147,16 @@ function mirror(url){
  if(url.origin==='https://cdn.oaistatic.com')return new URL(BASE+'original-client/public/cdn.oaistatic.com'+url.pathname,self.location.origin);
  return null;
 }
+async function fetchPublicAsset(request){
+ try{
+  const page=await fetch(request);
+  if(![502,503,504].includes(page.status)||request.signal?.aborted||self.navigator?.onLine===false)return page;
+  if(page.body)void page.body.cancel().catch(()=>{});
+ }catch(error){
+  if(request.signal?.aborted||self.navigator?.onLine===false)throw error;
+ }
+ return fetch(request,{cache:'reload'});
+}
 self.addEventListener('fetch',event=>{
  if(event.request.method!=='GET')return;
  const requested=new URL(event.request.url);
@@ -175,7 +191,7 @@ self.addEventListener('fetch',event=>{
    const cache=await caches.open(immutable?CACHE:SHELL_CACHE).catch(()=>null);
    const hit=cache&&await cache.match(event.request.url).catch(()=>null);
    if(hit)return hit;
-   const response=await fetch(event.request);
+   const response=await fetchPublicAsset(event.request);
    if(cache&&response.ok&&response.status===200){
     const save=cache.put(event.request.url,response.clone()).catch(()=>{});
     event.waitUntil?.(save);
@@ -207,14 +223,25 @@ for (const rule of originalCSS.matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
 const overrides = assetOverrides.join('\n');
 if (overrides.match(rootAsset)?.length !== originalCSS.match(rootAsset)?.length) throw Error('Incomplete stylesheet asset rebasing');
 const localCSS = overrides.replace(rootAsset, (_, quote) => 'url(' + quote + deploymentBase + 'original-client/public/chatgpt.com/cdn/');
+const ownModule = name => deploymentBase + name + '?v=' + release;
+const earlyModules = ['native-client/bootstrap.mjs', 'native-client/startup-compatibility.mjs', 'native-client/site-account.mjs'].map(ownModule);
+// Chromium 109 fetches the entry on modulepreload without fetching its imports.
+// All these chunks are needed on every home load; preloading leaves execution order to the original entry.
+const registrationAssets = await Promise.all(plan.registrationChunks.map(async url => ({
+ url, bytes: (await fs.stat(path.join(root, 'original-client/public/chatgpt.com', url.slice(1)))).size,
+})));
+registrationAssets.sort((a, b) => b.bytes - a.bytes);
+const originalPreloads = new Set([plan.runtime, ...registrationAssets.map(asset => asset.url), plan.manifest, ...Object.values(plan.initialRoutes)]);
 const primaryModules = [
- ...['native-client/entry-library.mjs', 'native-client/boot-adapter.mjs'].map(name => deploymentBase + name + '?v=' + release),
- ...[plan.manifest, ...Object.values(plan.initialRoutes)].map(url => deploymentBase + 'original-client/public/chatgpt.com' + url),
+ ...['native-client/boot-adapter.mjs', 'native-client/entry-library.mjs', 'native-client/service-boundary.mjs', 'runtime.js', 'model-catalog.js'].map(ownModule),
+ ...Array.from(originalPreloads, originalOnSite),
 ];
 const primaryStyles = [deploymentBase + cssAsset, deploymentBase + 'native-client/map-vendor/maplibre-gl.css?v=' + release];
 const preload = `<script>(function(){
- if(/\\/(?:login|signup|logout|signout)(?:\\/index\\.html|\\/)?$/i.test(location.pathname))return;
  function load(rel,url){var link=document.createElement('link');link.rel=rel;link.href=url;if(rel==='modulepreload')link.crossOrigin='anonymous';document.head.appendChild(link)}
+ ${JSON.stringify(earlyModules)}.forEach(function(url){load('modulepreload',url)});
+ if(!Array.prototype.toSorted||!Array.prototype.findLast||!Array.prototype.at||!Array.prototype.with||!Object.hasOwn||!window.Promise||!Promise.withResolvers||!window.structuredClone)load('modulepreload',${JSON.stringify(ownModule('native-client/compat-assets/standards.mjs'))});
+ if(/\\/(?:login|signup|logout|signout)(?:\\/index\\.html|\\/)?$/i.test(location.pathname))return;
  ${JSON.stringify(primaryStyles)}.forEach(function(url){load('stylesheet',url)});
  ${JSON.stringify(primaryModules)}.forEach(function(url){load('modulepreload',url)});
 })()</script>`;

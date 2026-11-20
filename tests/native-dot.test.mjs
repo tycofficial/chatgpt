@@ -154,7 +154,10 @@ test('native legacy selection and saved companion snapshots retain visible asset
 
   const snapshot = (await upload(env.adapter)).data.snapshot;
   const avatar = { avatar_type: 'codex-pet', avatar_manifest: { pet_id: 'fixture-pet', snapshot }, avatar_url: snapshot.asset_pointer };
-  const saved = (await request(env.adapter, path, 'PATCH', avatar)).data;
+  const petPath = '/cloud-aeons/' + profile.id;
+  assert.equal((await request(env.adapter, petPath, 'PATCH', { avatar_type: 'default' })).response.status, 422);
+  assert.equal((await request(env.adapter, '/cloud-aeons/local-dot-unowned', 'PATCH', avatar)).response.status, 404);
+  const saved = (await request(env.adapter, petPath, 'PATCH', avatar)).data;
   assert.equal(saved.avatar_url, snapshot.asset_pointer);
   assert.deepEqual(saved.avatar_manifest, avatar.avatar_manifest);
   const savedRecords = JSON.parse(env.storage.getItem(key));
@@ -215,8 +218,11 @@ test('original PNG upload -> manifest PATCH -> fresh GET -> download yields the 
   const id = snapshot.asset_pointer.slice('file-service://'.length);
   const download = await request(env.adapter, '/files/download/' + id);
   assert.equal(download.data.status, 'success');
-  assert.equal(download.data.download_url, 'https://site.invalid/chatgpt/backend-api/local-dot/assets/' + id);
-  const response = await env.create().handle(new Request(download.data.download_url), '/local-dot/assets/' + id);
+  assert.match(download.data.download_url, /^data:image\/png;base64,/);
+  const embedded = await fetch(download.data.download_url);
+  assert.equal(embedded.headers.get('Content-Type'), 'image/png');
+  assert.deepEqual(new Uint8Array(await embedded.arrayBuffer()), png);
+  const response = await env.create().handle(new Request('https://site.invalid/chatgpt/backend-api/local-dot/assets/' + id), '/local-dot/assets/' + id);
   assert.equal(response.headers.get('Content-Type'), 'image/png');
   assert.deepEqual(new Uint8Array(await response.arrayBuffer()), png);
 });
@@ -523,4 +529,28 @@ test('site-owned readiness never reads native cloud entitlement during loading o
   assert.equal(adapted.b({}, 'unexpected-account'), false);
   assert.equal(adapted.b({}, auth.authenticatedAccountId), true);
   assert.doesNotThrow(() => adapted.i({}));
+});
+
+test('Dot overview reads the native disconnected computer and empty schedule contracts for the owner', async () => {
+  const env = fixture();
+  const profile = (await request(env.adapter, '/tbo')).data.items[0];
+  const base = '/tbo/' + profile.id;
+  const computer = base + '/environment/status?thread_id=' + encodeURIComponent(profile.active_root_thread_id);
+  const schedules = base + '/automations?limit=100';
+  const stored = new Map(env.storage.values);
+
+  const computerStatus = await request(env.adapter, computer);
+  assert.equal(computerStatus.response.status, 200);
+  assert.deepEqual(computerStatus.data, { environmentId: null, status: 'unknown', capabilities: [] });
+  const schedulePage = await request(env.adapter, schedules);
+  assert.equal(schedulePage.response.status, 200);
+  assert.deepEqual(schedulePage.data, { items: [], cursor: null });
+  assert.equal((await request(env.adapter, base + '/environment/status?thread_id=another-thread')).response.status, 404);
+  assert.equal((await request(env.adapter, base + '/environment/wake', 'POST')).response.status, 501);
+  assert.equal((await request(env.adapter, schedules, 'POST')).response.status, 501);
+
+  env.setIdentity({ accountId: 'another-account', userId: 'another-user' });
+  assert.equal((await request(env.adapter, computer)).response.status, 404);
+  assert.equal((await request(env.adapter, schedules)).response.status, 404);
+  assert.deepEqual(env.storage.values, stored);
 });

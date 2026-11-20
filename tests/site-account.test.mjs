@@ -104,6 +104,12 @@ function makeIndexedDB(records) {
 }
 
 const record=(extra={})=>({token:fixtureToken,expiresAt:now+60000,user:{...user(),username:'UNTRUSTED_CACHE',canSelectModels:true},...extra});
+test('a successful sign-in cannot redirect to a static login or logout alias', () => {
+  const f = fixture();
+  for (const target of ['login/index.html', 'auth/logout/index.html', 'signup/index.html']) {
+    assert.equal(f.api.safeSiteReturnUrl('/chatgpt/' + target).pathname, '/chatgpt/');
+  }
+});
 function assertFree(f){assert.equal(f.api.getSiteAccount(),null);assert.equal(f.api.hasModelSelectionAccess(),false);assert.equal(f.api.getSiteSessionToken(),null);}
 test('no session stays Free and never contacts the account service',async()=>{const f=fixture();assertFree(f);assert.equal(await f.api.initializeSiteAccount(),null);assert.equal(f.calls.length,0);});
 test('invalid or expired cached sessions are removed without granting permissions',async t=>{

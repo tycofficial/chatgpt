@@ -1,5 +1,5 @@
 /** Namespace-aware Office XML over already verified OPC package parts. */
-import { DOMParser, XML_DOM_VERSION } from './office-vendor/xml-dom.mjs?v=3886dd09e0b0f238';
+import { DOMParser, XML_DOM_VERSION } from './office-vendor/xml-dom.mjs?v=d54056d29411fe79';
 
 export const OFFICE_XML_PARSER = Object.freeze({ name: '@xmldom/xmldom', version: '0.8.15' });
 export const OFFICE_NAMESPACES = Object.freeze({

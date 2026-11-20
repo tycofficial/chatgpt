@@ -26,3 +26,29 @@ test('browser preloads and dynamic navigation resolve inside the Pages project f
   }
   assert.equal(new URL(manifest.url).pathname, '/chatgpt/original-client/public/chatgpt.com/cdn/assets/manifest-98f8ff8a.js');
 });
+
+test('the HTML discovers every mandatory original entry chunk before boot and keeps them off the sign-in route', () => {
+  const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const plan = JSON.parse(fs.readFileSync(new URL('../native-client/entry-plan.json', import.meta.url), 'utf8'));
+  const loader = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(match => match[1]).find(code => code.includes('modulepreload'));
+  assert.ok(loader);
+  const run = pathname => {
+    const links = [];
+    const document = { createElement: () => ({}), head: { appendChild(link) { links.push(link); } } };
+    vm.runInNewContext(loader, { document, location: { pathname }, window: { Promise, structuredClone } });
+    return links.filter(link => link.rel === 'modulepreload').map(link => link.href);
+  };
+  const home = run('/chatgpt/'), login = run('/chatgpt/auth/login/');
+  const originals = [plan.runtime, ...plan.registrationChunks, plan.manifest, ...Object.values(plan.initialRoutes)];
+  for (const file of originals) {
+    const deployed = '/chatgpt/original-client/public/chatgpt.com' + file;
+    assert.equal(home.filter(url => url === deployed).length, 1);
+    assert.ok(!login.includes(deployed));
+  }
+  assert.ok(!home.some(url => /maplibre-gl\.mjs|_orbit-renderer/.test(url)));
+  const boot = fs.readFileSync(new URL('../native-client/boot-adapter.mjs', import.meta.url), 'utf8');
+  assert.ok(!/fetch\([^\n]*entry-plan\.json/.test(boot));
+  const registration = fs.readFileSync(new URL('../native-client/entry-library.mjs', import.meta.url), 'utf8');
+  assert.ok(!registration.includes('"/cdn/assets/'));
+  assert.ok(registration.includes('/chatgpt/original-client/public/chatgpt.com' + plan.runtime));
+});

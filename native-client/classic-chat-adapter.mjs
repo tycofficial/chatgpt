@@ -1,11 +1,11 @@
 /** Original classic Chat REST/SSE shapes over the same real local thread engine. */
-import { FRONTEND_TO_RAW_EFFORT } from './model-catalog-adapter.mjs?v=3886dd09e0b0f238';
-import { hostedSearchMessage, mergeWebSearchReferences } from './local-web-search.mjs?v=3886dd09e0b0f238';
-import { turnHostCheckpoints } from './preferred-host-transport.mjs?v=3886dd09e0b0f238';
-import { storedConversationOrigin, storedConversationSurface } from './local-app-server.mjs?v=3886dd09e0b0f238';
+import { FRONTEND_TO_RAW_EFFORT } from './model-catalog-adapter.mjs?v=d54056d29411fe79';
+import { hostedSearchMessage, mergeWebSearchReferences } from './local-web-search.mjs?v=d54056d29411fe79';
+import { turnHostCheckpoints } from './preferred-host-transport.mjs?v=d54056d29411fe79';
+import { storedConversationOrigin, storedConversationSurface } from './local-app-server.mjs?v=d54056d29411fe79';
 
-import { parseClassicInputMessages } from './classic-input-messages.mjs?v=3886dd09e0b0f238';
-export { parseClassicInputMessages, CLASSIC_CONTEXT_LIMITS } from './classic-input-messages.mjs?v=3886dd09e0b0f238';
+import { parseClassicInputMessages } from './classic-input-messages.mjs?v=d54056d29411fe79';
+export { parseClassicInputMessages, CLASSIC_CONTEXT_LIMITS } from './classic-input-messages.mjs?v=d54056d29411fe79';
 
 export function wrapNativeReasoningGroups(groupMessages) {
   return function (items, options) {

@@ -1,28 +1,28 @@
-import { createBrowserReadAloudController, createNativeReadAloudBindings } from './local-native-read-aloud.mjs?v=3886dd09e0b0f238';
-import { normalizeWorkUIStoredPreference, WORK_DEFAULT_OPTION } from '../model-catalog.js?v=3886dd09e0b0f238';
-import { consolidateWorkDefaults } from './model-catalog-adapter.mjs?v=3886dd09e0b0f238';
+import { createBrowserReadAloudController, createNativeReadAloudBindings } from './local-native-read-aloud.mjs?v=d54056d29411fe79';
+import { normalizeWorkUIStoredPreference, WORK_DEFAULT_OPTION } from '../model-catalog.js?v=d54056d29411fe79';
+import { consolidateWorkDefaults } from './model-catalog-adapter.mjs?v=d54056d29411fe79';
 /**
  * Loads the public original component graph with explicit local host services.
  * Private original backend credentials are never used by this entry point.
  */
-import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter, localFilesService, localOwnedDownloadTransport, localLibraryByteTransport, initializeLocalAccountHistory, setNativeAccountHistoryToaster, initializeLocalPublishedResources, registerNativeLibrarySource, notifyNativeLibrarySourceReady, registerNativeFileReferenceSources, localReadAloudHost } from './service-boundary.mjs?v=3886dd09e0b0f238';
-import { installDeferredMapProvider } from './local-map-provider.mjs?v=3886dd09e0b0f238';
-import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs?v=3886dd09e0b0f238';
-import { getPrototypeLocalSession, getPrototypeLocalAuth, isPrototypeLocalSession, getPrototypeLocalAuthGeneration, clearPrototypeLocalSession } from './local-identity.mjs?v=3886dd09e0b0f238';
-import { createLocalHostSettingsClass } from './local-host-settings.mjs?v=3886dd09e0b0f238';
-import { createLocalWorkPolicy } from './local-work-policy.mjs?v=3886dd09e0b0f238';
-import { hasModelSelectionAccess, getSiteLoginUrl, getSiteHomeUrl } from './site-account.mjs?v=3886dd09e0b0f238';
-import { createNativeSiteTrialCard } from './native-pricing-trials.mjs?v=3886dd09e0b0f238';
-import { createNativeSiteSignOut } from './site-signout.mjs?v=3886dd09e0b0f238';
-import { createNativeSiteLoginRoute } from './native-site-login.mjs?v=3886dd09e0b0f238';
-import { localizeRouterAssets } from './startup-compatibility.mjs?v=3886dd09e0b0f238';
-import { siteSignOut, localAppServer as timingServer } from './service-boundary.mjs?v=3886dd09e0b0f238';
-import { wrapNativeReasoningGroups } from './classic-chat-adapter.mjs?v=3886dd09e0b0f238';
-import { wrapNativeCodexWorkTiming, wrapNativeWorkedDuration } from './local-app-server.mjs?v=3886dd09e0b0f238';
-import { createNativeModelSelectionPolicy, createNativeThinkingEntryPolicy } from './local-model-selection-policy.mjs?v=3886dd09e0b0f238';
-import { createLocalHostClaimsReader } from './local-token-identity.mjs?v=3886dd09e0b0f238';
-import { wrapNativeFileUploadClass } from './local-native-upload.mjs?v=3886dd09e0b0f238';
-import { wrapNativeDownloadServices } from './local-native-download.mjs?v=3886dd09e0b0f238';
+import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter, localFilesService, localOwnedDownloadTransport, localLibraryByteTransport, initializeLocalAccountHistory, setNativeAccountHistoryToaster, initializeLocalPublishedResources, registerNativeLibrarySource, notifyNativeLibrarySourceReady, registerNativeFileReferenceSources, localReadAloudHost } from './service-boundary.mjs?v=d54056d29411fe79';
+import { installDeferredMapProvider } from './local-map-provider.mjs?v=d54056d29411fe79';
+import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs?v=d54056d29411fe79';
+import { getPrototypeLocalSession, getPrototypeLocalAuth, isPrototypeLocalSession, getPrototypeLocalAuthGeneration, clearPrototypeLocalSession } from './local-identity.mjs?v=d54056d29411fe79';
+import { createLocalHostSettingsClass } from './local-host-settings.mjs?v=d54056d29411fe79';
+import { createLocalWorkPolicy } from './local-work-policy.mjs?v=d54056d29411fe79';
+import { hasModelSelectionAccess, getSiteLoginUrl, getSiteHomeUrl } from './site-account.mjs?v=d54056d29411fe79';
+import { createNativeSiteTrialCard } from './native-pricing-trials.mjs?v=d54056d29411fe79';
+import { createNativeSiteSignOut } from './site-signout.mjs?v=d54056d29411fe79';
+import { createNativeSiteLoginRoute } from './native-site-login.mjs?v=d54056d29411fe79';
+import { localizeRouterAssets } from './startup-compatibility.mjs?v=d54056d29411fe79';
+import { siteSignOut, localAppServer as timingServer } from './service-boundary.mjs?v=d54056d29411fe79';
+import { wrapNativeReasoningGroups } from './classic-chat-adapter.mjs?v=d54056d29411fe79';
+import { wrapNativeCodexWorkTiming, wrapNativeWorkedDuration } from './local-app-server.mjs?v=d54056d29411fe79';
+import { createNativeModelSelectionPolicy, createNativeThinkingEntryPolicy } from './local-model-selection-policy.mjs?v=d54056d29411fe79';
+import { createLocalHostClaimsReader } from './local-token-identity.mjs?v=d54056d29411fe79';
+import { wrapNativeFileUploadClass } from './local-native-upload.mjs?v=d54056d29411fe79';
+import { wrapNativeDownloadServices } from './local-native-download.mjs?v=d54056d29411fe79';
 
 const boundary = installNetworkBoundary();
 globalThis.__originalClientProbe = boundary.diagnostics;
@@ -35,7 +35,7 @@ void initialHistory.then(() => initializeLocalPublishedResources()).catch(() => 
 installSyntheticDocumentState();
 if (globalThis.__CHATGPT_REPLICA_ENV__) window.__reactRouterContext.basename = globalThis.__CHATGPT_REPLICA_ENV__.basePath.replace(/\/$/, '') || '/';
 
-const plan = await (await fetch(new URL('./entry-plan.json?v=3886dd09e0b0f238', import.meta.url))).json();
+const plan = {"runtime":"/chatgpt/original-client/public/chatgpt.com/cdn/assets/633146.6428a93122.js","manifest":"/chatgpt/original-client/public/chatgpt.com/cdn/assets/manifest-98f8ff8a.js","initialRoutes":{"root":"/chatgpt/original-client/public/chatgpt.com/cdn/assets/736644.130f255edd.js","app.route":"/chatgpt/original-client/public/chatgpt.com/cdn/assets/538990.492f1e5a13.js","flow-layout.route":"/chatgpt/original-client/public/chatgpt.com/cdn/assets/687836.2c400a1faa.js","authenticated-layout.route":"/chatgpt/original-client/public/chatgpt.com/cdn/assets/42763.e7759944c5.js","home.route":"/chatgpt/original-client/public/chatgpt.com/cdn/assets/906348.348ecd5024.js"},"registrationEntry":"./entry-library.mjs?v=d54056d29411fe79"};
 const { __webpack_require__: requireOriginal } = await import(plan.runtime);
 if (globalThis.__CHATGPT_REPLICA_ENV__?.directAssetHost) requireOriginal.p = new URL('original-client/public/chatgpt.com/cdn/', new URL(globalThis.__CHATGPT_REPLICA_ENV__.basePath, location.origin)).href;
 // One mechanical entry transform defers its terminal hxQI invocation and

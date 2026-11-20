@@ -342,12 +342,6 @@ export function createLocalDotAdapter({
     }
     await pending;
   }
-  function assetURL(request, path, id) {
-    if (typeof makeAssetURL === 'function') return makeAssetURL(id, request);
-    const incoming = new URL(request.url);
-    const prefix = incoming.pathname.endsWith(path) ? incoming.pathname.slice(0, -path.length) : '';
-    return new URL(prefix + '/local-dot/assets/' + encodeURIComponent(id), incoming.origin).href;
-  }
   async function body(request) {
     try {
       const result = await request.json();
@@ -414,7 +408,9 @@ export function createLocalDotAdapter({
     });
   }
   async function handle(request, canonicalPath) {
-    const url = new URL(request.url), path = canonicalPath ?? url.pathname;
+    const url = new URL(request.url), requestPath = canonicalPath ?? url.pathname;
+    const nativePetUpdate = request.method === 'PATCH' && /^\/cloud-aeons\/local-dot-[A-Za-z0-9-]{1,100}$/.test(requestPath);
+    const path = nativePetUpdate ? '/tbo' + requestPath.slice('/cloud-aeons'.length) : requestPath;
     const relevant = path === '/tbo' || path.startsWith('/tbo/') || path.startsWith('/cloud-aeons/avatar-snapshots')
       || path.startsWith('/local-dot/assets/') || path.startsWith('/files/download/local-dot-avatar-')
       || path === '/pins' || path.startsWith('/pins/feature/') || path.startsWith('/messaging/rooms/');
@@ -503,9 +499,10 @@ export function createLocalDotAdapter({
         return new Response(decode64(record.base64), { headers: { 'Content-Type': 'image/png', 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' } });
       }
       if (path.startsWith('/files/download/local-dot-avatar-') && method === 'GET') {
-        const id = parts[3];
-        pngRecord(session, id);
-        return json({ status: 'success', download_url: assetURL(request, path, id) });
+        const id = parts[3], record = pngRecord(session, id);
+        // Native Image.decode() needs a directly loadable source for this browser-stored PNG.
+        const download_url = typeof makeAssetURL === 'function' ? makeAssetURL(id, request) : 'data:image/png;base64,' + record.base64;
+        return json({ status: 'success', download_url });
       }
       if (path === '/pins' && method === 'GET') {
         const pins = state(session).pins;
@@ -573,7 +570,9 @@ export function createLocalDotAdapter({
           if (method === 'GET') return json(publicProfile(row));
           if (method === 'PATCH') {
             const patch = await body(request);
-            const supported = new Set(['display_name', 'description', 'avatar', 'avatar_id', 'avatar_type', 'avatar_manifest', 'avatar_url', 'only_if_default_avatar']);
+            const supported = new Set(nativePetUpdate ? ['avatar_type', 'avatar_manifest', 'avatar_url']
+              : ['display_name', 'description', 'avatar', 'avatar_id', 'avatar_type', 'avatar_manifest', 'avatar_url', 'only_if_default_avatar']);
+            if (nativePetUpdate && patch.avatar_type !== 'codex-pet') throw error('Only native pet appearances can use this Dot profile route', 422);
             if (Object.keys(patch).some(key => !supported.has(key))) throw error('This Dot profile field is unavailable from the local provider', 422);
             if (own(patch, 'display_name')) {
               row.display_name = safeText(patch.display_name, 'Dot name', 100).trim();
@@ -634,11 +633,19 @@ export function createLocalDotAdapter({
           return json(pagination(rows, url));
         }
         if (parts.length === 4 && method === 'GET' && parts[3] === 'computers') return json({ thread_id: row.active_root_thread_id, computers: [] });
+        if (parts.length === 5 && method === 'GET' && parts[3] === 'environment' && parts[4] === 'status') {
+          const threadId = url.searchParams.get('thread_id');
+          if (threadId !== null && !row.thread_ids.includes(threadId)) {
+            throw error('No local Dot owns this thread', 404, 'LOCAL_DOT_NOT_FOUND');
+          }
+          return json({ environmentId: null, status: 'unknown', capabilities: [] });
+        }
+        if (parts.length === 4 && method === 'GET' && parts[3] === 'automations') return json(pagination([], url));
 
       }
       throw error('This Dot operation needs a service that is not provided locally', 501, 'LOCAL_DOT_SERVICE_UNAVAILABLE');
     } catch (cause) {
-      diagnostic('request-error', { path, code: cause?.code ?? 'LOCAL_DOT_ERROR', status: cause?.status ?? 500 });
+      diagnostic('request-error', { path: requestPath, code: cause?.code ?? 'LOCAL_DOT_ERROR', status: cause?.status ?? 500 });
       return fail(cause);
     }
   }

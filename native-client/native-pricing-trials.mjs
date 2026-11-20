@@ -1,5 +1,5 @@
-import { getSiteTrialAction, submitSiteTrial } from './local-pricing.mjs?v=3886dd09e0b0f238';
-import { getSiteHomeUrl, getSiteLoginUrl, safeSiteReturnUrl } from './site-account.mjs?v=3886dd09e0b0f238';
+import { getSiteTrialAction, submitSiteTrial } from './local-pricing.mjs?v=d54056d29411fe79';
+import { getSiteHomeUrl, getSiteLoginUrl, safeSiteReturnUrl } from './site-account.mjs?v=d54056d29411fe79';
 
 const oldPlanPath = /^\/(?:site-plans(?:\/index\.html)?|plans|pricing-plan|(?:codex\/)?purchase\/(?:plus|pro5x|prolite|pro|promax))\/?$/;
 
