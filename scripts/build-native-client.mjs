@@ -67,7 +67,13 @@ for(const [name,original]of raw){
  let text=original;
  if(name==='boot-adapter.mjs'){
   const initialRoutes = Object.fromEntries(Object.entries(plan.initialRoutes).map(([id, url]) => [id, originalOnSite(url)]));
-  const bootPlan = { runtime: originalOnSite(plan.runtime), manifest: originalOnSite(plan.manifest), initialRoutes, registrationEntry: './entry-library.mjs?v=' + release };
+  const bootPlan = {
+   mountMode: plan.mountMode,
+   runtime: originalOnSite(plan.runtime),
+   manifest: originalOnSite(plan.manifest),
+   initialRoutes,
+   registrationEntry: './entry-library.mjs?v=' + release,
+  };
   text=replace(text,"await (await fetch('/__prototype/entry-plan.json')).json()",JSON.stringify(bootPlan));
   text=replace(text,'installSyntheticDocumentState();',"installSyntheticDocumentState();\nif (globalThis.__CHATGPT_REPLICA_ENV__) window.__reactRouterContext.basename = globalThis.__CHATGPT_REPLICA_ENV__.basePath.replace(/\\/$/, '') || '/';");
  }

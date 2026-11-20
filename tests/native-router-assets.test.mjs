@@ -52,3 +52,12 @@ test('the HTML discovers every mandatory original entry chunk before boot and ke
   assert.ok(!registration.includes('"/cdn/assets/'));
   assert.ok(registration.includes('/chatgpt/original-client/public/chatgpt.com' + plan.runtime));
 });
+
+test('the packaged entry mounts a client root on the static Pages document', () => {
+  const read = path => fs.readFileSync(new URL(path, import.meta.url), 'utf8');
+  const plan = JSON.parse(read('../native-client/entry-plan.json'));
+  const boot = read('../native-client/boot-adapter.mjs');
+  const embedded = JSON.parse(boot.match(/^const plan = (\{[^\n]+\});$/m)[1]);
+  assert.equal(plan.mountMode, 'client');
+  assert.equal(embedded.mountMode, plan.mountMode);
+});
