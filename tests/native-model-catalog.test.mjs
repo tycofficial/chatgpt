@@ -47,13 +47,14 @@ test('dual-matched Terra stays manual with declared host Ultra and no Chat or cu
   assert.equal(catalog.WORK_ADDITIONAL_MODEL_PROVENANCE[id].inferenceVerified,false);
 });
 test('GPT-6.2 Sol and Astra are manual Work/Codex models with exact published efforts',()=>{
-  const expected=['low','medium','high','xhigh','max'];
+  const providerEfforts=['low','medium','high','xhigh','max'];
+  const expected=[...providerEfforts,'ultra'];
   for(const id of ['gpt-6.2-sol','gpt-6.2-astra']){
     assert(catalog.WORK_MODEL_IDS.includes(id));
     assert.deepEqual(catalog.WORK_PINNED_EFFORTS[id],expected);
-    assert.deepEqual(allowedReasoningEfforts(id),expected);
+    assert.deepEqual(allowedReasoningEfforts(id),providerEfforts);
     assert.deepEqual(catalog.getWorkSelectionCatalog({model:id,selectionMode:'pinned'}).map(choice=>choice.effort),expected);
-    assert(!catalog.SITE_ULTRA_ORCHESTRATION.models.includes(id));
+    assert(catalog.SITE_ULTRA_ORCHESTRATION.models.includes(id));
     assert(!catalog.WORK_PRESETS.some(choice=>choice.model===id));
     assert.equal(catalog.WORK_ADDITIONAL_MODEL_PROVENANCE[id].manualOnly,true);
     assert.equal(catalog.WORK_ADDITIONAL_MODEL_PROVENANCE[id].providerModelsStatus,200);

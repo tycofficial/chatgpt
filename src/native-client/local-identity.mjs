@@ -32,7 +32,7 @@ const snapshot = {
 };
 // Native auth cleanup invalidates the current adapter identity immediately.
 // The separately stored site login can be restored on the next page load.
-const isActive = () => siteAccount ? getSiteAccount()?.id === siteAccount.id : enabled;
+const isActive = () => enabled && (!siteAccount || getSiteAccount()?.id === siteAccount.id);
 export const isPrototypeLocalSession = isActive;
 /** Admin keeps existing storage; registered and guest accounts never read it. */
 export function getLocalAccountStorageKey(key) { return administrator ? key : registeredSiteUser ? key + ':account:' + LOCAL_ACCOUNT_ID : key + ':guest'; }

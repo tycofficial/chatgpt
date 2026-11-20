@@ -1,9 +1,9 @@
-import {BrowserWorkspaceStore,workspacePath} from './native-client/browser-tool-executor.mjs?v=2eee62044429f6bc';
+import {BrowserWorkspaceStore,workspacePath} from './native-client/browser-tool-executor.mjs?v=0afe1f6a931a198d';
 const workspace=new BrowserWorkspaceStore();
 const SOURCE_BUILD="ef0c3fb941611420d8683bf88f61acf1a8ac6b19";
 const BASE=new URL('./',self.location.href).pathname;
 const CACHE='chatgpt-original-assets-'+SOURCE_BUILD;
-const SHELL_CACHE='chatgpt-native-shell-2eee62044429f6bc';
+const SHELL_CACHE='chatgpt-native-shell-0afe1f6a931a198d';
 self.addEventListener('install',event=>event.waitUntil(self.skipWaiting()));
 self.addEventListener('activate',event=>event.waitUntil(self.clients.claim()));
 function mirror(url){
@@ -26,7 +26,7 @@ self.addEventListener('fetch',event=>{
  }
  if(event.request.mode==='navigate'&&requested.origin===self.location.origin&&requested.pathname.startsWith(BASE)&&!requested.pathname.startsWith(BASE+'_orbit-renderer/')){
   event.respondWith((async()=>{const cache=await caches.open(SHELL_CACHE).catch(()=>null),key=new URL(BASE+'index.html',self.location.origin).href;
-   try{let page=await fetch(event.request,{cache:'no-store'});if(page.status===404)page=await fetch(key,{cache:'no-store'});if(page.ok&&cache)await cache.put(key,page.clone()).catch(()=>{});return page;}
+   try{const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),8000);let page;try{page=await fetch(event.request,{cache:'no-store',signal:controller.signal});if(page.status===404)page=await fetch(key,{cache:'no-store',signal:controller.signal});}finally{clearTimeout(timer);}if(page.ok&&cache)await cache.put(key,page.clone()).catch(()=>{});return page;}
    catch(error){const saved=cache?await cache.match(key).catch(()=>null):null;if(saved)return saved;throw error;}
   })());return;
  }

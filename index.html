@@ -1,4 +1,22 @@
 <!DOCTYPE html>
-<html class="chatgpt-theme" lang="zh-CN" dir="ltr" data-theme="light" data-appearance-preset="codex" data-ios="false" data-build="ef0c3fb941611420d8683bf88f61acf1a8ac6b19" data-client-build-revision="ef0c3fb941611420d8683bf88f61acf1a8ac6b19" data-icon-sprite-url="/cdn/assets/icons-65c0f11497ac4847.svg" data-codex-cli-version="0.171.0-alpha.2" data-codex-window-type="browser" data-window-type="browser" data-native-client-release="2eee62044429f6bc">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/chatgpt/original-client/public/chatgpt.com/cdn/assets/c7fcb2505631.css"><link rel="stylesheet" href="/chatgpt/native-client/map-vendor/maplibre-gl.css?v=2eee62044429f6bc"><style data-codex-app-themes></style><title>ChatGPT</title></head>
-<body><script type="module" src="/chatgpt/native-client/bootstrap.mjs?v=2eee62044429f6bc"></script></body></html>
+<html class="chatgpt-theme" lang="zh-CN" dir="ltr" data-theme="light" data-appearance-preset="codex" data-ios="false" data-build="ef0c3fb941611420d8683bf88f61acf1a8ac6b19" data-client-build-revision="ef0c3fb941611420d8683bf88f61acf1a8ac6b19" data-icon-sprite-url="/cdn/assets/icons-65c0f11497ac4847.svg" data-codex-cli-version="0.171.0-alpha.2" data-codex-window-type="browser" data-window-type="browser" data-native-client-release="0afe1f6a931a198d">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="/chatgpt/original-client/public/chatgpt.com/cdn/assets/c7fcb2505631.css"><link rel="stylesheet" href="/chatgpt/native-client/map-vendor/maplibre-gl.css?v=0afe1f6a931a198d"><style data-codex-app-themes></style><title>ChatGPT</title></head>
+<body><script>
+(function(){
+ var timer=setTimeout(showRecovery,15000);
+ function showRecovery(){
+  if(document.getElementById('startup-recovery'))return;
+  var panel=document.createElement('div');panel.id='startup-recovery';panel.style.cssText='position:fixed;z-index:2147483647;inset:0;display:grid;place-content:center;gap:12px;padding:24px;background:#fff;color:#222;font:16px system-ui;text-align:center';
+  panel.innerHTML='<p>网站加载时间较长，请重试或清理网站缓存。</p><button id="startup-retry">重新加载</button><button id="startup-reset">清理网站缓存并重新加载</button>';
+  document.body.appendChild(panel);
+  document.getElementById('startup-retry').onclick=function(){location.reload()};
+  document.getElementById('startup-reset').onclick=async function(){
+   this.disabled=true;
+   try{if(navigator.serviceWorker){var registrations=await navigator.serviceWorker.getRegistrations();await Promise.all(registrations.filter(function(r){return new URL(r.scope).pathname==="/chatgpt/"}).map(function(r){return r.unregister()}))}if(window.caches){var names=await caches.keys();await Promise.all(names.filter(function(n){return n.indexOf('chatgpt-original-assets-')===0||n.indexOf('chatgpt-native-shell-')===0}).map(function(n){return caches.delete(n)}))}}catch(e){}
+   location.replace("/chatgpt/"+'?recovery='+Date.now());
+  };
+ }
+ window.__siteStartupDone=function(){clearTimeout(timer);var panel=document.getElementById('startup-recovery');if(panel)panel.remove()};
+ window.__siteStartupFailed=showRecovery;
+})();
+</script><script type="module" src="/chatgpt/native-client/bootstrap.mjs?v=0afe1f6a931a198d" onload="window.__siteStartupDone()" onerror="window.__siteStartupFailed()"></script></body></html>

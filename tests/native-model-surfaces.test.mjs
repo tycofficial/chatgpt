@@ -18,7 +18,7 @@ function nextBody(model='auto',thinking_effort='standard',extra={}){return{actio
 async function classicTurn(f,body){const response=f.classic.stream(new Request('https://site.fixture/f/conversation'),body);assert.equal(response.status,200);const sse=await response.text();const thread=[...f.server.threads.values()].at(-1),turn=thread.turns.at(-1);return{thread,turn,sse};}
 test('Work/Codex exact IDs, Luna five levels, supported reasoning tiers and one original curated default',()=>{
  assert.deepEqual(catalog.WORK_MODEL_IDS,expected);assert.deepEqual(models.getRpcModelList().data.map(row=>row.model),expected);
- for(const row of models.getRpcModelList().data){const expectedEfforts=row.model.endsWith('-luna')||row.model.startsWith('gpt-6.2-')?['low','medium','high','xhigh','max']:['low','medium','high','xhigh','max','ultra'];assert.deepEqual(row.supportedReasoningEfforts.map(value=>value.reasoningEffort),expectedEfforts);}
+ for(const row of models.getRpcModelList().data){const expectedEfforts=row.model.endsWith('-luna')?['low','medium','high','xhigh','max']:['low','medium','high','xhigh','max','ultra'];assert.deepEqual(row.supportedReasoningEfforts.map(value=>value.reasoningEffort),expectedEfforts);}
  const work=models.getWorkModels();assert.equal(work.models.length,10);assert.equal(work.versions.filter(value=>value.display_text==='默认').length,1);assert.equal(work.versions.length,11);
  assert.deepEqual(models.getSliderModelsConfig().presets[0].map(value=>value.model+':'+value.reasoning_effort),['gpt-6-luna:high','gpt-6.1-sol:low','gpt-6.1-sol:medium','gpt-6-astra:low','gpt-6-astra:medium','gpt-6-astra:xhigh']);
  assert(!work.models.some(row=>row.thinking_efforts.some(value=>value.thinking_effort==='zero')));

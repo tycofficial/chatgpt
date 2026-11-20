@@ -45,8 +45,8 @@ export const WORK_PINNED_EFFORTS=Object.freeze({
   'gpt-6.1-sol':Object.freeze(['low','medium','high','xhigh','max','ultra']),
   'gpt-6-astra':Object.freeze(['low','medium','high','xhigh','max','ultra']),
   'gpt-6.1-terra':Object.freeze(['low','medium','high','xhigh','max','ultra']),
-  'gpt-6.2-sol':Object.freeze(['low','medium','high','xhigh','max']),
-  'gpt-6.2-astra':Object.freeze(['low','medium','high','xhigh','max']),
+  'gpt-6.2-sol':Object.freeze(['low','medium','high','xhigh','max','ultra']),
+  'gpt-6.2-astra':Object.freeze(['low','medium','high','xhigh','max','ultra']),
   'gpt-6-sol':Object.freeze(['low','medium','high','xhigh','max','ultra']),
   'gpt-5.6-sol':Object.freeze(['low','medium','high','xhigh','max','ultra']),
   'gpt-5.6-terra':Object.freeze(['low','medium','high','xhigh','max','ultra']),
@@ -69,7 +69,7 @@ export const WORK_ADDITIONAL_MODEL_PROVENANCE=Object.freeze({
     officialCapabilities:'https://help.openai.com/en/articles/20001275-chatgpt-work-and-codex',
     providerModelsStatus:200,
     surfaces:Object.freeze(['work','codex']),manualOnly:true,curatedPreset:false,
-    inferenceVerified:false,siteUltraEnabled:false,
+    inferenceVerified:false,siteUltraEnabled:true,
   }),
   'gpt-6.2-astra':Object.freeze({
     officialModelId:'gpt-6.2-astra',providerExactModelId:'gpt-6.2-astra',
@@ -77,14 +77,14 @@ export const WORK_ADDITIONAL_MODEL_PROVENANCE=Object.freeze({
     officialCapabilities:'https://help.openai.com/en/articles/20001275-chatgpt-work-and-codex',
     providerModelsStatus:200,
     surfaces:Object.freeze(['work','codex']),manualOnly:true,curatedPreset:false,
-    inferenceVerified:false,siteUltraEnabled:false,
+    inferenceVerified:false,siteUltraEnabled:true,
   }),
 });
 // Ultra is a site execution mode; it is never a provider reasoning_effort enum.
 // The runner must execute genuine parallel delegation with the same base family.
 export const SITE_ULTRA_ORCHESTRATION=Object.freeze({
   effort:'ultra',mode:'parallel-agents',baseReasoningEffort:'max',
-  models:Object.freeze(['gpt-6.1-sol','gpt-6-astra','gpt-6.1-terra','gpt-6-sol','gpt-5.6-sol','gpt-5.6-terra']),providerReasoningEffort:false,
+  models:Object.freeze(['gpt-6.1-sol','gpt-6-astra','gpt-6.1-terra','gpt-6.2-sol','gpt-6.2-astra','gpt-6-sol','gpt-5.6-sol','gpt-5.6-terra']),providerReasoningEffort:false,
 });
 
 // Frontend aliases are presentation choices, never provider model slugs.

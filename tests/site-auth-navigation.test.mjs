@@ -31,3 +31,12 @@ test('signed-out destination keeps the GitHub Pages repository base when the rou
   for(const[name,descriptor]of previous)descriptor?Object.defineProperty(globalThis,name,descriptor):delete globalThis[name];
  }
 });
+
+test('native sign-out clears the site account and returns to the repository path', async()=>{
+ const begin=boot.indexOf("overrideExports('jEww', {"), end=boot.indexOf('let siteLoginRedirecting = false;',begin);
+ let signOut, cleared=0, loggedOut=0, cleaned=0;const requests=[];
+ const context=vm.createContext({overrideExports:(_id,exports)=>{signOut=exports.signOutOfBrowserSession;},getLocalSignedOutUrl:()=> 'https://tycofficial.github.io/chatgpt/?localSession=0',clearPrototypeLocalSession:()=>cleared++,logoutSiteAccount:async()=>{loggedOut++;},fetch:async(url,options)=>{requests.push([url,options]);return {json:async()=>({csrfToken:'fixture'})};},URLSearchParams,Promise,setTimeout});
+ new vm.Script(boot.slice(begin,end)).runInContext(context);
+ const result=await signOut(()=>{cleaned++;});
+ assert.equal(result.ok,true);assert.equal(new URL(result.url).pathname,'/chatgpt/');assert.deepEqual(requests.map(entry=>entry[0]),['/api/auth/csrf','/api/auth/signout']);assert.equal(requests[1][1].body.get('csrfToken'),'fixture');assert.equal(cleared,1);assert.equal(loggedOut,1);assert.equal(cleaned,1);
+});
