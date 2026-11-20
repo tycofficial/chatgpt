@@ -8,10 +8,10 @@ import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabili
 import * as mapLibreRenderer from './map-vendor/maplibre-gl.mjs';
 import { createLocalMapProvider } from './local-map-provider.mjs';
 import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs';
-import { getPrototypeLocalSession, getPrototypeLocalAuth, isPrototypeLocalSession, getPrototypeLocalAuthGeneration, clearPrototypeLocalSession, getLocalSignedOutUrl } from './local-identity.mjs';
+import { getPrototypeLocalSession, getPrototypeLocalAuth, isPrototypeLocalSession, getPrototypeLocalAuthGeneration, clearPrototypeLocalSession } from './local-identity.mjs';
 import { createLocalHostSettingsClass } from './local-host-settings.mjs';
 import { createLocalWorkPolicy } from './local-work-policy.mjs';
-import { hasModelSelectionAccess, getSiteLoginUrl, logoutSiteAccount } from './site-account.mjs';
+import { hasModelSelectionAccess, getSiteLoginUrl } from './site-account.mjs';
 import { createNativeModelSelectionPolicy, createNativeThinkingEntryPolicy } from './local-model-selection-policy.mjs';
 import { createLocalHostClaimsReader } from './local-token-identity.mjs';
 import { wrapNativeFileUploadClass } from './local-native-upload.mjs';
@@ -21,9 +21,8 @@ const boundary = installNetworkBoundary();
 globalThis.__originalClientProbe = boundary.diagnostics;
 // Restore the verified account's real durable history before native loaders
 // resolve a fresh-device conversation URL. Offline failures retain local data.
-const historyReady = initializeLocalAccountHistory();
-await Promise.race([historyReady, new Promise(resolve => setTimeout(resolve, 2000))]);
-void historyReady.then(() => initializeLocalPublishedResources()).catch(() => {});
+await initializeLocalAccountHistory();
+await initializeLocalPublishedResources();
 installSyntheticDocumentState();
 
 const plan = await (await fetch('/__prototype/entry-plan.json')).json();
@@ -351,21 +350,6 @@ const useOriginalAuth = new URL(location.href).searchParams.get('originalAuth') 
 boundary.diagnostics.push({ type: 'auth-state-engine', source: useOriginalAuth ? 'original-QdUF-with-local-bootstrap' : 'declared-local-auth-getters' });
 // QdUF's internal eh/ey closures keep the official hostname assumptions.
 // Route both public login functions through the same local account boundary.
-overrideExports('jEww', {
-  signOutOfBrowserSession: async cleanup => {
-    const target = getLocalSignedOutUrl();
-    try {
-      const csrf = await (await fetch('/api/auth/csrf', { cache: 'no-store' })).json();
-      await fetch('/api/auth/signout', { method: 'POST', body: new URLSearchParams({ csrfToken: csrf.csrfToken }) });
-    } catch {} finally {
-      clearPrototypeLocalSession();
-      void logoutSiteAccount();
-    }
-    try { await Promise.race([Promise.resolve(cleanup?.()), new Promise(resolve => setTimeout(resolve, 1000))]); } catch {}
-    return { ok: true, url: target };
-  },
-}, { deferred: true });
-
 let siteLoginRedirecting = false;
 function getSiteAuthPageUrl(name) {
   if (name !== 'login' && name !== 'signup') return new URL('/auth/' + name, location.origin);
@@ -397,9 +381,6 @@ overrideExports('QdUF', {
   getBrowserAuthPageUrl: getSiteAuthPageUrl,
   redirectToBrowserChatGptLogin: redirectToSiteLogin,
   maybeRedirectToBrowserChatGptLogin: maybeRedirectToSiteLogin,
-  clearBrowserAuth: clearPrototypeLocalSession,
-  markBrowserChatGptSignedOut: clearPrototypeLocalSession,
-  maybeRedirectToBrowserChatGptLogout: () => false,
   ...(!useOriginalAuth ? {
   loadBrowserChatGptAuth: async () => getPrototypeLocalAuth(),
   getOrLoadBrowserChatGptAuth: () => getPrototypeLocalAuth(),
@@ -413,6 +394,9 @@ overrideExports('QdUF', {
   isBrowserAccountSwitchLoading: () => false,
   refreshBrowserChatGptAuth: async () => getPrototypeLocalAuth(),
   recoverBrowserChatGptAuth: async () => ({ auth: getPrototypeLocalAuth(), recovery: 'reused_current_session' }),
+  clearBrowserAuth: clearPrototypeLocalSession,
+  markBrowserChatGptSignedOut: clearPrototypeLocalSession,
+  maybeRedirectToBrowserChatGptLogout: () => false,
   } : {}),
 }, undefined, {
   readChatGptTokenClaims: originalReader => createLocalHostClaimsReader(originalReader, {

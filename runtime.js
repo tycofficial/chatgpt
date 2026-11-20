@@ -14,8 +14,6 @@ const VERIFIED_REASONING_EFFORTS = Object.freeze({
   'gpt-6.1-sol': Object.freeze(['low', 'medium', 'high', 'xhigh', 'max']),
   'gpt-6.1-terra': Object.freeze(['none', 'low', 'medium', 'high', 'xhigh', 'max']),
   'gpt-6-astra': Object.freeze(['low', 'medium', 'high', 'xhigh', 'max']),
-  'gpt-6.2-sol': Object.freeze(['low', 'medium', 'high', 'xhigh', 'max']),
-  'gpt-6.2-astra': Object.freeze(['low', 'medium', 'high', 'xhigh', 'max']),
   'gpt-6-sol': Object.freeze(['none', 'low', 'medium', 'high', 'xhigh', 'max']),
   'gpt-6-luna': Object.freeze(['none', 'low', 'medium', 'high', 'xhigh', 'max']),
   'gpt-5.6-sol': Object.freeze(['none', 'low', 'medium', 'high', 'xhigh', 'max']),

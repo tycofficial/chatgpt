@@ -34,12 +34,12 @@ test('missing identity is rejected before creating an empty conversation or char
  const f=host(()=>null);await assert.rejects(f.classic.handle(request(body()),'/f/conversation'),{code:'SITE_ACCOUNT_REQUIRED'});
  assert.equal(f.server.threads.size,0);assert.equal(f.requests.length,0);
 });
-test('native browser-auth cleanup immediately invalidates the adapter identity',()=>{
+test('native browser-auth cleanup preserves a real site login; actual site logout revokes it',()=>{
  let reloads=0;let account={id:'site-admin',role:'administrator',planType:'pro',username:'TYC',createdAt:1};
  const context=vm.createContext({getSiteAccount:()=>account,URL,Date,Event,location:{href:'https://fixture.test/chatgpt/',origin:'https://fixture.test',reload(){reloads++;}},history:{state:null,replaceState(){}},sessionStorage:{getItem:()=>null,setItem(){}},dispatchEvent(){}});
  const source=fs.readFileSync(new URL('../src/native-client/local-identity.mjs',import.meta.url),'utf8').replace(/^import .*;\r?$/gm,'').replace(/^export\s+/gm,'').replaceAll('import.meta.url',JSON.stringify('https://fixture.test/chatgpt/native-client/local-identity.mjs'));
  new vm.Script(source+'\nglobalThis.api={getPrototypeLocalAuth,clearPrototypeLocalSession};').runInContext(context);
- context.api.clearPrototypeLocalSession();assert.equal(reloads,0);assert.equal(context.api.getPrototypeLocalAuth(),null);
+ context.api.clearPrototypeLocalSession();assert.equal(reloads,0);assert.equal(context.api.getPrototypeLocalAuth().planType,'pro');
  account=null;assert.equal(context.api.getPrototypeLocalAuth(),null);
 });
 test('explicit primary authentication rejection falls back without changing the paid model or effort',async t=>{
@@ -64,7 +64,7 @@ test('updating waits for click inactivity and never repeatedly navigates to the 
 test('generated worker returns fetched HTML and scripts even when browser caching fails',async()=>{
  const source=fs.readFileSync(new URL('../native-client-worker.js',import.meta.url),'utf8').replace(/^import .*;\r?\n/,'');
  for(const failOpen of [false,true]){
-  const handlers={},context=vm.createContext({URL,Headers,Response,AbortController,setTimeout,clearTimeout,BrowserWorkspaceStore:class{},workspacePath:x=>x,self:{location:{href:'https://fixture.test/chatgpt/native-client-worker.js',origin:'https://fixture.test'},addEventListener:(name,fn)=>handlers[name]=fn},caches:{open:async()=>{if(failOpen)throw Error('Storage denied');return{match:async()=>null,put:async()=>{throw Error('Quota exceeded');}};}},fetch:async()=>new Response('Neutral fetched bytes',{status:200})});
+  const handlers={},context=vm.createContext({URL,Headers,Response,BrowserWorkspaceStore:class{},workspacePath:x=>x,self:{location:{href:'https://fixture.test/chatgpt/native-client-worker.js',origin:'https://fixture.test'},addEventListener:(name,fn)=>handlers[name]=fn},caches:{open:async()=>{if(failOpen)throw Error('Storage denied');return{match:async()=>null,put:async()=>{throw Error('Quota exceeded');}};}},fetch:async()=>new Response('Neutral fetched bytes',{status:200})});
   new vm.Script(source).runInContext(context);
   for(const [url,mode]of[['https://fixture.test/cdn/assets/neutral.js','cors'],['https://fixture.test/chatgpt/','navigate']]){let response;handlers.fetch({request:{url,mode,method:'GET'},respondWith:value=>response=value});assert.equal(await(await response).text(),'Neutral fetched bytes');}
  }

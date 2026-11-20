@@ -80,11 +80,10 @@ const releaseFetch = globalThis.fetch.bind(globalThis);
 globalThis.__CHATGPT_REPLICA_ENV__ = Object.freeze({basePath:rootURL.pathname,localIdentity:true,useOriginalAuth:true,preferredHostEnabled:true,release:${JSON.stringify(release)},sourceBuild:${JSON.stringify(sourceBuild)}});
 const workerURL = new URL('native-client-worker.js?v='+${JSON.stringify(release)}, rootURL);
 if (!navigator.serviceWorker) throw Error('This browser does not support the original-client asset host');
-const withDeadline = (promise, ms) => Promise.race([promise, new Promise((_, reject) => setTimeout(() => reject(Error('Asset host timed out')), ms))]);
-await withDeadline(navigator.serviceWorker.register(workerURL,{scope:rootURL.pathname,type:'module',updateViaCache:'none'}), 12000);
-await withDeadline(navigator.serviceWorker.ready, 12000);
+await navigator.serviceWorker.register(workerURL,{scope:rootURL.pathname,type:'module',updateViaCache:'none'});
+await navigator.serviceWorker.ready;
 if (!navigator.serviceWorker.controller || !new URL(navigator.serviceWorker.controller.scriptURL).pathname.endsWith('/native-client-worker.js')) {
- await new Promise((resolve,reject)=>{const done=()=>{clearTimeout(timer);navigator.serviceWorker.removeEventListener('controllerchange',done);resolve();};const timer=setTimeout(()=>reject(Error('Original asset host did not become ready')),12000);navigator.serviceWorker.addEventListener('controllerchange',done);if(navigator.serviceWorker.controller)done();});
+ await new Promise((resolve,reject)=>{const done=()=>{clearTimeout(timer);navigator.serviceWorker.removeEventListener('controllerchange',done);resolve();};const timer=setTimeout(()=>reject(Error('Original asset host did not become ready')),20000);navigator.serviceWorker.addEventListener('controllerchange',done);if(navigator.serviceWorker.controller)done();});
 }
 const siteAccount = await import('./site-account.mjs?v='+${JSON.stringify(release)});
 let isBusy;
@@ -132,7 +131,7 @@ self.addEventListener('fetch',event=>{
  }
  if(event.request.mode==='navigate'&&requested.origin===self.location.origin&&requested.pathname.startsWith(BASE)&&!requested.pathname.startsWith(BASE+'_orbit-renderer/')){
   event.respondWith((async()=>{const cache=await caches.open(SHELL_CACHE).catch(()=>null),key=new URL(BASE+'index.html',self.location.origin).href;
-   try{const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),8000);let page;try{page=await fetch(event.request,{cache:'no-store',signal:controller.signal});if(page.status===404)page=await fetch(key,{cache:'no-store',signal:controller.signal});}finally{clearTimeout(timer);}if(page.ok&&cache)await cache.put(key,page.clone()).catch(()=>{});return page;}
+   try{let page=await fetch(event.request,{cache:'no-store'});if(page.status===404)page=await fetch(key,{cache:'no-store'});if(page.ok&&cache)await cache.put(key,page.clone()).catch(()=>{});return page;}
    catch(error){const saved=cache?await cache.match(key).catch(()=>null):null;if(saved)return saved;throw error;}
   })());return;
  }
@@ -150,25 +149,7 @@ await write(path.join(root,'native-client-worker.js'),worker);
 const html=`<!DOCTYPE html>
 <html class="chatgpt-theme" lang="zh-CN" dir="ltr" data-theme="light" data-appearance-preset="codex" data-ios="false" data-build="${sourceBuild}" data-client-build-revision="${sourceBuild}" data-icon-sprite-url="/cdn/assets/icons-65c0f11497ac4847.svg" data-codex-cli-version="0.171.0-alpha.2" data-codex-window-type="browser" data-window-type="browser" data-native-client-release="${release}">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="stylesheet" href="${deploymentBase}original-client/public/chatgpt.com/cdn/assets/c7fcb2505631.css"><link rel="stylesheet" href="${deploymentBase}native-client/map-vendor/maplibre-gl.css?v=${release}"><style data-codex-app-themes></style><title>ChatGPT</title></head>
-<body><script>
-(function(){
- var timer=setTimeout(showRecovery,15000);
- function showRecovery(){
-  if(document.getElementById('startup-recovery'))return;
-  var panel=document.createElement('div');panel.id='startup-recovery';panel.style.cssText='position:fixed;z-index:2147483647;inset:0;display:grid;place-content:center;gap:12px;padding:24px;background:#fff;color:#222;font:16px system-ui;text-align:center';
-  panel.innerHTML='<p>网站加载时间较长，请重试或清理网站缓存。</p><button id="startup-retry">重新加载</button><button id="startup-reset">清理网站缓存并重新加载</button>';
-  document.body.appendChild(panel);
-  document.getElementById('startup-retry').onclick=function(){location.reload()};
-  document.getElementById('startup-reset').onclick=async function(){
-   this.disabled=true;
-   try{if(navigator.serviceWorker){var registrations=await navigator.serviceWorker.getRegistrations();await Promise.all(registrations.filter(function(r){return new URL(r.scope).pathname===${JSON.stringify(deploymentBase)}}).map(function(r){return r.unregister()}))}if(window.caches){var names=await caches.keys();await Promise.all(names.filter(function(n){return n.indexOf('chatgpt-original-assets-')===0||n.indexOf('chatgpt-native-shell-')===0}).map(function(n){return caches.delete(n)}))}}catch(e){}
-   location.replace(${JSON.stringify(deploymentBase)}+'?recovery='+Date.now());
-  };
- }
- window.__siteStartupDone=function(){clearTimeout(timer);var panel=document.getElementById('startup-recovery');if(panel)panel.remove()};
- window.__siteStartupFailed=showRecovery;
-})();
-</script><script type="module" src="${deploymentBase}native-client/bootstrap.mjs?v=${release}" onload="window.__siteStartupDone()" onerror="window.__siteStartupFailed()"></script></body></html>
+<body><script type="module" src="${deploymentBase}native-client/bootstrap.mjs?v=${release}"></script></body></html>
 `;
 await write(path.join(root,'native-client-shell.html'),html);
 const sha256=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');

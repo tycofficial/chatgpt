@@ -1,7 +1,4 @@
 {
-  "active": true,
-  "release": "0afe1f6a931a198d",
-  "sourceBuild": "ef0c3fb941611420d8683bf88f61acf1a8ac6b19",
-  "originalComponentGraph": true,
-  "backend": "local-adapters-and-configured-api"
+  "active": false,
+  "replacement": "desk/index.html"
 }

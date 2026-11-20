@@ -272,27 +272,13 @@ export function setNativeAccountHistoryToaster(provider) {
 }
 async function finishAccountHistoryBeforeLogout() {
   if (!localAccountHistory) return;
-  const controller = new AbortController();
-  let deadline;
+  const controller = new AbortController(), deadline = setTimeout(() => controller.abort(), 8000);
   try {
-    const flush = async () => {
-      do {
-        const outcome = await localAccountHistory.synchronize({ signal: controller.signal });
-        if (!outcome.ok || outcome.deferred || outcome.conflictCount || !outcome.pending) break;
-      } while (!controller.signal.aborted);
-    };
-    await Promise.race([
-      flush(),
-      new Promise(resolve => { deadline = setTimeout(() => { controller.abort(); resolve(); }, 1500); }),
-    ]);
-  } catch (error) {
-    diagnostics.push({ type: 'local-signout-history-flush-failed', code: error?.code ?? null });
-  } finally {
-    controller.abort();
-    clearTimeout(deadline);
-    localAccountHistory.dispose();
-    historyFeedback?.dispose();
-  }
+    do {
+      const outcome = await localAccountHistory.synchronize({ signal: controller.signal });
+      if (!outcome.ok || outcome.deferred || outcome.conflictCount || !outcome.pending) break;
+    } while (!controller.signal.aborted);
+  } finally { clearTimeout(deadline); localAccountHistory.dispose(); historyFeedback?.dispose(); }
 }
 export const localDotAdapter = createLocalDotAdapter({
   storage: { getItem: key => globalThis.localStorage.getItem(key), setItem: (key, value) => globalThis.localStorage.setItem(key, value) },
@@ -400,33 +386,13 @@ export function installNetworkBoundary() {
       if (body.get('csrfToken') !== localCsrfToken) return response({ error: 'Invalid local signout token' }, 403);
       const target = getLocalSignedOutUrl();
       localAppServer.interruptAll({ reason: 'logout' });
-      let cancelTimer;
-      try {
-        const stopResults = await Promise.race([
-          cancelTurnHostRequests(localPreferredHostTransport, [...localAppServer.threads.values()].flatMap(thread => thread.turns), { onCheckpoint: () => localAppServer.persist() }),
-          new Promise(resolve => { cancelTimer = setTimeout(() => resolve(null), 1500); }),
-        ]);
-        if (stopResults) {
-          for (const result of stopResults) if (result.status === 'rejected') diagnostics.push({ type: 'local-signout-host-cancel-unconfirmed', code: result.reason?.code ?? null });
-        } else {
-          diagnostics.push({ type: 'local-signout-host-cancel-timeout' });
-        }
-      } catch (error) {
-        diagnostics.push({ type: 'local-signout-host-cancel-failed', code: error?.code ?? null });
-      } finally { clearTimeout(cancelTimer); }
+      const stopResults = await cancelTurnHostRequests(localPreferredHostTransport, [...localAppServer.threads.values()].flatMap(thread => thread.turns), { onCheckpoint: () => localAppServer.persist() });
+      for (const result of stopResults) if (result.status === 'rejected') diagnostics.push({ type: 'local-signout-host-cancel-unconfirmed', code: result.reason?.code ?? null });
       await finishAccountHistoryBeforeLogout();
       localNativeLibraryRefresh.dispose();
       localLibraryService.dispose();
       localWorkspaceDownloadService.dispose();
-      let logoutTimer;
-      try {
-        await Promise.race([
-          logoutSiteAccount(),
-          new Promise(resolve => { logoutTimer = setTimeout(resolve, 1500); }),
-        ]);
-      } catch (error) {
-        diagnostics.push({ type: 'local-signout-account-revoke-failed', code: error?.code ?? null });
-      } finally { clearTimeout(logoutTimer); }
+      await logoutSiteAccount();
       clearPrototypeLocalSession({ reload: false });
       return response({ url: target });
     }

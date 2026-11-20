@@ -3,8 +3,8 @@
  * Original UI and event pipeline remain unchanged; no Azure/cookie/private API.
  * POST /files -> upload URL -> actual bytes -> process NDJSON/uploaded.
  */
-import { workspacePath } from './browser-tool-executor.mjs?v=0afe1f6a931a198d';
-import { createLocalDocumentExtractor } from './local-document-extraction.mjs?v=0afe1f6a931a198d';
+import { workspacePath } from './browser-tool-executor.mjs?v=77599d3a62544f6e';
+import { createLocalDocumentExtractor } from './local-document-extraction.mjs?v=77599d3a62544f6e';
 export const LOCAL_FILES_SOURCE = 'browser-origin-file-storage';
 export const LOCAL_FILE_PREFIX = 'file_local_';
 /** Pure transport classification: no current-account or metadata dependency. */
@@ -136,103 +136,6 @@ function imageInfo(bytes) {
   if (!mimeType || !Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0 || width > 16384 || height > 16384) throw issue('Only valid PNG, JPEG and WebP images are supported locally', 415, 'unhandled_mime_type');
   return { mimeType, width, height };
 }
-function detectedImageMime(bytes) {
-  if (bytes.length >= 8 && [137,80,78,71,13,10,26,10].every((part, index) => bytes[index] === part)) return 'image/png';
-  if (bytes.length >= 3 && bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255) return 'image/jpeg';
-  if (bytes.length >= 12 && String.fromCharCode(...bytes.subarray(0, 4)) === 'RIFF' && String.fromCharCode(...bytes.subarray(8, 12)) === 'WEBP') return 'image/webp';
-  return null;
-}
-function abortError(signal) { return signal?.reason ?? new DOMException('Image processing cancelled', 'AbortError'); }
-function waitWithAbort(promise, signal, onAbort = () => {}) {
-  if (!signal) return promise;
-  if (signal.aborted) {
-    onAbort();
-    return Promise.reject(abortError(signal));
-  }
-  return new Promise((resolve, reject) => {
-    const aborted = () => { onAbort(); reject(abortError(signal)); };
-    signal.addEventListener('abort', aborted, { once: true });
-    promise.then(value => {
-      signal.removeEventListener('abort', aborted);
-      if (signal.aborted) { onAbort(); reject(abortError(signal)); }
-      else resolve(value);
-    }, cause => {
-      signal.removeEventListener('abort', aborted);
-      reject(cause);
-    });
-  });
-}
-async function decodeImageForResize(blob, signal) {
-  if (typeof globalThis.createImageBitmap === 'function') {
-    const pending = globalThis.createImageBitmap(blob);
-    let closeScheduled = false;
-    const closeLateBitmap = () => {
-      if (closeScheduled) return;
-      closeScheduled = true;
-      pending.then(value => value.close?.(), () => {});
-    };
-    try {
-      const bitmap = await waitWithAbort(pending, signal, closeLateBitmap);
-      return { image: bitmap, width: bitmap.width, height: bitmap.height, dispose: () => bitmap.close?.() };
-    } catch (cause) {
-      if (signal?.aborted) throw cause;
-    }
-  }
-  if (typeof globalThis.Image !== 'function' || typeof globalThis.URL?.createObjectURL !== 'function') return null;
-  const source = globalThis.URL.createObjectURL(blob), image = new Image();
-  let settled = false;
-  const loading = new Promise((resolve, reject) => {
-    image.onload = () => { settled = true; resolve(image); };
-    image.onerror = () => { settled = true; reject(new Error('Image decoding failed')); };
-    image.src = source;
-  });
-  try {
-    await waitWithAbort(loading, signal, () => { if (!settled) image.src = ''; });
-    return { image, width: image.naturalWidth || image.width, height: image.naturalHeight || image.height, dispose: () => { image.src = ''; } };
-  } catch (cause) {
-    if (signal?.aborted) throw cause;
-    return null;
-  } finally { globalThis.URL.revokeObjectURL(source); }
-}
-/** Resize supported raster images before writing their bytes to workspace storage. */
-export async function downscaleImage(bytes, { signal } = {}) {
-  const mimeType = detectedImageMime(bytes);
-  if (!mimeType) return bytes;
-  signal?.throwIfAborted();
-  const blob = new Blob([bytes], { type: mimeType });
-  let decoded;
-  try { decoded = await decodeImageForResize(blob, signal); }
-  catch (cause) { if (signal?.aborted) throw cause; return bytes; }
-  if (!decoded) return bytes;
-  try {
-    signal?.throwIfAborted();
-    const longest = Math.max(decoded.width, decoded.height);
-    if (!Number.isFinite(longest) || longest <= 1280) return bytes;
-    const scale = 1280 / longest, width = Math.max(1, Math.round(decoded.width * scale)), height = Math.max(1, Math.round(decoded.height * scale));
-    let canvas;
-    if (typeof globalThis.OffscreenCanvas === 'function') canvas = new OffscreenCanvas(width, height);
-    else if (typeof globalThis.document?.createElement === 'function') { canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height; }
-    else return bytes;
-    const context = canvas.getContext('2d');
-    if (!context) return bytes;
-    context.imageSmoothingEnabled = true;
-    context.imageSmoothingQuality = 'high';
-    context.drawImage(decoded.image, 0, 0, width, height);
-    signal?.throwIfAborted();
-    const quality = mimeType === 'image/png' ? undefined : 0.92;
-    const encoded = typeof canvas.convertToBlob === 'function'
-      ? await waitWithAbort(canvas.convertToBlob({ type: mimeType, ...(quality == null ? {} : { quality }) }), signal)
-      : await waitWithAbort(new Promise(resolve => canvas.toBlob(resolve, mimeType, quality)), signal);
-    signal?.throwIfAborted();
-    if (!encoded || encoded.type?.split(';')[0].toLowerCase() !== mimeType || encoded.size < 1 || encoded.size >= bytes.length) return bytes;
-    const resized = new Uint8Array(await waitWithAbort(encoded.arrayBuffer(), signal));
-    signal?.throwIfAborted();
-    return resized.length > 0 && resized.length < bytes.length ? resized : bytes;
-  } catch (cause) {
-    if (signal?.aborted) throw cause;
-    return bytes;
-  } finally { decoded.dispose(); }
-}
 function base64(bytes) {
   let binary = '';
   for (let offset = 0; offset < bytes.length; offset += 32768) binary += String.fromCharCode(...bytes.subarray(offset, offset + 32768));
@@ -247,11 +150,11 @@ export function createLocalFilesService({
   storage, metadataStorage = globalThis.localStorage, getAccountId = () => null,
   getWorkspacePrefix, diagnostics = [], now = Date.now, uuid = () => crypto.randomUUID(),
   maxFileBytes = MAX_DEFAULT, maxTotalBytes = 256 * 1024 * 1024,
-  readStorageEstimate, ticketLifetimeMs = 60 * 60 * 1000, documentExtractor, imageDownscaler = downscaleImage,
+  readStorageEstimate, ticketLifetimeMs = 60 * 60 * 1000, documentExtractor,
   getOwnedSourceWorkspace, storageLocks = globalThis.navigator?.locks,
 } = {}) {
   if (typeof storage?.write !== 'function' || typeof storage?.read !== 'function' || typeof storage?.remove !== 'function' || typeof getWorkspacePrefix !== 'function') throw new TypeError('Real workspace read/write/remove storage and its namespace callback are required');
-  const active = new Map(), locks = new Map(), storageWrites = new Map();
+  const active = new Map(), locks = new Map();
   let extractor = documentExtractor;
   const getDocumentExtractor = () => extractor ??= createLocalDocumentExtractor();
   function owner() {
@@ -271,9 +174,6 @@ export function createLocalFilesService({
     result.generatedFiles ??= {}; result.publicationOps ??= {};
     if (!object(result.generatedFiles) || !object(result.publicationOps) || Object.keys(result.publicationOps).length > MAX_PUBLICATION_OPERATIONS) throw issue('Local publication metadata is damaged; existing bytes were preserved', 500, 'file_corrupted');
     for (const row of Object.values(result.files)) {
-      if (row.uploadSize != null && (!Number.isSafeInteger(row.uploadSize) || row.uploadSize < 1)) throw issue('Local upload-size metadata is damaged', 500, 'file_corrupted');
-      if (row.reservedBytes != null && (!Number.isSafeInteger(row.reservedBytes) || row.reservedBytes < 1)) throw issue('Local image storage reservation is damaged', 500, 'file_corrupted');
-      if (row.uploadSHA256 != null && !SHA256.test(row.uploadSHA256)) throw issue('Local upload digest metadata is damaged', 500, 'file_corrupted');
       if (row.generated != null && (!object(row.generated) || !FILE_ID.test(row.generated.fileId ?? '') || row.generated.fileId === row.fileId || !Number.isSafeInteger(row.generated.revision) || row.generated.revision < 1 || !SHA256.test(row.generated.operationKey ?? '') || row.ticket != null || row.uploadURL != null || row.byteTarget != null || row.status === 'cancelled')) throw issue('Generated raw-version metadata is damaged', 500, 'file_corrupted');
       if (row.reservedTextBytes != null && (!row.generated || !Number.isSafeInteger(row.reservedTextBytes) || row.reservedTextBytes < 0 || row.reservedTextBytes > MAX_DEFAULT)) throw issue('Document text reservation metadata is damaged', 500, 'file_corrupted');
       if (row.kind === 'document' && !Object.hasOwn(DOCUMENT_MIME, row.documentFormat)) throw issue('The document format metadata is damaged', 500, 'file_corrupted');
@@ -326,7 +226,7 @@ export function createLocalFilesService({
   function usedBytes(files, excludeTextFor = null) {
     return Object.values(files).filter(row => row.status !== 'cancelled' &&
       (row.generated || row.status !== 'pending' || row.expiresAt > now()))
-      .reduce((total, row) => total + (row.kind === 'image' && !row.generated && row.status === 'pending' ? row.reservedBytes ?? 0 : row.size) + (row.fileId === excludeTextFor ? 0 : row.extraction?.textSize ?? row.reservedTextBytes ?? 0), 0);
+      .reduce((total, row) => total + row.size + (row.fileId === excludeTextFor ? 0 : row.extraction?.textSize ?? row.reservedTextBytes ?? 0), 0);
   }
   function find(id, fileId) {
     const row = state(id).files[fileId];
@@ -367,9 +267,9 @@ export function createLocalFilesService({
     if (size > maxFileBytes) throw issue('The file exceeds this local provider upload limit', 413, 'file_too_large');
     const mime = typeof body.mime_type === 'string' ? body.mime_type : typeof body.client_resolved_mime_type === 'string' ? body.client_resolved_mime_type : '';
     const kind = kindOf(name, mime), documentFormat = kind === 'document' ? documentFormatOf(name, mime) : null;
-    const current = state(id), reserved = usedBytes(current.files), deferredImageAdmission = kind === 'image';
-    if (!deferredImageAdmission && reserved + size > maxTotalBytes) throw issue('The configured local account file-storage quota is full', 507, 'over_user_quota');
-    if (!deferredImageAdmission && typeof readStorageEstimate === 'function') {
+    const current = state(id), reserved = usedBytes(current.files);
+    if (reserved + size > maxTotalBytes) throw issue('The configured local account file-storage quota is full', 507, 'over_user_quota');
+    if (typeof readStorageEstimate === 'function') {
       const estimate = await readStorageEstimate();
       assertOwner(id);
       if (Number.isFinite(estimate?.quota) && Number.isFinite(estimate?.usage) && estimate.quota - estimate.usage < size) throw issue('The browser reports insufficient origin storage', 507, 'over_user_quota');
@@ -382,10 +282,10 @@ export function createLocalFilesService({
     const uploadURL = new URL(urlPrefix + '/estuary/upload_content_bytes', incoming.origin);
     uploadURL.searchParams.set('upload_url', byteTarget);
     const imageExtension = /image\/png/i.test(mime) || /\.png$/i.test(name) ? 'png' : /image\/jpeg/i.test(mime) || /\.jpe?g$/i.test(name) ? 'jpg' : /image\/webp/i.test(mime) || /\.webp$/i.test(name) ? 'webp' : 'bin';
-    const row = { fileId, owner: id, ticket: token, namespace, storageName: kind === 'document' ? 'document.' + documentFormat : kind === 'image' ? 'image.' + imageExtension : 'payload.txt', fileName: name, mimeType: mime || (kind === 'text' ? 'text/plain' : 'application/octet-stream'), kind, ...(documentFormat ? { documentFormat } : {}), ...(deferredImageAdmission ? { uploadSize: size } : {}), size, status: 'pending', createdAt: now(), expiresAt: now() + ticketLifetimeMs, byteTarget, uploadURL: uploadURL.href, requestOrigin: incoming.origin, pathPrefix: urlPrefix };
+    const row = { fileId, owner: id, ticket: token, namespace, storageName: kind === 'document' ? 'document.' + documentFormat : kind === 'image' ? 'image.' + imageExtension : 'payload.txt', fileName: name, mimeType: mime || (kind === 'text' ? 'text/plain' : 'application/octet-stream'), kind, ...(documentFormat ? { documentFormat } : {}), size, status: 'pending', createdAt: now(), expiresAt: now() + ticketLifetimeMs, byteTarget, uploadURL: uploadURL.href, requestOrigin: incoming.origin, pathPrefix: urlPrefix };
     // Re-read after the optional real quota estimate; do not lose concurrent admissions.
     await mutateState(id, next => {
-      if (!deferredImageAdmission && usedBytes(next.files) + size > maxTotalBytes) throw issue('The configured local account file-storage quota is full', 507, 'over_user_quota');
+      if (usedBytes(next.files) + size > maxTotalBytes) throw issue('The configured local account file-storage quota is full', 507, 'over_user_quota');
       if (next.files[fileId] || next.generatedFiles?.[fileId]) throw issue('Duplicate local upload ID', 409);
       next.files[fileId] = row;
     }, { signal: request.signal });
@@ -422,59 +322,26 @@ export function createLocalFilesService({
     } catch {}
     return false;
   }
-  async function withImageStorageLock(id, signal, action) {
-    if (sharedLocksAvailable()) return withSharedLock('chatgpt-local-files:' + encodeURIComponent(id) + ':image-storage', signal, action);
-    const previous = storageWrites.get(id) ?? Promise.resolve();
-    const current = previous.catch(() => {}).then(() => { cancellation(signal); assertOwner(id); return action(); });
-    storageWrites.set(id, current);
-    try { return await current; } finally { if (storageWrites.get(id) === current) storageWrites.delete(id); }
-  }
-  async function reserveImageStorage(id, row, size, uploadSHA256, signal) {
-    let available = Infinity;
-    if (typeof readStorageEstimate === 'function') {
-      const estimate = await readStorageEstimate();
-      cancellation(signal); assertOwner(id);
-      if (Number.isFinite(estimate?.quota) && Number.isFinite(estimate?.usage)) {
-        available = estimate.quota - estimate.usage;
-      }
-    }
-    return mutateState(id, current => {
-      const prior = current.files[row.fileId];
-      if (!prior || prior.ticket !== row.ticket || prior.status !== 'pending') throw issue('The local image upload is no longer pending', 409, 'upload_cancelled');
-      const otherImages = Object.values(current.files).filter(file => file.fileId !== row.fileId && file.kind === 'image' && !file.generated && file.status === 'pending');
-      const waitingBytes = otherImages.reduce((total, file) => total + (file.reservedBytes ?? 0), 0);
-      if (available < waitingBytes + size) throw issue('The browser reports insufficient origin storage', 507, 'over_user_quota');
-      if (usedBytes(current.files, row.fileId) + size > maxTotalBytes) throw issue('The configured local account file-storage quota is full', 507, 'over_user_quota');
-      return current.files[row.fileId] = { ...prior, size, reservedBytes: size, uploadSHA256 };
-    }, { signal });
-  }
-  async function storeUpload(row, bytes, signal, source) {
+  async function storeUpload(row, bytes, signal) {
     const id = owner();
     return serialize(id, row.fileId, async () => {
-      const persist = async () => {
-        let current = find(id, row.fileId), reservedImage = false;
-        if (current.ticket !== row.ticket || current.byteTarget !== row.byteTarget) throw issue('Upload ticket changed', 409, 'permission_error');
-        cancellation(signal);
-        if (!Number.isSafeInteger(source.uploadSize) || source.uploadSize !== (current.uploadSize ?? current.size) || bytes.length < 1 || bytes.length > source.uploadSize) throw issue('Uploaded byte count differs from the allocated file', 422, 'file_corrupted');
-        // A retry confirms the original upload bytes even when the persisted
-        // representation is a smaller same-format image.
-        if (['stored','ready'].includes(current.status)) {
-          const saved = await readBytes(id, current, signal);
-          if (source.uploadSHA256 !== (current.uploadSHA256 ?? current.sha256)) throw issue('This file ID already refers to different uploaded bytes', 409, 'file_rejected');
-          if (await hash(saved) !== current.sha256) throw issue('This file ID already refers to different persisted bytes', 409, 'file_corrupted');
-          return;
-        }
-        const controller = new AbortController(), abort = () => controller.abort(signal.reason);
-        signal?.addEventListener('abort', abort, { once: true });
-        active.set(row.fileId, controller);
-        const stop = () => { cancellation(signal); controller.signal.throwIfAborted(); assertOwner(id); };
-        try {
+      const current = find(id, row.fileId);
+      if (current.ticket !== row.ticket || current.byteTarget !== row.byteTarget) throw issue('Upload ticket changed', 409, 'permission_error');
+      cancellation(signal);
+      if (bytes.length !== current.size) throw issue('Uploaded byte count differs from the allocated file', 422, 'file_corrupted');
+      // A retry may confirm the same immutable bytes, never replace an attachment
+      // already referenced by a conversation with different contents.
+      if (['stored','ready'].includes(current.status)) {
+        const saved = await readBytes(id, current, signal);
+        if (await hash(bytes) !== await hash(saved)) throw issue('This file ID already refers to different persisted bytes', 409, 'file_rejected');
+        return;
+      }
+      const controller = new AbortController(), abort = () => controller.abort(signal.reason);
+      signal?.addEventListener('abort', abort, { once: true });
+      active.set(row.fileId, controller);
+      const stop = () => { cancellation(signal); controller.signal.throwIfAborted(); assertOwner(id); };
+      try {
         stop();
-        if (current.kind === 'image') {
-          await reserveImageStorage(id, current, bytes.length, source.uploadSHA256, controller.signal);
-          current = find(id, row.fileId);
-          reservedImage = true;
-        }
         const digest = await hash(bytes); stop();
         try { await storage.write(storageKey(current), bytes); } catch { throw issue('The browser could not persist the actual uploaded bytes', 507, 'local_storage_write_failed'); }
         stop();
@@ -485,58 +352,21 @@ export function createLocalFilesService({
         stop();
         await update(id, row.fileId, prior => {
           if (prior.status === 'cancelled') throw issue('Upload cancelled', 409, 'upload_cancelled');
-          const { reservedBytes, ...saved } = prior;
-          return { ...saved, status: 'stored', sha256: digest, uploadSHA256: source.uploadSHA256, storedAt: now() };
+          return { ...prior, status: 'stored', sha256: digest, storedAt: now() };
         }, { signal: controller.signal });
         stop();
         note('bytes-persisted', { fileId: row.fileId, bytes: bytes.length });
-        } catch (cause) {
-          if (signal?.aborted || controller.signal.aborted) {
-            try { await storage.remove(storageKey(current)); } catch { note('cancel-cleanup-error', { fileId: row.fileId }); }
-            if (getAccountId() === id) try { await update(id, row.fileId, prior => ({ ...prior, status: 'cancelled' })); } catch {}
-            throw new DOMException('Upload cancelled', 'AbortError');
-          }
-          if (reservedImage) {
-            try { await storage.remove(storageKey(current)); } catch { note('upload-cleanup-error', { fileId: row.fileId }); }
-            try { await update(id, row.fileId, prior => {
-              if (prior.status !== 'pending') return prior;
-              const { reservedBytes, ...unreserved } = prior;
-              return { ...unreserved, size: prior.uploadSize };
-            }); } catch {}
-          }
-          throw cause;
-        } finally {
-          active.delete(row.fileId); signal?.removeEventListener('abort', abort);
+      } catch (cause) {
+        if (signal?.aborted || controller.signal.aborted) {
+          try { await storage.remove(storageKey(current)); } catch { note('cancel-cleanup-error', { fileId: row.fileId }); }
+          if (getAccountId() === id) try { await update(id, row.fileId, prior => ({ ...prior, status: 'cancelled' })); } catch {}
+          throw new DOMException('Upload cancelled', 'AbortError');
         }
-      };
-      return row.kind === 'image' ? withImageStorageLock(id, signal, persist) : persist();
-    }, { signal });
-  }
-  async function acceptUploadedBytes(row, bytes, request) {
-    const id = owner(), uploadSize = bytes.length, uploadSHA256 = await hash(bytes);
-    assertOwner(id); cancellation(request.signal);
-    if (uploadSize !== (row.uploadSize ?? row.size) || uploadSize > maxFileBytes) throw issue('Uploaded file size differs from its ticket', 422, 'file_corrupted');
-    const source = { uploadSize, uploadSHA256 };
-    if (row.kind !== 'image') { await storeUpload(row, bytes, request.signal, source); return row; }
-    const controller = new AbortController(), abort = () => controller.abort(request.signal.reason);
-    request.signal?.addEventListener('abort', abort, { once: true });
-    active.set(row.fileId, controller);
-    try {
-      const resized = bytesOf(await imageDownscaler(bytes, { signal: controller.signal }));
-      cancellation(controller.signal); assertOwner(id);
-      const persistedBytes = resized && resized.length > 0 && resized.length < bytes.length ? resized : bytes;
-      await storeUpload(row, persistedBytes, controller.signal, source);
-      return row;
-    } catch (cause) {
-      if (controller.signal.aborted) {
-        if (getAccountId() === id) try { await update(id, row.fileId, prior => ({ ...prior, status: 'cancelled' })); } catch {}
-        throw new DOMException('Upload cancelled', 'AbortError');
+        throw cause;
+      } finally {
+        active.delete(row.fileId); signal?.removeEventListener('abort', abort);
       }
-      throw cause;
-    } finally {
-      if (active.get(row.fileId) === controller) active.delete(row.fileId);
-      request.signal?.removeEventListener('abort', abort);
-    }
+    }, { signal });
   }
   async function acceptBytes(request, path) {
     const id = owner(), incoming = new URL(request.url);
@@ -546,8 +376,7 @@ export function createLocalFilesService({
       const row = findTicket(id, token);
       if (incoming.href !== row.byteTarget) throw issue('Invalid local upload target', 403, 'permission_error');
       file = new Uint8Array(await request.arrayBuffer());
-      cancellation(request.signal);
-      await acceptUploadedBytes(row, file, request);
+      await storeUpload(row, file, request.signal);
       return row;
     }
     const target = incoming.searchParams.get('upload_url');
@@ -558,10 +387,10 @@ export function createLocalFilesService({
     const form = await request.formData(), uploaded = form.get('file'), submittedTarget = form.get('upload_url');
     if (submittedTarget != null && submittedTarget !== target) throw issue('Multipart target differs from the allocated upload', 403, 'permission_error');
     if (!uploaded || typeof uploaded.arrayBuffer !== 'function') throw issue('The original multipart file field is required');
-    if (uploaded.size !== (row.uploadSize ?? row.size) || uploaded.size > maxFileBytes) throw issue('Uploaded file size differs from its ticket', 422, 'file_corrupted');
+    if (uploaded.size !== row.size || uploaded.size > maxFileBytes) throw issue('Uploaded file size differs from its ticket', 422, 'file_corrupted');
     file = new Uint8Array(await uploaded.arrayBuffer());
     assertOwner(id); cancellation(request.signal);
-    await acceptUploadedBytes(row, file, request);
+    await storeUpload(row, file, request.signal);
     return row;
   }
   async function readDocumentText(id, row, signal) {
@@ -1080,8 +909,7 @@ export function createLocalFilesService({
     }
     const id = owner(), target = new URL(url), token = target.pathname.endsWith('/estuary/upload_content_bytes') ? ticketFromURL(target.searchParams.get('upload_url')) : target.pathname.split('/').at(-1);
     const row = findTicket(id, token);
-    const uploadedSize = row.uploadSize ?? row.size;
-    onUploadProgress?.({ loaded: uploadedSize, total: uploadedSize });
+    onUploadProgress?.({ loaded: row.size, total: row.size });
   }
   async function materializeForThread(fileIds, { threadId, signal } = {}) {
     if (typeof threadId !== 'string' || !threadId) throw issue('A real thread workspace is required', 400);

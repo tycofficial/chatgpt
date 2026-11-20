@@ -33,26 +33,18 @@ export function createReleaseUpdater({
 } = {}) {
   const base = new URL(baseURL), state = { currentRelease, pendingRelease: null, checkedAt: null, status: 'idle', error: null };
   let stopped = false, applied = false, inFlight = null, timer = null, controller = null;
-  let lastInteraction=now(), lastTypingActivity=0, composing=false;
-  const interactionEvents=['pointerdown','keydown','input','focusin','popstate'];
-  const interaction=event=>{
-    const current=now();
-    if((event?.type==='input'||event?.type==='keydown')&&current-lastTypingActivity<100)return;
-    if(event?.type==='input'||event?.type==='keydown')lastTypingActivity=current;
-    lastInteraction=current;
-  };
-  const compositionStart=()=>{composing=true;lastInteraction=now();};
-  const compositionEnd=()=>{composing=false;lastInteraction=now();};
+  let lastInteraction=now(); const interactionEvents=['pointerdown','keydown','input','focusin','popstate'];
+  const interaction=()=>{lastInteraction=now();};
   const ownURL = path => new URL(path, base);
-  const request = async (path, signal) => {
+  const request = async path => {
     const url = ownURL(path); if (url.origin !== base.origin || !url.pathname.startsWith(base.pathname)) throw Error('Release URL outside this application');
-    const response = await fetchImpl(url, { cache: 'no-store', credentials: 'omit', redirect: 'error', signal });
+    const response = await fetchImpl(url, { cache: 'no-store', credentials: 'omit', redirect: 'error', signal: controller.signal });
     if (!response.ok) throw Error('Release resource unavailable: ' + response.status);
     return response;
   };
   function applyIfSafe() {
     if (stopped || applied || !state.pendingRelease) return false;
-    if (composing || isBusy() || hasDraft() || now()-lastInteraction<interactionQuietMs || [...(document?.querySelectorAll?.('[role=dialog],[role=menu],[role=listbox]')||[])].some(visibleComposerElement)) { state.status = 'deferred'; return false; }
+    if (isBusy() || hasDraft() || now()-lastInteraction<interactionQuietMs || [...(document?.querySelectorAll?.('[role=dialog],[role=menu],[role=listbox]')||[])].some(visibleComposerElement)) { state.status = 'deferred'; return false; }
     const key = 'chatgpt-release-application:' + state.pendingRelease;
     let previous;
     try { previous = JSON.parse(storage?.getItem(key) || 'null'); } catch {}
@@ -70,38 +62,20 @@ export function createReleaseUpdater({
     if (stopped || applied) return false;
     if (inFlight) return inFlight;
     inFlight = (async () => {
-      const checkController = new AbortController(); controller = checkController;
-      let timedOut = false, timeout;
-      const deadline = new Promise((_, reject) => {
-        timeout = setTimeout(() => {
-          timedOut = true;
-          checkController.abort();
-          reject(Error('Release check timed out'));
-        }, requestTimeoutMs);
-      });
-      const checkRelease = async () => {
-        const activeResponse = await request('native-client/active.json?check=' + now(), checkController.signal);
-        const active = await activeResponse.json();
-        if (stopped || timedOut) return false;
+      controller = new AbortController(); const timeout = setTimeout(() => controller.abort(), requestTimeoutMs);
+      try {
+        const active = await (await request('native-client/active.json?check=' + now())).json();
         state.checkedAt = now(); state.error = null;
         if (active.active !== true || !/^[a-f0-9]{16}$/.test(active.release || '')) throw Error('Invalid deployment release record');
         if (active.release === currentRelease) { state.pendingRelease = null; state.status = 'current'; return false; }
-        const htmlResponse = await request('index.html?check_release=' + active.release + '&t=' + now(), checkController.signal);
-        const html = await htmlResponse.text();
-        if (stopped || timedOut) return false;
+        const html = await (await request('index.html?check_release=' + active.release + '&t=' + now())).text();
         if (!html.includes('data-native-client-release="' + active.release + '"') || !html.includes('native-client/bootstrap.mjs?v=' + active.release)) throw Error('Deployment HTML and release record are not coherent yet');
-        const bootstrapResponse = await request('native-client/bootstrap.mjs?v=' + active.release + '&check=' + now(), checkController.signal);
-        const bootstrap = await bootstrapResponse.text();
-        if (stopped || timedOut) return false;
+        const bootstrap = await (await request('native-client/bootstrap.mjs?v=' + active.release + '&check=' + now())).text();
         if (!bootstrap.includes(JSON.stringify(active.release))) throw Error('Deployment bootstrap has not updated yet');
-        state.pendingRelease = active.release; return applyIfSafe();
-      };
-      try {
-        return await Promise.race([checkRelease(), deadline]);
-      } catch (error) {
         if (stopped) return false;
-        state.status = 'retry-later'; state.error = String(error.message || error); return false;
-      } finally { clearTimeout(timeout); if (controller === checkController) controller = null; }
+        state.pendingRelease = active.release; return applyIfSafe();
+      } catch (error) { state.status = 'retry-later'; state.error = String(error.message || error); return false; }
+      finally { clearTimeout(timeout); controller = null; }
     })();
     try { return await inFlight; } finally { inFlight = null; }
   }
@@ -109,7 +83,7 @@ export function createReleaseUpdater({
   const wake = () => { if (!stopped && document?.visibilityState !== 'hidden') void check(); };
   return {
     check, applyIfSafe, getState: () => ({ ...state }),
-    start() { for(const name of interactionEvents)eventTarget?.addEventListener?.(name,interaction); eventTarget?.addEventListener?.('compositionstart',compositionStart); eventTarget?.addEventListener?.('compositionend',compositionEnd); eventTarget?.addEventListener?.('focus', wake); eventTarget?.addEventListener?.('pageshow', wake); document?.addEventListener?.('visibilitychange', wake); schedule(); void check(); return this; },
-    stop() { for(const name of interactionEvents)eventTarget?.removeEventListener?.(name,interaction); eventTarget?.removeEventListener?.('compositionstart',compositionStart); eventTarget?.removeEventListener?.('compositionend',compositionEnd); stopped = true; clearTimeout(timer); controller?.abort(); eventTarget?.removeEventListener?.('focus', wake); eventTarget?.removeEventListener?.('pageshow', wake); document?.removeEventListener?.('visibilitychange', wake); },
+    start() { for(const name of interactionEvents)eventTarget?.addEventListener?.(name,interaction); eventTarget?.addEventListener?.('focus', wake); eventTarget?.addEventListener?.('pageshow', wake); document?.addEventListener?.('visibilitychange', wake); schedule(); void check(); return this; },
+    stop() { for(const name of interactionEvents)eventTarget?.removeEventListener?.(name,interaction); stopped = true; clearTimeout(timer); controller?.abort(); eventTarget?.removeEventListener?.('focus', wake); eventTarget?.removeEventListener?.('pageshow', wake); document?.removeEventListener?.('visibilitychange', wake); },
   };
 }

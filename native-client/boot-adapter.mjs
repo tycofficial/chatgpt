@@ -1,33 +1,32 @@
-import { createBrowserReadAloudController, createNativeReadAloudBindings } from './local-native-read-aloud.mjs?v=0afe1f6a931a198d';
-import { normalizeWorkUIStoredPreference } from '../model-catalog.js?v=0afe1f6a931a198d';
+import { createBrowserReadAloudController, createNativeReadAloudBindings } from './local-native-read-aloud.mjs?v=77599d3a62544f6e';
+import { normalizeWorkUIStoredPreference } from '../model-catalog.js?v=77599d3a62544f6e';
 /**
  * Loads the public original component graph with explicit local host services.
  * Private original backend credentials are never used by this entry point.
  */
-import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter, localFilesService, localOwnedDownloadTransport, localLibraryByteTransport, initializeLocalAccountHistory, setNativeAccountHistoryToaster, initializeLocalPublishedResources, registerNativeLibrarySource, notifyNativeLibrarySourceReady, registerNativeFileReferenceSources, localReadAloudHost } from './service-boundary.mjs?v=0afe1f6a931a198d';
-import * as mapLibreRenderer from './map-vendor/maplibre-gl.mjs?v=0afe1f6a931a198d';
-import { createLocalMapProvider } from './local-map-provider.mjs?v=0afe1f6a931a198d';
-import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs?v=0afe1f6a931a198d';
-import { getPrototypeLocalSession, getPrototypeLocalAuth, isPrototypeLocalSession, getPrototypeLocalAuthGeneration, clearPrototypeLocalSession, getLocalSignedOutUrl } from './local-identity.mjs?v=0afe1f6a931a198d';
-import { createLocalHostSettingsClass } from './local-host-settings.mjs?v=0afe1f6a931a198d';
-import { createLocalWorkPolicy } from './local-work-policy.mjs?v=0afe1f6a931a198d';
-import { hasModelSelectionAccess, getSiteLoginUrl, logoutSiteAccount } from './site-account.mjs?v=0afe1f6a931a198d';
-import { createNativeModelSelectionPolicy, createNativeThinkingEntryPolicy } from './local-model-selection-policy.mjs?v=0afe1f6a931a198d';
-import { createLocalHostClaimsReader } from './local-token-identity.mjs?v=0afe1f6a931a198d';
-import { wrapNativeFileUploadClass } from './local-native-upload.mjs?v=0afe1f6a931a198d';
-import { wrapNativeDownloadServices } from './local-native-download.mjs?v=0afe1f6a931a198d';
+import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter, localFilesService, localOwnedDownloadTransport, localLibraryByteTransport, initializeLocalAccountHistory, setNativeAccountHistoryToaster, initializeLocalPublishedResources, registerNativeLibrarySource, notifyNativeLibrarySourceReady, registerNativeFileReferenceSources, localReadAloudHost } from './service-boundary.mjs?v=77599d3a62544f6e';
+import * as mapLibreRenderer from './map-vendor/maplibre-gl.mjs?v=77599d3a62544f6e';
+import { createLocalMapProvider } from './local-map-provider.mjs?v=77599d3a62544f6e';
+import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs?v=77599d3a62544f6e';
+import { getPrototypeLocalSession, getPrototypeLocalAuth, isPrototypeLocalSession, getPrototypeLocalAuthGeneration, clearPrototypeLocalSession } from './local-identity.mjs?v=77599d3a62544f6e';
+import { createLocalHostSettingsClass } from './local-host-settings.mjs?v=77599d3a62544f6e';
+import { createLocalWorkPolicy } from './local-work-policy.mjs?v=77599d3a62544f6e';
+import { hasModelSelectionAccess, getSiteLoginUrl } from './site-account.mjs?v=77599d3a62544f6e';
+import { createNativeModelSelectionPolicy, createNativeThinkingEntryPolicy } from './local-model-selection-policy.mjs?v=77599d3a62544f6e';
+import { createLocalHostClaimsReader } from './local-token-identity.mjs?v=77599d3a62544f6e';
+import { wrapNativeFileUploadClass } from './local-native-upload.mjs?v=77599d3a62544f6e';
+import { wrapNativeDownloadServices } from './local-native-download.mjs?v=77599d3a62544f6e';
 
 const boundary = installNetworkBoundary();
 globalThis.__originalClientProbe = boundary.diagnostics;
 // Restore the verified account's real durable history before native loaders
 // resolve a fresh-device conversation URL. Offline failures retain local data.
-const historyReady = initializeLocalAccountHistory();
-await Promise.race([historyReady, new Promise(resolve => setTimeout(resolve, 2000))]);
-void historyReady.then(() => initializeLocalPublishedResources()).catch(() => {});
+await initializeLocalAccountHistory();
+await initializeLocalPublishedResources();
 installSyntheticDocumentState();
 if (globalThis.__CHATGPT_REPLICA_ENV__) window.__reactRouterContext.basename = globalThis.__CHATGPT_REPLICA_ENV__.basePath.replace(/\/$/, '') || '/';
 
-const plan = await (await fetch(new URL('./entry-plan.json?v=0afe1f6a931a198d', import.meta.url))).json();
+const plan = await (await fetch(new URL('./entry-plan.json?v=77599d3a62544f6e', import.meta.url))).json();
 const { __webpack_require__: requireOriginal } = await import(plan.runtime);
 // One mechanical entry transform defers its terminal hxQI invocation and
 // rebases its relative imports. All original factories and chunks are retained.
@@ -352,21 +351,6 @@ const useOriginalAuth = new URL(location.href).searchParams.get('originalAuth') 
 boundary.diagnostics.push({ type: 'auth-state-engine', source: useOriginalAuth ? 'original-QdUF-with-local-bootstrap' : 'declared-local-auth-getters' });
 // QdUF's internal eh/ey closures keep the official hostname assumptions.
 // Route both public login functions through the same local account boundary.
-overrideExports('jEww', {
-  signOutOfBrowserSession: async cleanup => {
-    const target = getLocalSignedOutUrl();
-    try {
-      const csrf = await (await fetch('/api/auth/csrf', { cache: 'no-store' })).json();
-      await fetch('/api/auth/signout', { method: 'POST', body: new URLSearchParams({ csrfToken: csrf.csrfToken }) });
-    } catch {} finally {
-      clearPrototypeLocalSession();
-      void logoutSiteAccount();
-    }
-    try { await Promise.race([Promise.resolve(cleanup?.()), new Promise(resolve => setTimeout(resolve, 1000))]); } catch {}
-    return { ok: true, url: target };
-  },
-}, { deferred: true });
-
 let siteLoginRedirecting = false;
 function getSiteAuthPageUrl(name) {
   if (name !== 'login' && name !== 'signup') return new URL('/auth/' + name, location.origin);
@@ -398,9 +382,6 @@ overrideExports('QdUF', {
   getBrowserAuthPageUrl: getSiteAuthPageUrl,
   redirectToBrowserChatGptLogin: redirectToSiteLogin,
   maybeRedirectToBrowserChatGptLogin: maybeRedirectToSiteLogin,
-  clearBrowserAuth: clearPrototypeLocalSession,
-  markBrowserChatGptSignedOut: clearPrototypeLocalSession,
-  maybeRedirectToBrowserChatGptLogout: () => false,
   ...(!useOriginalAuth ? {
   loadBrowserChatGptAuth: async () => getPrototypeLocalAuth(),
   getOrLoadBrowserChatGptAuth: () => getPrototypeLocalAuth(),
@@ -414,6 +395,9 @@ overrideExports('QdUF', {
   isBrowserAccountSwitchLoading: () => false,
   refreshBrowserChatGptAuth: async () => getPrototypeLocalAuth(),
   recoverBrowserChatGptAuth: async () => ({ auth: getPrototypeLocalAuth(), recovery: 'reused_current_session' }),
+  clearBrowserAuth: clearPrototypeLocalSession,
+  markBrowserChatGptSignedOut: clearPrototypeLocalSession,
+  maybeRedirectToBrowserChatGptLogout: () => false,
   } : {}),
 }, undefined, {
   readChatGptTokenClaims: originalReader => createLocalHostClaimsReader(originalReader, {
