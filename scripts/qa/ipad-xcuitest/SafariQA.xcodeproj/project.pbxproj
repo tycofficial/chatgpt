@@ -1,0 +1,103 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 56;
+	objects = {
+		A10000000000000000000001 = {
+			isa = PBXProject;
+			attributes = {
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {
+					A10000000000000000000010 = { CreatedOnToolsVersion = 26.0; };
+					A10000000000000000000011 = { CreatedOnToolsVersion = 26.0; TestTargetID = A10000000000000000000010; };
+				};
+			};
+			buildConfigurationList = A10000000000000000000020;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (en, Base);
+			mainGroup = A10000000000000000000002;
+			productRefGroup = A10000000000000000000005;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (A10000000000000000000010, A10000000000000000000011);
+		};
+		A10000000000000000000002 = { isa = PBXGroup; children = (A10000000000000000000003, A10000000000000000000004, A10000000000000000000005); sourceTree = "<group>"; };
+		A10000000000000000000003 = { isa = PBXGroup; children = (A10000000000000000000006); path = SafariQAHost; sourceTree = "<group>"; };
+		A10000000000000000000004 = { isa = PBXGroup; children = (A10000000000000000000007); path = SafariQAUITests; sourceTree = "<group>"; };
+		A10000000000000000000005 = { isa = PBXGroup; children = (A10000000000000000000008, A10000000000000000000009); name = Products; sourceTree = "<group>"; };
+		A10000000000000000000006 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariQAHost.swift; sourceTree = "<group>"; };
+		A10000000000000000000007 = { isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariPublicSiteTests.swift; sourceTree = "<group>"; };
+		A10000000000000000000008 = { isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = SafariQAHost.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000000000000000000009 = { isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SafariQAUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000000000000000000010 = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A10000000000000000000021;
+			buildPhases = (A10000000000000000000012);
+			buildRules = ();
+			dependencies = ();
+			name = SafariQAHost;
+			productName = SafariQAHost;
+			productReference = A10000000000000000000008;
+			productType = "com.apple.product-type.application";
+		};
+		A10000000000000000000011 = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A10000000000000000000022;
+			buildPhases = (A10000000000000000000013);
+			buildRules = ();
+			dependencies = (A10000000000000000000016);
+			name = SafariQAUITests;
+			productName = SafariQAUITests;
+			productReference = A10000000000000000000009;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		A10000000000000000000012 = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000014); runOnlyForDeploymentPostprocessing = 0; };
+		A10000000000000000000013 = { isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000015); runOnlyForDeploymentPostprocessing = 0; };
+		A10000000000000000000014 = { isa = PBXBuildFile; fileRef = A10000000000000000000006; };
+		A10000000000000000000015 = { isa = PBXBuildFile; fileRef = A10000000000000000000007; };
+		A10000000000000000000016 = { isa = PBXTargetDependency; target = A10000000000000000000010; targetProxy = A10000000000000000000017; };
+		A10000000000000000000017 = { isa = PBXContainerItemProxy; containerPortal = A10000000000000000000001; proxyType = 1; remoteGlobalIDString = A10000000000000000000010; remoteInfo = SafariQAHost; };
+		A10000000000000000000020 = { isa = XCConfigurationList; buildConfigurations = (A10000000000000000000023); defaultConfigurationIsVisible = 0; defaultConfigurationName = Debug; };
+		A10000000000000000000021 = { isa = XCConfigurationList; buildConfigurations = (A10000000000000000000024); defaultConfigurationIsVisible = 0; defaultConfigurationName = Debug; };
+		A10000000000000000000022 = { isa = XCConfigurationList; buildConfigurations = (A10000000000000000000025); defaultConfigurationIsVisible = 0; defaultConfigurationName = Debug; };
+		A10000000000000000000023 = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				"CODE_SIGN_IDENTITY[sdk=iphonesimulator*]" = "-";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				SDKROOT = iphoneos;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 2;
+			};
+			name = Debug;
+		};
+		A10000000000000000000024 = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tycofficial.safariqa.host;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+			};
+			name = Debug;
+		};
+		A10000000000000000000025 = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.tycofficial.safariqa.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TEST_TARGET_NAME = SafariQAHost;
+			};
+			name = Debug;
+		};
+	};
+	rootObject = A10000000000000000000001;
+}
