@@ -1,2 +1,0 @@
-/*! LICENSE: 283165.a7f20c64ca.js.LICENSE.txt */
-export const __rspack_esm_ids=[283165];export const __webpack_modules__={fl34(e,_,a){a.r(_);let p=(0,a("jTyp").c)("Crop",[["path",{d:"M6 2v14a2 2 0 0 0 2 2h14",key:"ron5a4"}],["path",{d:"M18 22V8a2 2 0 0 0-2-2H2",key:"7s9ehn"}]]);a.d(_,{},{default:p})}};

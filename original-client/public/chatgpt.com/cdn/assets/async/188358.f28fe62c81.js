@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[188358];export const __webpack_modules__={wnBZ(a){a.exports=JSON.parse('[{"name":"resource_dimension: habitat space","initialValues":{"resource_dimension":"habitat space"}},{"name":"resource_dimension: feeding time","initialValues":{"resource_dimension":"feeding time"}}]')}};

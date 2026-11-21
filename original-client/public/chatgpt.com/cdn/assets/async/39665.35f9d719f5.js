@@ -1,2 +1,0 @@
-/*! LICENSE: 39665.35f9d719f5.js.LICENSE.txt */
-export const __rspack_esm_ids=[39665];export const __webpack_modules__={K8Tu(e,t,d){d.r(t);let o=(0,d("jTyp").c)("BluetoothOff",[["path",{d:"m17 17-5 5V12l-5 5",key:"v5aci6"}],["path",{d:"m2 2 20 20",key:"1ooewy"}],["path",{d:"M14.5 9.5 17 7l-5-5v4.5",key:"1kddfz"}]]);d.d(t,{},{default:o})}};

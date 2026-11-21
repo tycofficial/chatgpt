@@ -1,2 +1,0 @@
-/*! LICENSE: 795260.64d0d6345f.js.LICENSE.txt */
-export const __rspack_esm_ids=[795260];export const __webpack_modules__={I1mG(e,r,a){a.r(r);var c=a("krfC");a.d(r,{default:()=>c.default})},krfC(e,r,a){a.r(r);let c=(0,a("jTyp").c)("CircleArrowUp",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["path",{d:"m16 12-4-4-4 4",key:"177agl"}],["path",{d:"M12 16V8",key:"1sbj14"}]]);a.d(r,{},{default:c})}};

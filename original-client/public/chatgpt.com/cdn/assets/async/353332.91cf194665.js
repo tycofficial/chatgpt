@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[353332];export const __webpack_modules__={wC2X(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"initial_temperature_c":0,"surrounding_pressure_kpa":40}},{"name":"Maximum supported values","initialValues":{"initial_temperature_c":60,"surrounding_pressure_kpa":160}}]')}};

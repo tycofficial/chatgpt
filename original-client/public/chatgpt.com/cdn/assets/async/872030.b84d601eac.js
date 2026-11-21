@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[872030];export const __webpack_modules__={fxkN(a,b,c){var d=c("QosV"),e=c("Q840"),f=c("zd8w"),g=c("OWtl"),h=c("gMJf");c.d(b,{},{FirstPartyPluginBackgroundBridge:function(){let a,b,c=(0,d.c)(3),i=(0,e.y)(g.a);return c[0]!==i?(a=()=>(0,h.d)(i),b=[i],c[0]=i,c[1]=a,c[2]=b):(a=c[1],b=c[2]),(0,f.useEffect)(a,b),null}})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 822767.3212eb6618.js.LICENSE.txt */
+export const __rspack_esm_ids=[822767];export const __webpack_modules__={TO8d(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Eclipse",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["path",{d:"M12 2a7 7 0 1 0 10 10",key:"1yuj32"}]]);c.d(b,{},{default:d})}};

@@ -1,2 +1,0 @@
-/*! LICENSE: 229824.3e6dff98d1.js.LICENSE.txt */
-export const __rspack_esm_ids=[229824];export const __webpack_modules__={Uara(a,e,p){p.r(e);let _=(0,p("jTyp").c)("CloudMoon",[["path",{d:"M10.188 8.5A6 6 0 0 1 16 4a1 1 0 0 0 6 6 6 6 0 0 1-3 5.197",key:"erj67n"}],["path",{d:"M13 16a3 3 0 1 1 0 6H7a5 5 0 1 1 4.9-6Z",key:"p44pc9"}]]);p.d(e,{},{default:_})}};

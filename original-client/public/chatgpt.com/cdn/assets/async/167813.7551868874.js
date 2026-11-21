@@ -1,0 +1,2 @@
+/*! LICENSE: 167813.7551868874.js.LICENSE.txt */
+export const __rspack_esm_ids=[167813];export const __webpack_modules__={N7dw(a,b,c){c.r(b);let d=(0,c("SHUh").c)("AlignVerticalSpaceAround",[["rect",{width:"10",height:"6",x:"7",y:"9",rx:"2",key:"b1zbii"}],["path",{d:"M22 20H2",key:"1p1f7z"}],["path",{d:"M22 4H2",key:"1b7qnq"}]]);c.d(b,{},{default:d})}};

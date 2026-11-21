@@ -1,2 +1,0 @@
-/*! LICENSE: 453640.91e269e34c.js.LICENSE.txt */
-export const __rspack_esm_ids=[453640];export const __webpack_modules__={CeAd(e,t,a){a.r(t);let d=(0,a("jTyp").c)("VibrateOff",[["path",{d:"m2 8 2 2-2 2 2 2-2 2",key:"sv1b1"}],["path",{d:"m22 8-2 2 2 2-2 2 2 2",key:"101i4y"}],["path",{d:"M8 8v10c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2",key:"1hbad5"}],["path",{d:"M16 10.34V6c0-.55-.45-1-1-1h-4.34",key:"1x5tf0"}],["line",{x1:"2",x2:"22",y1:"2",y2:"22",key:"a6p6uj"}]]);a.d(t,{},{default:d})}};

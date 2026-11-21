@@ -1,0 +1,2 @@
+/*! LICENSE: 225190.b9fb48bd5b.js.LICENSE.txt */
+export const __rspack_esm_ids=[225190];export const __webpack_modules__={Iqlk(a,b,c){c.r(b);let d=(0,c("SHUh").c)("EllipsisVertical",[["circle",{cx:"12",cy:"12",r:"1",key:"41hilf"}],["circle",{cx:"12",cy:"5",r:"1",key:"gxeob9"}],["circle",{cx:"12",cy:"19",r:"1",key:"lyex9k"}]]);c.d(b,{},{default:d})}};

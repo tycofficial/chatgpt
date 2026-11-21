@@ -1,0 +1,2 @@
+/*! LICENSE: 654805.7b1b78b070.js.LICENSE.txt */
+export const __rspack_esm_ids=[654805];export const __webpack_modules__={IUrE(a,b,c){c.r(b);let d=(0,c("SHUh").c)("MoveDownLeft",[["path",{d:"M11 19H5V13",key:"1akmht"}],["path",{d:"M19 5L5 19",key:"72u4yj"}]]);c.d(b,{},{default:d})}};

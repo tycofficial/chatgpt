@@ -1,0 +1,2 @@
+/*! LICENSE: 256038.8e50806249.js.LICENSE.txt */
+export const __rspack_esm_ids=[256038];export const __webpack_modules__={jDqq(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Brackets",[["path",{d:"M16 3h3v18h-3",key:"1yor1f"}],["path",{d:"M8 21H5V3h3",key:"1qrfwo"}]]);c.d(b,{},{default:d})}};

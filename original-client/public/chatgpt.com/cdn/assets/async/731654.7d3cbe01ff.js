@@ -1,0 +1,2 @@
+/*! LICENSE: 731654.7d3cbe01ff.js.LICENSE.txt */
+export const __rspack_esm_ids=[731654];export const __webpack_modules__={H583(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Mouse",[["rect",{x:"5",y:"2",width:"14",height:"20",rx:"7",key:"11ol66"}],["path",{d:"M12 6v4",key:"16clxf"}]]);c.d(b,{},{default:d})}};

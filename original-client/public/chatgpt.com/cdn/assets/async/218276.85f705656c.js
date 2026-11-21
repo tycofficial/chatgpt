@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[218276];export const __webpack_modules__={MEWW(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"indexRatio":0.5}},{"name":"Maximum supported values","initialValues":{"indexRatio":0.95}}]')}};

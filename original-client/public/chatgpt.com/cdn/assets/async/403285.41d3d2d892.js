@@ -1,2 +1,0 @@
-/*! LICENSE: 403285.41d3d2d892.js.LICENSE.txt */
-export const __rspack_esm_ids=[403285];export const __webpack_modules__={Y9op(e,t,_){_.r(t);let a=(0,_("jTyp").c)("SquareParking",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M9 17V7h4a3 3 0 0 1 0 6H9",key:"1dfk2c"}]]);_.d(t,{},{default:a})}};

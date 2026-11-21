@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[734991];export const __webpack_modules__={vAB9:(function(a,b,c){c.d(b,{},{a:function(a){let{params:b,serverLoader:c}=a;return b.postId?.startsWith("i_")?c():null}})})};import{__webpack_require__ as a}from"./633146.511711c8b9.js";import*as b from"./734991.c137125499.js";a.C(b);var c=a(a.s="vAB9").a;export{c as clientLoader};

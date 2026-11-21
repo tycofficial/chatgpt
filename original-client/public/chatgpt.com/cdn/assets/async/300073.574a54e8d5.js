@@ -1,2 +1,0 @@
-/*! LICENSE: 300073.574a54e8d5.js.LICENSE.txt */
-export const __rspack_esm_ids=[300073];export const __webpack_modules__={Aliv(e,t,_){_.r(t);let p=(0,_("jTyp").c)("ChevronFirst",[["path",{d:"m17 18-6-6 6-6",key:"1yerx2"}],["path",{d:"M7 6v12",key:"1p53r6"}]]);_.d(t,{},{default:p})}};

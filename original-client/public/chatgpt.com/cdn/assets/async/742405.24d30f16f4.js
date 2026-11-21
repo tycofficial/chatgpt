@@ -1,2 +1,0 @@
-/*! LICENSE: 742405.24d30f16f4.js.LICENSE.txt */
-export const __rspack_esm_ids=[742405];export const __webpack_modules__={PTvA(c,e,_){_.r(e);let r=(0,_("jTyp").c)("Eye",[["path",{d:"M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0",key:"1nclc0"}],["circle",{cx:"12",cy:"12",r:"3",key:"1v7zrd"}]]);_.d(e,{},{default:r})}};

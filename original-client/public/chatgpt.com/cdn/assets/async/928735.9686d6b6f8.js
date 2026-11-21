@@ -1,2 +1,0 @@
-/*! LICENSE: 928735.9686d6b6f8.js.LICENSE.txt */
-export const __rspack_esm_ids=[928735];export const __webpack_modules__={OgNY(e,t,_){_.r(t);let a=(0,_("jTyp").c)("CircleArrowOutDownRight",[["path",{d:"M12 22a10 10 0 1 1 10-10",key:"130bv5"}],["path",{d:"M22 22 12 12",key:"131aw7"}],["path",{d:"M22 16v6h-6",key:"1gvm70"}]]);_.d(t,{},{default:a})}};

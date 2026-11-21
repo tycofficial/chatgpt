@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[388976];export const __webpack_modules__={UreO(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"scale":0.7,"shear":-0.95}},{"name":"Maximum supported values","initialValues":{"scale":2.0,"shear":0.95}}]')}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 940658.7956ae3648.js.LICENSE.txt */
+export const __rspack_esm_ids=[940658];export const __webpack_modules__={Z7Ac(a,b,c){c.r(b);let d=(0,c("SHUh").c)("IndentIncrease",[["path",{d:"M21 12H11",key:"wd7e0v"}],["path",{d:"M21 18H11",key:"4wu86t"}],["path",{d:"M21 6H11",key:"6dy1d6"}],["path",{d:"m3 8 4 4-4 4",key:"1a3j6y"}]]);c.d(b,{},{default:d})}};

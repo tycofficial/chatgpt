@@ -1,0 +1,2 @@
+/*! LICENSE: 415798.3d801b958f.js.LICENSE.txt */
+export const __rspack_esm_ids=[415798];export const __webpack_modules__={gvpt(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ArrowUp",[["path",{d:"m5 12 7-7 7 7",key:"hav0vg"}],["path",{d:"M12 19V5",key:"x0mq9r"}]]);c.d(b,{},{default:d})}};

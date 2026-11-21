@@ -1,2 +1,0 @@
-/*! LICENSE: 442734.afcd3b9134.js.LICENSE.txt */
-export const __rspack_esm_ids=[442734];export const __webpack_modules__={McIv(e,c,t){t.r(c);let a=(0,t("jTyp").c)("CreativeCommons",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["path",{d:"M10 9.3a2.8 2.8 0 0 0-3.5 1 3.1 3.1 0 0 0 0 3.4 2.7 2.7 0 0 0 3.5 1",key:"1ss3eq"}],["path",{d:"M17 9.3a2.8 2.8 0 0 0-3.5 1 3.1 3.1 0 0 0 0 3.4 2.7 2.7 0 0 0 3.5 1",key:"1od56t"}]]);t.d(c,{},{default:a})}};

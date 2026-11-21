@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[333032];export const __webpack_modules__={INrN(a,b,c){a.exports=c.p+"assets/wreath.7029cc67a0.svg"}};

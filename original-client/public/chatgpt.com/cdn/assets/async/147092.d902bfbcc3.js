@@ -1,0 +1,2 @@
+/*! LICENSE: 147092.d902bfbcc3.js.LICENSE.txt */
+export const __rspack_esm_ids=[147092];export const __webpack_modules__={VOwR(a,b,c){c.r(b);let d=(0,c("SHUh").c)("SwissFranc",[["path",{d:"M10 21V3h8",key:"br2l0g"}],["path",{d:"M6 16h9",key:"2py0wn"}],["path",{d:"M10 9.5h7",key:"13dmhz"}]]);c.d(b,{},{default:d})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 934366.4a9fb5b065.js.LICENSE.txt */
+export const __rspack_esm_ids=[934366];export const __webpack_modules__={CheU(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Activity",[["path",{d:"M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2",key:"169zse"}]]);c.d(b,{},{default:d})}};

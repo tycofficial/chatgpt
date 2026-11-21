@@ -1,2 +1,0 @@
-/*! LICENSE: 386904.1b03120304.js.LICENSE.txt */
-export const __rspack_esm_ids=[386904];export const __webpack_modules__={wNDO(a,e,_){_.r(e);let p=(0,_("jTyp").c)("BookMarked",[["path",{d:"M10 2v8l3-3 3 3V2",key:"sqw3rj"}],["path",{d:"M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20",key:"k3hazp"}]]);_.d(e,{},{default:p})}};

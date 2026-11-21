@@ -1,0 +1,2 @@
+/*! LICENSE: 318153.cd3fccab10.js.LICENSE.txt */
+export const __rspack_esm_ids=[318153];export const __webpack_modules__={OYWk(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Cylinder",[["ellipse",{cx:"12",cy:"5",rx:"9",ry:"3",key:"msslwz"}],["path",{d:"M3 5v14a9 3 0 0 0 18 0V5",key:"aqi0yr"}]]);c.d(b,{},{default:d})}};

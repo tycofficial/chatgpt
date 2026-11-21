@@ -1,2 +1,0 @@
-/*! LICENSE: 888891.5f9ddfe6ed.js.LICENSE.txt */
-export const __rspack_esm_ids=[888891];export const __webpack_modules__={soWp(c,e,o){o.r(e);let _=(0,o("jTyp").c)("Clock8",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["polyline",{points:"12 6 12 12 8 14",key:"tmc9b4"}]]);o.d(e,{},{default:_})}};

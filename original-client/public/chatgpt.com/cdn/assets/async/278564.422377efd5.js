@@ -1,2 +1,0 @@
-/*! LICENSE: 278564.422377efd5.js.LICENSE.txt */
-export const __rspack_esm_ids=[278564];export const __webpack_modules__={Pl7L(e,t,_){_.r(t);let a=(0,_("jTyp").c)("WifiHigh",[["path",{d:"M12 20h.01",key:"zekei9"}],["path",{d:"M5 12.859a10 10 0 0 1 14 0",key:"1x1e6c"}],["path",{d:"M8.5 16.429a5 5 0 0 1 7 0",key:"1bycff"}]]);_.d(t,{},{default:a})}};

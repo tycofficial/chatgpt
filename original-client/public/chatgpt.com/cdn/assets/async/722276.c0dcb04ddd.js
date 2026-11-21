@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[722276];export const __webpack_modules__={VpFO(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"fundamental_frequency_hz":20}},{"name":"Maximum supported values","initialValues":{"fundamental_frequency_hz":2000}},{"name":"Concert A fundamental","initialValues":{"fundamental_frequency_hz":440}}]')}};

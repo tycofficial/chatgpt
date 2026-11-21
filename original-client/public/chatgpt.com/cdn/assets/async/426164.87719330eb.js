@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[426164];export const __webpack_modules__={F1WT(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"sleep_duration_hours":5}},{"name":"Maximum supported values","initialValues":{"sleep_duration_hours":10}}]')}};

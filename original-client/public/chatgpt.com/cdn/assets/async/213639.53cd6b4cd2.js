@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[213639];export const __webpack_modules__={JmFi(s){s.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"mass":0.01,"volume":0.01}},{"name":"Maximum supported values","initialValues":{"mass":10000,"volume":10000}}]')}};

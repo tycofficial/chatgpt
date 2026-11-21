@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[991195];export const __webpack_modules__={aWmc(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"skewStrength":0}},{"name":"Maximum supported values","initialValues":{"skewStrength":1}},{"name":"direction: left","initialValues":{"direction":"left"}}]')}};

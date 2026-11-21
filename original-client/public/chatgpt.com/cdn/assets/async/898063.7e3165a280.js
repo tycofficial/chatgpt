@@ -1,0 +1,2 @@
+/*! LICENSE: 898063.7e3165a280.js.LICENSE.txt */
+export const __rspack_esm_ids=[898063];export const __webpack_modules__={FHD7(a,b,c){c.r(b);let d=(0,c("SHUh").c)("StarOff",[["path",{d:"M8.34 8.34 2 9.27l5 4.87L5.82 21 12 17.77 18.18 21l-.59-3.43",key:"16m0ql"}],["path",{d:"M18.42 12.76 22 9.27l-6.91-1L12 2l-1.44 2.91",key:"1vt8nq"}],["line",{x1:"2",x2:"22",y1:"2",y2:"22",key:"a6p6uj"}]]);c.d(b,{},{default:d})}};

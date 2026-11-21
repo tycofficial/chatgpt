@@ -1,0 +1,2 @@
+/*! LICENSE: 633835.99d312fc55.js.LICENSE.txt */
+export const __rspack_esm_ids=[633835];export const __webpack_modules__={DO4X(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Clock2",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["polyline",{points:"12 6 12 12 16 10",key:"1g230d"}]]);c.d(b,{},{default:d})}};

@@ -1,2 +1,0 @@
-/*! LICENSE: 936328.1947509586.js.LICENSE.txt */
-export const __rspack_esm_ids=[936328];export const __webpack_modules__={LBfC(e,_,p){p.r(_);let t=(0,p("jTyp").c)("Cone",[["path",{d:"m20.9 18.55-8-15.98a1 1 0 0 0-1.8 0l-8 15.98",key:"53pte7"}],["ellipse",{cx:"12",cy:"19",rx:"9",ry:"3",key:"1ji25f"}]]);p.d(_,{},{default:t})}};

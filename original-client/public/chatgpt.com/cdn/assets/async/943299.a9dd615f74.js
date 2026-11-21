@@ -1,0 +1,2 @@
+/*! LICENSE: 943299.a9dd615f74.js.LICENSE.txt */
+export const __rspack_esm_ids=[943299];export const __webpack_modules__={NqLf(a,b,c){c.r(b);let d=(0,c("SHUh").c)("FlagOff",[["path",{d:"M8 2c3 0 5 2 8 2s4-1 4-1v11",key:"9rwyz9"}],["path",{d:"M4 22V4",key:"1plyxx"}],["path",{d:"M4 15s1-1 4-1 5 2 8 2",key:"1myooe"}],["line",{x1:"2",x2:"22",y1:"2",y2:"22",key:"a6p6uj"}]]);c.d(b,{},{default:d})}};

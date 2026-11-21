@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[117227];export const __webpack_modules__={sxlT(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"radius":2.5,"pointDistance":5.8,"pointAngleDeg":145}},{"name":"Maximum supported values","initialValues":{"radius":4.5,"pointDistance":7.2,"pointAngleDeg":215}}]')}};

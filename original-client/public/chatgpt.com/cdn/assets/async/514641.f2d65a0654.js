@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[514641];export const __webpack_modules__={eKts(a){a.exports=JSON.parse('[{"content":"(x-3)^2+(y+2)^2=16"},{"content":"(x+1)^2+(y-4)^2=9"},{"content":"x^2 + y^2 = 4"},{"content":"(x-1.5)^2 + (y+0.5)^2 = 2.25"},{"content":"(x-\\\\frac{1}{2})^2+(y+\\\\frac{3}{2})^2=(\\\\frac{5}{2})^2"}]')}};

@@ -1,2 +1,0 @@
-/*! LICENSE: 439181.10bcf11182.js.LICENSE.txt */
-export const __rspack_esm_ids=[439181];export const __webpack_modules__={NtYf(e,o,t){t.r(o);let p=(0,t("jTyp").c)("Code",[["polyline",{points:"16 18 22 12 16 6",key:"z7tu5w"}],["polyline",{points:"8 6 2 12 8 18",key:"1eg1df"}]]);t.d(o,{},{default:p})}};

@@ -1,2 +1,0 @@
-/*! LICENSE: 418547.0bba0ec7ce.js.LICENSE.txt */
-export const __rspack_esm_ids=[418547];export const __webpack_modules__={XRlt(e,p,t){t.r(p);let o=(0,t("jTyp").c)("ArrowDownUp",[["path",{d:"m3 16 4 4 4-4",key:"1co6wj"}],["path",{d:"M7 20V4",key:"1yoxec"}],["path",{d:"m21 8-4-4-4 4",key:"1c9v7m"}],["path",{d:"M17 4v16",key:"7dpous"}]]);t.d(p,{},{default:o})}};

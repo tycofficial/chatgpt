@@ -1,0 +1,2 @@
+/*! LICENSE: 962147.b644684d6c.js.LICENSE.txt */
+export const __rspack_esm_ids=[962147];export const __webpack_modules__={tQ4I(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Spline",[["circle",{cx:"19",cy:"5",r:"2",key:"mhkx31"}],["circle",{cx:"5",cy:"19",r:"2",key:"v8kfzx"}],["path",{d:"M5 17A12 12 0 0 1 17 5",key:"1okkup"}]]);c.d(b,{},{default:d})}};

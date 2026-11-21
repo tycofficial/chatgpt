@@ -1,2 +1,0 @@
-/*! LICENSE: 239963.4f5d96dac4.js.LICENSE.txt */
-export const __rspack_esm_ids=[239963];export const __webpack_modules__={Jm1O(e,t,d){d.r(t);var k=d("dkKe");d.d(t,{default:()=>k.default})},dkKe(e,t,d){d.r(t);let k=(0,d("jTyp").c)("AlarmClockCheck",[["circle",{cx:"12",cy:"13",r:"8",key:"3y4lt7"}],["path",{d:"M5 3 2 6",key:"18tl5t"}],["path",{d:"m22 6-3-3",key:"1opdir"}],["path",{d:"M6.38 18.7 4 21",key:"17xu3x"}],["path",{d:"M17.64 18.67 20 21",key:"kv2oe2"}],["path",{d:"m9 13 2 2 4-4",key:"6343dt"}]]);d.d(t,{},{default:k})}};

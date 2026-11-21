@@ -1,2 +1,0 @@
-/*! LICENSE: 377149.614fd8da2b.js.LICENSE.txt */
-export const __rspack_esm_ids=[377149];export const __webpack_modules__={ZZoM(c,e,r){r.r(e);let y=(0,r("jTyp").c)("GripVertical",[["circle",{cx:"9",cy:"12",r:"1",key:"1vctgf"}],["circle",{cx:"9",cy:"5",r:"1",key:"hp0tcf"}],["circle",{cx:"9",cy:"19",r:"1",key:"fkjjf6"}],["circle",{cx:"15",cy:"12",r:"1",key:"1tmaij"}],["circle",{cx:"15",cy:"5",r:"1",key:"19l28e"}],["circle",{cx:"15",cy:"19",r:"1",key:"f4zoj3"}]]);r.d(e,{},{default:y})}};

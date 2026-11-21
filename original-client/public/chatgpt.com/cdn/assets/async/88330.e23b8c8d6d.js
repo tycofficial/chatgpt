@@ -1,0 +1,2 @@
+/*! LICENSE: 88330.e23b8c8d6d.js.LICENSE.txt */
+export const __rspack_esm_ids=[88330];export const __webpack_modules__={dWQH(a,b,c){c.r(b);let d=(0,c("SHUh").c)("GalleryHorizontal",[["path",{d:"M2 3v18",key:"pzttux"}],["rect",{width:"12",height:"18",x:"6",y:"3",rx:"2",key:"btr8bg"}],["path",{d:"M22 3v18",key:"6jf3v"}]]);c.d(b,{},{default:d})}};

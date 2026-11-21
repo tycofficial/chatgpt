@@ -1,0 +1,2 @@
+/*! LICENSE: 61267.74e7636948.js.LICENSE.txt */
+export const __rspack_esm_ids=[61267];export const __webpack_modules__={QNCt(a,b,c){c.r(b);let d=(0,c("SHUh").c)("CornerRightUp",[["polyline",{points:"10 9 15 4 20 9",key:"1lr6px"}],["path",{d:"M4 20h7a4 4 0 0 0 4-4V4",key:"1plgdj"}]]);c.d(b,{},{default:d})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 332519.46406ad588.js.LICENSE.txt */
+export const __rspack_esm_ids=[332519];export const __webpack_modules__={f5zg(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Computer",[["rect",{width:"14",height:"8",x:"5",y:"2",rx:"2",key:"wc9tft"}],["rect",{width:"20",height:"8",x:"2",y:"14",rx:"2",key:"w68u3i"}],["path",{d:"M6 18h2",key:"rwmk9e"}],["path",{d:"M12 18h6",key:"aqd8w3"}]]);c.d(b,{},{default:d})}};

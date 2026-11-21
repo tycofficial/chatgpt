@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[177508];export const __webpack_modules__={x2D8(e){e.exports=JSON.parse('[{"name":"workload: spaced","initialValues":{"workload":"spaced"}}]')}};

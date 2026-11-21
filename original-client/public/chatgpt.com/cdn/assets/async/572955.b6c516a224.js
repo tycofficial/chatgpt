@@ -1,0 +1,2 @@
+/*! LICENSE: 572955.b6c516a224.js.LICENSE.txt */
+export const __rspack_esm_ids=[572955];export const __webpack_modules__={ByNd(a,b,c){c.r(b);let d=(0,c("SHUh").c)("AtSign",[["circle",{cx:"12",cy:"12",r:"4",key:"4exip2"}],["path",{d:"M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8",key:"7n84p3"}]]);c.d(b,{},{default:d})}};

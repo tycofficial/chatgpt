@@ -1,0 +1,2 @@
+/*! LICENSE: 171125.e7d1c9f53e.js.LICENSE.txt */
+export const __rspack_esm_ids=[171125];export const __webpack_modules__={SG0S(a,b,c){c.r(b);let d=(0,c("SHUh").c)("StretchHorizontal",[["rect",{width:"20",height:"6",x:"2",y:"4",rx:"2",key:"qdearl"}],["rect",{width:"20",height:"6",x:"2",y:"14",rx:"2",key:"1xrn6j"}]]);c.d(b,{},{default:d})}};

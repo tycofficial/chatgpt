@@ -1,2 +1,0 @@
-/*! LICENSE: 212139.29db4bf5d7.js.LICENSE.txt */
-export const __rspack_esm_ids=[212139];export const __webpack_modules__={sfOU(e,o,p){p.r(o);let t=(0,p("jTyp").c)("CornerLeftDown",[["polyline",{points:"14 15 9 20 4 15",key:"nkc4i"}],["path",{d:"M20 4h-7a4 4 0 0 0-4 4v12",key:"nbpdq2"}]]);p.d(o,{},{default:t})}};

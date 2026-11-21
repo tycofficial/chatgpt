@@ -1,2 +1,0 @@
-/*! LICENSE: 789844.f1ef9f1086.js.LICENSE.txt */
-export const __rspack_esm_ids=[789844];export const __webpack_modules__={g3lL(e,t,_){_.r(t);let d=(0,_("jTyp").c)("AlignRight",[["path",{d:"M21 12H9",key:"dn1m92"}],["path",{d:"M21 18H7",key:"1ygte8"}],["path",{d:"M21 6H3",key:"1jwq7v"}]]);_.d(t,{},{default:d})}};

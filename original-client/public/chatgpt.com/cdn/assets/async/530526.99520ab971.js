@@ -1,2 +1,0 @@
-/*! LICENSE: 530526.99520ab971.js.LICENSE.txt */
-export const __rspack_esm_ids=[530526];export const __webpack_modules__={M09c(e,a,t){t.r(a);let d=(0,t("jTyp").c)("FileBadge",[["path",{d:"M12 22h6a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v3",key:"12ixgl"}],["path",{d:"M14 2v4a2 2 0 0 0 2 2h4",key:"tnqrlb"}],["path",{d:"M5 17a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z",key:"u0c8gj"}],["path",{d:"M7 16.5 8 22l-3-1-3 1 1-5.5",key:"5gm2nr"}]]);t.d(a,{},{default:d})}};

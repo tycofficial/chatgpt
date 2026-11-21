@@ -1,0 +1,2 @@
+/*! LICENSE: 925824.16fae9c125.js.LICENSE.txt */
+export const __rspack_esm_ids=[925824];export const __webpack_modules__={ieZ7(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ChevronsLeft",[["path",{d:"m11 17-5-5 5-5",key:"13zhaf"}],["path",{d:"m18 17-5-5 5-5",key:"h8a8et"}]]);c.d(b,{},{default:d})}};

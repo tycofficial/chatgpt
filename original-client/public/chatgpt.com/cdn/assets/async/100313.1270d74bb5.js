@@ -1,0 +1,2 @@
+/*! LICENSE: 100313.1270d74bb5.js.LICENSE.txt */
+export const __rspack_esm_ids=[100313];export const __webpack_modules__={wBxy(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Ellipsis",[["circle",{cx:"12",cy:"12",r:"1",key:"41hilf"}],["circle",{cx:"19",cy:"12",r:"1",key:"1wjl8i"}],["circle",{cx:"5",cy:"12",r:"1",key:"1pcz8c"}]]);c.d(b,{},{default:d})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 40461.5ac91ec103.js.LICENSE.txt */
+export const __rspack_esm_ids=[40461];export const __webpack_modules__={Ggjg(a,b,c){c.r(b);let d=(0,c("SHUh").c)("AlignJustify",[["path",{d:"M3 12h18",key:"1i2n21"}],["path",{d:"M3 18h18",key:"1h113x"}],["path",{d:"M3 6h18",key:"d0wm0j"}]]);c.d(b,{},{default:d})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 98125.9289f0ea7c.js.LICENSE.txt */
+export const __rspack_esm_ids=[98125];export const __webpack_modules__={zMRc(a,b,c){c.r(b);var d=c("kPKz");c.d(b,{default:()=>d.default})},kPKz(a,b,c){c.r(b);let d=(0,c("SHUh").c)("CircleChevronLeft",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["path",{d:"m14 16-4-4 4-4",key:"ojs7w8"}]]);c.d(b,{},{default:d})}};

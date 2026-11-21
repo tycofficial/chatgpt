@@ -1,0 +1,2 @@
+/*! LICENSE: 336627.480120c0d2.js.LICENSE.txt */
+export const __rspack_esm_ids=[336627];export const __webpack_modules__={aTnZ(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ChevronsLeftRightEllipsis",[["path",{d:"m18 8 4 4-4 4",key:"1ak13k"}],["path",{d:"m6 8-4 4 4 4",key:"15zrgr"}],["path",{d:"M8 12h.01",key:"czm47f"}],["path",{d:"M12 12h.01",key:"1mp3jc"}],["path",{d:"M16 12h.01",key:"1l6xoz"}]]);c.d(b,{},{default:d})}};

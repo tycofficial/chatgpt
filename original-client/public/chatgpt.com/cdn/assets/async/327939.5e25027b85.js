@@ -1,2 +1,0 @@
-/*! LICENSE: 327939.5e25027b85.js.LICENSE.txt */
-export const __rspack_esm_ids=[327939];export const __webpack_modules__={P7Jv(e,a,t){t.r(a);let _=(0,t("jTyp").c)("Magnet",[["path",{d:"m6 15-4-4 6.75-6.77a7.79 7.79 0 0 1 11 11L13 22l-4-4 6.39-6.36a2.14 2.14 0 0 0-3-3L6 15",key:"1i3lhw"}],["path",{d:"m5 8 4 4",key:"j6kj7e"}],["path",{d:"m12 15 4 4",key:"lnac28"}]]);t.d(a,{},{default:_})}};

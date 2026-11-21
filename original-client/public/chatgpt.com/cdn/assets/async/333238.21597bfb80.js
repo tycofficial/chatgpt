@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[333238];export const __webpack_modules__={vPCf(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"x":1.25}},{"name":"Maximum supported values","initialValues":{"x":4.5}},{"name":"symmetryType: odd","initialValues":{"symmetryType":"odd"}},{"name":"symmetryType: neither","initialValues":{"symmetryType":"neither"}}]')}};

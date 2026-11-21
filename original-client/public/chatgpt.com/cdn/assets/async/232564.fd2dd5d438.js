@@ -1,0 +1,2 @@
+/*! LICENSE: 232564.fd2dd5d438.js.LICENSE.txt */
+export const __rspack_esm_ids=[232564];export const __webpack_modules__={hTPG(a,b,c){c.r(b);let d=(0,c("SHUh").c)("GlassWater",[["path",{d:"M5.116 4.104A1 1 0 0 1 6.11 3h11.78a1 1 0 0 1 .994 1.105L17.19 20.21A2 2 0 0 1 15.2 22H8.8a2 2 0 0 1-2-1.79z",key:"p55z4y"}],["path",{d:"M6 12a5 5 0 0 1 6 0 5 5 0 0 0 6 0",key:"mjntcy"}]]);c.d(b,{},{default:d})}};

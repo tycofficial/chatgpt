@@ -1,0 +1,2 @@
+/*! LICENSE: 430352.71c281bfa8.js.LICENSE.txt */
+export const __rspack_esm_ids=[430352];export const __webpack_modules__={tJH8(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Music3",[["circle",{cx:"12",cy:"18",r:"4",key:"m3r9ws"}],["path",{d:"M16 18V2",key:"40x2m5"}]]);c.d(b,{},{default:d})}};

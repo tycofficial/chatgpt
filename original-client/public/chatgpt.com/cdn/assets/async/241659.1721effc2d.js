@@ -1,2 +1,0 @@
-/*! LICENSE: 241659.1721effc2d.js.LICENSE.txt */
-export const __rspack_esm_ids=[241659];export const __webpack_modules__={t01L(e,c,y){y.r(c);let _=(0,y("jTyp").c)("Timer",[["line",{x1:"10",x2:"14",y1:"2",y2:"2",key:"14vaq8"}],["line",{x1:"12",x2:"15",y1:"14",y2:"11",key:"17fdiu"}],["circle",{cx:"12",cy:"14",r:"8",key:"1e1u0o"}]]);y.d(c,{},{default:_})}};

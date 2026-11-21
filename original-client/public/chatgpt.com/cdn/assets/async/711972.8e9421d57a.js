@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[711972];export const __webpack_modules__={ipM9(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"qtcMs":360}},{"name":"Maximum supported values","initialValues":{"qtcMs":560}}]')}};

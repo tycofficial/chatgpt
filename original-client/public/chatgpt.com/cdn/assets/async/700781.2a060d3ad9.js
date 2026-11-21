@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[700781];export const __webpack_modules__={pB7i(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"costUsd":20000,"salvageFraction":0,"usefulLifeYears":3,"ageFraction":0}},{"name":"Maximum supported values","initialValues":{"costUsd":100000,"salvageFraction":0.5,"usefulLifeYears":10,"ageFraction":1}}]')}};

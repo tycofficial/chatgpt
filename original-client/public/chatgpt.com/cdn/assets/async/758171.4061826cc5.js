@@ -1,0 +1,2 @@
+/*! LICENSE: 758171.4061826cc5.js.LICENSE.txt */
+export const __rspack_esm_ids=[758171];export const __webpack_modules__={GTn6(a,b,c){c.r(b);let d=(0,c("SHUh").c)("FolderClock",[["circle",{cx:"16",cy:"16",r:"6",key:"qoo3c4"}],["path",{d:"M7 20H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2",key:"1urifu"}],["path",{d:"M16 14v2l1 1",key:"xth2jh"}]]);c.d(b,{},{default:d})}};

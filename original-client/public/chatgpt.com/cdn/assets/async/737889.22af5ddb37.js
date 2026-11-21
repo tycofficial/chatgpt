@@ -1,0 +1,2 @@
+/*! LICENSE: 737889.22af5ddb37.js.LICENSE.txt */
+export const __rspack_esm_ids=[737889];export const __webpack_modules__={TSVw(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Space",[["path",{d:"M22 17v1c0 .5-.5 1-1 1H3c-.5 0-1-.5-1-1v-1",key:"lt2kga"}]]);c.d(b,{},{default:d})}};

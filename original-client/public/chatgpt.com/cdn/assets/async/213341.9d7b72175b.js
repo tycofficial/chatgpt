@@ -1,0 +1,2 @@
+/*! LICENSE: 213341.9d7b72175b.js.LICENSE.txt */
+export const __rspack_esm_ids=[213341];export const __webpack_modules__={zKKe(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Wallet",[["path",{d:"M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1",key:"18etb6"}],["path",{d:"M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4",key:"xoc0q4"}]]);c.d(b,{},{default:d})}};

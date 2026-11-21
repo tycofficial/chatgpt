@@ -1,0 +1,2 @@
+/*! LICENSE: 411284.1097fe35b3.js.LICENSE.txt */
+export const __rspack_esm_ids=[411284];export const __webpack_modules__={OIvo(a,b,c){c.r(b);let d=(0,c("SHUh").c)("MoonStar",[["path",{d:"M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9",key:"4ay0iu"}],["path",{d:"M20 3v4",key:"1olli1"}],["path",{d:"M22 5h-4",key:"1gvqau"}]]);c.d(b,{},{default:d})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 301943.f35d7ad46d.js.LICENSE.txt */
+export const __rspack_esm_ids=[301943];export const __webpack_modules__={VKC0(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Hexagon",[["path",{d:"M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z",key:"yt0hxn"}]]);c.d(b,{},{default:d})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 879720.b193b8da2e.js.LICENSE.txt */
+export const __rspack_esm_ids=[879720];export const __webpack_modules__={V4bR(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Annoyed",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["path",{d:"M8 15h8",key:"45n4r"}],["path",{d:"M8 9h2",key:"1g203m"}],["path",{d:"M14 9h2",key:"116p9w"}]]);c.d(b,{},{default:d})}};

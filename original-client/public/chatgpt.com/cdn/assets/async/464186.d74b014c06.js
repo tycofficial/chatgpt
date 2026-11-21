@@ -1,2 +1,0 @@
-/*! LICENSE: 464186.d74b014c06.js.LICENSE.txt */
-export const __rspack_esm_ids=[464186];export const __webpack_modules__={ai42(e,a,t){t.r(a);let p=(0,t("jTyp").c)("ReceiptRussianRuble",[["path",{d:"M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z",key:"q3az6g"}],["path",{d:"M8 15h5",key:"vxg57a"}],["path",{d:"M8 11h5a2 2 0 1 0 0-4h-3v10",key:"1usi5u"}]]);t.d(a,{},{default:p})}};

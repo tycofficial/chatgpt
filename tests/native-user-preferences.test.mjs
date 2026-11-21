@@ -24,7 +24,14 @@ function fixture(initial, values = new Map(), options = {}) {
     getItem(key) { reads++; options.beforeGet?.(key); if (options.readError) throw options.readError; return values.get(key) ?? null; },
     setItem(key, value) { writes++; if (options.writeError) throw options.writeError; values.set(key, value); options.afterSet?.(key); },
   };
-  const context = vm.createContext({ getSiteAccount: () => account, URL, Date: class extends Date { static now() { return clock; } }, location: { href: 'https://fixture.invalid/chatgpt/', origin: 'https://fixture.invalid' }, sessionStorage: { getItem: () => options.localSession ? '1' : null, setItem() {} }, localStorage: storage });
+  const context = vm.createContext({
+    getSiteAccount: () => account,
+    hasModelSelectionAccess: () => options.modelSelectionAccess === true,
+    URL, Date: class extends Date { static now() { return clock; } },
+    location: { href: 'https://fixture.invalid/chatgpt/', origin: 'https://fixture.invalid' },
+    sessionStorage: { getItem: () => options.localSession ? '1' : null, setItem() {} },
+    localStorage: storage,
+  });
   const script = source => source.replace(/^import .*;\r?$/gm, '').replace(/^export\s+/gm, '').replaceAll('import.meta.url', JSON.stringify('https://fixture.invalid/chatgpt/native-client/local-identity.mjs'));
   new vm.Script(script(identitySource), { filename: 'local-identity.mjs (actual isolated module)' }).runInContext(context);
   if ('accountBeforePreferences' in options) account = options.accountBeforePreferences;
@@ -156,4 +163,27 @@ test('invalid public mutation inputs make no storage changes', () => {
   assert.throws(() => f.api.updateLocalUserPreference('../foreign', true), /Invalid local preference key/);
   assert.throws(() => f.api.acknowledgeLocalAnnouncement(''), /Announcement ID is required/);
   assert.equal(f.reads(), 0); assert.equal(f.writes(), 0); assert.equal(f.values.size, 0);
+});
+
+test('the native effort preference restores choices only while the same account has model selection', () => {
+  const key = 'model_picker_reasoning_effort_visibility';
+  const levels = ['low', 'medium', 'high', 'xhigh', 'max', 'ultra'];
+  const f = fixture(first, new Map(), { modelSelectionAccess: true });
+  assert.deepEqual(plain(f.api.readLocalUserPreferences().settings[key]),
+    { enabled: levels, source: 'default', uses_defaults: true });
+  f.api.updateLocalUserPreference(key, { ultra: false });
+  assert.deepEqual(plain(f.api.readLocalUserPreferences().settings[key]),
+    { enabled: levels.slice(0, -1), source: 'user', uses_defaults: false });
+
+  f.options.modelSelectionAccess = false;
+  const previous = f.values.get(accountKey(first));
+  assert.equal(f.api.readLocalUserPreferences().settings[key], undefined);
+  assert.equal(f.api.updateLocalUserPreference(key, { max: false })[key], undefined);
+  assert.equal(f.values.get(accountKey(first)), previous);
+
+  f.options.modelSelectionAccess = true;
+  assert.deepEqual(plain(f.api.readLocalUserPreferences().settings[key].enabled), levels.slice(0, -1));
+  assert.deepEqual(plain(f.api.updateLocalUserPreference(key, null)[key].enabled), levels);
+  f.setAccount(second);
+  assert.deepEqual(plain(f.api.readLocalUserPreferences()), empty());
 });

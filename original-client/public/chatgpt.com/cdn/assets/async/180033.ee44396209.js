@@ -1,0 +1,2 @@
+/*! LICENSE: 180033.ee44396209.js.LICENSE.txt */
+export const __rspack_esm_ids=[180033];export const __webpack_modules__={eFWw(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ChartNoAxesColumnDecreasing",[["path",{d:"M12 20V10",key:"g8npz5"}],["path",{d:"M18 20v-4",key:"8uic4z"}],["path",{d:"M6 20V4",key:"1w1bmo"}]]);c.d(b,{},{default:d})}};

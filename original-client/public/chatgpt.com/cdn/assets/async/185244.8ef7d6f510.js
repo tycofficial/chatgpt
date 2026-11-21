@@ -1,2 +1,0 @@
-/*! LICENSE: 185244.8ef7d6f510.js.LICENSE.txt */
-export const __rspack_esm_ids=[185244];export const __webpack_modules__={wH6i(e,t,d){d.r(t);let p=(0,d("jTyp").c)("ListCheck",[["path",{d:"M11 18H3",key:"n3j2dh"}],["path",{d:"m15 18 2 2 4-4",key:"1szwhi"}],["path",{d:"M16 12H3",key:"1a2rj7"}],["path",{d:"M16 6H3",key:"1wxfjs"}]]);d.d(t,{},{default:p})}};

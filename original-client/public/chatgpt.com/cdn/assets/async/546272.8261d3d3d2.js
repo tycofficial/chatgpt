@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[546272];export const __webpack_modules__={RwkT(a){a.exports=JSON.parse('[{"name":"monomer: propene","initialValues":{"monomer":"propene"}},{"name":"monomer: chloroethene","initialValues":{"monomer":"chloroethene"}},{"name":"monomer: tetrafluoroethene","initialValues":{"monomer":"tetrafluoroethene"}}]')}};

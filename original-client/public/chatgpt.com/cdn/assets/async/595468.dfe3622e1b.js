@@ -1,0 +1,2 @@
+/*! LICENSE: 595468.dfe3622e1b.js.LICENSE.txt */
+export const __rspack_esm_ids=[595468];export const __webpack_modules__={enuv(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Copyright",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["path",{d:"M14.83 14.83a4 4 0 1 1 0-5.66",key:"1i56pz"}]]);c.d(b,{},{default:d})}};

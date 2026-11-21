@@ -1,0 +1,2 @@
+/*! LICENSE: 893683.751e907f0c.js.LICENSE.txt */
+export const __rspack_esm_ids=[893683];export const __webpack_modules__={nVyi(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Music4",[["path",{d:"M9 18V5l12-2v13",key:"1jmyc2"}],["path",{d:"m9 9 12-2",key:"1e64n2"}],["circle",{cx:"6",cy:"18",r:"3",key:"fqmcym"}],["circle",{cx:"18",cy:"16",r:"3",key:"1hluhg"}]]);c.d(b,{},{default:d})}};

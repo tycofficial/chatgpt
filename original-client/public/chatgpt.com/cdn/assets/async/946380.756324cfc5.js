@@ -1,0 +1,2 @@
+/*! LICENSE: 946380.756324cfc5.js.LICENSE.txt */
+export const __rspack_esm_ids=[946380];export const __webpack_modules__={xYIY(a,b,c){c.r(b);let d=(0,c("SHUh").c)("WashingMachine",[["path",{d:"M3 6h3",key:"155dbl"}],["path",{d:"M17 6h.01",key:"e2y6kg"}],["rect",{width:"18",height:"20",x:"3",y:"2",rx:"2",key:"od3kk9"}],["circle",{cx:"12",cy:"13",r:"5",key:"nlbqau"}],["path",{d:"M12 18a2.5 2.5 0 0 0 0-5 2.5 2.5 0 0 1 0-5",key:"17lach"}]]);c.d(b,{},{default:d})}};

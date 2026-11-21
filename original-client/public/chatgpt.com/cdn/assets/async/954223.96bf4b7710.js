@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[954223];export const __webpack_modules__={jPZN(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"r1":0.1,"r2":0.1,"r3":0.1,"voltage":0}},{"name":"Maximum supported values","initialValues":{"r1":100000,"r2":100000,"r3":100000,"voltage":1000}}]')}};

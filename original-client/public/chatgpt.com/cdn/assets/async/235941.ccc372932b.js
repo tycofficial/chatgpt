@@ -1,0 +1,2 @@
+/*! LICENSE: 235941.ccc372932b.js.LICENSE.txt */
+export const __rspack_esm_ids=[235941];export const __webpack_modules__={ue5j(a,b,c){c.r(b);var d=c("DBAd");c.d(b,{default:()=>d.default})},DBAd(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ChartBar",[["path",{d:"M3 3v16a2 2 0 0 0 2 2h16",key:"c24i48"}],["path",{d:"M7 16h8",key:"srdodz"}],["path",{d:"M7 11h12",key:"127s9w"}],["path",{d:"M7 6h3",key:"w9rmul"}]]);c.d(b,{},{default:d})}};

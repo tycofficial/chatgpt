@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[791888];export const __webpack_modules__={wlXq(a){a.exports=JSON.parse('[{"name":"example: cis-1,2-dimethylcyclohexane","initialValues":{"example":"cis-1,2-dimethylcyclohexane"}},{"name":"example: trans-1,2-dimethylcyclohexane","initialValues":{"example":"trans-1,2-dimethylcyclohexane"}}]')}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 699917.ef6473e824.js.LICENSE.txt */
+export const __rspack_esm_ids=[699917];export const __webpack_modules__={odTw(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ArrowDownRight",[["path",{d:"m7 7 10 10",key:"1fmybs"}],["path",{d:"M17 7v10H7",key:"6fjiku"}]]);c.d(b,{},{default:d})}};

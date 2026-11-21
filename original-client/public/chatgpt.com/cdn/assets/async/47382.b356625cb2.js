@@ -1,2 +1,0 @@
-/*! LICENSE: 47382.b356625cb2.js.LICENSE.txt */
-export const __rspack_esm_ids=[47382];export const __webpack_modules__={amNf(c,e,_){_.r(e);let s=(0,_("jTyp").c)("Music3",[["circle",{cx:"12",cy:"18",r:"4",key:"m3r9ws"}],["path",{d:"M16 18V2",key:"40x2m5"}]]);_.d(e,{},{default:s})}};

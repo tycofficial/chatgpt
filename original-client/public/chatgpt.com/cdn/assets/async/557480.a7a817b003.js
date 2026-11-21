@@ -1,0 +1,2 @@
+/*! LICENSE: 557480.a7a817b003.js.LICENSE.txt */
+export const __rspack_esm_ids=[557480];export const __webpack_modules__={KIF0(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Strikethrough",[["path",{d:"M16 4H9a3 3 0 0 0-2.83 4",key:"43sutm"}],["path",{d:"M14 12a4 4 0 0 1 0 8H6",key:"nlfj13"}],["line",{x1:"4",x2:"20",y1:"12",y2:"12",key:"1e0a9i"}]]);c.d(b,{},{default:d})}};

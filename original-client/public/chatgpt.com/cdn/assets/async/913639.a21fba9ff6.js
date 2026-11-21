@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[913639];export const __webpack_modules__={g5ar(e){e.exports=JSON.parse('[{"name":"order: 8,7,6,5,4,3,2,1","initialValues":{"order":"8,7,6,5,4,3,2,1"}},{"name":"order: 1,2,3,4,5,6,7,8","initialValues":{"order":"1,2,3,4,5,6,7,8"}},{"name":"order: 4,1,7,3,8,5,2,6","initialValues":{"order":"4,1,7,3,8,5,2,6"}}]')}};

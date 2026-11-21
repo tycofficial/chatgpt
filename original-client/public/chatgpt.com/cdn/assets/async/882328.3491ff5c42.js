@@ -1,0 +1,2 @@
+/*! LICENSE: 882328.3491ff5c42.js.LICENSE.txt */
+export const __rspack_esm_ids=[882328];export const __webpack_modules__={jAU4(a,b,c){c.r(b);let d=(0,c("SHUh").c)("PaintRoller",[["rect",{width:"16",height:"6",x:"2",y:"2",rx:"2",key:"jcyz7m"}],["path",{d:"M10 16v-2a2 2 0 0 1 2-2h8a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2",key:"1b9h7c"}],["rect",{width:"4",height:"6",x:"8",y:"16",rx:"1",key:"d6e7yl"}]]);c.d(b,{},{default:d})}};

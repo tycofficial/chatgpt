@@ -1,0 +1,2 @@
+/*! LICENSE: 413656.75035beee7.js.LICENSE.txt */
+export const __rspack_esm_ids=[413656];export const __webpack_modules__={RYFh(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ArrowLeftRight",[["path",{d:"M8 3 4 7l4 4",key:"9rb6wj"}],["path",{d:"M4 7h16",key:"6tx8e3"}],["path",{d:"m16 21 4-4-4-4",key:"siv7j2"}],["path",{d:"M20 17H4",key:"h6l3hr"}]]);c.d(b,{},{default:d})}};

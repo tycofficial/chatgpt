@@ -7,7 +7,10 @@ import { parseHTML } from 'linkedom/worker';
 import * as catalog from '../model-catalog.js';
 import { streamCompletion } from '../runtime.js';
 import { LocalAppServer, wrapNativeCodexWorkTiming, wrapNativeWorkedDuration } from '../src/native-client/local-app-server.mjs';
-import { ClassicChatAdapter, wrapNativeReasoningGroups } from '../src/native-client/classic-chat-adapter.mjs';
+import {
+  ClassicChatAdapter, wrapNativeChatPreamble, wrapNativeClassicChatTiming, wrapNativeClassicStatus,
+  wrapNativeClassicTiming, wrapNativeReasoningGroups,
+} from '../src/native-client/classic-chat-adapter.mjs';
 import { createModelCatalogAdapter } from '../src/native-client/model-catalog-adapter.mjs';
 import { createBrowserToolExecutor } from '../src/native-client/browser-tool-executor.mjs';
 
@@ -292,7 +295,9 @@ async function loadNativeActivityModules(t) {
   }
   const entry = await fs.readFile(new URL('../src/native-client/entry-library.mjs', import.meta.url), 'utf8');
   const assets = new URL('../original-client/public/chatgpt.com/cdn/assets/', import.meta.url);
-  const chunks = await Promise.all([...entry.matchAll(/import\*as \w+ from"\/cdn\/assets\/([^"]+)"/g)].map(match => import(new URL(match[1], assets).href)));
+  const names = [...entry.matchAll(/import\*as \w+ from"\/cdn\/assets\/([^"]+)"/g)].map(match => match[1]);
+  names.push('923609.c9f1e3da56.js'); // XSEO, the original row for live or finished Work outside a disclosure.
+  const chunks = await Promise.all(names.map(name => import(new URL(name, assets).href)));
   const factories = Object.assign({}, ...chunks.map(chunk => chunk.__webpack_modules__));
   const cache = new Map();
   function requireNative(id) {
@@ -326,102 +331,148 @@ async function loadNativeActivityModules(t) {
   return requireNative;
 }
 
-test('original Classic Work and Codex presenters retain activity across progress and freeze at the real subsecond end', async t => {
+test('original Classic Work and Codex presenters retain activity across progress and freeze at the real subsecond end', { timeout: 30_000 }, async t => {
   const native = await loadNativeActivityModules(t);
+  const messageProjection = native('AuIy');
+  Object.defineProperty(messageProjection, 'o', { value: wrapNativeChatPreamble(messageProjection.o) });
   const group = native('hUUF');
   Object.defineProperty(group, 'b', { value: wrapNativeReasoningGroups(group.b) });
-  const work = native('R2pa').a;
-  const codex = native('AqC0').e;
-  const durationLabel = wrapNativeWorkedDuration(native('waM8').a);
-  const nativeMessageTree = native('AuIy').a;
+  const workProjection = native('R2pa');
+  Object.defineProperty(workProjection, 'a', { value: wrapNativeClassicTiming(wrapNativeClassicChatTiming(workProjection.a)) });
+  const work = native('G6Ip').a;
+  const codex = native('cOHk').e;
+  const formatDuration = native('waM8').a;
+  const durationLabel = wrapNativeWorkedDuration(formatDuration);
+  const NativeWorkStatus = native('XSEO').a;
+  const { jsx, jsxs, Fragment } = native('ABep');
+  const TranscriptFixture = () => null;
   const started = 1_800_000_000_100;
-  let clock = started;
-  const { server, adapter, storage } = setup({ now: () => clock });
   const progress = { ...endMessage('Public progress body.', 'commentary'), id: 'neutral-progress' };
   const final = { ...endMessage('Final public answer.'), id: 'neutral-final' };
   const publicThought = { type: 'reasoning', id: 'neutral-thought', summary: [{ type: 'summary_text', text: 'Public reasoning summary.' }] };
-  const progressDone = deferred(), finalStarted = deferred();
-  const snapshots = [];
-  function takeSnapshot(thread, adapter, server) {
-    const turn = thread.turns.at(-1);
-    const isStreaming = turn.status === 'inProgress';
-    const items = nativeMessageTree(adapter.detail(thread)).map(message => {
-      const converted = group.k(message, { isTurnActive: isStreaming, isLatestMessage: false });
-      const role = message.author.role;
-      if (converted) return { ...converted, turnId: turn.id };
-      const item = role === 'user' ? { type: 'user-message', messageId: message.id, message: message.content.parts[0] } :
-        { type: 'assistant-message', chatGptMessageId: message.id, content: message.content.parts[0], phase: 'final_answer', completed: message.status !== 'in_progress' };
-      return { item, sourceMessage: message, role, turnId: turn.id };
-    });
-    const projectedWork = work({ id: turn.id, responseTurnId: turn.id, items }, { isStreaming, isWorkConversation: true }).turn.turn;
-    const projectCodex = wrapNativeCodexWorkTiming(codex, server);
-    const projectedCodex = projectCodex({
-      params: { threadId: thread.id, input: [] }, turnId: turn.id, status: turn.status,
-      items: turn.items, turnStartedAtMs: started, firstTurnWorkItemStartedAtMs: null, finalAssistantStartedAtMs: started,
-    }, [], { includeAeonProjection: false });
-    return { projectedWork, projectedCodex };
-  }
-  const off = server.subscribe(event => {
-    const item = event.params.item;
-    const stage = event.method === 'item/completed' && item?.phase === 'commentary' ? progressDone :
-      event.method === 'item/agentMessage/delta' && event.params.delta === final.content[0].text ? finalStarted : null;
-    if (stage) {
-      try { snapshots.push(takeSnapshot(current(server), adapter, server)); stage.resolve(); }
-      catch (error) { stage.reject(error); }
+  const paragraphs = [progress.content[0].text, final.content[0].text];
+
+  for (const surface of ['work', 'codex']) await t.test(surface, async () => {
+    let clock = started;
+    const live = setup({ now: () => clock });
+    const { server, adapter, storage } = live;
+    const progressDone = deferred(), finalStarted = deferred(), turnDone = deferred();
+    const snapshots = [];
+    let projectionError;
+    const readThread = (host, threadId) => surface === 'work' ? host.server.getThread(threadId) :
+      host.server.dispatch('thread/read', { threadId, includeTurns: true }).result.thread;
+    function takeSnapshot(host, threadId) {
+      const thread = readThread(host, threadId);
+      const turn = thread.turns.at(-1);
+      const isStreaming = turn.status === 'inProgress';
+      if (surface === 'codex') {
+        const project = wrapNativeCodexWorkTiming(codex, host.server);
+        const input = turn.items.find(item => item.type === 'userMessage').content;
+        const projected = project({
+          params: { threadId, input, cwd: thread.cwd }, turnId: turn.id, status: turn.status, items: turn.items,
+          turnStartedAtMs: null, firstTurnWorkItemStartedAtMs: null, finalAssistantStartedAtMs: started,
+        }, [], { includeAeonProjection: false });
+        const worked = projected.items.find(item => item.type === 'worked-for');
+        assert.ok(worked, 'The native Codex projector must provide a worked-for row');
+        return { projected, timing: worked, activities: projected.items.filter(item => item.type === 'reasoning') };
+      }
+      const projected = work(host.adapter.detail(thread), { isStreaming, isWorkConversation: true }).at(-1).turn;
+      const thinking = projected.items.filter(item => item.type === 'chatgpt-reasoning-group');
+      let timing = { startedAtMs: projected.workStartedAtMs, completedAtMs: projected.workCompletedAtMs };
+      if (isStreaming) {
+        const render = wrapNativeClassicStatus(TranscriptFixture, {
+          getThread: id => host.server.threads.get(id), renderTurn: jsx,
+          renderStatus: (element, status) => jsxs(Fragment, { children: [element, jsx(NativeWorkStatus, status)] }),
+          renderChatElapsed: () => assert.fail('Work used the Chat elapsed presenter'),
+        });
+        const [transcript, status] = render({ conversationId: threadId, isWorkConversation: true, turn: projected }).props.children;
+        assert.equal(transcript.type, TranscriptFixture);
+        assert.equal(status.type, NativeWorkStatus);
+        assert.equal(projected.workCompletedAtMs, undefined);
+        assert(thinking.some(item => !item.completed));
+        timing = status.props;
+      } else {
+        assert(thinking.every(item => item.completed));
+      }
+      return { projected, timing, activities: thinking.flatMap(item => item.items) };
     }
-  });
-  t.after(off);
-  await withHTTP(({ signal }) => responseStream(async ({ emit, close }) => {
-    clock = started + 100;
-    emit('response.reasoning_summary_text.delta', { output_index: 0, item_id: publicThought.id, delta: publicThought.summary[0].text });
-    emit('response.output_item.added', { output_index: 1, item: { ...progress, content: [] } });
-    emit('response.output_text.delta', { output_index: 1, item_id: progress.id, delta: progress.content[0].text });
-    emit('response.output_item.done', { output_index: 1, item: progress });
-    await progressDone.promise;
-    clock = started + 325;
-    emit('response.output_item.added', { output_index: 2, item: { ...final, content: [] } });
-    emit('response.output_text.delta', { output_index: 2, item_id: final.id, delta: final.content[0].text });
-    await finalStarted.promise;
-    clock = started + 750;
-    emit('response.completed', { response: { status: 'completed', output: [publicThought, progress, final] } });
-    close();
-  }, signal), async requests => {
-    const wire = await (await next(adapter)).text();
-    assert.equal(requests.length, 1);
-    const thread = current(server);
-    const turn = thread.turns[0];
-    assert.equal(turn.status, 'completed', turn.error?.message);
-    assert.equal(turn.durationMs, 750);
-    assert.deepEqual(turn.items.filter(item => item.type === 'agentMessage').map(item => [item.phase, item.text]), [
-      ['commentary', progress.content[0].text], ['final_answer', final.content[0].text],
-    ]);
-    const assistantWire = wireMessages(wire).filter(message => ['commentary', 'final'].includes(message.channel));
-    assert(assistantWire.every(message => !message.content.parts?.[0]?.includes('Public progress body.Final public answer.')));
-    assert.equal(assistantWire.findLast(message => message.channel === 'final').end_turn, true);
-    assert.equal(snapshots.length, 2);
-    for (const { projectedWork, projectedCodex } of snapshots) {
-      assert.equal(projectedWork.status, 'in_progress');
-      assert.equal(projectedWork.workStartedAtMs, started);
-      assert.equal(projectedWork.workCompletedAtMs, undefined);
-      const thinking = projectedWork.items.find(item => item.type === 'chatgpt-reasoning-group');
-      assert.equal(thinking.completed, false);
-      assert(thinking.items.some(item => item.presentation === 'preamble' && item.content === progress.content[0].text));
-      const worked = projectedCodex.items.find(item => item.type === 'worked-for');
-      assert.equal(worked.status, 'working');
-      assert.equal(worked.completedAtMs, null);
+    function assertContent(snapshot, expectedBody) {
+      const body = snapshot.projected.items.filter(item => item.type === 'assistant-message')
+        .flatMap(item => item.content.split('\n\n'));
+      assert.deepEqual(body, expectedBody);
+      assert.deepEqual(snapshot.activities.map(item => item.content), [publicThought.summary[0].text]);
     }
 
-    clock += 120000;
-    const restored = setup({ now: () => clock, storage });
-    const before = takeSnapshot(thread, adapter, server);
-    const after = takeSnapshot(restored.server.getThread(thread.id), restored.adapter, restored.server);
-    for (const { projectedWork, projectedCodex } of [before, after]) {
-      assert.equal(projectedWork.status, 'complete');
-      assert.equal(projectedWork.workCompletedAtMs - projectedWork.workStartedAtMs, 750);
-      const worked = projectedCodex.items.find(item => item.type === 'worked-for');
-      assert.equal(worked.status, 'worked');
-      assert.equal(worked.completedAtMs - worked.startedAtMs, 750);
-      assert.equal(durationLabel(worked.completedAtMs - worked.startedAtMs, 'zh-CN'), '<' + native('waM8').a(1000, 'zh-CN'));
-    }
+    const off = server.subscribe(event => {
+      if (event.method === 'turn/completed') turnDone.resolve(event.params.turn);
+      const stage = event.method === 'item/completed' && event.params.item?.phase === 'commentary' ? progressDone :
+        event.method === 'item/agentMessage/delta' && event.params.delta === paragraphs[1] ? finalStarted : null;
+      if (stage) {
+        try { snapshots.push(takeSnapshot(live, event.params.threadId)); stage.resolve(); }
+        catch (error) { projectionError = error; stage.reject(error); }
+      }
+    });
+    try {
+      await withHTTP(({ signal }) => responseStream(async ({ emit, close }) => {
+        clock = started + 100;
+        emit('response.reasoning_summary_text.delta', { output_index: 0, item_id: publicThought.id, delta: publicThought.summary[0].text });
+        emit('response.output_item.added', { output_index: 1, item: { ...progress, content: [] } });
+        emit('response.output_text.delta', { output_index: 1, item_id: progress.id, delta: paragraphs[0] });
+        emit('response.output_item.done', { output_index: 1, item: progress });
+        await progressDone.promise;
+        clock = started + 325;
+        emit('response.output_item.added', { output_index: 2, item: { ...final, content: [] } });
+        emit('response.output_text.delta', { output_index: 2, item_id: final.id, delta: paragraphs[1] });
+        await finalStarted.promise;
+        clock = started + 750;
+        emit('response.completed', { response: { status: 'completed', output: [publicThought, progress, final] } });
+        close();
+      }, signal), async requests => {
+        if (surface === 'work') {
+          const wire = await (await next(adapter)).text();
+          assert.ifError(projectionError);
+          const assistantWire = wireMessages(wire).filter(message => ['commentary', 'final'].includes(message.channel));
+          assert(assistantWire.some(message => message.channel === 'commentary' && message.content.parts?.[0] === paragraphs[0]));
+          assert.equal(assistantWire.findLast(message => message.channel === 'final').content.parts[0], paragraphs[1]);
+          assert.equal(assistantWire.findLast(message => message.channel === 'final').end_turn, true);
+        } else {
+          const start = server.dispatch('thread/start', { model: 'gpt-6.1-sol', effort: 'high', executionSurface: 'codex' });
+          start.afterReply();
+          const input = [{ type: 'text', text: 'Complete the neutral Codex fixture.', text_elements: [] }];
+          server.dispatch('turn/start', { threadId: start.result.thread.id, input }).afterReply();
+          await turnDone.promise;
+          assert.ifError(projectionError);
+        }
+        const thread = current(server);
+        const turn = thread.turns[0];
+        assert.equal(thread.executionSurface, surface);
+        assert.equal(turn.status, 'completed', turn.error?.message);
+        assert.equal(turn.durationMs, 750);
+        assert.deepEqual(turn.items.filter(item => item.type === 'agentMessage').map(item => [item.phase, item.text]), [
+          ['commentary', paragraphs[0]], ['final_answer', paragraphs[1]],
+        ]);
+        assert.equal(snapshots.length, 2);
+        for (const [index, snapshot] of snapshots.entries()) {
+          assertContent(snapshot, paragraphs.slice(0, index + 1));
+          assert.equal(snapshot.projected.status, 'in_progress');
+          assert.equal(snapshot.timing.status, 'working');
+          assert.equal(snapshot.timing.startedAtMs, started);
+          assert.equal(snapshot.timing.completedAtMs, null);
+        }
+
+        const completed = takeSnapshot(live, thread.id);
+        clock += 120000;
+        const restored = takeSnapshot(setup({ now: () => clock, storage }), thread.id);
+        for (const snapshot of [completed, restored]) {
+          assertContent(snapshot, paragraphs);
+          assert.equal(snapshot.projected.status, 'complete');
+          if (surface === 'codex') assert.equal(snapshot.timing.status, 'worked');
+          const elapsed = snapshot.timing.completedAtMs - snapshot.timing.startedAtMs;
+          assert.equal(elapsed, 750);
+          assert.equal(durationLabel(elapsed, 'zh-CN'), '<' + formatDuration(1000, 'zh-CN'));
+        }
+        assert.equal(requests.length, 1);
+      });
+    } finally { off(); }
   });
 });

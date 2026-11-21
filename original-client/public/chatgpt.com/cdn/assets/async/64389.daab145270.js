@@ -1,2 +1,0 @@
-/*! LICENSE: 64389.daab145270.js.LICENSE.txt */
-export const __rspack_esm_ids=[64389];export const __webpack_modules__={P6tg(t,e,h){h.r(e);let r=(0,h("jTyp").c)("Computer",[["rect",{width:"14",height:"8",x:"5",y:"2",rx:"2",key:"wc9tft"}],["rect",{width:"20",height:"8",x:"2",y:"14",rx:"2",key:"w68u3i"}],["path",{d:"M6 18h2",key:"rwmk9e"}],["path",{d:"M12 18h6",key:"aqd8w3"}]]);h.d(e,{},{default:r})}};

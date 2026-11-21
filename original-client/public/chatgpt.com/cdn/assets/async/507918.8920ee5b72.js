@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[507918];export const __webpack_modules__={zDoK(t){t.exports=JSON.parse('[{"name":"initial_pattern: stationary","initialValues":{"initial_pattern":"stationary"}},{"name":"initial_pattern: constrictive","initialValues":{"initial_pattern":"constrictive"}}]')}};

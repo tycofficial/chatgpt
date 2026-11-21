@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[367];export const __webpack_modules__={j5Iz(a){a.exports=JSON.parse('[{"name":"order_a: zero","initialValues":{"order_a":"zero"}},{"name":"order_a: second","initialValues":{"order_a":"second"}},{"name":"order_b: zero","initialValues":{"order_b":"zero"}},{"name":"order_b: first","initialValues":{"order_b":"first"}}]')}};

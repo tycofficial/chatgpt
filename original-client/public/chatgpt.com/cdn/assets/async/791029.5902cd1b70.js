@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[791029];export const __webpack_modules__={TCNG(a){a.exports=JSON.parse('[{"name":"statistic: median","initialValues":{"statistic":"median"}},{"name":"statistic: proportion","initialValues":{"statistic":"proportion"}}]')}};

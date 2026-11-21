@@ -1,0 +1,2 @@
+/*! LICENSE: 754119.1402bdfcfe.js.LICENSE.txt */
+export const __rspack_esm_ids=[754119];export const __webpack_modules__={wA43(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ChevronsDown",[["path",{d:"m7 6 5 5 5-5",key:"1lc07p"}],["path",{d:"m7 13 5 5 5-5",key:"1d48rs"}]]);c.d(b,{},{default:d})}};

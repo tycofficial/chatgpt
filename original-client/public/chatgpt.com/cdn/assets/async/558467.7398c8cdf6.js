@@ -1,0 +1,2 @@
+/*! LICENSE: 558467.7398c8cdf6.js.LICENSE.txt */
+export const __rspack_esm_ids=[558467];export const __webpack_modules__={irDt(a,b,c){c.r(b);let d=(0,c("SHUh").c)("SquareDot",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["circle",{cx:"12",cy:"12",r:"1",key:"41hilf"}]]);c.d(b,{},{default:d})}};

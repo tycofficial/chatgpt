@@ -1,2 +1,0 @@
-/*! LICENSE: 980652.743faf3330.js.LICENSE.txt */
-export const __rspack_esm_ids=[980652];export const __webpack_modules__={iL1X(_,e,t){t.r(e);let l=(0,t("jTyp").c)("Tally1",[["path",{d:"M4 4v16",key:"6qkkli"}]]);t.d(e,{},{default:l})}};

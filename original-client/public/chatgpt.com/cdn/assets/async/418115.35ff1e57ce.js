@@ -1,0 +1,2 @@
+/*! LICENSE: 418115.35ff1e57ce.js.LICENSE.txt */
+export const __rspack_esm_ids=[418115];export const __webpack_modules__={I745(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Microwave",[["rect",{width:"20",height:"15",x:"2",y:"4",rx:"2",key:"2no95f"}],["rect",{width:"8",height:"7",x:"6",y:"8",rx:"1",key:"zh9wx"}],["path",{d:"M18 8v7",key:"o5zi4n"}],["path",{d:"M6 19v2",key:"1loha6"}],["path",{d:"M18 19v2",key:"1dawf0"}]]);c.d(b,{},{default:d})}};

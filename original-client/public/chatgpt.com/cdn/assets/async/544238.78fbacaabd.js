@@ -1,2 +1,0 @@
-/*! LICENSE: 544238.78fbacaabd.js.LICENSE.txt */
-export const __rspack_esm_ids=[544238];export const __webpack_modules__={VKHM(e,t,s){s.r(t);let p=(0,s("jTyp").c)("ListMinus",[["path",{d:"M11 12H3",key:"51ecnj"}],["path",{d:"M16 6H3",key:"1wxfjs"}],["path",{d:"M16 18H3",key:"12xzn7"}],["path",{d:"M21 12h-6",key:"bt1uis"}]]);s.d(t,{},{default:p})}};

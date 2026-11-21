@@ -1,2 +1,0 @@
-/*! LICENSE: 512785.671ccbeaa4.js.LICENSE.txt */
-export const __rspack_esm_ids=[512785];export const __webpack_modules__={iJIk(e,p,t){t.r(p);let _=(0,t("jTyp").c)("CornerRightUp",[["polyline",{points:"10 9 15 4 20 9",key:"1lr6px"}],["path",{d:"M4 20h7a4 4 0 0 0 4-4V4",key:"1plgdj"}]]);t.d(p,{},{default:_})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 402090.4550a301ed.js.LICENSE.txt */
+export const __rspack_esm_ids=[402090];export const __webpack_modules__={RnOR(a,b,c){c.r(b);let d=(0,c("SHUh").c)("SquarePlus",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M8 12h8",key:"1wcyev"}],["path",{d:"M12 8v8",key:"napkw2"}]]);c.d(b,{},{default:d})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 631714.91e7cd2f2a.js.LICENSE.txt */
+export const __rspack_esm_ids=[631714];export const __webpack_modules__={CRgj(a,b,c){c.r(b);let d=(0,c("SHUh").c)("FolderInput",[["path",{d:"M2 9V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H20a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-1",key:"fm4g5t"}],["path",{d:"M2 13h10",key:"pgb2dq"}],["path",{d:"m9 16 3-3-3-3",key:"6m91ic"}]]);c.d(b,{},{default:d})}};

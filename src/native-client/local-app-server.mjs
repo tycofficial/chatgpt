@@ -404,13 +404,15 @@ export class LocalAppServer {
         const thread = this.getThread(params.threadId), selected = this.selection(params, thread);
         this.updateSelection(thread, selected, params);
         this.persist();
-        return { result: this.startResponse(thread) };
+        const afterReply = this.resumeAutomaticCheckpoint(thread);
+        return { result: this.startResponse(thread), afterReply };
       }
       case 'thread/turns/list': {
         const thread = this.getThread(params.threadId), turns = [...thread.turns];
         if (params.sortDirection !== 'asc') turns.reverse();
         return { result: this.pagination(turns, params, 'local-turns') };
       }
+      case 'thread/items/list': return { result: this.listThreadItems(params) };
       case 'thread/settings/update': {
         const thread = this.getThread(params.threadId), selected = this.selection(params, thread);
         this.updateSelection(thread, selected, params);
@@ -434,6 +436,29 @@ export class LocalAppServer {
       case 'thread/unsubscribe': this.getThread(params.threadId); return { result: {} };
       default: throw new RpcError(-32601, `Local adapter is not implemented for ${method}`);
     }
+  }
+  listThreadItems(params) {
+    const thread = this.getThread(params.threadId);
+    if (params.turnId != null && (typeof params.turnId !== 'string' || !params.turnId)) throw new RpcError(-32602, 'Invalid turnId');
+    if (params.sortDirection != null && !['asc', 'desc'].includes(params.sortDirection)) throw new RpcError(-32602, 'Invalid sortDirection');
+    const turns = params.turnId == null ? thread.turns : thread.turns.filter(turn => turn.id === params.turnId);
+    if (params.turnId != null && !turns.length) throw new RpcError(-32001, 'turn_not_found');
+    const items = turns.flatMap(turn => turn.items.map(item => ({ turnId: turn.id, item,
+      startedAtMs: item.startedAtMs ?? null, completedAtMs: item.completedAtMs ?? null,
+    })));
+    if (params.sortDirection === 'desc') items.reverse();
+    const prefix = 'local-items';
+    let cursor = params.cursor;
+    if (object(cursor)) {
+      if (cursor.type !== 'item' || !params.turnId) throw new RpcError(-32602, 'An item cursor requires turnId');
+      const index = items.findIndex(row => row.item.id === cursor.itemId);
+      if (index < 0) throw new RpcError(-32602, 'The cursor item is outside this turn');
+      cursor = prefix + ':' + (index + 1);
+    }
+    const page = this.pagination(items, { ...params, cursor }, prefix);
+    const first = page.data[0];
+    const index = first ? items.findIndex(row => row.turnId === first.turnId && row.item.id === first.item.id) : -1;
+    return { ...page, backwardsCursor: index < 0 ? null : prefix + ':' + (items.length - index) };
   }
   instructions(params) {
     return [...new Set([params.baseInstructions, params.developerInstructions, params.config?.developer_instructions, params.collaborationMode?.settings?.developer_instructions].filter(value => typeof value === 'string' && value.trim()))];
@@ -691,6 +716,20 @@ export class LocalAppServer {
     if (this.now() - running.lastSavedAt >= (this.agentOptions.persistIntervalMs ?? 1000)) { this.persist(); running.lastSavedAt = this.now(); }
   }
   async runTurn(running) { return runAgentTurn(this, running); }
+  resumeAutomaticCheckpoint(thread) {
+    const turn = thread.turns.at(-1), saved = turn?.adapterMetadata;
+    if (this.running.has(thread.id) || !saved?.resumable || saved.resumePolicy !== 'automatic' ||
+        !saved.checkpoint || turn.status === 'completed') return;
+    try {
+      // Reserve the same turn before returning its snapshot so concurrent reads
+      // join it. Start notifications only after the reader receives that snapshot.
+      return this.resumeTurn({ threadId: thread.id, turnId: turn.id }).afterReply;
+    } catch (error) {
+      saved.resumePolicy = 'manual';
+      this.persist();
+      this.diagnostics.push({ type: 'automatic-checkpoint-resume-rejected', code: error.code ?? null });
+    }
+  }
   resumeTurn(params) {
     const thread = this.getThread(params.threadId), turn = params.turnId ? thread.turns.find(value => value.id === params.turnId) : thread.turns.at(-1);
     if (!turn) throw new RpcError(-32001, 'turn_not_found');

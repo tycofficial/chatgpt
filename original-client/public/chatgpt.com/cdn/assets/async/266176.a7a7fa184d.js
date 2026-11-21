@@ -1,0 +1,2 @@
+/*! LICENSE: 266176.a7a7fa184d.js.LICENSE.txt */
+export const __rspack_esm_ids=[266176];export const __webpack_modules__={lmlJ(a,b,c){c.r(b);let d=(0,c("SHUh").c)("MoveDiagonal2",[["path",{d:"M19 13v6h-6",key:"1hxl6d"}],["path",{d:"M5 11V5h6",key:"12e2xe"}],["path",{d:"m5 5 14 14",key:"11anup"}]]);c.d(b,{},{default:d})}};

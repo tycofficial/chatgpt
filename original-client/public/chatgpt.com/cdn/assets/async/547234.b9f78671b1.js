@@ -1,0 +1,2 @@
+/*! LICENSE: 547234.b9f78671b1.js.LICENSE.txt */
+export const __rspack_esm_ids=[547234];export const __webpack_modules__={HZhE(a,b,c){c.r(b);var d=c("uoNa");c.d(b,{default:()=>d.default})},uoNa(a,b,c){c.r(b);let d=(0,c("SHUh").c)("SquareChevronLeft",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"m14 16-4-4 4-4",key:"ojs7w8"}]]);c.d(b,{},{default:d})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 150810.e0a7936b72.js.LICENSE.txt */
+export const __rspack_esm_ids=[150810];export const __webpack_modules__={gENd(a,b,c){c.r(b);let d=(0,c("SHUh").c)("PersonStanding",[["circle",{cx:"12",cy:"5",r:"1",key:"gxeob9"}],["path",{d:"m9 20 3-6 3 6",key:"se2kox"}],["path",{d:"m6 8 6 2 6-2",key:"4o3us4"}],["path",{d:"M12 10v4",key:"1kjpxc"}]]);c.d(b,{},{default:d})}};

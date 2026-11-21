@@ -1,0 +1,2 @@
+/*! LICENSE: 668532.c87ead42ab.js.LICENSE.txt */
+export const __rspack_esm_ids=[668532];export const __webpack_modules__={rZ0u(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Minimize2",[["polyline",{points:"4 14 10 14 10 20",key:"11kfnr"}],["polyline",{points:"20 10 14 10 14 4",key:"rlmsce"}],["line",{x1:"14",x2:"21",y1:"10",y2:"3",key:"o5lafz"}],["line",{x1:"3",x2:"10",y1:"21",y2:"14",key:"1atl0r"}]]);c.d(b,{},{default:d})}};

@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[944412];export const __webpack_modules__={Lkfx(a,b,c){var d=c("HE0T"),e=c("UtIA");c.d(b,{createDataStore:()=>e.b,read:()=>d.d})}};

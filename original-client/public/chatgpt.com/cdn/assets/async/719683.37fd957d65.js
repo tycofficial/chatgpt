@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[719683];export const __webpack_modules__={AWXn(a){a.exports=JSON.parse('[{"name":"initial_example: methane","initialValues":{"initial_example":"methane"}},{"name":"initial_example: hydrogen chloride","initialValues":{"initial_example":"hydrogen chloride"}}]')}};

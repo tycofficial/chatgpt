@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[800831];export const __webpack_modules__={aPol(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"marketPrice":52}},{"name":"Maximum supported values","initialValues":{"marketPrice":78}}]')}};

@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[651357];export const __webpack_modules__={w3Ig(e){e.exports=JSON.parse('[{"name":"meanPosition: offset","initialValues":{"meanPosition":"offset"}},{"name":"measurementSpread: large","initialValues":{"measurementSpread":"large"}}]')}};

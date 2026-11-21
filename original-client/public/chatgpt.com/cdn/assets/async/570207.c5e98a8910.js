@@ -1,0 +1,2 @@
+/*! LICENSE: 570207.c5e98a8910.js.LICENSE.txt */
+export const __rspack_esm_ids=[570207];export const __webpack_modules__={TuMe(a,b,c){c.r(b);let d=(0,c("SHUh").c)("RussianRuble",[["path",{d:"M6 11h8a4 4 0 0 0 0-8H9v18",key:"18ai8t"}],["path",{d:"M6 15h8",key:"1y8f6l"}]]);c.d(b,{},{default:d})}};

@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[486912];export const __webpack_modules__={idwG(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"controlledPrice":20}},{"name":"Maximum supported values","initialValues":{"controlledPrice":80}},{"name":"policyType: floor","initialValues":{"policyType":"floor"}}]')}};

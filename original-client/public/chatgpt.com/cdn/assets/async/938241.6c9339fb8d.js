@@ -1,2 +1,0 @@
-/*! LICENSE: 938241.6c9339fb8d.js.LICENSE.txt */
-export const __rspack_esm_ids=[938241];export const __webpack_modules__={wn4s(a,e,s){s.r(e);let _=(0,s("jTyp").c)("BookMinus",[["path",{d:"M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20",key:"k3hazp"}],["path",{d:"M9 10h6",key:"9gxzsh"}]]);s.d(e,{},{default:_})}};

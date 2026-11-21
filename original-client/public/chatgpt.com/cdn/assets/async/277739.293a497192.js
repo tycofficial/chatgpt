@@ -1,0 +1,2 @@
+/*! LICENSE: 277739.293a497192.js.LICENSE.txt */
+export const __rspack_esm_ids=[277739];export const __webpack_modules__={ojom(a,b,c){c.r(b);let d=(0,c("SHUh").c)("CornerDownLeft",[["polyline",{points:"9 10 4 15 9 20",key:"r3jprv"}],["path",{d:"M20 4v7a4 4 0 0 1-4 4H4",key:"6o5b7l"}]]);c.d(b,{},{default:d})}};

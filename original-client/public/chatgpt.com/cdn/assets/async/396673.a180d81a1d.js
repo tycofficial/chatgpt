@@ -1,0 +1,2 @@
+/*! LICENSE: 396673.a180d81a1d.js.LICENSE.txt */
+export const __rspack_esm_ids=[396673];export const __webpack_modules__={JEwq(a,b,c){c.r(b);let d=(0,c("SHUh").c)("MoveDiagonal",[["path",{d:"M11 19H5v-6",key:"8awifj"}],["path",{d:"M13 5h6v6",key:"7voy1q"}],["path",{d:"M19 5 5 19",key:"wwaj1z"}]]);c.d(b,{},{default:d})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 208931.ca4166ebc0.js.LICENSE.txt */
+export const __rspack_esm_ids=[208931];export const __webpack_modules__={AzHr(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ListTodo",[["rect",{x:"3",y:"5",width:"6",height:"6",rx:"1",key:"1defrl"}],["path",{d:"m3 17 2 2 4-4",key:"1jhpwq"}],["path",{d:"M13 6h8",key:"15sg57"}],["path",{d:"M13 12h8",key:"h98zly"}],["path",{d:"M13 18h8",key:"oe0vm4"}]]);c.d(b,{},{default:d})}};

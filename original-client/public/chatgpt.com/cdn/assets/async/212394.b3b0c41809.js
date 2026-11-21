@@ -1,2 +1,0 @@
-/*! LICENSE: 212394.b3b0c41809.js.LICENSE.txt */
-export const __rspack_esm_ids=[212394];export const __webpack_modules__={RMYN(e,a,t){t.r(a);let s=(0,t("jTyp").c)("MessageSquareShare",[["path",{d:"M21 12v3a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h7",key:"tqtdkg"}],["path",{d:"M16 3h5v5",key:"1806ms"}],["path",{d:"m16 8 5-5",key:"15mbrl"}]]);t.d(a,{},{default:s})}};

@@ -1,2 +1,0 @@
-/*! LICENSE: 673150.8ce28f81d2.js.LICENSE.txt */
-export const __rspack_esm_ids=[673150];export const __webpack_modules__={lNvH(e,t,d){d.r(t);let p=(0,d("jTyp").c)("Barcode",[["path",{d:"M3 5v14",key:"1nt18q"}],["path",{d:"M8 5v14",key:"1ybrkv"}],["path",{d:"M12 5v14",key:"s699le"}],["path",{d:"M17 5v14",key:"ycjyhj"}],["path",{d:"M21 5v14",key:"nzette"}]]);d.d(t,{},{default:p})}};

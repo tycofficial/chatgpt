@@ -1,0 +1,2 @@
+/*! LICENSE: 339385.8e59d4c028.js.LICENSE.txt */
+export const __rspack_esm_ids=[339385];export const __webpack_modules__={lXgS(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ArrowDownToDot",[["path",{d:"M12 2v14",key:"jyx4ut"}],["path",{d:"m19 9-7 7-7-7",key:"1oe3oy"}],["circle",{cx:"12",cy:"21",r:"1",key:"o0uj5v"}]]);c.d(b,{},{default:d})}};

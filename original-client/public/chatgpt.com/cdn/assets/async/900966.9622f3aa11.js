@@ -1,2 +1,0 @@
-/*! LICENSE: 900966.9622f3aa11.js.LICENSE.txt */
-export const __rspack_esm_ids=[900966];export const __webpack_modules__={gzH5(e,t,h){h.r(t);let o=(0,h("jTyp").c)("MonitorStop",[["path",{d:"M12 17v4",key:"1riwvh"}],["path",{d:"M8 21h8",key:"1ev6f3"}],["rect",{x:"2",y:"3",width:"20",height:"14",rx:"2",key:"x3v2xh"}],["rect",{x:"9",y:"7",width:"6",height:"6",rx:"1",key:"5m2oou"}]]);h.d(t,{},{default:o})}};

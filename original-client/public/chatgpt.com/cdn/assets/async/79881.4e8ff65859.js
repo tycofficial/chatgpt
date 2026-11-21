@@ -1,2 +1,0 @@
-/*! LICENSE: 79881.4e8ff65859.js.LICENSE.txt */
-export const __rspack_esm_ids=[79881];export const __webpack_modules__={ApvB(e,t,a){a.r(t);let c=(0,a("jTyp").c)("MonitorDot",[["circle",{cx:"19",cy:"6",r:"3",key:"108a5v"}],["path",{d:"M22 12v3a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9",key:"1fet9y"}],["path",{d:"M12 17v4",key:"1riwvh"}],["path",{d:"M8 21h8",key:"1ev6f3"}]]);a.d(t,{},{default:c})}};

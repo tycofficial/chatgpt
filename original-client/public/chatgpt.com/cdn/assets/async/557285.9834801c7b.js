@@ -1,0 +1,2 @@
+/*! LICENSE: 557285.9834801c7b.js.LICENSE.txt */
+export const __rspack_esm_ids=[557285];export const __webpack_modules__={wJGE(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Bell",[["path",{d:"M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9",key:"1qo2s2"}],["path",{d:"M10.3 21a1.94 1.94 0 0 0 3.4 0",key:"qgo35s"}]]);c.d(b,{},{default:d})}};

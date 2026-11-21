@@ -1,0 +1,2 @@
+/*! LICENSE: 224114.db05c246b2.js.LICENSE.txt */
+export const __rspack_esm_ids=[224114];export const __webpack_modules__={PqNc(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Scan",[["path",{d:"M3 7V5a2 2 0 0 1 2-2h2",key:"aa7l1z"}],["path",{d:"M17 3h2a2 2 0 0 1 2 2v2",key:"4qcy5o"}],["path",{d:"M21 17v2a2 2 0 0 1-2 2h-2",key:"6vwrx8"}],["path",{d:"M7 21H5a2 2 0 0 1-2-2v-2",key:"ioqczr"}]]);c.d(b,{},{default:d})}};

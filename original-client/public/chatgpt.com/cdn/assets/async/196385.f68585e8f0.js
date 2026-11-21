@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[196385];export const __webpack_modules__={vxCL(a){a.exports=JSON.parse('[{"name":"hybridization: sp3","initialValues":{"hybridization":"sp3"}},{"name":"hybridization: sp","initialValues":{"hybridization":"sp"}}]')}};

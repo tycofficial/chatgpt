@@ -1,2 +1,0 @@
-/*! LICENSE: 543677.4d714bafd6.js.LICENSE.txt */
-export const __rspack_esm_ids=[543677];export const __webpack_modules__={Jnan(e,a,c){c.r(a);let _=(0,c("jTyp").c)("UserRoundPen",[["path",{d:"M2 21a8 8 0 0 1 10.821-7.487",key:"1c8h7z"}],["path",{d:"M21.378 16.626a1 1 0 0 0-3.004-3.004l-4.01 4.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z",key:"1817ys"}],["circle",{cx:"10",cy:"8",r:"5",key:"o932ke"}]]);c.d(a,{},{default:_})}};

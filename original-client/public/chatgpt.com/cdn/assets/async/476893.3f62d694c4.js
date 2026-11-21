@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[476893];export const __webpack_modules__={jd9p(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"groupCount":1,"itemsPerGroup":1}},{"name":"Maximum supported values","initialValues":{"groupCount":6,"itemsPerGroup":6}}]')}};

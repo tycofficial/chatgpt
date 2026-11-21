@@ -1,0 +1,2 @@
+/*! LICENSE: 510650.16e2e5b143.js.LICENSE.txt */
+export const __rspack_esm_ids=[510650];export const __webpack_modules__={UwT9(a,b,c){c.r(b);var d=c("Erlq");c.d(b,{default:()=>d.default})},Erlq(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Scale3d",[["circle",{cx:"19",cy:"19",r:"2",key:"17f5cg"}],["circle",{cx:"5",cy:"5",r:"2",key:"1gwv83"}],["path",{d:"M5 7v12h12",key:"vtaa4r"}],["path",{d:"m5 19 6-6",key:"jh6hbb"}]]);c.d(b,{},{default:d})}};

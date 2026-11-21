@@ -1,2 +1,0 @@
-/*! LICENSE: 515043.ed25165b3e.js.LICENSE.txt */
-export const __rspack_esm_ids=[515043];export const __webpack_modules__={p7xz(e,p,t){t.r(p);let _=(0,t("jTyp").c)("LampFloor",[["path",{d:"M9 2h6l3 7H6l3-7Z",key:"wcx6mj"}],["path",{d:"M12 9v13",key:"3n1su1"}],["path",{d:"M9 22h6",key:"1rlq3v"}]]);t.d(p,{},{default:_})}};

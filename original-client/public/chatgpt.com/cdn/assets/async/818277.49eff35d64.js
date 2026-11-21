@@ -1,0 +1,2 @@
+/*! LICENSE: 818277.49eff35d64.js.LICENSE.txt */
+export const __rspack_esm_ids=[818277];export const __webpack_modules__={oCNe(a,b,c){c.r(b);var d=c("dbPX");c.d(b,{default:()=>d.default})},dbPX(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Pen",[["path",{d:"M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z",key:"1a8usu"}]]);c.d(b,{},{default:d})}};

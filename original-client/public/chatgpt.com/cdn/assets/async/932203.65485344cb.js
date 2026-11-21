@@ -1,2 +1,0 @@
-/*! LICENSE: 932203.65485344cb.js.LICENSE.txt */
-export const __rspack_esm_ids=[932203];export const __webpack_modules__={ixiH(e,t,r){r.r(t);let _=(0,r("jTyp").c)("Instagram",[["rect",{width:"20",height:"20",x:"2",y:"2",rx:"5",ry:"5",key:"2e1cvw"}],["path",{d:"M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z",key:"9exkf1"}],["line",{x1:"17.5",x2:"17.51",y1:"6.5",y2:"6.5",key:"r4j83e"}]]);r.d(t,{},{default:_})}};

@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[777921];export const __webpack_modules__={JfJV(a){a.exports=JSON.parse('[{"name":"cell_type: body-centered cubic","initialValues":{"cell_type":"body-centered cubic"}},{"name":"cell_type: face-centered cubic","initialValues":{"cell_type":"face-centered cubic"}}]')}};

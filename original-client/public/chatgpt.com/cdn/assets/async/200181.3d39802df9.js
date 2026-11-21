@@ -1,0 +1,2 @@
+/*! LICENSE: 200181.3d39802df9.js.LICENSE.txt */
+export const __rspack_esm_ids=[200181];export const __webpack_modules__={fWT6(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Play",[["polygon",{points:"6 3 20 12 6 21 6 3",key:"1oa8hb"}]]);c.d(b,{},{default:d})}};

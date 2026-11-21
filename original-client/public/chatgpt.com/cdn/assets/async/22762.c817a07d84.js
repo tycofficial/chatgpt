@@ -1,0 +1,2 @@
+/*! LICENSE: 22762.c817a07d84.js.LICENSE.txt */
+export const __rspack_esm_ids=[22762];export const __webpack_modules__={m4Mg(a,b,c){c.r(b);let d=(0,c("SHUh").c)("MonitorCheck",[["path",{d:"m9 10 2 2 4-4",key:"1gnqz4"}],["rect",{width:"20",height:"14",x:"2",y:"3",rx:"2",key:"48i651"}],["path",{d:"M12 17v4",key:"1riwvh"}],["path",{d:"M8 21h8",key:"1ev6f3"}]]);c.d(b,{},{default:d})}};

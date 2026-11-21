@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[639408];export const __webpack_modules__={I8Iu(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"server_capacity":100,"legitimate_request_rate":10}},{"name":"Maximum supported values","initialValues":{"server_capacity":300,"legitimate_request_rate":80}}]')}};

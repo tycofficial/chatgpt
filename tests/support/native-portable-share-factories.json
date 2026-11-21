@@ -1,30 +1,27 @@
 [
   {
     "id": "bsEp",
-    "file": "original-client/public/chatgpt.com/cdn/assets/200429.11007a9422.js",
-    "startUTF16": 1321019,
-    "endUTF16": 1322002,
-    "sha256": "1528aa4397a2a232a542f161328df6c69e9cdb499f37e4e4ff444ba55dd13241",
+    "file": "original-client/public/chatgpt.com/cdn/assets/646436.71dd39a771.js",
+    "startUTF16": 1357032,
+    "endUTF16": 1357959,
+    "sha256": "5bc33f796e7731f97c464a36d28b92f1f04c40ef825406fb2910076ef48ea579",
     "requires": [
-      "ASxG"
+      "lAQI"
     ]
   },
   {
-    "id": "ASxG",
-    "file": "original-client/public/chatgpt.com/cdn/assets/226913.27c93050ff.js",
-    "startUTF16": 598394,
-    "endUTF16": 621545,
-    "sha256": "b763ce260aa76a201d498108541090c46c7089a9862f2f93209c81266e09dffc",
+    "id": "lAQI",
+    "file": "original-client/public/chatgpt.com/cdn/assets/226913.9dca92fd99.js",
+    "startUTF16": 603320,
+    "endUTF16": 626836,
+    "sha256": "71c54a071acbe5af2b3d95c8399d50bd6dac862637066cd18b7be1c92ab63681",
     "requires": [
-      "BTwN",
       "IWEP",
-      "QKjC",
       "XQrv",
-      "bpsm",
+      "d7QT",
       "eESV",
-      "fVBu",
       "fttz",
-      "mMAU",
+      "ilMW",
       "oG25",
       "pZ3S",
       "rrbL",
@@ -32,95 +29,41 @@
     ]
   },
   {
-    "id": "BTwN",
-    "file": "original-client/public/chatgpt.com/cdn/assets/226913.27c93050ff.js",
-    "startUTF16": 659336,
-    "endUTF16": 662612,
-    "sha256": "ef5250e79bf5cb7fa1df37bd0e265f4ffbd59fcde0d6a957683134eeb40308a1",
+    "id": "IWEP",
+    "file": "original-client/public/chatgpt.com/cdn/assets/226913.9dca92fd99.js",
+    "startUTF16": 639091,
+    "endUTF16": 640892,
+    "sha256": "07f7458eae6e33fa596efdf27b057b84c989f2edef46b3ca4761db18f0d198e6",
     "requires": [
       "pZ3S"
     ]
   },
   {
     "id": "pZ3S",
-    "file": "original-client/public/chatgpt.com/cdn/assets/226913.27c93050ff.js",
-    "startUTF16": 720872,
-    "endUTF16": 734252,
-    "sha256": "c9046738b436679fb0ac8bd9f15db7a172a0adc97459d439c088d481172af812",
+    "file": "original-client/public/chatgpt.com/cdn/assets/226913.9dca92fd99.js",
+    "startUTF16": 706740,
+    "endUTF16": 716298,
+    "sha256": "052a90989919ccbc08b0eba52ba270bbdb27effd4880bc3111ae9a1ea2138d27",
     "requires": [
       "IWEP"
     ]
   },
   {
-    "id": "IWEP",
-    "file": "original-client/public/chatgpt.com/cdn/assets/226913.27c93050ff.js",
-    "startUTF16": 641316,
-    "endUTF16": 643157,
-    "sha256": "57528eb933d7b2c98ae63867b07484961df7a47b52b583a3f1c9528f877b18be",
-    "requires": [
-      "pZ3S"
-    ]
-  },
-  {
-    "id": "QKjC",
-    "file": "original-client/public/chatgpt.com/cdn/assets/226913.27c93050ff.js",
-    "startUTF16": 672126,
-    "endUTF16": 712046,
-    "sha256": "50307d6dce6eebe8b9bd5e9c34be7fd2ac437e242b85f224b641cb327dcb4e1b",
-    "requires": [
-      "IWEP",
-      "MSU2",
-      "XQrv",
-      "ac24",
-      "bpsm",
-      "fttz",
-      "pZ3S"
-    ]
-  },
-  {
-    "id": "MSU2",
-    "file": "original-client/public/chatgpt.com/cdn/assets/226913.27c93050ff.js",
-    "startUTF16": 734260,
-    "endUTF16": 734316,
-    "sha256": "ec79751c9b91f69e6ab45a90e7da500998abade08fff636513efd764200f0fef",
-    "requires": []
-  },
-  {
     "id": "XQrv",
-    "file": "original-client/public/chatgpt.com/cdn/assets/226913.27c93050ff.js",
-    "startUTF16": 665321,
-    "endUTF16": 671320,
-    "sha256": "296b6ec622d5837713c8350aa4d37406faf2cc7149496ba0eeac4849ab6df717",
+    "file": "original-client/public/chatgpt.com/cdn/assets/226913.9dca92fd99.js",
+    "startUTF16": 658266,
+    "endUTF16": 664255,
+    "sha256": "74c8919a21abc778442cb844e414c554b5a4fd3ca26adb4f6caa666e2ee869cb",
     "requires": [
       "pZ3S"
     ]
   },
   {
-    "id": "ac24",
-    "file": "original-client/public/chatgpt.com/cdn/assets/226913.27c93050ff.js",
-    "startUTF16": 643165,
-    "endUTF16": 643805,
-    "sha256": "58b8b8f41dac0b3548b0cd894dbe82374f18fe0382e6256a11e3d4a5b2377eb7",
-    "requires": []
-  },
-  {
-    "id": "bpsm",
-    "file": "original-client/public/chatgpt.com/cdn/assets/226913.27c93050ff.js",
-    "startUTF16": 633754,
-    "endUTF16": 641308,
-    "sha256": "a7d6f1a3f64f375488e2717159bdf35f8793ee60d0d9551fa38779c489565bf3",
-    "requires": [
-      "IWEP",
-      "XQrv",
-      "pZ3S"
-    ]
-  },
-  {
-    "id": "fttz",
-    "file": "original-client/public/chatgpt.com/cdn/assets/226913.27c93050ff.js",
-    "startUTF16": 662620,
-    "endUTF16": 665313,
-    "sha256": "be3842eb41303d93720e55dc01d660fb978948267818b7e03a45449c480aa28d",
+    "id": "d7QT",
+    "file": "original-client/public/chatgpt.com/cdn/assets/226913.9dca92fd99.js",
+    "startUTF16": 602309,
+    "endUTF16": 603182,
+    "sha256": "7751aa0f883b510d0b6a446fc5c614a2e8f9dff5d957f069b0fa96b6f0cb90b2",
     "requires": [
       "CsuQ",
       "IWEP",
@@ -129,10 +72,10 @@
   },
   {
     "id": "CsuQ",
-    "file": "original-client/public/chatgpt.com/cdn/assets/226913.27c93050ff.js",
-    "startUTF16": 643813,
-    "endUTF16": 646974,
-    "sha256": "e0094008a2e7d150a8574cc031f7d4223fb523936b32f0c3c1dad82973d24258",
+    "file": "original-client/public/chatgpt.com/cdn/assets/226913.9dca92fd99.js",
+    "startUTF16": 640900,
+    "endUTF16": 643572,
+    "sha256": "4c8f6b3b1a089368be7c8fd4b8a62114c2733f242926fc1c94cf71bcf70695a6",
     "requires": [
       "IWEP",
       "pZ3S"
@@ -140,23 +83,48 @@
   },
   {
     "id": "eESV",
-    "file": "original-client/public/chatgpt.com/cdn/assets/226913.27c93050ff.js",
-    "startUTF16": 646982,
-    "endUTF16": 659328,
-    "sha256": "9683b667ad8d1952f04633c39b8a7a69b21c5ff4b4576300a5ff558db0cd2169",
+    "file": "original-client/public/chatgpt.com/cdn/assets/226913.9dca92fd99.js",
+    "startUTF16": 643580,
+    "endUTF16": 655744,
+    "sha256": "23e7464573269f18a57dd640daad80da7e35efb4040e731cfd3dda73565a9e53",
     "requires": [
-      "QKjC",
       "XQrv",
+      "ilMW",
       "pZ3S",
       "ygkR"
     ]
   },
   {
+    "id": "ilMW",
+    "file": "original-client/public/chatgpt.com/cdn/assets/226913.9dca92fd99.js",
+    "startUTF16": 664973,
+    "endUTF16": 697945,
+    "sha256": "234657728dbf6b958c4af11f0ecabed4900fb3ce06fb9c9c82ae179c378db863",
+    "requires": [
+      "IWEP",
+      "XQrv",
+      "bpsm",
+      "pZ3S"
+    ]
+  },
+  {
+    "id": "bpsm",
+    "file": "original-client/public/chatgpt.com/cdn/assets/226913.9dca92fd99.js",
+    "startUTF16": 633421,
+    "endUTF16": 639083,
+    "sha256": "7e8828e903e7dadda759eff1f4e5bcf5d4b40d88666179edc9f1a728d0714432",
+    "requires": [
+      "IWEP",
+      "XQrv",
+      "pZ3S"
+    ]
+  },
+  {
     "id": "ygkR",
-    "file": "original-client/public/chatgpt.com/cdn/assets/226913.27c93050ff.js",
-    "startUTF16": 712054,
-    "endUTF16": 720864,
-    "sha256": "03fa4f8c791079f49c0cfd7c33ec2a668ac84c0079fe51381d54d4c2f04efcb1",
+    "file": "original-client/public/chatgpt.com/cdn/assets/226913.9dca92fd99.js",
+    "startUTF16": 697953,
+    "endUTF16": 706732,
+    "sha256": "152f68d786bc4acfdd9bd9af68219a2d57837fd8ef34284d7924bb8ae0603f5f",
     "requires": [
       "oG25",
       "pZ3S"
@@ -164,29 +132,18 @@
   },
   {
     "id": "oG25",
-    "file": "original-client/public/chatgpt.com/cdn/assets/226913.27c93050ff.js",
-    "startUTF16": 671328,
-    "endUTF16": 672118,
-    "sha256": "a0a3e546af314423f44b6f6d0cf1b08ca06346d0f04a7ebcebb22510920c0ce7",
+    "file": "original-client/public/chatgpt.com/cdn/assets/226913.9dca92fd99.js",
+    "startUTF16": 664263,
+    "endUTF16": 664965,
+    "sha256": "802f43080662ef617af8188510443d83ed316f96980c2786c9e4e515f3b6c679",
     "requires": []
   },
   {
-    "id": "fVBu",
-    "file": "original-client/public/chatgpt.com/cdn/assets/226913.27c93050ff.js",
-    "startUTF16": 598127,
-    "endUTF16": 598386,
-    "sha256": "97407d750df1d1dd13f2d7358fd79f97190c5c2ebcee0806bf7562317a0615aa",
-    "requires": [
-      "d7QT",
-      "fttz"
-    ]
-  },
-  {
-    "id": "d7QT",
-    "file": "original-client/public/chatgpt.com/cdn/assets/226913.27c93050ff.js",
-    "startUTF16": 596812,
-    "endUTF16": 597725,
-    "sha256": "813be7b3f9f647923d8e6ecad8c0185e8fc651e41e7791a4c6ff6723fb1fc645",
+    "id": "fttz",
+    "file": "original-client/public/chatgpt.com/cdn/assets/226913.9dca92fd99.js",
+    "startUTF16": 655752,
+    "endUTF16": 658258,
+    "sha256": "600bbbeb6b4d38be4c228f160227f9e594cf5bbe67b34e10cf1067b1ad364416",
     "requires": [
       "CsuQ",
       "IWEP",
@@ -194,51 +151,40 @@
     ]
   },
   {
-    "id": "mMAU",
-    "file": "original-client/public/chatgpt.com/cdn/assets/226913.27c93050ff.js",
-    "startUTF16": 734324,
-    "endUTF16": 737142,
-    "sha256": "1df06255c8d064887c766919797c0d3e7a1f0ce946b80667af6476e62a5002c2",
-    "requires": [
-      "pZ3S"
-    ]
-  },
-  {
     "id": "rrbL",
-    "file": "original-client/public/chatgpt.com/cdn/assets/226913.27c93050ff.js",
-    "startUTF16": 621553,
-    "endUTF16": 633746,
-    "sha256": "ae7197624fcb1e1aaa136e4ee5b70e8f533e38284b2cbaa772c9b4babe1c40cf",
+    "file": "original-client/public/chatgpt.com/cdn/assets/226913.9dca92fd99.js",
+    "startUTF16": 626844,
+    "endUTF16": 633413,
+    "sha256": "2ce3a9524c991726a039c50200c854b9981c70df6679aaee19735c6c05a4f66f",
     "requires": [
-      "QKjC",
       "bpsm",
       "oG25",
       "pZ3S"
     ]
   },
   {
-    "id": "lBzi",
-    "file": "original-client/public/chatgpt.com/cdn/assets/200429.11007a9422.js",
-    "startUTF16": 722508,
-    "endUTF16": 732288,
-    "sha256": "d2d3170d03ac253d0ec4123a73943ad913dc89eba5d148014ba3c0d30407dc9b",
+    "id": "CKur",
+    "file": "original-client/public/chatgpt.com/cdn/assets/646436.71dd39a771.js",
+    "startUTF16": 737456,
+    "endUTF16": 745117,
+    "sha256": "d8dec68f3e426d4c39a1b3e5a2ef72465d3bd7f6daeecacf1a2f4102b6dc87ff",
     "requires": [
       "AOHi",
-      "BolX",
+      "Brn9",
+      "Cslg",
+      "D7Ms",
       "FGJH",
-      "GDNt",
-      "Ggpj",
       "Kwur",
       "LCGF",
       "OWtl",
       "OiCI",
+      "Q840",
       "SKgd",
-      "SZCv",
+      "TFzY",
       "TrP8",
+      "UgZO",
       "XNvh",
-      "aC05",
       "aFoA",
-      "bgok",
       "bsEp",
       "dQRk",
       "eShZ",
@@ -248,13 +194,15 @@
       "gbRX",
       "hZax",
       "hwXH",
+      "ipGa",
       "jAnS",
       "lTvi",
       "nlNF",
       "rvFo",
       "sMGP",
-      "xqlV",
-      "yGJW"
+      "vloM",
+      "yGJW",
+      "zMIV"
     ]
   }
 ]

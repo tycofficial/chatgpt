@@ -1,0 +1,2 @@
+/*! LICENSE: 60802.cb551ef7a7.js.LICENSE.txt */
+export const __rspack_esm_ids=[60802];export const __webpack_modules__={E3Tz(a,b,c){c.r(b);let d=(0,c("SHUh").c)("BadgeIndianRupee",[["path",{d:"M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z",key:"3c2336"}],["path",{d:"M8 8h8",key:"1bis0t"}],["path",{d:"M8 12h8",key:"1wcyev"}],["path",{d:"m13 17-5-1h1a4 4 0 0 0 0-8",key:"nu2bwa"}]]);c.d(b,{},{default:d})}};

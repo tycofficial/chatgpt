@@ -1,4 +1,4 @@
-import { getSiteAuthEntryKind, isHistoricalSitePath, resolveSiteHomeUrl, siteRelativePath } from './site-paths.mjs?v=ca63aad189abab8c';
+import { getSiteAuthEntryKind, isHistoricalSitePath, resolveSiteHomeUrl, siteRelativePath } from './site-paths.mjs?v=91ed19db286dc9e0';
 
 const originalOrigin = 'https://chatgpt.com';
 
@@ -21,9 +21,7 @@ export function getSiteSignOutPageUrl(home) {
 }
 
 export function getSiteSignedOutUrl(home) {
-  const url = appHome(home);
-  url.searchParams.set('localSession', '0');
-  return url.href;
+  return appHome(home).href;
 }
 
 export function isSiteSignOutPage(value, homeUrl) {
@@ -45,6 +43,23 @@ export function isNativeSignOutLink(href, currentUrl, homeUrl) {
 
 /** Keep the archived logout account-switch return on the repository's home. */
 export function installSiteSignOutRestore({ home, scope = globalThis.window }) {
+  const history = scope.history;
+  const originalReplaceState = history?.replaceState;
+  function replaceState(state, title, url) {
+    if (url != null) {
+      const base = appHome(home());
+      const current = resolveUrl(scope.location.href, base);
+      if (current?.origin === base.origin && current.pathname === base.pathname) {
+        const target = resolveUrl(url, current);
+        if (target?.origin === base.origin && target.pathname === base.pathname.slice(0, -1)) {
+          target.pathname = base.pathname;
+          return originalReplaceState.call(this, state, title, target.href);
+        }
+      }
+    }
+    return Reflect.apply(originalReplaceState, this, arguments);
+  }
+  if (typeof originalReplaceState === 'function') history.replaceState = replaceState;
   function legacyLogoutHome() {
     const base = appHome(home());
     const current = resolveUrl(scope.location.href, base);
@@ -72,6 +87,7 @@ export function installSiteSignOutRestore({ home, scope = globalThis.window }) {
   return () => {
     scope.removeEventListener('pageshow', restore, options);
     scope.navigation?.removeEventListener('navigate', replaceOriginRoot);
+    if (history?.replaceState === replaceState) history.replaceState = originalReplaceState;
   };
 }
 

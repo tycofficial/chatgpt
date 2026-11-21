@@ -3,13 +3,19 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import { isSiteSignOutPage } from '../src/native-client/site-signout.mjs';
 const boot=fs.readFileSync(new URL('../src/native-client/boot-adapter.mjs',import.meta.url),'utf8');
 const start=boot.indexOf('let siteLoginRedirecting = false;'),end=boot.indexOf("overrideExports('QdUF', {",start);
 assert(start>=0&&end>start);
 const code=boot.slice(start,end)+'\nglobalThis.navigationFixture={redirectToSiteLogin,maybeRedirectToSiteLogin,getSiteAuthPageUrl};';
 function fixture({signedIn=false,path='/chatgpt/c/fixture',search='?draft=1',hash='#tail'}={}){
  const assigned=[],location={origin:'https://tycofficial.github.io',pathname:path,search,hash,href:'https://tycofficial.github.io'+path+search+hash,assign:url=>assigned.push(new URL(url))};
- const context=vm.createContext({URL,location,isPrototypeLocalSession:()=>signedIn,getSiteLoginUrl:()=>new URL('/chatgpt/login',location.origin)});
+ const context=vm.createContext({
+   URL, location, isSiteSignOutPage,
+   isPrototypeLocalSession: () => signedIn,
+   getSiteLoginUrl: () => new URL('/chatgpt/login', location.origin),
+   getSiteHomeUrl: () => new URL('/chatgpt/', location.origin),
+ });
  new vm.Script(code,{filename:'boot-adapter.mjs (owned navigation fixture)'}).runInContext(context);
  return{...context.navigationFixture,assigned};
 }

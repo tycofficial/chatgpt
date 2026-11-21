@@ -1,0 +1,2 @@
+/*! LICENSE: 363382.1736f21c90.js.LICENSE.txt */
+export const __rspack_esm_ids=[363382];export const __webpack_modules__={Dyhu(a,b,c){c.r(b);var d=c("Kb6m");c.d(b,{default:()=>d.default})},Kb6m(a,b,c){c.r(b);let d=(0,c("SHUh").c)("WalletMinimal",[["path",{d:"M17 14h.01",key:"7oqj8z"}],["path",{d:"M7 7h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14",key:"u1rqew"}]]);c.d(b,{},{default:d})}};

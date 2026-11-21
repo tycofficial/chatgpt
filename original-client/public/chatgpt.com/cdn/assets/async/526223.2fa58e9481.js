@@ -1,0 +1,2 @@
+/*! LICENSE: 526223.2fa58e9481.js.LICENSE.txt */
+export const __rspack_esm_ids=[526223];export const __webpack_modules__={tCr4(a,b,c){c.r(b);var d=c("hg5i");c.d(b,{default:()=>d.default})},hg5i(a,b,c){c.r(b);let d=(0,c("SHUh").c)("SquareMenu",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M7 8h10",key:"1jw688"}],["path",{d:"M7 12h10",key:"b7w52i"}],["path",{d:"M7 16h10",key:"wp8him"}]]);c.d(b,{},{default:d})}};

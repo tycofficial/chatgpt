@@ -1,0 +1,2 @@
+/*! LICENSE: 940620.895c93e420.js.LICENSE.txt */
+export const __rspack_esm_ids=[940620];export const __webpack_modules__={Gywo(a,b,c){c.r(b);let d=(0,c("SHUh").c)("GalleryHorizontalEnd",[["path",{d:"M2 7v10",key:"a2pl2d"}],["path",{d:"M6 5v14",key:"1kq3d7"}],["rect",{width:"12",height:"18",x:"10",y:"3",rx:"2",key:"13i7bc"}]]);c.d(b,{},{default:d})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 205328.52f93f41f4.js.LICENSE.txt */
+export const __rspack_esm_ids=[205328];export const __webpack_modules__={pujc(a,b,c){c.r(b);let d=(0,c("SHUh").c)("BadgeEuro",[["path",{d:"M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z",key:"3c2336"}],["path",{d:"M7 12h5",key:"gblrwe"}],["path",{d:"M15 9.4a4 4 0 1 0 0 5.2",key:"1makmb"}]]);c.d(b,{},{default:d})}};

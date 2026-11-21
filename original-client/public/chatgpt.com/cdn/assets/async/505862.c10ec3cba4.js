@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[505862];export const __webpack_modules__={pAiK(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"resourceLimit":8}},{"name":"Maximum supported values","initialValues":{"resourceLimit":18}}]')}};

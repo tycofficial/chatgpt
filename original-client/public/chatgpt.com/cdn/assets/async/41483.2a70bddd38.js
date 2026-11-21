@@ -1,0 +1,2 @@
+/*! LICENSE: 41483.2a70bddd38.js.LICENSE.txt */
+export const __rspack_esm_ids=[41483];export const __webpack_modules__={kx72(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Flashlight",[["path",{d:"M18 6c0 2-2 2-2 4v10a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2V10c0-2-2-2-2-4V2h12z",key:"1orkel"}],["line",{x1:"6",x2:"18",y1:"6",y2:"6",key:"1z11jq"}],["line",{x1:"12",x2:"12",y1:"12",y2:"12",key:"1f4yc1"}]]);c.d(b,{},{default:d})}};

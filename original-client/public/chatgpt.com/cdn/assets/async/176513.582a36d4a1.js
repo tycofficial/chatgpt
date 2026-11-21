@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[176513];export const __webpack_modules__={vzZB(s){s.exports=JSON.parse('[{"name":"substrate_class: ketone","initialValues":{"substrate_class":"ketone"}}]')}};

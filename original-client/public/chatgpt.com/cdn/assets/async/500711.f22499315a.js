@@ -1,0 +1,2 @@
+/*! LICENSE: 500711.f22499315a.js.LICENSE.txt */
+export const __rspack_esm_ids=[500711];export const __webpack_modules__={U8Sy(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Hourglass",[["path",{d:"M5 22h14",key:"ehvnwv"}],["path",{d:"M5 2h14",key:"pdyrp9"}],["path",{d:"M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22",key:"1d314k"}],["path",{d:"M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2",key:"1vvvr6"}]]);c.d(b,{},{default:d})}};

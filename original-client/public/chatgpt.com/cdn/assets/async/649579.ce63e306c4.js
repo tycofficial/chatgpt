@@ -1,2 +1,0 @@
-/*! LICENSE: 649579.ce63e306c4.js.LICENSE.txt */
-export const __rspack_esm_ids=[649579];export const __webpack_modules__={Bj7r(e,t,_){_.r(t);let d=(0,_("jTyp").c)("CloudLightning",[["path",{d:"M6 16.326A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 .5 8.973",key:"1cez44"}],["path",{d:"m13 12-3 5h4l-3 5",key:"1t22er"}]]);_.d(t,{},{default:d})}};

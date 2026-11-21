@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[27149];export const __webpack_modules__={vwAk(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"equilibrium_constant":0.25,"initial_total_concentration":0.5}},{"name":"Maximum supported values","initialValues":{"equilibrium_constant":4,"initial_total_concentration":2}}]')}};

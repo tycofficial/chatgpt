@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[964949];export const __webpack_modules__={d2cH(a){a.exports=JSON.parse('[{"name":"example_pattern: alternating","initialValues":{"example_pattern":"alternating"}},{"name":"example_pattern: seasonal","initialValues":{"example_pattern":"seasonal"}},{"name":"example_pattern: uncorrelated","initialValues":{"example_pattern":"uncorrelated"}}]')}};

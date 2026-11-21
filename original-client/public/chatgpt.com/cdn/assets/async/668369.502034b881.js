@@ -1,0 +1,2 @@
+/*! LICENSE: 668369.502034b881.js.LICENSE.txt */
+export const __rspack_esm_ids=[668369];export const __webpack_modules__={De9g(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ArrowRightToLine",[["path",{d:"M17 12H3",key:"8awo09"}],["path",{d:"m11 18 6-6-6-6",key:"8c2y43"}],["path",{d:"M21 5v14",key:"nzette"}]]);c.d(b,{},{default:d})}};

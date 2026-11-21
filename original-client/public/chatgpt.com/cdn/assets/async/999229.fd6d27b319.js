@@ -1,0 +1,2 @@
+/*! LICENSE: 999229.fd6d27b319.js.LICENSE.txt */
+export const __rspack_esm_ids=[999229];export const __webpack_modules__={hpOV(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ChevronsLeftRight",[["path",{d:"m9 7-5 5 5 5",key:"j5w590"}],["path",{d:"m15 7 5 5-5 5",key:"1bl6da"}]]);c.d(b,{},{default:d})}};

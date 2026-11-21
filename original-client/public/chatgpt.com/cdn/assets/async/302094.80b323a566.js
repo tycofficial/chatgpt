@@ -1,0 +1,2 @@
+/*! LICENSE: 302094.80b323a566.js.LICENSE.txt */
+export const __rspack_esm_ids=[302094];export const __webpack_modules__={VRC6(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Unlink2",[["path",{d:"M15 7h2a5 5 0 0 1 0 10h-2m-6 0H7A5 5 0 0 1 7 7h2",key:"1re2ne"}]]);c.d(b,{},{default:d})}};

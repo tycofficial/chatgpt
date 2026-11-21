@@ -1,2 +1,0 @@
-/*! LICENSE: 781752.b0b41d2815.js.LICENSE.txt */
-export const __rspack_esm_ids=[781752];export const __webpack_modules__={uQiL(e,t,r){r.r(t);let _=(0,r("jTyp").c)("SmartphoneCharging",[["rect",{width:"14",height:"20",x:"5",y:"2",rx:"2",ry:"2",key:"1yt0o3"}],["path",{d:"M12.667 8 10 12h4l-2.667 4",key:"h9lk2d"}]]);r.d(t,{},{default:_})}};

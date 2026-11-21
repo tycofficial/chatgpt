@@ -1,2 +1,0 @@
-/*! LICENSE: 688335.f71989bcfd.js.LICENSE.txt */
-export const __rspack_esm_ids=[688335];export const __webpack_modules__={sDk7(e,t,c){c.r(t);let h=(0,c("jTyp").c)("Dice3",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",ry:"2",key:"1m3agn"}],["path",{d:"M16 8h.01",key:"cr5u4v"}],["path",{d:"M12 12h.01",key:"1mp3jc"}],["path",{d:"M8 16h.01",key:"18s6g9"}]]);c.d(t,{},{default:h})}};

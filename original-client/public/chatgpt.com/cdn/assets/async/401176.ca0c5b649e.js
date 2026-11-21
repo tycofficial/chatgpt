@@ -1,0 +1,2 @@
+/*! LICENSE: 401176.ca0c5b649e.js.LICENSE.txt */
+export const __rspack_esm_ids=[401176];export const __webpack_modules__={SJPB(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Triangle",[["path",{d:"M13.73 4a2 2 0 0 0-3.46 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z",key:"14u9p9"}]]);c.d(b,{},{default:d})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 690613.d7b48bd40b.js.LICENSE.txt */
+export const __rspack_esm_ids=[690613];export const __webpack_modules__={nC8x(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ArrowUpFromDot",[["path",{d:"m5 9 7-7 7 7",key:"1hw5ic"}],["path",{d:"M12 16V2",key:"ywoabb"}],["circle",{cx:"12",cy:"21",r:"1",key:"o0uj5v"}]]);c.d(b,{},{default:d})}};

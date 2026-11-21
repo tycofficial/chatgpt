@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[735204];export const __webpack_modules__={Map8(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"solute_concentration_molar":0.05,"vant_hoff_factor":1,"temperature_kelvin":273}},{"name":"Maximum supported values","initialValues":{"solute_concentration_molar":0.5,"vant_hoff_factor":3,"temperature_kelvin":323}}]')}};

@@ -1,2 +1,0 @@
-/*! LICENSE: 410921.30e57e439e.js.LICENSE.txt */
-export const __rspack_esm_ids=[410921];export const __webpack_modules__={ULtS(a,e,t){t.r(e);let _=(0,t("jTyp").c)("WalletMinimal",[["path",{d:"M17 14h.01",key:"7oqj8z"}],["path",{d:"M7 7h12a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14",key:"u1rqew"}]]);t.d(e,{},{default:_})}};

@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[937536];export const __webpack_modules__={TFab(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"slope":-10000,"intercept":-10000}},{"name":"Maximum supported values","initialValues":{"slope":10000,"intercept":10000}}]')}};

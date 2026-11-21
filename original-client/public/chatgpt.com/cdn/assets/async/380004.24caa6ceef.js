@@ -1,2 +1,0 @@
-/*! LICENSE: 380004.24caa6ceef.js.LICENSE.txt */
-export const __rspack_esm_ids=[380004];export const __webpack_modules__={YwGa(e,t,_){_.r(t);let c=(0,_("jTyp").c)("TvMinimal",[["path",{d:"M7 21h10",key:"1b0cd5"}],["rect",{width:"20",height:"14",x:"2",y:"3",rx:"2",key:"48i651"}]]);_.d(t,{},{default:c})}};

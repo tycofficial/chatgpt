@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[952056];export const __webpack_modules__={Q8Iz(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"initial":0.01,"decay":0.01}},{"name":"Maximum supported values","initialValues":{"initial":10000,"decay":10000}}]')}};

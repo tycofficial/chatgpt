@@ -1,2 +1,0 @@
-/*! LICENSE: 639260.4f3ff7bcbb.js.LICENSE.txt */
-export const __rspack_esm_ids=[639260];export const __webpack_modules__={wZr4(a,e,d){d.r(e);var t=d("GrAD");d.d(e,{default:()=>t.default})},GrAD(a,e,d){d.r(e);let t=(0,d("jTyp").c)("Grid2x2Plus",[["path",{d:"M12 3v17a1 1 0 0 1-1 1H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v6a1 1 0 0 1-1 1H3",key:"11za1p"}],["path",{d:"M16 19h6",key:"xwg31i"}],["path",{d:"M19 22v-6",key:"qhmiwi"}]]);d.d(e,{},{default:t})}};

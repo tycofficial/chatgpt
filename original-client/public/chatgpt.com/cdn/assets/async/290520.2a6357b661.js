@@ -1,0 +1,2 @@
+/*! LICENSE: 290520.2a6357b661.js.LICENSE.txt */
+export const __rspack_esm_ids=[290520];export const __webpack_modules__={vbmX(a,b,c){c.r(b);let d=(0,c("SHUh").c)("CircleOff",[["path",{d:"m2 2 20 20",key:"1ooewy"}],["path",{d:"M8.35 2.69A10 10 0 0 1 21.3 15.65",key:"1pfsoa"}],["path",{d:"M19.08 19.08A10 10 0 1 1 4.92 4.92",key:"1ablyi"}]]);c.d(b,{},{default:d})}};

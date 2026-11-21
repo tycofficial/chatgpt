@@ -1,2 +1,0 @@
-/*! LICENSE: 337665.f0af176604.js.LICENSE.txt */
-export const __rspack_esm_ids=[337665];export const __webpack_modules__={aTiR(e,a,p){p.r(a);let t=(0,p("jTyp").c)("CalendarArrowUp",[["path",{d:"m14 18 4-4 4 4",key:"ftkppy"}],["path",{d:"M16 2v4",key:"4m81vk"}],["path",{d:"M18 22v-8",key:"su0gjh"}],["path",{d:"M21 11.343V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h9",key:"1exg90"}],["path",{d:"M3 10h18",key:"8toen8"}],["path",{d:"M8 2v4",key:"1cmpym"}]]);p.d(a,{},{default:t})}};

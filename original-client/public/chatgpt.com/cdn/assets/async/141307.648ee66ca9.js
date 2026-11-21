@@ -1,0 +1,2 @@
+/*! LICENSE: 141307.648ee66ca9.js.LICENSE.txt */
+export const __rspack_esm_ids=[141307];export const __webpack_modules__={AACX(a,b,c){c.r(b);let d=(0,c("SHUh").c)("SquareEqual",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M7 10h10",key:"1101jm"}],["path",{d:"M7 14h10",key:"1mhdw3"}]]);c.d(b,{},{default:d})}};

@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[181213];export const __webpack_modules__={qTKq(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"wheat":0,"computers":0}},{"name":"Maximum supported values","initialValues":{"wheat":9,"computers":9}}]')}};

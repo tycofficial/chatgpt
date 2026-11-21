@@ -1,0 +1,2 @@
+/*! LICENSE: 8751.0287481cd5.js.LICENSE.txt */
+export const __rspack_esm_ids=[8751];export const __webpack_modules__={n6Od(a,b,c){c.r(b);let d=(0,c("SHUh").c)("LayoutGrid",[["rect",{width:"7",height:"7",x:"3",y:"3",rx:"1",key:"1g98yp"}],["rect",{width:"7",height:"7",x:"14",y:"3",rx:"1",key:"6d4xhi"}],["rect",{width:"7",height:"7",x:"14",y:"14",rx:"1",key:"nxv5o0"}],["rect",{width:"7",height:"7",x:"3",y:"14",rx:"1",key:"1bb6yr"}]]);c.d(b,{},{default:d})}};

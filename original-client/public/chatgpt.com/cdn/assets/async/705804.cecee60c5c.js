@@ -1,2 +1,0 @@
-/*! LICENSE: 705804.cecee60c5c.js.LICENSE.txt */
-export const __rspack_esm_ids=[705804];export const __webpack_modules__={qZXf(a,e,p){p.r(e);let t=(0,p("jTyp").c)("DiamondPlus",[["path",{d:"M12 8v8",key:"napkw2"}],["path",{d:"M2.7 10.3a2.41 2.41 0 0 0 0 3.41l7.59 7.59a2.41 2.41 0 0 0 3.41 0l7.59-7.59a2.41 2.41 0 0 0 0-3.41L13.7 2.71a2.41 2.41 0 0 0-3.41 0z",key:"1ey20j"}],["path",{d:"M8 12h8",key:"1wcyev"}]]);p.d(e,{},{default:t})}};

@@ -1,2 +1,0 @@
-/*! LICENSE: 222572.53491e7b9a.js.LICENSE.txt */
-export const __rspack_esm_ids=[222572];export const __webpack_modules__={tTbh(e,t,_){_.r(t);let o=(0,_("jTyp").c)("Brackets",[["path",{d:"M16 3h3v18h-3",key:"1yor1f"}],["path",{d:"M8 21H5V3h3",key:"1qrfwo"}]]);_.d(t,{},{default:o})}};

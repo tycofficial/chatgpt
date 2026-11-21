@@ -30,7 +30,7 @@ import { createNativeFileReferenceComposition } from './native-file-reference-co
 import { createLocalInputPreparer } from './local-input-preparation.mjs';
 import { createPreparedInputStore } from './prepared-input-store.mjs';
 import { createLocalPricingAdapter } from './local-pricing.mjs';
-import { SITE_ACCOUNT_SERVICE, getSiteAccount, getSiteSessionToken, hasModelSelectionAccess, getSitePlanCapabilities, logoutSiteAccount, getSiteHomeUrl, refreshSiteAccount } from './site-account.mjs';
+import { SITE_ACCOUNT_SERVICE, getSiteAccount, getSiteSessionToken, hasModelSelectionAccess, getSitePlanCapabilities, logoutSiteAccount, getSiteHomeUrl, refreshSiteAccount, startSiteGuestSession } from './site-account.mjs';
 import { createSiteSignOutController, isNativeSignOutLink, getSiteSignOutPageUrl } from './site-signout.mjs';
 import { isSitePricingPath, nativePricingDestination } from './native-pricing-trials.mjs';
 import { createLocalCodexAdapter } from './local-codex-adapter.mjs';
@@ -154,8 +154,24 @@ export function registerNativeLibrarySource(client, invalidate) {
   // outside render and only when an actual committed file made it dirty.
   queueMicrotask(notifyNativeLibrarySourceReady);
 }
+const mapSearchTool = { type: 'function', function: {
+  name: 'search_places', description: 'Find a public place requested by the user and return links to its map.',
+  parameters: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'], additionalProperties: false },
+} };
 export const localToolExecutor = createLibraryPublishingExecutor({
-  baseExecutor: localWorkspaceExecutor, getIdentity: getPersonalizationIdentity,
+  baseExecutor: {
+    ...localWorkspaceExecutor,
+    tools: [...localWorkspaceExecutor.tools, mapSearchTool],
+    async execute(call, context) {
+      if (call?.function?.name !== 'search_places') return localWorkspaceExecutor.execute(call, context);
+      const { query } = JSON.parse(call.function.arguments || '{}');
+      const result = await localMapsService.searchPlaces(query, { signal: context?.signal });
+      const places = result.places.map(place => ({ ...place, url: new URL('maps/' + encodeURIComponent(place.entity_id), getSiteHomeUrl()).href }));
+      const structuredContent = { ...result, places };
+      return { content: [{ type: 'text', text: JSON.stringify(structuredContent) }], structuredContent, isError: false };
+    },
+  },
+  getIdentity: getPersonalizationIdentity,
   publishGeneratedFile: getPersonalizationIdentity() ? async (...args) => {
     const receipt = await localFilesService.publishGeneratedFile(...args);
     try { void localNativeLibraryRefresh.notifyCommitted(receipt).catch(() => localProtocolDiagnostics.push({ type: 'native-library-refresh-observer-error' })); }
@@ -182,7 +198,7 @@ export const localPricingAdapter = createLocalPricingAdapter({
   },
 });
 export const localDiscoveryAdapter = createLocalDiscoveryAdapter({ storage: { getItem: key => globalThis.localStorage.getItem(key), setItem: (key, value) => globalThis.localStorage.setItem(key, value) }, getAccountId: () => getPrototypeLocalAuth()?.accountId ?? null, diagnostics: localProtocolDiagnostics });
-export const localMapsService = createLocalMapsService({ storage: { getItem: key => globalThis.localStorage.getItem(key), setItem: (key, value) => globalThis.localStorage.setItem(key, value) }, getAccountId: () => getPrototypeLocalAuth()?.accountId ?? null, diagnostics: localProtocolDiagnostics });
+export const localMapsService = createLocalMapsService({ storage: { getItem: key => globalThis.localStorage.getItem(key), setItem: (key, value) => globalThis.localStorage.setItem(key, value) }, getAccountId: () => getPrototypeLocalAuth()?.accountId ?? null, geocodeFetch: globalThis.fetch.bind(globalThis), diagnostics: localProtocolDiagnostics });
 // Verified site ownership and the local namespace are both bound at boot.
 // A preview flag, prototype account ID or late login cannot claim cloud history.
 const getHistoryIdentity = () => {
@@ -350,7 +366,11 @@ async function finishAccountHistoryBeforeLogout(signal) {
   } finally { localAccountHistory.dispose(); historyFeedback?.dispose(); }
 }
 export const siteSignOut = createSiteSignOutController({
-  home: getSiteHomeUrl, clearSiteAccount: () => logoutSiteAccount({ waitForRemote: true }), clearNativeSession: clearPrototypeLocalSession,
+  home: getSiteHomeUrl, clearSiteAccount: () => logoutSiteAccount({ waitForRemote: true }),
+  clearNativeSession() {
+    clearPrototypeLocalSession();
+    startSiteGuestSession();
+  },
   async prepare(signal) {
     localAppServer.interruptAll({ reason: 'logout' });
     localNativeLibraryRefresh.dispose();

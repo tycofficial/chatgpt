@@ -1,0 +1,2 @@
+/*! LICENSE: 178008.e22921a273.js.LICENSE.txt */
+export const __rspack_esm_ids=[178008];export const __webpack_modules__={xDsP(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Grid2x2",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M3 12h18",key:"1i2n21"}],["path",{d:"M12 3v18",key:"108xh3"}]]);c.d(b,{},{default:d})}};

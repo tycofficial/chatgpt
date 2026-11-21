@@ -1,0 +1,2 @@
+/*! LICENSE: 547290.494d345dee.js.LICENSE.txt */
+export const __rspack_esm_ids=[547290];export const __webpack_modules__={hGbV(a,b,c){c.r(b);let d=(0,c("SHUh").c)("GitPullRequest",[["circle",{cx:"18",cy:"18",r:"3",key:"1xkwt0"}],["circle",{cx:"6",cy:"6",r:"3",key:"1lh9wr"}],["path",{d:"M13 6h3a2 2 0 0 1 2 2v7",key:"1yeb86"}],["line",{x1:"6",x2:"6",y1:"9",y2:"21",key:"rroup"}]]);c.d(b,{},{default:d})}};

@@ -1,2 +1,0 @@
-/*! LICENSE: 504297.0c55dfbf6c.js.LICENSE.txt */
-export const __rspack_esm_ids=[504297];export const __webpack_modules__={FS3i(_,e,s){s.r(e);let t=(0,s("jTyp").c)("Minus",[["path",{d:"M5 12h14",key:"1ays0h"}]]);s.d(e,{},{default:t})}};

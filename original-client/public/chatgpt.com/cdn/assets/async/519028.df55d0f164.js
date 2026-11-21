@@ -1,0 +1,2 @@
+/*! LICENSE: 519028.df55d0f164.js.LICENSE.txt */
+export const __rspack_esm_ids=[519028];export const __webpack_modules__={xGv9(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Move3d",[["path",{d:"M5 3v16h16",key:"1mqmf9"}],["path",{d:"m5 19 6-6",key:"jh6hbb"}],["path",{d:"m2 6 3-3 3 3",key:"tkyvxa"}],["path",{d:"m18 16 3 3-3 3",key:"1d4glt"}]]);c.d(b,{},{default:d})}};

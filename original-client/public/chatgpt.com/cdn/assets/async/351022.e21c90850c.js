@@ -1,0 +1,2 @@
+/*! LICENSE: 351022.e21c90850c.js.LICENSE.txt */
+export const __rspack_esm_ids=[351022];export const __webpack_modules__={QS6t(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Forward",[["polyline",{points:"15 17 20 12 15 7",key:"1w3sku"}],["path",{d:"M4 18v-2a4 4 0 0 1 4-4h12",key:"jmiej9"}]]);c.d(b,{},{default:d})}};

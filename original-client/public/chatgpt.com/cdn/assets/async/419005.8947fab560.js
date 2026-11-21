@@ -1,2 +1,0 @@
-/*! LICENSE: 419005.8947fab560.js.LICENSE.txt */
-export const __rspack_esm_ids=[419005];export const __webpack_modules__={WHAm(e,a,t){t.r(a);let _=(0,t("jTyp").c)("Files",[["path",{d:"M20 7h-3a2 2 0 0 1-2-2V2",key:"x099mo"}],["path",{d:"M9 18a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h7l4 4v10a2 2 0 0 1-2 2Z",key:"18t6ie"}],["path",{d:"M3 7.6v12.8A1.6 1.6 0 0 0 4.6 22h9.8",key:"1nja0z"}]]);t.d(a,{},{default:_})}};

@@ -7,3 +7,7 @@
 /runtime.js -text
 /python-worker.js -text
 /release-updater.js -text
+/original-client/public/** -text
+/original-client/resource-manifest.json -text
+/original-client/dot-renderer-manifest.json -text
+/_orbit-renderer/** -text

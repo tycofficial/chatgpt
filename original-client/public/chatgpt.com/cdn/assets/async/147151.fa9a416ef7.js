@@ -1,2 +1,0 @@
-/*! LICENSE: 147151.fa9a416ef7.js.LICENSE.txt */
-export const __rspack_esm_ids=[147151];export const __webpack_modules__={HPxy(e,_,t){t.r(_);let d=(0,t("jTyp").c)("X",[["path",{d:"M18 6 6 18",key:"1bl5f8"}],["path",{d:"m6 6 12 12",key:"d8bk6v"}]]);t.d(_,{},{default:d})}};

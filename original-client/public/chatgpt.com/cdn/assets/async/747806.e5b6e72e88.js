@@ -1,2 +1,0 @@
-/*! LICENSE: 747806.e5b6e72e88.js.LICENSE.txt */
-export const __rspack_esm_ids=[747806];export const __webpack_modules__={ThkU(e,c,r){r.r(c);let t=(0,r("jTyp").c)("Videotape",[["rect",{width:"20",height:"16",x:"2",y:"4",rx:"2",key:"18n3k1"}],["path",{d:"M2 8h20",key:"d11cs7"}],["circle",{cx:"8",cy:"14",r:"2",key:"1k2qr5"}],["path",{d:"M8 12h8",key:"1wcyev"}],["circle",{cx:"16",cy:"14",r:"2",key:"14k7lr"}]]);r.d(c,{},{default:t})}};

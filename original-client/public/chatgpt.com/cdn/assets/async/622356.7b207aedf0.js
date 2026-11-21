@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[622356];export const __webpack_modules__={RAOp(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"a":-12,"b":-12,"c":-12,"d":-12}},{"name":"Maximum supported values","initialValues":{"a":12,"b":12,"c":12,"d":12}}]')}};

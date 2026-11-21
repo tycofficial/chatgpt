@@ -1,0 +1,2 @@
+/*! LICENSE: 972230.01f282ee33.js.LICENSE.txt */
+export const __rspack_esm_ids=[972230];export const __webpack_modules__={sYmb(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Tally2",[["path",{d:"M4 4v16",key:"6qkkli"}],["path",{d:"M9 4v16",key:"81ygyz"}]]);c.d(b,{},{default:d})}};

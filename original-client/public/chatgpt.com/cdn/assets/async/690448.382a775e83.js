@@ -1,0 +1,2 @@
+/*! LICENSE: 690448.382a775e83.js.LICENSE.txt */
+export const __rspack_esm_ids=[690448];export const __webpack_modules__={llJB(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Axis3d",[["path",{d:"M4 4v16h16",key:"1s015l"}],["path",{d:"m4 20 7-7",key:"17qe9y"}]]);c.d(b,{},{default:d})}};

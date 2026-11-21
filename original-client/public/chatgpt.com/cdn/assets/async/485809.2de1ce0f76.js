@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[485809];export const __webpack_modules__={JJDv(e){e.exports=JSON.parse('[{"name":"initial_example: 2-ethylpent-1-ene","initialValues":{"initial_example":"2-ethylpent-1-ene"}},{"name":"initial_example: 4-methylhex-2-yne","initialValues":{"initial_example":"4-methylhex-2-yne"}}]')}};

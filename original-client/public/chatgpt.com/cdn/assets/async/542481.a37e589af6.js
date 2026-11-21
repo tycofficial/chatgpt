@@ -1,0 +1,2 @@
+/*! LICENSE: 542481.a37e589af6.js.LICENSE.txt */
+export const __rspack_esm_ids=[542481];export const __webpack_modules__={OPaI(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Clock8",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["polyline",{points:"12 6 12 12 8 14",key:"tmc9b4"}]]);c.d(b,{},{default:d})}};

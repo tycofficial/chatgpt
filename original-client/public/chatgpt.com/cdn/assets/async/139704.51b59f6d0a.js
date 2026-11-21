@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[139704];export const __webpack_modules__={IQsl(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"tariff":0}},{"name":"Maximum supported values","initialValues":{"tariff":2}}]')}};

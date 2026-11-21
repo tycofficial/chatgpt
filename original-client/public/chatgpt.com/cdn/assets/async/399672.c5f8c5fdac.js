@@ -1,0 +1,2 @@
+/*! LICENSE: 399672.c5f8c5fdac.js.LICENSE.txt */
+export const __rspack_esm_ids=[399672];export const __webpack_modules__={tzKX(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Kanban",[["path",{d:"M6 5v11",key:"mdvv1e"}],["path",{d:"M12 5v6",key:"14ar3b"}],["path",{d:"M18 5v14",key:"7ji314"}]]);c.d(b,{},{default:d})}};

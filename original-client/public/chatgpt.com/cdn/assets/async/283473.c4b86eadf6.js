@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[283473];export const __webpack_modules__={RYut(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"objectDistanceMeters":0.25}},{"name":"Maximum supported values","initialValues":{"objectDistanceMeters":6}}]')}};

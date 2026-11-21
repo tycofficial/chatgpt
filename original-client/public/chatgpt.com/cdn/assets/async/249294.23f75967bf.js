@@ -1,0 +1,2 @@
+/*! LICENSE: 249294.23f75967bf.js.LICENSE.txt */
+export const __rspack_esm_ids=[249294];export const __webpack_modules__={Ab3N(a,b,c){c.r(b);let d=(0,c("SHUh").c)("SquareFunction",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",ry:"2",key:"1m3agn"}],["path",{d:"M9 17c2 0 2.8-1 2.8-2.8V10c0-2 1-3.3 3.2-3",key:"m1af9g"}],["path",{d:"M9 11.2h5.7",key:"3zgcl2"}]]);c.d(b,{},{default:d})}};

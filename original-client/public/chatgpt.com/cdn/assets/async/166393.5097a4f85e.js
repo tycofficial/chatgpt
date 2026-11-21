@@ -1,0 +1,2 @@
+/*! LICENSE: 166393.5097a4f85e.js.LICENSE.txt */
+export const __rspack_esm_ids=[166393];export const __webpack_modules__={Dw2Y(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ArrowLeftToLine",[["path",{d:"M3 19V5",key:"rwsyhb"}],["path",{d:"m13 6-6 6 6 6",key:"1yhaz7"}],["path",{d:"M7 12h14",key:"uoisry"}]]);c.d(b,{},{default:d})}};

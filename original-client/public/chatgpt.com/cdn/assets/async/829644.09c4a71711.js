@@ -1,2 +1,0 @@
-/*! LICENSE: 829644.09c4a71711.js.LICENSE.txt */
-export const __rspack_esm_ids=[829644];export const __webpack_modules__={oLDj(e,c,a){a.r(c);var r=a("mO5Y");a.d(c,{default:()=>r.default})},mO5Y(e,c,a){a.r(c);let r=(0,a("jTyp").c)("Scale3d",[["circle",{cx:"19",cy:"19",r:"2",key:"17f5cg"}],["circle",{cx:"5",cy:"5",r:"2",key:"1gwv83"}],["path",{d:"M5 7v12h12",key:"vtaa4r"}],["path",{d:"m5 19 6-6",key:"jh6hbb"}]]);a.d(c,{},{default:r})}};

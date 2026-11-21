@@ -1,0 +1,2 @@
+/*! LICENSE: 923150.999eb351ec.js.LICENSE.txt */
+export const __rspack_esm_ids=[923150];export const __webpack_modules__={tndM(a,b,c){c.r(b);let d=(0,c("SHUh").c)("SeparatorVertical",[["line",{x1:"12",x2:"12",y1:"3",y2:"21",key:"1efggb"}],["polyline",{points:"8 8 4 12 8 16",key:"bnfmv4"}],["polyline",{points:"16 16 20 12 16 8",key:"u90052"}]]);c.d(b,{},{default:d})}};

@@ -1,2 +1,0 @@
-/*! LICENSE: 631772.fa4b67cc54.js.LICENSE.txt */
-export const __rspack_esm_ids=[631772];export const __webpack_modules__={lCTP(e,t,_){_.r(t);let s=(0,_("jTyp").c)("ArrowBigRightDash",[["path",{d:"M5 9v6",key:"158jrl"}],["path",{d:"M9 9h3V5l7 7-7 7v-4H9V9z",key:"1sg2xn"}]]);_.d(t,{},{default:s})}};

@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[27205];export const __webpack_modules__={jd9M(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"coefficientA":-2,"coefficientB":-2}},{"name":"Maximum supported values","initialValues":{"coefficientA":2,"coefficientB":2}}]')}};

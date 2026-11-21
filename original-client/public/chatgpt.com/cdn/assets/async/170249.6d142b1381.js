@@ -1,0 +1,2 @@
+/*! LICENSE: 170249.6d142b1381.js.LICENSE.txt */
+export const __rspack_esm_ids=[170249];export const __webpack_modules__={cY5S(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ChevronsDownUp",[["path",{d:"m7 20 5-5 5 5",key:"13a0gw"}],["path",{d:"m7 4 5 5 5-5",key:"1kwcof"}]]);c.d(b,{},{default:d})}};

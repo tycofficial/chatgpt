@@ -1,2 +1,0 @@
-/*! LICENSE: 208502.bbc1188c15.js.LICENSE.txt */
-export const __rspack_esm_ids=[208502];export const __webpack_modules__={yo6q(e,t,o){o.r(t);let p=(0,o("jTyp").c)("ClockArrowDown",[["path",{d:"M12.338 21.994A10 10 0 1 1 21.925 13.227",key:"1i7shu"}],["path",{d:"M12 6v6l2 1",key:"19cm8n"}],["path",{d:"m14 18 4 4 4-4",key:"1waygx"}],["path",{d:"M18 14v8",key:"irew45"}]]);o.d(t,{},{default:p})}};

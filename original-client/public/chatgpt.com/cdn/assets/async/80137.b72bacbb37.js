@@ -1,0 +1,2 @@
+/*! LICENSE: 80137.b72bacbb37.js.LICENSE.txt */
+export const __rspack_esm_ids=[80137];export const __webpack_modules__={JFui(a,b,c){c.r(b);let d=(0,c("SHUh").c)("BadgeAlert",[["path",{d:"M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z",key:"3c2336"}],["line",{x1:"12",x2:"12",y1:"8",y2:"12",key:"1pkeuh"}],["line",{x1:"12",x2:"12.01",y1:"16",y2:"16",key:"4dfq90"}]]);c.d(b,{},{default:d})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 814755.d8c7c75423.js.LICENSE.txt */
+export const __rspack_esm_ids=[814755];export const __webpack_modules__={nN2g(a,b,c){c.r(b);let d=(0,c("SHUh").c)("BetweenHorizontalEnd",[["rect",{width:"13",height:"7",x:"3",y:"3",rx:"1",key:"11xb64"}],["path",{d:"m22 15-3-3 3-3",key:"26chmm"}],["rect",{width:"13",height:"7",x:"3",y:"14",rx:"1",key:"k6ky7n"}]]);c.d(b,{},{default:d})}};

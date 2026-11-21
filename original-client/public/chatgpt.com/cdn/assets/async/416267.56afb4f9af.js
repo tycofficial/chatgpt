@@ -1,2 +1,0 @@
-/*! LICENSE: 416267.56afb4f9af.js.LICENSE.txt */
-export const __rspack_esm_ids=[416267];export const __webpack_modules__={ex5R(e,t,_){_.r(t);let o=(0,_("jTyp").c)("MoveDownLeft",[["path",{d:"M11 19H5V13",key:"1akmht"}],["path",{d:"M19 5L5 19",key:"72u4yj"}]]);_.d(t,{},{default:o})}};

@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[445868];export const __webpack_modules__={Vfza(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"m1":7,"m2":7,"distance":10}},{"name":"Maximum supported values","initialValues":{"m1":10,"m2":10,"distance":18}}]')}};

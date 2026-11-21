@@ -1,2 +1,0 @@
-/*! LICENSE: 851581.15c4dab0e2.js.LICENSE.txt */
-export const __rspack_esm_ids=[851581];export const __webpack_modules__={NEyL(e,p,t){t.r(p);let d=(0,t("jTyp").c)("ArrowsUpFromLine",[["path",{d:"m4 6 3-3 3 3",key:"9aidw8"}],["path",{d:"M7 17V3",key:"19qxw1"}],["path",{d:"m14 6 3-3 3 3",key:"6iy689"}],["path",{d:"M17 17V3",key:"o0fmgi"}],["path",{d:"M4 21h16",key:"1h09gz"}]]);t.d(p,{},{default:d})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 113551.b1db456f5f.js.LICENSE.txt */
+export const __rspack_esm_ids=[113551];export const __webpack_modules__={mEu9(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Slash",[["path",{d:"M22 2 2 22",key:"y4kqgn"}]]);c.d(b,{},{default:d})}};

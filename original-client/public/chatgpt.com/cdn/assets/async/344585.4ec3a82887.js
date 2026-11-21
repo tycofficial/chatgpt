@@ -1,0 +1,2 @@
+/*! LICENSE: 344585.4ec3a82887.js.LICENSE.txt */
+export const __rspack_esm_ids=[344585];export const __webpack_modules__={Ekz6(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Briefcase",[["path",{d:"M16 20V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16",key:"jecpp"}],["rect",{width:"20",height:"14",x:"2",y:"6",rx:"2",key:"i6l2r4"}]]);c.d(b,{},{default:d})}};

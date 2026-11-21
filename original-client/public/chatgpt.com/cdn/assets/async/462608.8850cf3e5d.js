@@ -1,2 +1,0 @@
-/*! LICENSE: 462608.8850cf3e5d.js.LICENSE.txt */
-export const __rspack_esm_ids=[462608];export const __webpack_modules__={VDH6(e,t,c){c.r(t);let r=(0,c("jTyp").c)("SquareUserRound",[["path",{d:"M18 21a6 6 0 0 0-12 0",key:"kaz2du"}],["circle",{cx:"12",cy:"11",r:"4",key:"1gt34v"}],["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}]]);c.d(t,{},{default:r})}};

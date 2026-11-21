@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[20204];export const __webpack_modules__={qNTn(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"positiveInteger":1,"negativeInteger":-12}},{"name":"Maximum supported values","initialValues":{"positiveInteger":12,"negativeInteger":-1}}]')}};

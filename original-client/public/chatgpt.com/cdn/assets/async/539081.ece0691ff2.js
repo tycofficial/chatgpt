@@ -1,2 +1,0 @@
-/*! LICENSE: 539081.ece0691ff2.js.LICENSE.txt */
-export const __rspack_esm_ids=[539081];export const __webpack_modules__={zlWo(e,t,_){_.r(t);let l=(0,_("jTyp").c)("LaptopMinimal",[["rect",{width:"18",height:"12",x:"3",y:"4",rx:"2",ry:"2",key:"1qhy41"}],["line",{x1:"2",x2:"22",y1:"20",y2:"20",key:"ni3hll"}]]);_.d(t,{},{default:l})}};

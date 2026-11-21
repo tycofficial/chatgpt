@@ -1,2 +1,0 @@
-/*! LICENSE: 7526.ba464ea8d3.js.LICENSE.txt */
-export const __rspack_esm_ids=[7526];export const __webpack_modules__={tQPr(e,a,c){c.r(a);let t=(0,c("jTyp").c)("BookUser",[["path",{d:"M15 13a3 3 0 1 0-6 0",key:"10j68g"}],["path",{d:"M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20",key:"k3hazp"}],["circle",{cx:"12",cy:"8",r:"2",key:"1822b1"}]]);c.d(a,{},{default:t})}};

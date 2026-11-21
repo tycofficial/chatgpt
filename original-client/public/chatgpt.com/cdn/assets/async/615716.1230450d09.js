@@ -1,2 +1,0 @@
-/*! LICENSE: 615716.1230450d09.js.LICENSE.txt */
-export const __rspack_esm_ids=[615716];export const __webpack_modules__={QRhB(e,_,t){t.r(_);let d=(0,t("jTyp").c)("ArrowDown",[["path",{d:"M12 5v14",key:"s699le"}],["path",{d:"m19 12-7 7-7-7",key:"1idqje"}]]);t.d(_,{},{default:d})}};

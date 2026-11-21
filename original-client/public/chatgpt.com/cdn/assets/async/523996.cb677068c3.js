@@ -1,0 +1,2 @@
+/*! LICENSE: 523996.cb677068c3.js.LICENSE.txt */
+export const __rspack_esm_ids=[523996];export const __webpack_modules__={OGGY(a,b,c){c.r(b);let d=(0,c("SHUh").c)("MessageSquareOff",[["path",{d:"M21 15V5a2 2 0 0 0-2-2H9",key:"43el77"}],["path",{d:"m2 2 20 20",key:"1ooewy"}],["path",{d:"M3.6 3.6c-.4.3-.6.8-.6 1.4v16l4-4h10",key:"pwpm4a"}]]);c.d(b,{},{default:d})}};

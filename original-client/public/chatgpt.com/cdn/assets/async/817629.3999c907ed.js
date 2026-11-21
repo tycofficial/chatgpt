@@ -1,0 +1,2 @@
+/*! LICENSE: 817629.3999c907ed.js.LICENSE.txt */
+export const __rspack_esm_ids=[817629];export const __webpack_modules__={XQEW(a,b,c){c.r(b);let d=(0,c("SHUh").c)("VenetianMask",[["path",{d:"M2 12a5 5 0 0 0 5 5 8 8 0 0 1 5 2 8 8 0 0 1 5-2 5 5 0 0 0 5-5V7h-5a8 8 0 0 0-5 2 8 8 0 0 0-5-2H2Z",key:"1g6z3j"}],["path",{d:"M6 11c1.5 0 3 .5 3 2-2 0-3 0-3-2Z",key:"c2lwnf"}],["path",{d:"M18 11c-1.5 0-3 .5-3 2 2 0 3 0 3-2Z",key:"njd9zo"}]]);c.d(b,{},{default:d})}};

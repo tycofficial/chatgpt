@@ -1,0 +1,2 @@
+/*! LICENSE: 306762.84d56d6ee2.js.LICENSE.txt */
+export const __rspack_esm_ids=[306762];export const __webpack_modules__={EneH(a,b,c){c.r(b);let d=(0,c("SHUh").c)("MessageSquareDiff",[["path",{d:"m5 19-2 2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2",key:"1xuzuj"}],["path",{d:"M9 10h6",key:"9gxzsh"}],["path",{d:"M12 7v6",key:"lw1j43"}],["path",{d:"M9 17h6",key:"r8uit2"}]]);c.d(b,{},{default:d})}};

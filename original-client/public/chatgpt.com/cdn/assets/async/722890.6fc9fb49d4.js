@@ -1,0 +1,2 @@
+/*! LICENSE: 722890.6fc9fb49d4.js.LICENSE.txt */
+export const __rspack_esm_ids=[722890];export const __webpack_modules__={mkjW(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Pi",[["line",{x1:"9",x2:"9",y1:"4",y2:"20",key:"ovs5a5"}],["path",{d:"M4 7c0-1.7 1.3-3 3-3h13",key:"10pag4"}],["path",{d:"M18 20c-1.7 0-3-1.3-3-3V4",key:"1gaosr"}]]);c.d(b,{},{default:d})}};

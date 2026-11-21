@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[878059];export const __webpack_modules__={CTpA(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"extraWheat":0.5}},{"name":"Maximum supported values","initialValues":{"extraWheat":6}}]')}};

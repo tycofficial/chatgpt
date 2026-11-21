@@ -1,2 +1,0 @@
-/*! LICENSE: 653859.05c0cd283b.js.LICENSE.txt */
-export const __rspack_esm_ids=[653859];export const __webpack_modules__={AYs3(e,t,r){r.r(t);let h=(0,r("jTyp").c)("AlignHorizontalDistributeCenter",[["rect",{width:"6",height:"14",x:"4",y:"5",rx:"2",key:"1wwnby"}],["rect",{width:"6",height:"10",x:"14",y:"7",rx:"2",key:"1fe6j6"}],["path",{d:"M17 22v-5",key:"4b6g73"}],["path",{d:"M17 7V2",key:"hnrr36"}],["path",{d:"M7 22v-3",key:"1r4jpn"}],["path",{d:"M7 5V2",key:"liy1u9"}]]);r.d(t,{},{default:h})}};

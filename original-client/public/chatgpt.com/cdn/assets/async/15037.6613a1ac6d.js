@@ -1,2 +1,0 @@
-/*! LICENSE: 15037.6613a1ac6d.js.LICENSE.txt */
-export const __rspack_esm_ids=[15037];export const __webpack_modules__={k8Mj(t,e,d){d.r(e);let p=(0,d("jTyp").c)("Tent",[["path",{d:"M3.5 21 14 3",key:"1szst5"}],["path",{d:"M20.5 21 10 3",key:"1310c3"}],["path",{d:"M15.5 21 12 15l-3.5 6",key:"1ddtfw"}],["path",{d:"M2 21h20",key:"1nyx9w"}]]);d.d(e,{},{default:p})}};

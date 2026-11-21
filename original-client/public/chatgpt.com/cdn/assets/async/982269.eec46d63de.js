@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[982269];export const __webpack_modules__={rYHu(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"objectDistance":0.01,"focalLength":-10000}},{"name":"Maximum supported values","initialValues":{"objectDistance":10000,"focalLength":10000}}]')}};

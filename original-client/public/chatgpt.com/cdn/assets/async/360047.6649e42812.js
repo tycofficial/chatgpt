@@ -1,0 +1,2 @@
+/*! LICENSE: 360047.6649e42812.js.LICENSE.txt */
+export const __rspack_esm_ids=[360047];export const __webpack_modules__={CuKc(a,b,c){c.r(b);let d=(0,c("SHUh").c)("PillBottle",[["path",{d:"M18 11h-4a1 1 0 0 0-1 1v5a1 1 0 0 0 1 1h4",key:"17ldeb"}],["path",{d:"M6 7v13a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V7",key:"nc37y6"}],["rect",{width:"16",height:"5",x:"4",y:"2",rx:"1",key:"3jeezo"}]]);c.d(b,{},{default:d})}};

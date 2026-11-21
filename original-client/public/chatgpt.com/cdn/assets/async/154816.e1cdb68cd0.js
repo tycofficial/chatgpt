@@ -1,2 +1,0 @@
-/*! LICENSE: 154816.e1cdb68cd0.js.LICENSE.txt */
-export const __rspack_esm_ids=[154816];export const __webpack_modules__={aDuL(e,t,a){a.r(t);let p=(0,a("jTyp").c)("Repeat2",[["path",{d:"m2 9 3-3 3 3",key:"1ltn5i"}],["path",{d:"M13 18H7a2 2 0 0 1-2-2V6",key:"1r6tfw"}],["path",{d:"m22 15-3 3-3-3",key:"4rnwn2"}],["path",{d:"M11 6h6a2 2 0 0 1 2 2v10",key:"2f72bc"}]]);a.d(t,{},{default:p})}};

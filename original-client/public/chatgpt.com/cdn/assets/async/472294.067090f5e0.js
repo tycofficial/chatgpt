@@ -1,0 +1,2 @@
+/*! LICENSE: 472294.067090f5e0.js.LICENSE.txt */
+export const __rspack_esm_ids=[472294];export const __webpack_modules__={SCVH(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ArrowBigRightDash",[["path",{d:"M5 9v6",key:"158jrl"}],["path",{d:"M9 9h3V5l7 7-7 7v-4H9V9z",key:"1sg2xn"}]]);c.d(b,{},{default:d})}};

@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[249219];export const __webpack_modules__={xMMT(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"catalystEffectivenessPercent":0}},{"name":"Maximum supported values","initialValues":{"catalystEffectivenessPercent":100}}]')}};

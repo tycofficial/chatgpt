@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[40289];export const __webpack_modules__={fHFC(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"pointX":-3,"pointY":2,"planeAngleDegrees":-25}},{"name":"Maximum supported values","initialValues":{"pointX":3,"pointY":5.5,"planeAngleDegrees":25}}]')}};

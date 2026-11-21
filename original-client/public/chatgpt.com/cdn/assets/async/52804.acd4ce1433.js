@@ -1,2 +1,0 @@
-/*! LICENSE: 52804.acd4ce1433.js.LICENSE.txt */
-export const __rspack_esm_ids=[52804];export const __webpack_modules__={Kf2O(e,_,a){a.r(_);let t=(0,a("jTyp").c)("Pill",[["path",{d:"m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z",key:"wa1lgi"}],["path",{d:"m8.5 8.5 7 7",key:"rvfmvr"}]]);a.d(_,{},{default:t})}};

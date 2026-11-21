@@ -1,0 +1,2 @@
+/*! LICENSE: 406666.28940d6710.js.LICENSE.txt */
+export const __rspack_esm_ids=[406666];export const __webpack_modules__={MzGB(a,b,c){c.r(b);let d=(0,c("SHUh").c)("TvMinimal",[["path",{d:"M7 21h10",key:"1b0cd5"}],["rect",{width:"20",height:"14",x:"2",y:"3",rx:"2",key:"48i651"}]]);c.d(b,{},{default:d})}};

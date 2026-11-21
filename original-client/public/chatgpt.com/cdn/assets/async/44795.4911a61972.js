@@ -1,0 +1,2 @@
+/*! LICENSE: 44795.4911a61972.js.LICENSE.txt */
+export const __rspack_esm_ids=[44795];export const __webpack_modules__={lij6(a,b,c){c.r(b);let d=(0,c("SHUh").c)("SquareTerminal",[["path",{d:"m7 11 2-2-2-2",key:"1lz0vl"}],["path",{d:"M11 13h4",key:"1p7l4v"}],["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",ry:"2",key:"1m3agn"}]]);c.d(b,{},{default:d})},gnJS(a,b,c){c.r(b);var d=c("lij6");c.d(b,{default:()=>d.default})}};

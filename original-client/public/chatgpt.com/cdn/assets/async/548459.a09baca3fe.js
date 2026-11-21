@@ -1,2 +1,0 @@
-/*! LICENSE: 548459.a09baca3fe.js.LICENSE.txt */
-export const __rspack_esm_ids=[548459];export const __webpack_modules__={xg1R(e,a,p){p.r(a);let t=(0,p("jTyp").c)("MessageSquareCode",[["path",{d:"M10 7.5 8 10l2 2.5",key:"xb17xw"}],["path",{d:"m14 7.5 2 2.5-2 2.5",key:"5rap1v"}],["path",{d:"M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z",key:"1lielz"}]]);p.d(a,{},{default:t})}};

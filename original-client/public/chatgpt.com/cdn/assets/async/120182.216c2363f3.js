@@ -1,0 +1,2 @@
+/*! LICENSE: 120182.216c2363f3.js.LICENSE.txt */
+export const __rspack_esm_ids=[120182];export const __webpack_modules__={q8zp(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Bot",[["path",{d:"M12 8V4H8",key:"hb8ula"}],["rect",{width:"16",height:"12",x:"4",y:"8",rx:"2",key:"enze0r"}],["path",{d:"M2 14h2",key:"vft8re"}],["path",{d:"M20 14h2",key:"4cs60a"}],["path",{d:"M15 13v2",key:"1xurst"}],["path",{d:"M9 13v2",key:"rq6x2g"}]]);c.d(b,{},{default:d})}};

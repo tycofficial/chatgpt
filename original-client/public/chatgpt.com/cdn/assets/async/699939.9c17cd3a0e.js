@@ -1,2 +1,0 @@
-/*! LICENSE: 699939.9c17cd3a0e.js.LICENSE.txt */
-export const __rspack_esm_ids=[699939];export const __webpack_modules__={xPf3(e,_,t){t.r(_);let r=(0,t("jTyp").c)("FlagTriangleLeft",[["path",{d:"M17 22V2L7 7l10 5",key:"1rmf0r"}]]);t.d(_,{},{default:r})}};

@@ -1,2 +1,0 @@
-/*! LICENSE: 309021.ffd39231ae.js.LICENSE.txt */
-export const __rspack_esm_ids=[309021];export const __webpack_modules__={gpro(o,_,e){e.r(_);let p=(0,e("jTyp").c)("Navigation2",[["polygon",{points:"12 2 19 21 12 17 5 21 12 2",key:"x8c0qg"}]]);e.d(_,{},{default:p})}};

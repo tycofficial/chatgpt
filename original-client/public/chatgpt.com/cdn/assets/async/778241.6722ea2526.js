@@ -1,0 +1,2 @@
+/*! LICENSE: 778241.6722ea2526.js.LICENSE.txt */
+export const __rspack_esm_ids=[778241];export const __webpack_modules__={IQUE(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Tally3",[["path",{d:"M4 4v16",key:"6qkkli"}],["path",{d:"M9 4v16",key:"81ygyz"}],["path",{d:"M14 4v16",key:"12vmem"}]]);c.d(b,{},{default:d})}};

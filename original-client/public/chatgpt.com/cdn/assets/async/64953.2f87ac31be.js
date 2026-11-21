@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[64953];export const __webpack_modules__={SR9k(a){a.exports=JSON.parse('[{"name":"soil_texture: sand","initialValues":{"soil_texture":"sand"}},{"name":"soil_texture: clay","initialValues":{"soil_texture":"clay"}}]')}};

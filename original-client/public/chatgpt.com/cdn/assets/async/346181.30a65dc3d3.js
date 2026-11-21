@@ -1,2 +1,0 @@
-/*! LICENSE: 346181.30a65dc3d3.js.LICENSE.txt */
-export const __rspack_esm_ids=[346181];export const __webpack_modules__={mGyj(e,t,h){h.r(t);let p=(0,h("jTyp").c)("Table",[["path",{d:"M12 3v18",key:"108xh3"}],["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M3 9h18",key:"1pudct"}],["path",{d:"M3 15h18",key:"5xshup"}]]);h.d(t,{},{default:p})}};

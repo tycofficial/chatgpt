@@ -1,2 +1,0 @@
-/*! LICENSE: 783613.da5cb9d060.js.LICENSE.txt */
-export const __rspack_esm_ids=[783613];export const __webpack_modules__={ixSE(_,a,e){e.r(a);let t=(0,e("jTyp").c)("Bold",[["path",{d:"M6 12h9a4 4 0 0 1 0 8H7a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h7a4 4 0 0 1 0 8",key:"mg9rjx"}]]);e.d(a,{},{default:t})}};

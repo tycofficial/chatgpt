@@ -1,0 +1,2 @@
+/*! LICENSE: 676581.f5c0895fae.js.LICENSE.txt */
+export const __rspack_esm_ids=[676581];export const __webpack_modules__={iEnc(a,b,c){c.r(b);let d=(0,c("SHUh").c)("CornerDownRight",[["polyline",{points:"15 10 20 15 15 20",key:"1q7qjw"}],["path",{d:"M4 4v7a4 4 0 0 0 4 4h12",key:"z08zvw"}]]);c.d(b,{},{default:d})}};

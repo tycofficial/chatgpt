@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[817410];export const __webpack_modules__={FFua(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"observation1":1,"observation2":1,"observation3":1}},{"name":"Maximum supported values","initialValues":{"observation1":10,"observation2":10,"observation3":10}}]')}};

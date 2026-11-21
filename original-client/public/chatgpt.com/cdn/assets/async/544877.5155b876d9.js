@@ -1,2 +1,0 @@
-/*! LICENSE: 544877.5155b876d9.js.LICENSE.txt */
-export const __rspack_esm_ids=[544877];export const __webpack_modules__={BLWq(e,r,t){t.r(r);let c=(0,t("jTyp").c)("CircleStop",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["rect",{x:"9",y:"9",width:"6",height:"6",rx:"1",key:"1ssd4o"}]]);t.d(r,{},{default:c})},F1ra(e,r,t){t.r(r);var c=t("BLWq");t.d(r,{default:()=>c.default})}};

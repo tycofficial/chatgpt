@@ -1257,6 +1257,62 @@ export function createLocalDotAdapter({
   function profileForThread(session, threadId) {
     return typeof threadId === 'string' ? state(session).profiles.find(profile => profile.thread_ids.includes(threadId)) : undefined;
   }
+  function browserVoiceContext(threadId) {
+    const session = identity(false);
+    const thread = appServer?.threads?.get(threadId);
+    if (!session || thread?.adapterMetadata?.conversationOrigin !== 'dot') return null;
+    const row = profileForThread(session, threadId);
+    if (!row || row.active_root_thread_id !== threadId) return null;
+    return { accountId: session.accountId, userId: session.userId, profileId: row.id, threadId };
+  }
+  async function submitBrowserVoice(context, text, { signal } = {}) {
+    const current = browserVoiceContext(context.threadId);
+    if (!current || current.accountId !== context.accountId || current.userId !== context.userId || current.profileId !== context.profileId) {
+      throw error('Dot 语音所属的帐号已变更。', 409, 'LOCAL_DOT_ACCOUNT_CHANGED');
+    }
+    const session = identity();
+    signal?.throwIfAborted();
+    const requestId = uuid();
+    let resolve, reject;
+    const answer = new Promise((resolveResult, rejectResult) => { resolve = resolveResult; reject = rejectResult; });
+    const unsubscribe = appServer.subscribe(event => {
+      const { method, params } = event;
+      if (method !== 'turn/completed' || params.threadId !== context.threadId || params.turn.clientUserMessageId !== requestId) return;
+      const turn = params.turn;
+      if (turn.status !== 'completed') {
+        reject(error(turn.error?.message || '这条语音消息的回复中断了。请查看 Dot 对话。', 503, 'LOCAL_DOT_VOICE_TURN_INTERRUPTED'));
+        return;
+      }
+      const result = turn.items.filter(item => item.type === 'agentMessage' && item.phase !== 'commentary').map(item => item.text).join('\n').trim();
+      if (result) resolve(result);
+      else reject(error('Dot 没有返回可朗读的正文。', 503, 'LOCAL_DOT_VOICE_NO_REPLY'));
+    });
+    const abort = () => reject(signal.reason);
+    signal?.addEventListener('abort', abort, { once: true });
+    try {
+      return await Promise.all([roomLock(session, () => {
+        signal?.throwIfAborted();
+        assertIdentity(session);
+        const data = state(session);
+        const row = findProfile(data, context.profileId);
+        if (row.active_root_thread_id !== context.threadId) throw error('Dot 语音对话已更换。', 409, 'LOCAL_DOT_THREAD_NOT_FOUND');
+        if (row.messaging_room_id !== context.threadId) {
+          row.messaging_room_id = context.threadId;
+          save(session, data);
+        }
+        activateRoom(session, context.threadId);
+        const next = { requestId, text: safeText(text, 'Dot transcript', 100000), replyId: null, files: [], createdAt: new Date(now()).toISOString() };
+        if (!next.text.trim()) throw error('没有可发送的语音文本。');
+        const accepted = enqueueMessage(session, context.threadId, next);
+        if (!accepted.ok) throw error('语音文本未能保存到 Dot。', 503);
+        // Page transport readers receive the real submitted text and its eventual reply.
+        return accepted.json().then(message => publishRoomUpdate({ type: 'calpico-message-add', payload: { room_id: context.threadId, message } }));
+      }), answer]).then(([, result]) => result);
+    } finally {
+      unsubscribe();
+      signal?.removeEventListener('abort', abort);
+    }
+  }
   function createRpcFacade(base = appServer) {
     if (typeof base?.dispatch !== 'function' || typeof base?.subscribe !== 'function') throw new TypeError('Dot requires the shared conversation RPC façade');
     return Object.freeze({
@@ -1308,12 +1364,12 @@ export function createLocalDotAdapter({
       adapter_source: LOCAL_DOT_SOURCE, openai_cloud_entitlement: false,
     };
   }
-  /** Original jiwy c/f are capability atoms; a/d are boolean/null atoms. */
+  /** b634 jiwy exports separate account, navigation, and local-computer capabilities. */
   function adaptCapabilityAtoms(original, requireOriginal) {
-    const derive = requireOriginal('BolX').c, scope = requireOriginal('OWtl').a;
-    const inputs = requireOriginal('Cslg').m;
+    const derive = requireOriginal('Q840').c, scope = requireOriginal('OWtl').a;
+    const inputs = requireOriginal('Cslg').n;
     const capable = derive(scope, ({ get }) => {
-      if (!usesSitePolicy()) return get(original.c);
+      if (!usesSitePolicy()) return get(original.d);
       const auth = get(inputs);
       const isLoading = auth?.authLoading === true || auth?.accountLoading === true;
       const session = identity(false);
@@ -1321,22 +1377,34 @@ export function createLocalDotAdapter({
       const local = getLocalDotPolicy();
       return { ...local, isLoading, isCapable: !isLoading && matches && local.isCapable, retainNavigation: false, unresolved: false };
     });
-    const available = derive(scope, ({ get }) => get(capable).isCapable);
+    const available = derive(scope, ({ get }) => usesSitePolicy() ? get(capable).isCapable : get(original.e));
     return {
-      a: available, c: capable, d: available, f: capable,
+      a: derive(scope, ({ get }) => {
+        if (!usesSitePolicy()) return get(original.a);
+        const auth = get(inputs);
+        return auth?.authenticatedAccountId && auth?.authenticatedUserId ? get(available) : null;
+      }),
       b: (stateScope, accountId) => {
         if (!usesSitePolicy()) return original.b(stateScope, accountId);
         const session = identity(false);
-        return session != null && session.accountId === accountId && getLocalDotPolicy().isCapable;
+        return session != null && session.accountId === accountId && stateScope.get(available);
       },
-      i: stateScope => {
-        if (usesSitePolicy()) {
-          if (!getLocalDotPolicy().isCapable) throw error('The local Dot provider is unavailable', 503);
-          return;
-        }
-        return original.i(stateScope);
+      c: (stateScope, owner) => {
+        if (!usesSitePolicy()) return original.c(stateScope, owner);
+        const session = identity(false);
+        return session != null && session.accountId === owner?.accountId && session.userId === owner?.userId &&
+          stateScope.get(available);
+      },
+      d: capable,
+      e: available,
+      f: derive(scope, ({ get }) => usesSitePolicy() ? { ...get(capable), isCapable: false } : get(original.f)),
+      g: derive(scope, ({ get }) => usesSitePolicy() ? get(capable) : get(original.g)),
+      j: stateScope => {
+        if (!usesSitePolicy()) return original.j(stateScope);
+        if (!stateScope.get(available)) throw error('The local Dot provider is unavailable', 503);
       },
     };
   }
-  return { handle, createRpcFacade, subscribeRoomMessages, complete, getLocalDotPolicy, adaptCapabilityAtoms, provenance: Object.freeze({ provider: LOCAL_DOT_SOURCE, profileNamespace: '/tbo', cloudComputer: false, defaultAppearance: LOCAL_DOT_DEFAULT_APPEARANCE }) };
+  return { handle, createRpcFacade, subscribeRoomMessages, complete, getLocalDotPolicy, adaptCapabilityAtoms, browserVoiceContext, submitBrowserVoice,
+    provenance: Object.freeze({ provider: LOCAL_DOT_SOURCE, profileNamespace: '/tbo', cloudComputer: false, defaultAppearance: LOCAL_DOT_DEFAULT_APPEARANCE }) };
 }

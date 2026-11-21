@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[450608];export const __webpack_modules__={iQuD(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"runTimeMinutes":1,"fragmentSizeBasePairs":100}},{"name":"Maximum supported values","initialValues":{"runTimeMinutes":40,"fragmentSizeBasePairs":2000}}]')}};

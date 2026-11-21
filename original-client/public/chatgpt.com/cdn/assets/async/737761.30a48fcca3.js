@@ -1,2 +1,0 @@
-/*! LICENSE: 737761.30a48fcca3.js.LICENSE.txt */
-export const __rspack_esm_ids=[737761];export const __webpack_modules__={BLWq(e,c,t){t.r(c);let r=(0,t("jTyp").c)("CircleStop",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["rect",{x:"9",y:"9",width:"6",height:"6",rx:"1",key:"1ssd4o"}]]);t.d(c,{},{default:r})}};

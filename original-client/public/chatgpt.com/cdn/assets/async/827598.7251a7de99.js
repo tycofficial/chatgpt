@@ -1,0 +1,2 @@
+/*! LICENSE: 827598.7251a7de99.js.LICENSE.txt */
+export const __rspack_esm_ids=[827598];export const __webpack_modules__={s5NA(a,b,c){c.r(b);let d=(0,c("SHUh").c)("MessageCircleReply",[["path",{d:"M7.9 20A9 9 0 1 0 4 16.1L2 22Z",key:"vv11sd"}],["path",{d:"m10 15-3-3 3-3",key:"1pgupc"}],["path",{d:"M7 12h7a2 2 0 0 1 2 2v1",key:"1gheu4"}]]);c.d(b,{},{default:d})}};

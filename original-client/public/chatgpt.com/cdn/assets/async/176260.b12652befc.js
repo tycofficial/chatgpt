@@ -1,2 +1,0 @@
-/*! LICENSE: 176260.b12652befc.js.LICENSE.txt */
-export const __rspack_esm_ids=[176260];export const __webpack_modules__={PUkw(e,t,_){_.r(t);let p=(0,_("jTyp").c)("Redo",[["path",{d:"M21 7v6h-6",key:"3ptur4"}],["path",{d:"M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7",key:"1kgawr"}]]);_.d(t,{},{default:p})}};

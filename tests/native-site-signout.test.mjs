@@ -9,7 +9,7 @@ import {
 } from '../src/native-client/site-signout.mjs';
 
 const home = 'https://tycofficial.github.io/chatgpt/';
-const signedOut = home + '?localSession=0';
+const signedOut = home;
 const conversation = home + 'c/neutral-fixture';
 const origin = new URL(home).origin;
 
@@ -55,15 +55,15 @@ function nativeConfirmationAdapter(siteSignOut, markBrowserSignedOut) {
 }
 
 test('the original profile logout command enters the native confirmation route and completes inside the application', async () => {
-  const commands = nativeExports('956483.6cfec0717e.js', 'q3HK', 'vnLQ');
+  const commands = nativeExports('200429.7cb44b876c.js', 'q3HK', 'vnLQ');
   const navigations = [];
   const profileLocation = 'fixture-profile-dropdown';
-  const nativeHandler = nativeExports('76629.ac20799396.js', 'QtaM', 'zskm', {
+  const nativeHandler = nativeExports('767086.390bf6c64e.js', 'QtaM', 'zskm', {
     QosV: { c: length => Array(length).fill(Symbol.for('react.memo_cache_sentinel')) },
     c2QW: { o: { ACCESS_LOGOUT_ACTION_LOCATION_PROFILE_DROP_DOWN: profileLocation } },
-    BolX: { y: () => ({}) },
-    jqIZ: { _: () => (path, options) => navigations.push({ path, state: options.state }) },
-    EOo5: { a: () => ({ authMethod: 'chatgpt', email: 'fixture@example.invalid', requiresAuth: true }) },
+    Q840: { y: () => ({}) },
+    rEML: { ab: () => (path, options) => navigations.push({ path, state: options.state }) },
+    h6fL: { a: () => ({ authMethod: 'chatgpt', email: 'fixture@example.invalid', requiresAuth: true }) },
     xm2W: { b: () => false },
     EFj1: { a: (id, handler, options) => commands.c(id, handler, { isActive: () => options.enabled }) },
     Lhm2: { c: path => path },
@@ -242,4 +242,62 @@ test('the logout deadline aborts pending work and a canceled confirmation never 
   assert.equal(await signOut.complete(), signedOut);
   assert.equal(prepareSignal.aborted, true);
   assert.equal(clears, 1);
+});
+
+test('losing the local identity during native logout confirmation preserves that route', () => {
+  const source = fs.readFileSync(new URL('../src/native-client/boot-adapter.mjs', import.meta.url), 'utf8');
+  const start = source.indexOf('let siteLoginRedirecting = false;');
+  const end = source.indexOf("\noverrideExports('QdUF',", start);
+  assert.ok(start >= 0 && end > start);
+  let localIdentity = true;
+  let currentUrl = new URL('auth/logout?logout_navigation=fixture', home);
+  const navigations = [];
+  const { redirectToSiteLogin, maybeRedirectToSiteLogin } = vm.runInNewContext(
+    source.slice(start, end) + '\n;({ redirectToSiteLogin, maybeRedirectToSiteLogin })', {
+      location: {
+        get href() { return currentUrl.href; },
+        get origin() { return currentUrl.origin; },
+        get pathname() { return currentUrl.pathname; },
+        get search() { return currentUrl.search; },
+        get hash() { return currentUrl.hash; },
+        assign: href => navigations.push(new URL(href)),
+      },
+      getSiteLoginUrl: () => new URL('login', home),
+      getSiteHomeUrl: () => new URL(home),
+      isPrototypeLocalSession: () => localIdentity,
+      isSiteSignOutPage,
+      URL,
+    },
+  );
+  assert.equal(maybeRedirectToSiteLogin(), false);
+  localIdentity = false;
+  assert.equal(maybeRedirectToSiteLogin(), false);
+  redirectToSiteLogin();
+  assert.deepEqual(navigations, []);
+
+  currentUrl = new URL('codex?project=fixture#tools', home);
+  assert.equal(maybeRedirectToSiteLogin(), true);
+  assert.equal(navigations[0].pathname, '/chatgpt/login');
+  assert.equal(navigations[0].searchParams.get('next'), '/chatgpt/codex?project=fixture#tools');
+});
+
+test('the root retains its trailing slash when the native router replaces history', () => {
+  const scope = new EventTarget();
+  const calls = [];
+  const original = function (state, title, url) { calls.push({ receiver: this, state, title, url }); };
+  scope.history = { replaceState: original };
+  scope.location = { href: home };
+  const dispose = installSiteSignOutRestore({ home: () => home, scope });
+  const state = { idx: 1, usr: 'fixture' };
+  scope.history.replaceState(state, '', '/chatgpt?test=1#fixture');
+  assert.deepEqual(calls.pop(), { receiver: scope.history, state, title: '', url: home + '?test=1#fixture' });
+  for (const url of [null, '/chatgpt/c/fixture', '/chatgpt-sibling', 'https://example.invalid/chatgpt']) {
+    scope.history.replaceState(state, '', url);
+    assert.equal(calls.pop().url, url);
+  }
+  scope.location.href = home + 'codex';
+  scope.history.replaceState(state, '', '/chatgpt');
+  assert.equal(calls.pop().url, '/chatgpt');
+  dispose();
+  assert.equal(scope.history.replaceState, original);
 });

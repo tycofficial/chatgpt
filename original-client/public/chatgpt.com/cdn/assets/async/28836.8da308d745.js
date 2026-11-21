@@ -1,0 +1,2 @@
+/*! LICENSE: 28836.8da308d745.js.LICENSE.txt */
+export const __rspack_esm_ids=[28836];export const __webpack_modules__={n77O(a,b,c){c.r(b);var d=c("dKnj");c.d(b,{default:()=>d.default})},dKnj(a,b,c){c.r(b);let d=(0,c("SHUh").c)("SquareActivity",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M17 12h-2l-2 5-2-10-2 5H7",key:"15hlnc"}]]);c.d(b,{},{default:d})}};

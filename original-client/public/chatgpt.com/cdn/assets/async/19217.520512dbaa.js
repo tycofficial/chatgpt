@@ -1,2 +1,0 @@
-/*! LICENSE: 19217.520512dbaa.js.LICENSE.txt */
-export const __rspack_esm_ids=[19217];export const __webpack_modules__={xInn(e,_,o){o.r(_);let t=(0,o("jTyp").c)("Power",[["path",{d:"M12 2v10",key:"mnfbl"}],["path",{d:"M18.4 6.6a9 9 0 1 1-12.77.04",key:"obofu9"}]]);o.d(_,{},{default:t})}};

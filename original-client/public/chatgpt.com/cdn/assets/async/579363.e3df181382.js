@@ -1,0 +1,2 @@
+/*! LICENSE: 579363.e3df181382.js.LICENSE.txt */
+export const __rspack_esm_ids=[579363];export const __webpack_modules__={Vqp1(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Warehouse",[["path",{d:"M22 8.35V20a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8.35A2 2 0 0 1 3.26 6.5l8-3.2a2 2 0 0 1 1.48 0l8 3.2A2 2 0 0 1 22 8.35Z",key:"gksnxg"}],["path",{d:"M6 18h12",key:"9pbo8z"}],["path",{d:"M6 14h12",key:"4cwo0f"}],["rect",{width:"12",height:"12",x:"6",y:"10",key:"apd30q"}]]);c.d(b,{},{default:d})}};

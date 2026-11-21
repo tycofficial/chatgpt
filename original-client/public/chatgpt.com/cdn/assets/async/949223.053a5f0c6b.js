@@ -1,0 +1,2 @@
+/*! LICENSE: 949223.053a5f0c6b.js.LICENSE.txt */
+export const __rspack_esm_ids=[949223];export const __webpack_modules__={ufhl(a,b,c){c.r(b);let d=(0,c("SHUh").c)("FileAxis3d",[["path",{d:"M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z",key:"1rqfz7"}],["path",{d:"M14 2v4a2 2 0 0 0 2 2h4",key:"tnqrlb"}],["path",{d:"m8 18 4-4",key:"12zab0"}],["path",{d:"M8 10v8h8",key:"tlaukw"}]]);c.d(b,{},{default:d})}};

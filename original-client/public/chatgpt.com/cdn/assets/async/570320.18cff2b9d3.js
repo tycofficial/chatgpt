@@ -1,0 +1,2 @@
+/*! LICENSE: 570320.18cff2b9d3.js.LICENSE.txt */
+export const __rspack_esm_ids=[570320];export const __webpack_modules__={WeJu(a,b,c){c.r(b);var d=c("xDsP");c.d(b,{default:()=>d.default})},xDsP(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Grid2x2",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M3 12h18",key:"1i2n21"}],["path",{d:"M12 3v18",key:"108xh3"}]]);c.d(b,{},{default:d})}};

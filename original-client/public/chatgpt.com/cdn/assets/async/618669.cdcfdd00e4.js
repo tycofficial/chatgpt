@@ -1,0 +1,2 @@
+/*! LICENSE: 618669.cdcfdd00e4.js.LICENSE.txt */
+export const __rspack_esm_ids=[618669];export const __webpack_modules__={OsPL(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Diff",[["path",{d:"M12 3v14",key:"7cf3v8"}],["path",{d:"M5 10h14",key:"elsbfy"}],["path",{d:"M5 21h14",key:"11awu3"}]]);c.d(b,{},{default:d})}};

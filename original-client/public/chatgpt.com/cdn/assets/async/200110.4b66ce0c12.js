@@ -1,0 +1,2 @@
+/*! LICENSE: 200110.4b66ce0c12.js.LICENSE.txt */
+export const __rspack_esm_ids=[200110];export const __webpack_modules__={wg3v(a,b,c){c.r(b);let d=(0,c("SHUh").c)("MoveRight",[["path",{d:"M18 8L22 12L18 16",key:"1r0oui"}],["path",{d:"M2 12H22",key:"1m8cig"}]]);c.d(b,{},{default:d})}};

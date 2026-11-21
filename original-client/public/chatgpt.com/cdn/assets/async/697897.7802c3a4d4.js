@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[697897];export const __webpack_modules__={EG8D(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"first_number":1,"second_number":1}},{"name":"Maximum supported values","initialValues":{"first_number":100,"second_number":100}},{"name":"Coprime values","initialValues":{"first_number":11,"second_number":18}}]')}};

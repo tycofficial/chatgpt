@@ -1,0 +1,2 @@
+/*! LICENSE: 3645.bf4bf1de23.js.LICENSE.txt */
+export const __rspack_esm_ids=[3645];export const __webpack_modules__={NgG4(a,b,c){c.r(b);var d=c("MzGB");c.d(b,{default:()=>d.default})},MzGB(a,b,c){c.r(b);let d=(0,c("SHUh").c)("TvMinimal",[["path",{d:"M7 21h10",key:"1b0cd5"}],["rect",{width:"20",height:"14",x:"2",y:"3",rx:"2",key:"48i651"}]]);c.d(b,{},{default:d})}};

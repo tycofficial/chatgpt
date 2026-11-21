@@ -1,0 +1,2 @@
+/*! LICENSE: 795160.1843f4fe54.js.LICENSE.txt */
+export const __rspack_esm_ids=[795160];export const __webpack_modules__={hfLX(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Book",[["path",{d:"M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20",key:"k3hazp"}]]);c.d(b,{},{default:d})}};

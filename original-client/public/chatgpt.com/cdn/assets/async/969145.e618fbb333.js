@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[969145];export const __webpack_modules__={QfWF(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"reactionExtentMoles":0.5}},{"name":"Maximum supported values","initialValues":{"reactionExtentMoles":5}}]')}};

@@ -1,2 +1,0 @@
-/*! LICENSE: 170852.1919cd119d.js.LICENSE.txt */
-export const __rspack_esm_ids=[170852];export const __webpack_modules__={RWMq(e,t,_){_.r(t);let c=(0,_("jTyp").c)("Mouse",[["rect",{x:"5",y:"2",width:"14",height:"20",rx:"7",key:"11ol66"}],["path",{d:"M12 6v4",key:"16clxf"}]]);_.d(t,{},{default:c})}};

@@ -1,2 +1,0 @@
-/*! LICENSE: 10889.b30804a1a3.js.LICENSE.txt */
-export const __rspack_esm_ids=[10889];export const __webpack_modules__={xUAX(e,y,_){_.r(y);let p=(0,_("jTyp").c)("Link2Off",[["path",{d:"M9 17H7A5 5 0 0 1 7 7",key:"10o201"}],["path",{d:"M15 7h2a5 5 0 0 1 4 8",key:"1d3206"}],["line",{x1:"8",x2:"12",y1:"12",y2:"12",key:"rvw6j4"}],["line",{x1:"2",x2:"22",y1:"2",y2:"22",key:"a6p6uj"}]]);_.d(y,{},{default:p})}};

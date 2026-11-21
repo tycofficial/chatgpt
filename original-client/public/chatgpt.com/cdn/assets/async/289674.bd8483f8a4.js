@@ -1,2 +1,0 @@
-/*! LICENSE: 289674.bd8483f8a4.js.LICENSE.txt */
-export const __rspack_esm_ids=[289674];export const __webpack_modules__={DJhz(e,c,a){a.r(c);let t=(0,a("jTyp").c)("BookHeadphones",[["path",{d:"M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20",key:"k3hazp"}],["path",{d:"M8 12v-2a4 4 0 0 1 8 0v2",key:"1vsqkj"}],["circle",{cx:"15",cy:"12",r:"1",key:"1tmaij"}],["circle",{cx:"9",cy:"12",r:"1",key:"1vctgf"}]]);a.d(c,{},{default:t})}};

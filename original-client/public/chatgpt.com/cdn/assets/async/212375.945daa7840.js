@@ -1,0 +1,2 @@
+/*! LICENSE: 212375.945daa7840.js.LICENSE.txt */
+export const __rspack_esm_ids=[212375];export const __webpack_modules__={Ri3v(a,b,c){c.r(b);let d=(0,c("SHUh").c)("HeartOff",[["line",{x1:"2",y1:"2",x2:"22",y2:"22",key:"1w4vcy"}],["path",{d:"M16.5 16.5 12 21l-7-7c-1.5-1.45-3-3.2-3-5.5a5.5 5.5 0 0 1 2.14-4.35",key:"3mpagl"}],["path",{d:"M8.76 3.1c1.15.22 2.13.78 3.24 1.9 1.5-1.5 2.74-2 4.5-2A5.5 5.5 0 0 1 22 8.5c0 2.12-1.3 3.78-2.67 5.17",key:"1gh3v3"}]]);c.d(b,{},{default:d})}};

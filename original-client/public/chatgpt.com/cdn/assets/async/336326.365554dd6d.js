@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[336326];export const __webpack_modules__={xJag(i){i.exports=JSON.parse('[{"name":"initial_pattern: group-a-lower","initialValues":{"initial_pattern":"group-a-lower"}},{"name":"initial_pattern: group-a-higher","initialValues":{"initial_pattern":"group-a-higher"}},{"name":"initial_pattern: ties","initialValues":{"initial_pattern":"ties"}}]')}};

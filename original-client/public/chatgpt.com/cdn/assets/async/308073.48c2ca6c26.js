@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[308073];export const __webpack_modules__={wzqW(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"massKilograms":0.5,"speedMetersPerSecond":0,"radiusMeters":1}},{"name":"Maximum supported values","initialValues":{"massKilograms":5,"speedMetersPerSecond":8,"radiusMeters":5}}]')}};

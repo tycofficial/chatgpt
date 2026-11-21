@@ -1,0 +1,2 @@
+/*! LICENSE: 388131.46c3571785.js.LICENSE.txt */
+export const __rspack_esm_ids=[388131];export const __webpack_modules__={Xixs(a,b,c){c.r(b);let d=(0,c("SHUh").c)("File",[["path",{d:"M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z",key:"1rqfz7"}],["path",{d:"M14 2v4a2 2 0 0 0 2 2h4",key:"tnqrlb"}]]);c.d(b,{},{default:d})}};

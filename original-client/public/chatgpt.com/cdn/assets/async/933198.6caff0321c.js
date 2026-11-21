@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[933198];export const __webpack_modules__={KZ2Z(s,e,_){s.exports=_.p+"assets/bell.e33e880172.svg"}};

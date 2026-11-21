@@ -1,0 +1,2 @@
+/*! LICENSE: 882610.784f581b01.js.LICENSE.txt */
+export const __rspack_esm_ids=[882610];export const __webpack_modules__={FNpE(a,b,c){c.r(b);let d=(0,c("SHUh").c)("SquareUserRound",[["path",{d:"M18 21a6 6 0 0 0-12 0",key:"kaz2du"}],["circle",{cx:"12",cy:"11",r:"4",key:"1gt34v"}],["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}]]);c.d(b,{},{default:d})}};

@@ -1,2 +1,0 @@
-/*! LICENSE: 681348.3cd4cb7485.js.LICENSE.txt */
-export const __rspack_esm_ids=[681348];export const __webpack_modules__={iQTg(t,e,i){i.r(e);let r=(0,i("jTyp").c)("AlignVerticalJustifyStart",[["rect",{width:"14",height:"6",x:"5",y:"16",rx:"2",key:"1i8z2d"}],["rect",{width:"10",height:"6",x:"7",y:"6",rx:"2",key:"13squh"}],["path",{d:"M2 2h20",key:"1ennik"}]]);i.d(e,{},{default:r})}};

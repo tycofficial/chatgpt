@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[946429];export const __webpack_modules__={MaKl(n,e,r){r.d(e,{},{componentSource:"(() => {\nvar __dilDefaultExport = (function() {\n\n\n//#region DisableReplyAutocorrect.dil.tsx\n	function DisableReplyAutocorrect() {\n		return null;\n	}\n\n//#endregion\nreturn DisableReplyAutocorrect;\n})();\nreturn __dilDefaultExport;\n})()"})}};

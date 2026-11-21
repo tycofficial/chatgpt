@@ -1,0 +1,2 @@
+/*! LICENSE: 834120.006d01144b.js.LICENSE.txt */
+export const __rspack_esm_ids=[834120];export const __webpack_modules__={hZQX(a,b,c){c.r(b);let d=(0,c("SHUh").c)("AudioWaveform",[["path",{d:"M2 13a2 2 0 0 0 2-2V7a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0V4a2 2 0 0 1 4 0v13a2 2 0 0 0 4 0v-4a2 2 0 0 1 2-2",key:"57tc96"}]]);c.d(b,{},{default:d})}};

@@ -7,6 +7,18 @@ import { storedConversationOrigin, storedConversationSurface } from './local-app
 import { parseClassicInputMessages } from './classic-input-messages.mjs';
 export { parseClassicInputMessages, CLASSIC_CONTEXT_LIMITS } from './classic-input-messages.mjs';
 
+function isLocalAssistantText(message) {
+  return message?.metadata?.adapter_source === 'local-original-client-adapter' &&
+    message.author?.role === 'assistant' && message.content?.content_type === 'text';
+}
+
+export function wrapNativeChatPreamble(isPreamble) {
+  return function (message, ...args) {
+    if (message?.channel === 'commentary' && isLocalAssistantText(message)) return false;
+    return isPreamble.call(this, message, ...args);
+  };
+}
+
 export function wrapNativeReasoningGroups(groupMessages) {
   return function (items, options) {
     const isLocal = message => message?.metadata?.adapter_source === 'local-original-client-adapter';
@@ -16,6 +28,89 @@ export function wrapNativeReasoningGroups(groupMessages) {
     const hasPublicProgress = hasLiveThoughts && items.some(({ sourceMessage }) =>
       isLocal(sourceMessage) && sourceMessage.channel === 'commentary' && sourceMessage.content?.content_type === 'text');
     return groupMessages.call(this, items, hasPublicProgress ? { ...options, preserveStreamingOrder: true } : options);
+  };
+}
+
+function classicTurnClock(turn) {
+  const timing = turn.adapterMetadata?.reasoningLifecycle;
+  const start = timing?.workStartedAtMs ?? (Number.isFinite(turn.startedAt) ? turn.startedAt * 1000 : null);
+  const end = turn.status === 'inProgress' ? null :
+    timing?.completedAtMs ?? (Number.isFinite(turn.completedAt) ? turn.completedAt * 1000 : null);
+  return {
+    ...(Number.isFinite(start) ? { reasoning_start_time: start / 1000 } : {}),
+    ...(Number.isFinite(start) && Number.isFinite(end) && end >= start ? { reasoning_end_time: end / 1000 } : {}),
+  };
+}
+
+export function wrapNativeClassicTiming(projectTurn) {
+  return function (turn, options, ...args) {
+    const messages = turn.items.map(({ sourceMessage }) => sourceMessage);
+    const bodyTiming = messages.findLast(message => isLocalAssistantText(message) &&
+      Number.isFinite(message.metadata.adapter_turn_timing?.reasoning_start_time))
+      ?.metadata.adapter_turn_timing;
+    const reasoningTiming = messages.findLast(message => message?.metadata?.adapter_source === 'local-original-client-adapter' &&
+      Number.isFinite(message.metadata.reasoning_start_time))?.metadata;
+    const timing = bodyTiming ?? reasoningTiming;
+    const hasPartialAnswer = options?.isWorkConversation && options.isStreaming && messages.some(message =>
+      isLocalAssistantText(message) && Array.isArray(message.content.parts) &&
+      message.content.parts.some(part => typeof part === 'string' && part.trim()));
+    const result = projectTurn.call(this, turn,
+      hasPartialAnswer ? { ...options, showPartialAnswerContinuation: true } : options, ...args);
+    const projected = result?.turn?.turn;
+    if (!timing || !projected) return result;
+    const finished = !options?.isStreaming && timing.reasoning_status !== 'is_reasoning' &&
+      Number.isFinite(timing.reasoning_end_time) && timing.reasoning_end_time >= timing.reasoning_start_time;
+    return { ...result, turn: { ...result.turn, turn: {
+      ...projected,
+      workStartedAtMs: Math.round(timing.reasoning_start_time * 1000),
+      workCompletedAtMs: finished ? Math.round(timing.reasoning_end_time * 1000) : undefined,
+    } } };
+  };
+}
+
+export function wrapNativeClassicChatTiming(projectTurn) {
+  return function (turn, options, ...args) {
+    const result = projectTurn.call(this, turn, options, ...args);
+    const projected = result?.turn?.turn;
+    if (options?.isWorkConversation || !options?.isStreaming || projected?.status !== 'in_progress' ||
+        !turn.items.some(({ sourceMessage }) => isLocalAssistantText(sourceMessage))) return result;
+    const index = projected.items.findLastIndex(item => item.type === 'assistant-message' && item.content?.trim());
+    if (index < 0) return result;
+    const suffix = projected.items.findLastIndex((item, position) =>
+      position > index && item.type === 'chatgpt-reasoning-group' && !item.completed);
+    const existing = projected.items[suffix];
+    if (existing?.activeReasoning || existing?.items.length) return result;
+    const activeReasoning = { type: 'reasoning', presentation: 'thought', content: '', completed: false };
+    const items = [...projected.items];
+    if (existing) items[suffix] = { ...existing, activeReasoning };
+    else items.push({ type: 'chatgpt-reasoning-group', completed: false, items: [], activeReasoning });
+    return { ...result, turn: { ...result.turn, turn: { ...projected, items } } };
+  };
+}
+
+export function wrapNativeClassicStatus(NativeTurn, { renderTurn, renderStatus, renderChatElapsed, getThread }) {
+  return function SiteClassicTurn(props) {
+    const native = props.turn;
+    const ordinary = () => renderTurn(NativeTurn, props);
+    if (!native || !Array.isArray(native.items)) return ordinary();
+    const surface = storedConversationSurface(getThread(props.conversationId));
+    if (surface !== (props.isWorkConversation ? 'work' : 'chat')) return ordinary();
+    const body = native.items.findLastIndex(item => item.type === 'assistant-message' &&
+      typeof item.content === 'string' && item.content.trim());
+    if (body === -1 || !Number.isFinite(native.workStartedAtMs)) return ordinary();
+
+    const running = native.status === 'in_progress';
+    const activity = running ? native.items.slice(body + 1) : native.items;
+    if (activity.some(item => item.type === 'chatgpt-reasoning-group' && (!running || !item.completed))) return ordinary();
+    if (!running && (!Number.isFinite(native.workCompletedAtMs) || native.workCompletedAtMs < native.workStartedAtMs)) return ordinary();
+    if (surface === 'chat') {
+      return native.status === 'complete' ? renderChatElapsed(ordinary(), native.workCompletedAtMs - native.workStartedAtMs) : ordinary();
+    }
+
+    return renderStatus(ordinary(), {
+      status: running ? 'working' : native.status === 'cancelled' ? 'stopped' : 'worked',
+      startedAtMs: native.workStartedAtMs, completedAtMs: running ? null : native.workCompletedAtMs,
+    });
   };
 }
 
@@ -58,6 +153,8 @@ export class ClassicChatAdapter {
   }
   message(thread, turn, item, role) {
     const original = role === 'user' ? turn.adapterMetadata?.classicUserMessage : null;
+    const isWorkBody = role === 'assistant' && storedConversationSurface(thread) === 'work';
+    const hasBodyTiming = role === 'assistant' && (isWorkBody || turn.adapterMetadata?.reasoningLifecycle != null);
     const text = role === 'user' ? item.content.filter(part => part.type === 'text').map(part => part.text).join('\n') : item.text;
     const frontendSlug = turn.adapterMetadata?.frontendModelSlug ?? thread.adapterMetadata?.classicModelSlugs?.[turn.id] ?? thread.adapterMetadata?.frontendModelSlug ?? turn.model;
     const done = turn.status === 'completed', terminal = ['completed', 'failed', 'interrupted'].includes(turn.status), itemDone = terminal || turn.adapterMetadata.completedItemIds?.includes(item.id);
@@ -78,8 +175,7 @@ export class ClassicChatAdapter {
       weight: 1, recipient: 'all', channel: role === 'assistant' ? item.phase === 'commentary' ? 'commentary' : 'final' : null,
       // hUUF treats reasoning_status as a reasoning-group membership marker,
       // including on final text. Only real thoughts carry that lifecycle data.
-      // Native v5 commentary preserves preamble text and subsequent activity order.
-      metadata: { ...(original?.metadata ? structuredClone(original.metadata) : {}), ...(role === 'assistant' && item.phase === 'commentary' ? { cot_version: 'v5', hide_inline_actions: true, disable_turn_actions: true } : {}), model_slug: frontendSlug, thinking_effort: FRONTEND_TO_RAW_EFFORT[turn.reasoningEffort], reasoning_mode: turn.reasoningMode ?? 'standard', ...(turn.reasoningMode === 'pro' ? { reasoning_type: 'pro' } : {}), adapter_api_model: turn.model, is_complete: role === 'user' || Boolean(itemDone), ...(done && role === 'assistant' ? { finish_details: { type: 'stop', stop_tokens: [] } } : {}), ...(nativeReferences.length ? { content_references: nativeReferences } : {}), adapter_source: 'local-original-client-adapter' },
+      metadata: { ...(original?.metadata ? structuredClone(original.metadata) : {}), ...(hasBodyTiming ? { adapter_turn_timing: classicTurnClock(turn) } : {}), ...(role === 'assistant' && item.phase === 'commentary' ? { cot_version: 'v5', hide_inline_actions: true, disable_turn_actions: true } : {}), model_slug: frontendSlug, thinking_effort: FRONTEND_TO_RAW_EFFORT[turn.reasoningEffort], reasoning_mode: turn.reasoningMode ?? 'standard', ...(turn.reasoningMode === 'pro' ? { reasoning_type: 'pro' } : {}), adapter_api_model: turn.model, is_complete: role === 'user' || Boolean(itemDone), ...(done && role === 'assistant' ? { finish_details: { type: 'stop', stop_tokens: [] } } : {}), ...(nativeReferences.length ? { content_references: nativeReferences } : {}), adapter_source: 'local-original-client-adapter' },
     };
   }
   originalInputMessages(thread, turn, item) {
@@ -104,7 +200,15 @@ export class ClassicChatAdapter {
     let text = output.content.filter(part => part.type === 'text').map(part => part.text).join('\n');
     const data = output.structuredContent, files = data?.files || (data?.file ? [data.file] : []);
     if (files.length) text += '\n\n' + files.map(file => '[' + file.name + '](' + file.url + ')').join('\n');
-    return [call, { ...base, id: item.id + '-result', author: { role: 'tool', name: item.tool, metadata: {} }, recipient: 'all', channel: null, content: { content_type: 'text', parts: [text] }, status: output.isError ? 'finished_partial_completion' : 'finished_successfully', end_turn: false }];
+    const file = data?.file;
+    const written = storedConversationSurface(thread) === 'work' && item.server === 'browser_workspace' &&
+      (item.tool === 'create_file' || item.tool === 'write_file') && item.status === 'completed' &&
+      !item.error && output.isError === false && typeof file?.path === 'string' && file.path.startsWith('/mnt/data/');
+    const metadata = written ? {
+      ...base.metadata, ...classicTurnClock(turn), reasoning_title: file.path,
+      work_activity: { groups: [{ group_id: turn.id, items: [{ item_id: file.path, kind: 'file-change', count: 1, status: 'completed' }] }] },
+    } : base.metadata;
+    return [call, { ...base, metadata, id: item.id + '-result', author: { role: 'tool', name: item.tool, metadata: {} }, recipient: 'all', channel: null, content: { content_type: 'text', parts: [text] }, status: output.isError ? 'finished_partial_completion' : 'finished_successfully', end_turn: false }];
   }
   detail(thread) {
     const root = thread.adapterMetadata.classicRootId ?? `local-root-${thread.id}`, mapping = { [root]: { id: root, message: null, parent: null, children: [] } };
@@ -141,20 +245,8 @@ export class ClassicChatAdapter {
     return this.json([...this.server.threads.values()].filter(thread => thread.adapterMetadata.pinnedAt).map(thread => ({ item_type: 'conversation', pinned_at: thread.adapterMetadata.pinnedAt, item: { conversation: this.summary(thread) } })));
   }
   resumeAutomaticCheckpoint(thread) {
-    const turn = thread.turns.at(-1);
-    if (this.server.running.has(thread.id) || !turn || turn.status === 'completed' ||
-        !turn.adapterMetadata?.resumable || turn.adapterMetadata.resumePolicy !== 'automatic' || !turn.adapterMetadata.checkpoint) return;
-    try {
-      // The native recovery poll treats FAILURE as terminal. Admit the saved
-      // execution before returning its snapshot/status; subsequent readers attach
-      // to that same turn. resumeTurn performs the real current-plan permission check.
-      const transaction = this.server.dispatch('turn/resume', { threadId: thread.id, turnId: turn.id });
-      if (transaction.afterReply) setTimeout(transaction.afterReply, 0);
-    } catch (error) {
-      turn.adapterMetadata.resumePolicy = 'manual';
-      this.server.persist();
-      this.server.diagnostics?.push({ type: 'automatic-checkpoint-resume-rejected', code: error.code ?? null });
-    }
+    const afterReply = this.server.resumeAutomaticCheckpoint(thread);
+    if (afterReply) setTimeout(afterReply, 0);
   }
   /** REST bulk controls address Chat/Work records, never separate RPC/Dot storage. */
   bulkMutationTargets() {

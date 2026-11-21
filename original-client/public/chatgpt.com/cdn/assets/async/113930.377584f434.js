@@ -1,2 +1,0 @@
-/*! LICENSE: 113930.377584f434.js.LICENSE.txt */
-export const __rspack_esm_ids=[113930];export const __webpack_modules__={PanY(e,t,h){h.r(t);let a=(0,h("jTyp").c)("Dice4",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",ry:"2",key:"1m3agn"}],["path",{d:"M16 8h.01",key:"cr5u4v"}],["path",{d:"M8 8h.01",key:"1e4136"}],["path",{d:"M8 16h.01",key:"18s6g9"}],["path",{d:"M16 16h.01",key:"1f9h7w"}]]);h.d(t,{},{default:a})}};

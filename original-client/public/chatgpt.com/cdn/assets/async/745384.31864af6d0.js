@@ -1,0 +1,2 @@
+/*! LICENSE: 745384.31864af6d0.js.LICENSE.txt */
+export const __rspack_esm_ids=[745384];export const __webpack_modules__={GqEX(a,b,c){c.r(b);let d=(0,c("SHUh").c)("RotateCwSquare",[["path",{d:"M12 5H6a2 2 0 0 0-2 2v3",key:"l96uqu"}],["path",{d:"m9 8 3-3-3-3",key:"1gzgc3"}],["path",{d:"M4 14v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2",key:"1w2k5h"}]]);c.d(b,{},{default:d})}};

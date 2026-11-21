@@ -1,0 +1,2 @@
+/*! LICENSE: 903484.6e178999be.js.LICENSE.txt */
+export const __rspack_esm_ids=[903484];export const __webpack_modules__={Wg92(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Drumstick",[["path",{d:"M15.4 15.63a7.875 6 135 1 1 6.23-6.23 4.5 3.43 135 0 0-6.23 6.23",key:"1dtqwm"}],["path",{d:"m8.29 12.71-2.6 2.6a2.5 2.5 0 1 0-1.65 4.65A2.5 2.5 0 1 0 8.7 18.3l2.59-2.59",key:"1oq1fw"}]]);c.d(b,{},{default:d})}};

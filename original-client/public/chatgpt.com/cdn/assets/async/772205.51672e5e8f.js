@@ -1,2 +1,0 @@
-/*! LICENSE: 772205.51672e5e8f.js.LICENSE.txt */
-export const __rspack_esm_ids=[772205];export const __webpack_modules__={RXDV(e,a,s){s.r(a);let t=(0,s("jTyp").c)("MessageSquarePlus",[["path",{d:"M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z",key:"1lielz"}],["path",{d:"M12 7v6",key:"lw1j43"}],["path",{d:"M9 10h6",key:"9gxzsh"}]]);s.d(a,{},{default:t})}};

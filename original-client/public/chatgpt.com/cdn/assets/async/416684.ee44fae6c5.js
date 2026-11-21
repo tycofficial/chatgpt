@@ -1,0 +1,2 @@
+/*! LICENSE: 416684.ee44fae6c5.js.LICENSE.txt */
+export const __rspack_esm_ids=[416684];export const __webpack_modules__={aMbz(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Framer",[["path",{d:"M5 16V9h14V2H5l14 14h-7m-7 0 7 7v-7m-7 0h7",key:"1a2nng"}]]);c.d(b,{},{default:d})}};

@@ -1,2 +1,0 @@
-/*! LICENSE: 751431.50cfed9a0c.js.LICENSE.txt */
-export const __rspack_esm_ids=[751431];export const __webpack_modules__={mNBx(e,_,t){t.r(_);let o=(0,t("jTyp").c)("ChevronLeft",[["path",{d:"m15 18-6-6 6-6",key:"1wnfg3"}]]);t.d(_,{},{default:o})}};

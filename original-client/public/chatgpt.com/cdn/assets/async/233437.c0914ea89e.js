@@ -1,2 +1,0 @@
-/*! LICENSE: 233437.c0914ea89e.js.LICENSE.txt */
-export const __rspack_esm_ids=[233437];export const __webpack_modules__={EEFy(e,_,p){p.r(_);let t=(0,p("jTyp").c)("ChevronsUp",[["path",{d:"m17 11-5-5-5 5",key:"e8nh98"}],["path",{d:"m17 18-5-5-5 5",key:"2avn1x"}]]);p.d(_,{},{default:t})}};

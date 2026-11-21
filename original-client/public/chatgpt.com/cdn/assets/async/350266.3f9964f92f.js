@@ -1,0 +1,2 @@
+/*! LICENSE: 350266.3f9964f92f.js.LICENSE.txt */
+export const __rspack_esm_ids=[350266];export const __webpack_modules__={ZIJy(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ChartGantt",[["path",{d:"M10 6h8",key:"zvc2xc"}],["path",{d:"M12 16h6",key:"yi5mkt"}],["path",{d:"M3 3v16a2 2 0 0 0 2 2h16",key:"c24i48"}],["path",{d:"M8 11h7",key:"wz2hg0"}]]);c.d(b,{},{default:d})}};

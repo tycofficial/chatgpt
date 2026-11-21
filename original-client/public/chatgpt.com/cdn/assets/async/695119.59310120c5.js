@@ -1,2 +1,0 @@
-/*! LICENSE: 695119.59310120c5.js.LICENSE.txt */
-export const __rspack_esm_ids=[695119];export const __webpack_modules__={SEiO(e,t,_){_.r(t);let p=(0,_("jTyp").c)("Tally3",[["path",{d:"M4 4v16",key:"6qkkli"}],["path",{d:"M9 4v16",key:"81ygyz"}],["path",{d:"M14 4v16",key:"12vmem"}]]);_.d(t,{},{default:p})}};

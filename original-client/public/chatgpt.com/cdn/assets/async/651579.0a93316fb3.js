@@ -1,2 +1,0 @@
-/*! LICENSE: 651579.0a93316fb3.js.LICENSE.txt */
-export const __rspack_esm_ids=[651579];export const __webpack_modules__={KMLv(e,t,p){p.r(t);let a=(0,p("jTyp").c)("Subscript",[["path",{d:"m4 5 8 8",key:"1eunvl"}],["path",{d:"m12 5-8 8",key:"1ah0jp"}],["path",{d:"M20 19h-4c0-1.5.44-2 1.5-2.5S20 15.33 20 14c0-.47-.17-.93-.48-1.29a2.11 2.11 0 0 0-2.62-.44c-.42.24-.74.62-.9 1.07",key:"e8ta8j"}]]);p.d(t,{},{default:a})}};

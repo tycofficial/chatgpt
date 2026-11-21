@@ -1,0 +1,2 @@
+/*! LICENSE: 953447.e529ccd2a6.js.LICENSE.txt */
+export const __rspack_esm_ids=[953447];export const __webpack_modules__={ddRI(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Database",[["ellipse",{cx:"12",cy:"5",rx:"9",ry:"3",key:"msslwz"}],["path",{d:"M3 5V19A9 3 0 0 0 21 19V5",key:"1wlel7"}],["path",{d:"M3 12A9 3 0 0 0 21 12",key:"mv7ke4"}]]);c.d(b,{},{default:d})}};

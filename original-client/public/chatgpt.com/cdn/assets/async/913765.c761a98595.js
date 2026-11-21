@@ -1,0 +1,2 @@
+/*! LICENSE: 913765.c761a98595.js.LICENSE.txt */
+export const __rspack_esm_ids=[913765];export const __webpack_modules__={fgS2(a,b,c){c.r(b);var d=c("Y0vl");c.d(b,{default:()=>d.default})},Y0vl(a,b,c){c.r(b);let d=(0,c("SHUh").c)("UserRound",[["circle",{cx:"12",cy:"8",r:"5",key:"1hypcn"}],["path",{d:"M20 21a8 8 0 0 0-16 0",key:"rfgkzh"}]]);c.d(b,{},{default:d})}};

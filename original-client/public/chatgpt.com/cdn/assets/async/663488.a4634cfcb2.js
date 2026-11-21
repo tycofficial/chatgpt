@@ -1,0 +1,2 @@
+/*! LICENSE: 663488.a4634cfcb2.js.LICENSE.txt */
+export const __rspack_esm_ids=[663488];export const __webpack_modules__={gZhQ(a,b,c){c.r(b);let d=(0,c("SHUh").c)("MessageCircleWarning",[["path",{d:"M7.9 20A9 9 0 1 0 4 16.1L2 22Z",key:"vv11sd"}],["path",{d:"M12 8v4",key:"1got3b"}],["path",{d:"M12 16h.01",key:"1drbdi"}]]);c.d(b,{},{default:d})}};

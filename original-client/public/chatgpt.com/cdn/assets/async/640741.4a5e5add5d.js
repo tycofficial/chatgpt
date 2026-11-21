@@ -1,0 +1,2 @@
+/*! LICENSE: 640741.4a5e5add5d.js.LICENSE.txt */
+export const __rspack_esm_ids=[640741];export const __webpack_modules__={nPhW(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Bed",[["path",{d:"M2 4v16",key:"vw9hq8"}],["path",{d:"M2 8h18a2 2 0 0 1 2 2v10",key:"1dgv2r"}],["path",{d:"M2 17h20",key:"18nfp3"}],["path",{d:"M6 8v9",key:"1yriud"}]]);c.d(b,{},{default:d})}};

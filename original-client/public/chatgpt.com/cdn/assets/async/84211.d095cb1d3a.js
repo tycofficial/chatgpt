@@ -1,2 +1,0 @@
-/*! LICENSE: 84211.d095cb1d3a.js.LICENSE.txt */
-export const __rspack_esm_ids=[84211];export const __webpack_modules__={Q5Rp(e,t,d){d.r(t);let _=(0,d("jTyp").c)("Rows2",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M3 12h18",key:"1i2n21"}]]);d.d(t,{},{default:_})},k4XR(e,t,d){d.r(t);var _=d("Q5Rp");d.d(t,{default:()=>_.default})}};

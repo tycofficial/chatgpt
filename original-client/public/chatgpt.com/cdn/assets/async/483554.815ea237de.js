@@ -1,0 +1,2 @@
+/*! LICENSE: 483554.815ea237de.js.LICENSE.txt */
+export const __rspack_esm_ids=[483554];export const __webpack_modules__={cq9U(a,b,c){c.r(b);let d=(0,c("SHUh").c)("FastForward",[["polygon",{points:"13 19 22 12 13 5 13 19",key:"587y9g"}],["polygon",{points:"2 19 11 12 2 5 2 19",key:"3pweh0"}]]);c.d(b,{},{default:d})}};

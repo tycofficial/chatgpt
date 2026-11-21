@@ -1,2 +1,0 @@
-/*! LICENSE: 893852.5c90051130.js.LICENSE.txt */
-export const __rspack_esm_ids=[893852];export const __webpack_modules__={XBz3(_,a,e){e.r(a);let t=(0,e("jTyp").c)("Radical",[["path",{d:"M3 12h3.28a1 1 0 0 1 .948.684l2.298 7.934a.5.5 0 0 0 .96-.044L13.82 4.771A1 1 0 0 1 14.792 4H21",key:"1mqj8i"}]]);e.d(a,{},{default:t})}};

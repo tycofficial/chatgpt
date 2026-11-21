@@ -1,0 +1,2 @@
+/*! LICENSE: 345593.04c0c43459.js.LICENSE.txt */
+export const __rspack_esm_ids=[345593];export const __webpack_modules__={epta(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Axe",[["path",{d:"m14 12-8.5 8.5a2.12 2.12 0 1 1-3-3L11 9",key:"csbz4o"}],["path",{d:"M15 13 9 7l4-4 6 6h3a8 8 0 0 1-7 7z",key:"113wfo"}]]);c.d(b,{},{default:d})}};

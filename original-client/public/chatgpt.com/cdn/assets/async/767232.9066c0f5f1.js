@@ -1,0 +1,2 @@
+/*! LICENSE: 767232.9066c0f5f1.js.LICENSE.txt */
+export const __rspack_esm_ids=[767232];export const __webpack_modules__={jy2S(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Touchpad",[["rect",{width:"20",height:"16",x:"2",y:"4",rx:"2",key:"18n3k1"}],["path",{d:"M2 14h20",key:"myj16y"}],["path",{d:"M12 20v-6",key:"1rm09r"}]]);c.d(b,{},{default:d})}};

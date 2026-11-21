@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[989392];export const __webpack_modules__={cZkn(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"planeAngleDegrees":15,"boxMassKilograms":2}},{"name":"Maximum supported values","initialValues":{"planeAngleDegrees":45,"boxMassKilograms":6}}]')}};

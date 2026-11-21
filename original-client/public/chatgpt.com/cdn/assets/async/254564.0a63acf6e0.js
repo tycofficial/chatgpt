@@ -1,2 +1,0 @@
-/*! LICENSE: 254564.0a63acf6e0.js.LICENSE.txt */
-export const __rspack_esm_ids=[254564];export const __webpack_modules__={LbEo(e,o,_){_.r(o);let p=(0,_("jTyp").c)("Forward",[["polyline",{points:"15 17 20 12 15 7",key:"1w3sku"}],["path",{d:"M4 18v-2a4 4 0 0 1 4-4h12",key:"jmiej9"}]]);_.d(o,{},{default:p})}};

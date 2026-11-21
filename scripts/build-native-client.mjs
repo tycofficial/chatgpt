@@ -10,7 +10,8 @@ const output=path.join(root,'native-client');
 const servicesOnly = process.argv.includes('--services-only');
 const sha256 = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const helpers=['boot-adapter.mjs','startup-compatibility.mjs','image-input-compression.mjs','service-boundary.mjs','provider-routing.mjs','local-native-read-aloud.mjs','local-web-search.mjs','preferred-host-transport.mjs','synthetic-bootstrap.mjs','public-auth-envelope.mjs','local-identity.mjs','local-token-identity.mjs','site-account.mjs','chat-history-sync.mjs','account-history-coordinator.mjs','native-cloud-sync-feedback.mjs','local-model-selection-policy.mjs','local-configuration.mjs','local-user-preferences.mjs','local-personalization-service.mjs','local-personalization-context.mjs','local-host-settings.mjs','local-work-policy.mjs','local-codex-adapter.mjs','local-dot-adapter.mjs','local-map-provider.mjs','local-maps-service.mjs','local-discovery.mjs','public-plugin-catalog.mjs','local-pubsub.mjs','model-catalog-adapter.mjs','local-app-server.mjs','classic-chat-adapter.mjs','portable-conversation-share.mjs','classic-response-branches.mjs','classic-input-messages.mjs','agent-turn-runner.mjs','site-ultra-orchestrator.mjs','browser-tool-executor.mjs','local-document-extraction.mjs','document-text-worker.mjs','local-ooxml-container.mjs','local-office-xml.mjs','local-xlsx-extraction.mjs','local-pptx-extraction.mjs','local-files-service.mjs','local-library-service.mjs','local-library-publisher.mjs','published-resource-rehydration.mjs','native-library-refresh.mjs','native-publication-references.mjs','native-workspace-references.mjs','native-file-reference-composition.mjs','local-native-upload.mjs','local-native-download.mjs','local-workspace-download-source.mjs','local-workspace-download-service.mjs','owned-download-transport.mjs','local-input-preparation.mjs','local-pricing.mjs','entry-library.mjs'];
-helpers.push('native-pricing-trials.mjs', 'site-signout.mjs', 'native-site-login.mjs', 'site-paths.mjs', 'prepared-input-store.mjs', 'site-inference-transport.mjs');
+helpers.push('native-pricing-trials.mjs', 'site-signout.mjs', 'native-site-login.mjs', 'site-paths.mjs', 'prepared-input-store.mjs', 'site-inference-transport.mjs', 'local-dot-browser-voice.mjs');
+helpers.push('local-dot-transcription.mjs');
 if(new Set(helpers).size!==helpers.length)throw Error('Duplicate native helper declaration');
 if(process.argv.includes('--from-reference')){
  if (servicesOnly) throw Error('A service update requires a previously published client');
@@ -22,6 +23,12 @@ const entryPlanInput=await fs.readFile(path.join(input,'entry-plan.json'),'utf8'
 const plan=JSON.parse(entryPlanInput);
 const sourceBuild=plan.sourceBuild??'ef0c3fb941611420d8683bf88f61acf1a8ac6b19';
 if (!/^[a-f\d]{40}$/.test(sourceBuild)) throw Error('Invalid upstream build identifier');
+if (plan.assetManifestSha256) {
+ const resourceManifest = await fs.readFile(path.join(root,'original-client/resource-manifest.json'));
+ if (sha256(resourceManifest) !== plan.assetManifestSha256 || JSON.parse(resourceManifest).sourceBuild !== sourceBuild) {
+  throw Error('The public asset graph does not match the native entry plan');
+ }
+}
 const publicAssets=[];
 async function collectAssets(directory){
  let entries;try{entries=await fs.readdir(path.join(input,directory),{withFileTypes:true});}catch(error){if(error.code==='ENOENT')return;throw error;}
@@ -76,7 +83,7 @@ for(const asset of publicAssets){
 // Keep the site's implementation out of the upstream archive manifest.
 const siteResourceAliases = [];
 const preparationWorker = publicAssets.find(asset => asset.relative === 'dot-assets/preparation-worker.mjs');
-if (preparationWorker) {
+if (preparationWorker && !supplementalManifest.sourceBuild) {
  const file = '_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/single-thread/preparation-worker.mjs';
  if (servicesOnly) {
   if (sha256(await fs.readFile(path.join(root, file))) !== sha256(preparationWorker.bytes)) throw Error('Renderer asset differs: ' + file);
@@ -105,7 +112,8 @@ for(const [name,original]of raw){
    registrationEntry,
   };
   text=replace(text,"await (await fetch('/__prototype/entry-plan.json')).json()",JSON.stringify(bootPlan));
-  text=replace(text,'installSyntheticDocumentState();',"installSyntheticDocumentState();\nif (globalThis.__CHATGPT_REPLICA_ENV__) window.__reactRouterContext.basename = globalThis.__CHATGPT_REPLICA_ENV__.basePath.replace(/\\/$/, '') || '/';");
+  const installDocument = 'installSyntheticDocumentState(localCodexAdapter.mergeConfiguration);';
+  text=replace(text,installDocument,installDocument+"\nif (globalThis.__CHATGPT_REPLICA_ENV__) window.__reactRouterContext.basename = globalThis.__CHATGPT_REPLICA_ENV__.basePath.replace(/\\/$/, '') || '/';");
  }
  if(name==='entry-library.mjs'){
   text=replace(text,'/__prototype/entry-library.mjs','./entry-library.mjs?v='+release);
@@ -150,6 +158,7 @@ const pagePath = location.pathname.replace(/\\/index\\.html$/, '/').replace(/\\/
 const authEntry = getSiteAuthEntryKind(location.href, rootURL);
 if (authEntry === 'logout') {
  await siteAccount.logoutSiteAccount({waitForRemote:true});
+ siteAccount.startSiteGuestSession();
  location.replace(signOut.getSiteSignedOutUrl(rootURL));
 } else if(authEntry === 'login' || authEntry === 'signup') {
  siteAccount.renderSiteLoginPage();
@@ -251,7 +260,10 @@ self.addEventListener('fetch',event=>{
 });
 `;
 await write(path.join(root,'native-client-worker.js'),worker);
-const cssAsset = 'original-client/public/chatgpt.com/cdn/assets/c7fcb2505631.css';
+const upstreamStylesheet = plan.stylesheet ?? '/cdn/assets/c7fcb2505631.css';
+const upstreamSprite = plan.iconSprite ?? '/cdn/assets/icons-65c0f11497ac4847.svg';
+if (!/^\/cdn\/assets\/[\w.-]+\.css$/.test(upstreamStylesheet) || !/^\/cdn\/assets\/[\w.-]+\.svg$/.test(upstreamSprite)) throw Error('Invalid native shell asset path');
+const cssAsset = 'original-client/public/chatgpt.com' + upstreamStylesheet;
 let html;
 if (servicesOnly) {
  const existing = await fs.readFile(path.join(root, 'native-client-shell.html'), 'utf8');
@@ -297,7 +309,7 @@ const preload = `<script>(function(){
  ${JSON.stringify(primaryModules)}.forEach(function(url){load('modulepreload',url)});
 })()</script>`;
 html=`<!DOCTYPE html>
-<html class="chatgpt-theme" lang="zh-CN" dir="ltr" data-theme="light" data-appearance-preset="codex" data-ios="false" data-build="${sourceBuild}" data-client-build-revision="${sourceBuild}" data-router-basename="${deploymentBase.replace(/\/$/,'') || '/'}" data-icon-sprite-url="${deploymentBase}original-client/public/chatgpt.com/cdn/assets/icons-65c0f11497ac4847.svg" data-codex-cli-version="0.171.0-alpha.2" data-codex-window-type="browser" data-window-type="browser" data-native-client-release="${release}">
+<html class="chatgpt-theme" lang="zh-CN" dir="ltr" data-theme="light" data-appearance-preset="codex" data-ios="false" data-build="${sourceBuild}" data-client-build-revision="${sourceBuild}" data-router-basename="${deploymentBase.replace(/\/$/,'') || '/'}" data-icon-sprite-url="${originalOnSite(upstreamSprite)}" data-codex-cli-version="0.171.0-alpha.2" data-codex-window-type="browser" data-window-type="browser" data-native-client-release="${release}">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><script type="importmap">${JSON.stringify({imports:{"/cdn/":deploymentBase+"original-client/public/chatgpt.com/cdn/","https://chatgpt.com/cdn/":deploymentBase+"original-client/public/chatgpt.com/cdn/","https://cdn.oaistatic.com/":deploymentBase+"original-client/public/cdn.oaistatic.com/"}})}</script>${preload}<style data-native-asset-rebase>${localCSS}</style><style data-codex-app-themes></style><title>ChatGPT</title></head>
 <body><div id="site-start-status" role="status" style="margin:24px;font:16px system-ui">正在打开…</div><script>function siteModuleFailed(){var n=document.getElementById('site-start-status');if(n){n.textContent='此浏览器未能载入页面。';var b=document.createElement('button');b.textContent='重新加载';b.onclick=function(){location.reload()};n.appendChild(b)}}</script><script nomodule>siteModuleFailed()</script><script type="module" onerror="siteModuleFailed()" src="${deploymentBase}native-client/bootstrap.mjs?v=${release}"></script></body></html>
 `;

@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[784647];export const __webpack_modules__={J83p(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"magnitudeA":0.5,"magnitudeB":0.5,"angleDeg":5}},{"name":"Maximum supported values","initialValues":{"magnitudeA":6,"magnitudeB":6,"angleDeg":175}},{"name":"order: bxa","initialValues":{"order":"bxa"}}]')}};

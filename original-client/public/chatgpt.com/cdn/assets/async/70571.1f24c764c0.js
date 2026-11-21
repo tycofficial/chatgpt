@@ -1,2 +1,0 @@
-/*! LICENSE: 70571.1f24c764c0.js.LICENSE.txt */
-export const __rspack_esm_ids=[70571];export const __webpack_modules__={DlvK(e,c,_){_.r(c);let r=(0,_("jTyp").c)("UserRound",[["circle",{cx:"12",cy:"8",r:"5",key:"1hypcn"}],["path",{d:"M20 21a8 8 0 0 0-16 0",key:"rfgkzh"}]]);_.d(c,{},{default:r})}};

@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[415283];export const __webpack_modules__={hqgS(a){a.exports=JSON.parse('[{"name":"compound: carbon dioxide","initialValues":{"compound":"carbon dioxide"}},{"name":"compound: sodium chloride","initialValues":{"compound":"sodium chloride"}}]')}};

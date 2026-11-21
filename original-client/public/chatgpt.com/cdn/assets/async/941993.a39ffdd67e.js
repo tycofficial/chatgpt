@@ -1,0 +1,2 @@
+/*! LICENSE: 941993.a39ffdd67e.js.LICENSE.txt */
+export const __rspack_esm_ids=[941993];export const __webpack_modules__={SHN8(a,b,c){c.r(b);let d=(0,c("SHUh").c)("TrendingUp",[["polyline",{points:"22 7 13.5 15.5 8.5 10.5 2 17",key:"126l90"}],["polyline",{points:"16 7 22 7 22 13",key:"kwv8wd"}]]);c.d(b,{},{default:d})}};

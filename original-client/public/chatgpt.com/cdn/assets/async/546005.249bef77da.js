@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[546005];export const __webpack_modules__={MZMV(a){a.exports=JSON.parse('[{"name":"confidence_level: 90%","initialValues":{"confidence_level":"90%"}},{"name":"confidence_level: 99%","initialValues":{"confidence_level":"99%"}}]')}};

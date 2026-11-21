@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[774795];export const __webpack_modules__={nXYX(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"lower_bound":-20,"upper_bound":11}},{"name":"Maximum supported values","initialValues":{"lower_bound":10,"upper_bound":40}},{"name":"Narrow support","initialValues":{"lower_bound":10,"upper_bound":11}}]')}};

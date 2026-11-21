@@ -1,0 +1,2 @@
+/*! LICENSE: 435318.53244b6e15.js.LICENSE.txt */
+export const __rspack_esm_ids=[435318];export const __webpack_modules__={v1Qc(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Tablet",[["rect",{width:"16",height:"20",x:"4",y:"2",rx:"2",ry:"2",key:"76otgf"}],["line",{x1:"12",x2:"12.01",y1:"18",y2:"18",key:"1dp563"}]]);c.d(b,{},{default:d})}};

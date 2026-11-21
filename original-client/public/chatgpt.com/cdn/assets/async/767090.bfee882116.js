@@ -1,0 +1,2 @@
+/*! LICENSE: 767090.bfee882116.js.LICENSE.txt */
+export const __rspack_esm_ids=[767090];export const __webpack_modules__={XsTO(a,b,c){c.r(b);let d=(0,c("SHUh").c)("MessagesSquare",[["path",{d:"M14 9a2 2 0 0 1-2 2H6l-4 4V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2z",key:"p1xzt8"}],["path",{d:"M18 9h2a2 2 0 0 1 2 2v11l-4-4h-6a2 2 0 0 1-2-2v-1",key:"1cx29u"}]]);c.d(b,{},{default:d})}};

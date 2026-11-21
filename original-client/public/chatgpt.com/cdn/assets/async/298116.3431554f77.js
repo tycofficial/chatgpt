@@ -1,0 +1,2 @@
+/*! LICENSE: 298116.3431554f77.js.LICENSE.txt */
+export const __rspack_esm_ids=[298116];export const __webpack_modules__={pSGD(a,b,c){c.r(b);let d=(0,c("SHUh").c)("SquareMinus",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M8 12h8",key:"1wcyev"}]]);c.d(b,{},{default:d})}};

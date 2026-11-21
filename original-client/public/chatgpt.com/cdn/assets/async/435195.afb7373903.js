@@ -1,2 +1,0 @@
-/*! LICENSE: 435195.afb7373903.js.LICENSE.txt */
-export const __rspack_esm_ids=[435195];export const __webpack_modules__={lkap(e,_,a){a.r(_);let l=(0,a("jTyp").c)("Slice",[["path",{d:"M11 16.586V19a1 1 0 0 1-1 1H2L18.37 3.63a1 1 0 1 1 3 3l-9.663 9.663a1 1 0 0 1-1.414 0L8 14",key:"1sllp5"}]]);a.d(_,{},{default:l})}};

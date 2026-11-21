@@ -1,0 +1,2 @@
+/*! LICENSE: 806474.798dc595dc.js.LICENSE.txt */
+export const __rspack_esm_ids=[806474];export const __webpack_modules__={xDOv(a,b,c){c.r(b);let d=(0,c("SHUh").c)("CornerUpLeft",[["polyline",{points:"9 14 4 9 9 4",key:"881910"}],["path",{d:"M20 20v-7a4 4 0 0 0-4-4H4",key:"1nkjon"}]]);c.d(b,{},{default:d})}};

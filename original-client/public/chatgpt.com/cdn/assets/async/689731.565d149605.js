@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[689731];export const __webpack_modules__={GnXn(a){a.exports=JSON.parse('[{"name":"example: human circulatory system","initialValues":{"example":"human circulatory system"}},{"name":"example: flowering plant","initialValues":{"example":"flowering plant"}}]')}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 728443.4971d70ccc.js.LICENSE.txt */
+export const __rspack_esm_ids=[728443];export const __webpack_modules__={u6Ni(a,b,c){c.r(b);let d=(0,c("SHUh").c)("SquareM",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M8 16V8l4 4 4-4v8",key:"141u4e"}]]);c.d(b,{},{default:d})}};

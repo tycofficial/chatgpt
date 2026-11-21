@@ -1,0 +1,2 @@
+/*! LICENSE: 892631.cb149a8345.js.LICENSE.txt */
+export const __rspack_esm_ids=[892631];export const __webpack_modules__={gvgD(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ToyBrick",[["rect",{width:"18",height:"12",x:"3",y:"8",rx:"1",key:"158fvp"}],["path",{d:"M10 8V5c0-.6-.4-1-1-1H6a1 1 0 0 0-1 1v3",key:"s0042v"}],["path",{d:"M19 8V5c0-.6-.4-1-1-1h-3a1 1 0 0 0-1 1v3",key:"9wmeh2"}]]);c.d(b,{},{default:d})}};

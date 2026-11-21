@@ -1,0 +1,2 @@
+/*! LICENSE: 711615.141d55fbab.js.LICENSE.txt */
+export const __rspack_esm_ids=[711615];export const __webpack_modules__={K6kB(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Tablets",[["circle",{cx:"7",cy:"7",r:"5",key:"x29byf"}],["circle",{cx:"17",cy:"17",r:"5",key:"1op1d2"}],["path",{d:"M12 17h10",key:"ls21zv"}],["path",{d:"m3.46 10.54 7.08-7.08",key:"1rehiu"}]]);c.d(b,{},{default:d})}};

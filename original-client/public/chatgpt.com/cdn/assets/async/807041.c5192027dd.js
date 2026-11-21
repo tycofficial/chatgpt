@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[807041];export const __webpack_modules__={gyDH(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"saving_change":-26,"borrowing_change":-26}},{"name":"Maximum supported values","initialValues":{"saving_change":26,"borrowing_change":26}}]')}};

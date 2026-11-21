@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[208637];export const __webpack_modules__={fS4C(e){e.exports=JSON.parse('[{"name":"reaction_example: nitrogen-and-hydrogen-to-ammonia","initialValues":{"reaction_example":"nitrogen-and-hydrogen-to-ammonia"}},{"name":"reaction_example: methane-combustion","initialValues":{"reaction_example":"methane-combustion"}}]')}};

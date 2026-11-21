@@ -1,2 +1,0 @@
-/*! LICENSE: 961447.14ebb45c6a.js.LICENSE.txt */
-export const __rspack_esm_ids=[961447];export const __webpack_modules__={qx69(t,e,r){r.r(e);var a=r("ngtc");r.d(e,{default:()=>a.default})},ngtc(t,e,r){r.r(e);let a=(0,r("jTyp").c)("BetweenHorizontalStart",[["rect",{width:"13",height:"7",x:"8",y:"3",rx:"1",key:"pkso9a"}],["path",{d:"m2 9 3 3-3 3",key:"1agib5"}],["rect",{width:"13",height:"7",x:"8",y:"14",rx:"1",key:"1q5fc1"}]]);r.d(e,{},{default:a})}};

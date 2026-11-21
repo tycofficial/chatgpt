@@ -1,2 +1,0 @@
-/*! LICENSE: 173531.c508fdb331.js.LICENSE.txt */
-export const __rspack_esm_ids=[173531];export const __webpack_modules__={PgSf(e,t,c){c.r(t);let r=(0,c("jTyp").c)("Speaker",[["rect",{width:"16",height:"20",x:"4",y:"2",rx:"2",key:"1nb95v"}],["path",{d:"M12 6h.01",key:"1vi96p"}],["circle",{cx:"12",cy:"14",r:"4",key:"1jruaj"}],["path",{d:"M12 14h.01",key:"1etili"}]]);c.d(t,{},{default:r})}};

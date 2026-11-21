@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[722302];export const __webpack_modules__={usFC(a,b,c){a.exports=c.p+"assets/globe.fa04d49b3c.svg"}};

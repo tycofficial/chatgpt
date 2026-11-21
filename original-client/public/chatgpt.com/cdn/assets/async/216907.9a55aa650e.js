@@ -1,0 +1,2 @@
+/*! LICENSE: 216907.9a55aa650e.js.LICENSE.txt */
+export const __rspack_esm_ids=[216907];export const __webpack_modules__={kX6i(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Minus",[["path",{d:"M5 12h14",key:"1ays0h"}]]);c.d(b,{},{default:d})}};

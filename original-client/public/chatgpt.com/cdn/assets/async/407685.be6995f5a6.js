@@ -1,0 +1,2 @@
+/*! LICENSE: 407685.be6995f5a6.js.LICENSE.txt */
+export const __rspack_esm_ids=[407685];export const __webpack_modules__={fFm8(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Disc2",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["circle",{cx:"12",cy:"12",r:"4",key:"4exip2"}],["path",{d:"M12 12h.01",key:"1mp3jc"}]]);c.d(b,{},{default:d})}};

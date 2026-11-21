@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[407937];export const __webpack_modules__={PQYx(a){a.exports=JSON.parse('[{"name":"inheritance_pattern: autosomal-recessive","initialValues":{"inheritance_pattern":"autosomal-recessive"}},{"name":"inheritance_pattern: x-linked-recessive","initialValues":{"inheritance_pattern":"x-linked-recessive"}}]')}};

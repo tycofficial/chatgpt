@@ -1,0 +1,2 @@
+/*! LICENSE: 612019.b2e05bd647.js.LICENSE.txt */
+export const __rspack_esm_ids=[612019];export const __webpack_modules__={itAs(a,b,c){c.r(b);var d=c("Drbm");c.d(b,{default:()=>d.default})},Drbm(a,b,c){c.r(b);let d=(0,c("SHUh").c)("SquareCheck",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"m9 12 2 2 4-4",key:"dzmm74"}]]);c.d(b,{},{default:d})}};

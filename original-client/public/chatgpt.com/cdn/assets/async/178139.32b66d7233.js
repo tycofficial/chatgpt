@@ -1,2 +1,0 @@
-/*! LICENSE: 178139.32b66d7233.js.LICENSE.txt */
-export const __rspack_esm_ids=[178139];export const __webpack_modules__={PSi7(e,t,p){p.r(t);let _=(0,p("jTyp").c)("ChartNoAxesColumnDecreasing",[["path",{d:"M12 20V10",key:"g8npz5"}],["path",{d:"M18 20v-4",key:"8uic4z"}],["path",{d:"M6 20V4",key:"1w1bmo"}]]);p.d(t,{},{default:_})}};

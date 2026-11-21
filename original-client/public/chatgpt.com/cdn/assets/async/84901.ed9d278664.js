@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[84901];export const __webpack_modules__={KTiA(n){n.exports=JSON.parse('[{"name":"contaminant: methylmercury","initialValues":{"contaminant":"methylmercury"}},{"name":"contaminant: PCBs","initialValues":{"contaminant":"PCBs"}}]')}};

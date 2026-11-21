@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[217392];export const __webpack_modules__={cZau(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"m1":0.01,"m2":0.01,"v":0}},{"name":"Maximum supported values","initialValues":{"m1":10000,"m2":10000,"v":10000}}]')}};

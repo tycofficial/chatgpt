@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[554352];export const __webpack_modules__={Zzvc(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"first_number":1,"second_number":1}},{"name":"Maximum supported values","initialValues":{"first_number":12,"second_number":12}},{"name":"Longest coprime tracks","initialValues":{"first_number":11,"second_number":12}}]')}};

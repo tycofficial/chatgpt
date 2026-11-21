@@ -1,2 +1,0 @@
-/*! LICENSE: 857687.1385d322ce.js.LICENSE.txt */
-export const __rspack_esm_ids=[857687];export const __webpack_modules__={py1X(e,c,y){y.r(c);let _=(0,y("jTyp").c)("CirclePause",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["line",{x1:"10",x2:"10",y1:"15",y2:"9",key:"c1nkhi"}],["line",{x1:"14",x2:"14",y1:"15",y2:"9",key:"h65svq"}]]);y.d(c,{},{default:_})}};

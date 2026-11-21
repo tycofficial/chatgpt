@@ -1,2 +1,0 @@
-/*! LICENSE: 171669.c7bc7bd4bd.js.LICENSE.txt */
-export const __rspack_esm_ids=[171669];export const __webpack_modules__={eNwa(e,_,t){t.r(_);let r=(0,t("jTyp").c)("ArrowBigLeft",[["path",{d:"M18 15h-6v4l-7-7 7-7v4h6v6z",key:"lbrdak"}]]);t.d(_,{},{default:r})}};

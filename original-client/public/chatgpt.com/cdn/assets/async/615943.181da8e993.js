@@ -1,0 +1,2 @@
+/*! LICENSE: 615943.181da8e993.js.LICENSE.txt */
+export const __rspack_esm_ids=[615943];export const __webpack_modules__={j7VL(a,b,c){c.r(b);let d=(0,c("SHUh").c)("SquareArrowUp",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"m16 12-4-4-4 4",key:"177agl"}],["path",{d:"M12 16V8",key:"1sbj14"}]]);c.d(b,{},{default:d})}};

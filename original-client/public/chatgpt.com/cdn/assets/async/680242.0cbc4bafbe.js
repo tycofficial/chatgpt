@@ -1,0 +1,2 @@
+/*! LICENSE: 680242.0cbc4bafbe.js.LICENSE.txt */
+export const __rspack_esm_ids=[680242];export const __webpack_modules__={kURe(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ArrowDown",[["path",{d:"M12 5v14",key:"s699le"}],["path",{d:"m19 12-7 7-7-7",key:"1idqje"}]]);c.d(b,{},{default:d})}};

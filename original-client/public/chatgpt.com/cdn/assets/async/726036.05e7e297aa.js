@@ -1,0 +1,2 @@
+/*! LICENSE: 726036.05e7e297aa.js.LICENSE.txt */
+export const __rspack_esm_ids=[726036];export const __webpack_modules__={qUSN(a,b,c){c.r(b);let d=(0,c("SHUh").c)("MessageCircleX",[["path",{d:"M7.9 20A9 9 0 1 0 4 16.1L2 22Z",key:"vv11sd"}],["path",{d:"m15 9-6 6",key:"1uzhvr"}],["path",{d:"m9 9 6 6",key:"z0biqf"}]]);c.d(b,{},{default:d})}};

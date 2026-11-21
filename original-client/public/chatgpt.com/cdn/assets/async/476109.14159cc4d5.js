@@ -1,2 +1,0 @@
-/*! LICENSE: 476109.14159cc4d5.js.LICENSE.txt */
-export const __rspack_esm_ids=[476109];export const __webpack_modules__={nUCS(e,t,d){d.r(t);var a=d("QexR");d.d(t,{default:()=>a.default})},QexR(e,t,d){d.r(t);let a=(0,d("jTyp").c)("SquareCheck",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"m9 12 2 2 4-4",key:"dzmm74"}]]);d.d(t,{},{default:a})}};

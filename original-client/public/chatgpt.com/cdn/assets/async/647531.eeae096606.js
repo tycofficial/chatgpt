@@ -1,2 +1,0 @@
-/*! LICENSE: 647531.eeae096606.js.LICENSE.txt */
-export const __rspack_esm_ids=[647531];export const __webpack_modules__={RHkv(c,e,l){l.r(e);let r=(0,l("jTyp").c)("Ellipsis",[["circle",{cx:"12",cy:"12",r:"1",key:"41hilf"}],["circle",{cx:"19",cy:"12",r:"1",key:"1wjl8i"}],["circle",{cx:"5",cy:"12",r:"1",key:"1pcz8c"}]]);l.d(e,{},{default:r})}};

@@ -1,2 +1,0 @@
-/*! LICENSE: 368393.004d0aea86.js.LICENSE.txt */
-export const __rspack_esm_ids=[368393];export const __webpack_modules__={Dzai(e,c,r){r.r(c);let t=(0,r("jTyp").c)("Tablets",[["circle",{cx:"7",cy:"7",r:"5",key:"x29byf"}],["circle",{cx:"17",cy:"17",r:"5",key:"1op1d2"}],["path",{d:"M12 17h10",key:"ls21zv"}],["path",{d:"m3.46 10.54 7.08-7.08",key:"1rehiu"}]]);r.d(c,{},{default:t})}};

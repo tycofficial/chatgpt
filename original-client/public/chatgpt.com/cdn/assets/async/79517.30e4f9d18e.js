@@ -1,0 +1,2 @@
+/*! LICENSE: 79517.30e4f9d18e.js.LICENSE.txt */
+export const __rspack_esm_ids=[79517];export const __webpack_modules__={r2Q9(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Merge",[["path",{d:"m8 6 4-4 4 4",key:"ybng9g"}],["path",{d:"M12 2v10.3a4 4 0 0 1-1.172 2.872L4 22",key:"1hyw0i"}],["path",{d:"m20 22-5-5",key:"1m27yz"}]]);c.d(b,{},{default:d})}};

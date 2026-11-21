@@ -1,0 +1,2 @@
+/*! LICENSE: 239886.8daab358a1.js.LICENSE.txt */
+export const __rspack_esm_ids=[239886];export const __webpack_modules__={r1Fu(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Pill",[["path",{d:"m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z",key:"wa1lgi"}],["path",{d:"m8.5 8.5 7 7",key:"rvfmvr"}]]);c.d(b,{},{default:d})}};

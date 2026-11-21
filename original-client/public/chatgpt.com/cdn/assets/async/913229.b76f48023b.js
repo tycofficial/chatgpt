@@ -1,0 +1,2 @@
+/*! LICENSE: 913229.b76f48023b.js.LICENSE.txt */
+export const __rspack_esm_ids=[913229];export const __webpack_modules__={ztuj(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Tornado",[["path",{d:"M21 4H3",key:"1hwok0"}],["path",{d:"M18 8H6",key:"41n648"}],["path",{d:"M19 12H9",key:"1g4lpz"}],["path",{d:"M16 16h-6",key:"1j5d54"}],["path",{d:"M11 20H9",key:"39obr8"}]]);c.d(b,{},{default:d})}};

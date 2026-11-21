@@ -1,2 +1,0 @@
-/*! LICENSE: 253796.db31a9a745.js.LICENSE.txt */
-export const __rspack_esm_ids=[253796];export const __webpack_modules__={Ue4g(e,a,t){t.r(a);let p=(0,t("jTyp").c)("FileSliders",[["path",{d:"M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z",key:"1rqfz7"}],["path",{d:"M14 2v4a2 2 0 0 0 2 2h4",key:"tnqrlb"}],["path",{d:"M8 12h8",key:"1wcyev"}],["path",{d:"M10 11v2",key:"1s651w"}],["path",{d:"M8 17h8",key:"wh5c61"}],["path",{d:"M14 16v2",key:"12fp5e"}]]);t.d(a,{},{default:p})}};

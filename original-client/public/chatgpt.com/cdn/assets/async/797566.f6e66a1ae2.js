@@ -1,2 +1,0 @@
-/*! LICENSE: 797566.f6e66a1ae2.js.LICENSE.txt */
-export const __rspack_esm_ids=[797566];export const __webpack_modules__={ORBR(e,t,a){a.r(t);var d=a("EEQ9");a.d(t,{default:()=>d.default})},EEQ9(e,t,a){a.r(t);let d=(0,a("jTyp").c)("SquareM",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M8 16V8l4 4 4-4v8",key:"141u4e"}]]);a.d(t,{},{default:d})}};

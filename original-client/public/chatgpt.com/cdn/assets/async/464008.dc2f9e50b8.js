@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[464008];export const __webpack_modules__={Tb95(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"objectDistanceCentimeters":25}},{"name":"Maximum supported values","initialValues":{"objectDistanceCentimeters":200}},{"name":"condition: typical","initialValues":{"condition":"typical"}}]')}};

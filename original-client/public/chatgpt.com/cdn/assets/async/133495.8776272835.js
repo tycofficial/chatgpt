@@ -1,0 +1,2 @@
+/*! LICENSE: 133495.8776272835.js.LICENSE.txt */
+export const __rspack_esm_ids=[133495];export const __webpack_modules__={qFav(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ArrowRight",[["path",{d:"M5 12h14",key:"1ays0h"}],["path",{d:"m12 5 7 7-7 7",key:"xquz4c"}]]);c.d(b,{},{default:d})}};

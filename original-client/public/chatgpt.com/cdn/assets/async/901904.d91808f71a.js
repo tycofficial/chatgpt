@@ -1,0 +1,2 @@
+/*! LICENSE: 901904.d91808f71a.js.LICENSE.txt */
+export const __rspack_esm_ids=[901904];export const __webpack_modules__={wSoC(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ScreenShareOff",[["path",{d:"M13 3H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-3",key:"i8wdob"}],["path",{d:"M8 21h8",key:"1ev6f3"}],["path",{d:"M12 17v4",key:"1riwvh"}],["path",{d:"m22 3-5 5",key:"12jva0"}],["path",{d:"m17 3 5 5",key:"k36vhe"}]]);c.d(b,{},{default:d})}};

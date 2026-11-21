@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[185999];export const __webpack_modules__={hoQZ(e,o,a){a("I07G"),a("MCYz"),a("Yxds"),a("q7pe"),a("tl5a"),a("dbK8"),a("AnoK"),a("Cslg"),a("F4h0"),a("QmkR"),a("JQtI"),a("qMca"),a("AXK1");var s=a("Um05");a.d(o,{},{buildDeleteThreadToolResponse:async function(e,o,a){return(0,s.a)("Chat deletion is only available in the desktop app.")}})}};

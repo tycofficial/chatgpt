@@ -1,0 +1,2 @@
+/*! LICENSE: 486317.0f18e7daaf.js.LICENSE.txt */
+export const __rspack_esm_ids=[486317];export const __webpack_modules__={nNHO(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Settings2",[["path",{d:"M20 7h-9",key:"3s1dr2"}],["path",{d:"M14 17H5",key:"gfn3mx"}],["circle",{cx:"17",cy:"17",r:"3",key:"18b49y"}],["circle",{cx:"7",cy:"7",r:"3",key:"dfmy0x"}]]);c.d(b,{},{default:d})}};

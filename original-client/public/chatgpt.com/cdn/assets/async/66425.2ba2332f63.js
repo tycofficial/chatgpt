@@ -1,0 +1,2 @@
+/*! LICENSE: 66425.2ba2332f63.js.LICENSE.txt */
+export const __rspack_esm_ids=[66425];export const __webpack_modules__={twaw(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Shovel",[["path",{d:"M2 22v-5l5-5 5 5-5 5z",key:"1fh25c"}],["path",{d:"M9.5 14.5 16 8",key:"1smz5x"}],["path",{d:"m17 2 5 5-.5.5a3.53 3.53 0 0 1-5 0s0 0 0 0a3.53 3.53 0 0 1 0-5L17 2",key:"1q8uv5"}]]);c.d(b,{},{default:d})}};

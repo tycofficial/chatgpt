@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[435953];export const __webpack_modules__={VTwh(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"wageFloor":2}},{"name":"Maximum supported values","initialValues":{"wageFloor":10}}]')}};

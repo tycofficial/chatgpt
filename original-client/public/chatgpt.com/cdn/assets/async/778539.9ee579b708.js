@@ -1,2 +1,0 @@
-/*! LICENSE: 778539.9ee579b708.js.LICENSE.txt */
-export const __rspack_esm_ids=[778539];export const __webpack_modules__={xXec(e,c,t){t.r(c);let a=(0,t("jTyp").c)("FileAudio2",[["path",{d:"M4 22h14a2 2 0 0 0 2-2V7l-5-5H6a2 2 0 0 0-2 2v2",key:"17k7jt"}],["path",{d:"M14 2v4a2 2 0 0 0 2 2h4",key:"tnqrlb"}],["circle",{cx:"3",cy:"17",r:"1",key:"vo6nti"}],["path",{d:"M2 17v-3a4 4 0 0 1 8 0v3",key:"1ggdre"}],["circle",{cx:"9",cy:"17",r:"1",key:"bc1fq4"}]]);t.d(c,{},{default:a})}};

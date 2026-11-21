@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[281156];export const __webpack_modules__={JTb6(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"intercept":-2,"coefficient":-2.5}},{"name":"Maximum supported values","initialValues":{"intercept":2,"coefficient":2.5}}]')}};

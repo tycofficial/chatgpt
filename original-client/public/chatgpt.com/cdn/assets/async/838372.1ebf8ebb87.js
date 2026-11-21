@@ -1,0 +1,2 @@
+/*! LICENSE: 838372.1ebf8ebb87.js.LICENSE.txt */
+export const __rspack_esm_ids=[838372];export const __webpack_modules__={f0q1(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Dot",[["circle",{cx:"12.1",cy:"12.1",r:"1",key:"18d7e5"}]]);c.d(b,{},{default:d})}};

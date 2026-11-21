@@ -1,2 +1,0 @@
-/*! LICENSE: 734376.e39ea3dea2.js.LICENSE.txt */
-export const __rspack_esm_ids=[734376];export const __webpack_modules__={Svs0(e,c,_){_.r(c);let r=(0,_("jTyp").c)("CircleCheck",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["path",{d:"m9 12 2 2 4-4",key:"dzmm74"}]]);_.d(c,{},{default:r})}};

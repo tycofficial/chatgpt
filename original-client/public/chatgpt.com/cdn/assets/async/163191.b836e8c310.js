@@ -1,0 +1,2 @@
+/*! LICENSE: 163191.b836e8c310.js.LICENSE.txt */
+export const __rspack_esm_ids=[163191];export const __webpack_modules__={w1ml(a,b,c){c.r(b);let d=(0,c("SHUh").c)("RailSymbol",[["path",{d:"M5 15h14",key:"m0yey3"}],["path",{d:"M5 9h14",key:"7tsvo6"}],["path",{d:"m14 20-5-5 6-6-5-5",key:"1jo42i"}]]);c.d(b,{},{default:d})}};

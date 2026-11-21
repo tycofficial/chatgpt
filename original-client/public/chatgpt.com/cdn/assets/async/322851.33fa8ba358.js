@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[322851];export const __webpack_modules__={y4b6(a,b,c){var d=c("SRbQ");c.d(b,{},{loadLegacyVideoPlugins:function(a){return(0,d.c)(this,void 0,void 0,function(){return(0,d.g)(this,function(b){switch(b.label){case 0:return[4,c.e(678476).then(c.t.bind(c,"YoDh",23))];case 1:return a._plugins=b.sent(),[2]}})})}})}};

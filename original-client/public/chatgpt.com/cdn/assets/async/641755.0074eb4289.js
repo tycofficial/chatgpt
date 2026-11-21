@@ -1,0 +1,2 @@
+/*! LICENSE: 641755.0074eb4289.js.LICENSE.txt */
+export const __rspack_esm_ids=[641755];export const __webpack_modules__={gKqe(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Clock12",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["polyline",{points:"12 6 12 12",key:"1fub01"}]]);c.d(b,{},{default:d})}};

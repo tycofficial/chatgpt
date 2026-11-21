@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[803464];export const __webpack_modules__={zzGI(a){a.exports=JSON.parse('[{"name":"mixture: salt solution","initialValues":{"mixture":"salt solution"}},{"name":"mixture: sand and salt solution","initialValues":{"mixture":"sand and salt solution"}}]')}};

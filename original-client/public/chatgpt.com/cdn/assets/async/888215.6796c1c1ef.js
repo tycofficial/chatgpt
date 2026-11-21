@@ -1,0 +1,2 @@
+/*! LICENSE: 888215.6796c1c1ef.js.LICENSE.txt */
+export const __rspack_esm_ids=[888215];export const __webpack_modules__={ppUi(a,b,c){c.r(b);let d=(0,c("SHUh").c)("TrendingDown",[["polyline",{points:"22 17 13.5 8.5 8.5 13.5 2 7",key:"1r2t7k"}],["polyline",{points:"16 17 22 17 22 11",key:"11uiuu"}]]);c.d(b,{},{default:d})}};

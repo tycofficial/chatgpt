@@ -1,0 +1,2 @@
+/*! LICENSE: 732739.8e81a701c4.js.LICENSE.txt */
+export const __rspack_esm_ids=[732739];export const __webpack_modules__={y0l1(a,b,c){c.r(b);let d=(0,c("SHUh").c)("MessageSquareDot",[["path",{d:"M11.7 3H5a2 2 0 0 0-2 2v16l4-4h12a2 2 0 0 0 2-2v-2.7",key:"uodpkb"}],["circle",{cx:"18",cy:"6",r:"3",key:"1h7g24"}]]);c.d(b,{},{default:d})}};

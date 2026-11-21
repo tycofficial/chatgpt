@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[998889];export const __webpack_modules__={skbu(a){function b(a){var b=Error("Cannot find module '"+a+"'");throw b.code="MODULE_NOT_FOUND",b}b.keys=()=>[],b.resolve=b,b.id="skbu",a.exports=b}};

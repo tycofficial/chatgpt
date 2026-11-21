@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[562465];export const __webpack_modules__={RTIZ(s){s.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"demand_shift":-2.8,"supply_shift":-2.8}},{"name":"Maximum supported values","initialValues":{"demand_shift":2.8,"supply_shift":2.8}}]')}};

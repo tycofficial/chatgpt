@@ -1,0 +1,2 @@
+/*! LICENSE: 537368.d967d09b39.js.LICENSE.txt */
+export const __rspack_esm_ids=[537368];export const __webpack_modules__={L0js(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Skull",[["path",{d:"m12.5 17-.5-1-.5 1h1z",key:"3me087"}],["path",{d:"M15 22a1 1 0 0 0 1-1v-1a2 2 0 0 0 1.56-3.25 8 8 0 1 0-11.12 0A2 2 0 0 0 8 20v1a1 1 0 0 0 1 1z",key:"1o5pge"}],["circle",{cx:"15",cy:"12",r:"1",key:"1tmaij"}],["circle",{cx:"9",cy:"12",r:"1",key:"1vctgf"}]]);c.d(b,{},{default:d})}};

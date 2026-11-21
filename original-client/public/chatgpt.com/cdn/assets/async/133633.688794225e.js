@@ -1,2 +1,0 @@
-/*! LICENSE: 133633.688794225e.js.LICENSE.txt */
-export const __rspack_esm_ids=[133633];export const __webpack_modules__={JZWM(e,t,r){r.r(t);let _=(0,r("jTyp").c)("SquareX",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",ry:"2",key:"1m3agn"}],["path",{d:"m15 9-6 6",key:"1uzhvr"}],["path",{d:"m9 9 6 6",key:"z0biqf"}]]);r.d(t,{},{default:_})}};

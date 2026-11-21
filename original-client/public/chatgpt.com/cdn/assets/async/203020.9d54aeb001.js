@@ -1,0 +1,2 @@
+/*! LICENSE: 203020.9d54aeb001.js.LICENSE.txt */
+export const __rspack_esm_ids=[203020];export const __webpack_modules__={vMFm(a,b,c){c.r(b);let d=(0,c("SHUh").c)("PanelsRightBottom",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M3 15h12",key:"1wkqb3"}],["path",{d:"M15 3v18",key:"14nvp0"}]]);c.d(b,{},{default:d})}};

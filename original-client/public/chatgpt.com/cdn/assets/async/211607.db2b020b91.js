@@ -1,2 +1,0 @@
-/*! LICENSE: 211607.db2b020b91.js.LICENSE.txt */
-export const __rspack_esm_ids=[211607];export const __webpack_modules__={J4F9(e,d,t){t.r(d);let h=(0,t("jTyp").c)("ListOrdered",[["path",{d:"M10 12h11",key:"6m4ad9"}],["path",{d:"M10 18h11",key:"11hvi2"}],["path",{d:"M10 6h11",key:"c7qv1k"}],["path",{d:"M4 10h2",key:"16xx2s"}],["path",{d:"M4 6h1v4",key:"cnovpq"}],["path",{d:"M6 18H4c0-1 2-2 2-3s-1-1.5-2-1",key:"m9a95d"}]]);t.d(d,{},{default:h})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 528895.fd627a8187.js.LICENSE.txt */
+export const __rspack_esm_ids=[528895];export const __webpack_modules__={mM7f(a,b,c){c.r(b);let d=(0,c("SHUh").c)("MessageSquareX",[["path",{d:"M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z",key:"1lielz"}],["path",{d:"m14.5 7.5-5 5",key:"3lb6iw"}],["path",{d:"m9.5 7.5 5 5",key:"ko136h"}]]);c.d(b,{},{default:d})}};

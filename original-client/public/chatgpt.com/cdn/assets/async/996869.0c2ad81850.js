@@ -1,0 +1,2 @@
+/*! LICENSE: 996869.0c2ad81850.js.LICENSE.txt */
+export const __rspack_esm_ids=[996869];export const __webpack_modules__={qJYY(a,b,c){c.r(b);let d=(0,c("SHUh").c)("StretchVertical",[["rect",{width:"6",height:"20",x:"4",y:"2",rx:"2",key:"19qu7m"}],["rect",{width:"6",height:"20",x:"14",y:"2",rx:"2",key:"24v0nk"}]]);c.d(b,{},{default:d})}};

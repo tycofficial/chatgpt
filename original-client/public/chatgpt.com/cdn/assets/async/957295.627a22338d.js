@@ -1,0 +1,2 @@
+/*! LICENSE: 957295.627a22338d.js.LICENSE.txt */
+export const __rspack_esm_ids=[957295];export const __webpack_modules__={EJ0w(a,b,c){c.r(b);let d=(0,c("SHUh").c)("CircleChevronDown",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["path",{d:"m16 10-4 4-4-4",key:"894hmk"}]]);c.d(b,{},{default:d})}};

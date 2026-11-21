@@ -1,2 +1,0 @@
-/*! LICENSE: 662489.f9e6fbb72e.js.LICENSE.txt */
-export const __rspack_esm_ids=[662489];export const __webpack_modules__={OWq1(e,t,c){c.r(t);let r=(0,c("jTyp").c)("ToggleLeft",[["rect",{width:"20",height:"12",x:"2",y:"6",rx:"6",ry:"6",key:"f2vt7d"}],["circle",{cx:"8",cy:"12",r:"2",key:"1nvbw3"}]]);c.d(t,{},{default:r})}};

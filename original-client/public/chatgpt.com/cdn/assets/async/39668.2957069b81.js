@@ -1,0 +1,2 @@
+/*! LICENSE: 39668.2957069b81.js.LICENSE.txt */
+export const __rspack_esm_ids=[39668];export const __webpack_modules__={h6UM(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Martini",[["path",{d:"M8 22h8",key:"rmew8v"}],["path",{d:"M12 11v11",key:"ur9y6a"}],["path",{d:"m19 3-7 8-7-8Z",key:"1sgpiw"}]]);c.d(b,{},{default:d})}};

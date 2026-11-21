@@ -1,0 +1,2 @@
+/*! LICENSE: 72312.7b01d85054.js.LICENSE.txt */
+export const __rspack_esm_ids=[72312];export const __webpack_modules__={WRR2(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Umbrella",[["path",{d:"M22 12a10.06 10.06 1 0 0-20 0Z",key:"1teyop"}],["path",{d:"M12 12v8a2 2 0 0 0 4 0",key:"ulpmoc"}],["path",{d:"M12 2v1",key:"11qlp1"}]]);c.d(b,{},{default:d})}};

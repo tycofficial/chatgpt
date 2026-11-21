@@ -1,0 +1,2 @@
+/*! LICENSE: 425170.0bdacedeb7.js.LICENSE.txt */
+export const __rspack_esm_ids=[425170];export const __webpack_modules__={kbDR(a,b,c){c.r(b);let d=(0,c("SHUh").c)("BadgePlus",[["path",{d:"M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z",key:"3c2336"}],["line",{x1:"12",x2:"12",y1:"8",y2:"16",key:"10p56q"}],["line",{x1:"8",x2:"16",y1:"12",y2:"12",key:"1jonct"}]]);c.d(b,{},{default:d})}};

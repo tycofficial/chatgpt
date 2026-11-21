@@ -1,1 +1,0 @@
-(()=>{"use strict";class e extends AudioWorkletProcessor{remaining=8e4;process(e,i){let r=e[0]?.[0];if(r&&this.remaining>0){let e=r.slice(0,this.remaining);this.remaining-=e.length,this.port.postMessage(e,[e.buffer])}for(let e of i[0]??[])e.fill(0);return this.remaining>0}}registerProcessor("biometric-pcm-capture",e)})();

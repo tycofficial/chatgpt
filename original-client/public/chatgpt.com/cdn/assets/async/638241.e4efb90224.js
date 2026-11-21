@@ -1,2 +1,0 @@
-/*! LICENSE: 638241.e4efb90224.js.LICENSE.txt */
-export const __rspack_esm_ids=[638241];export const __webpack_modules__={KNkE(e,t,a){a.r(t);let d=(0,a("jTyp").c)("Eraser",[["path",{d:"m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21",key:"182aya"}],["path",{d:"M22 21H7",key:"t4ddhn"}],["path",{d:"m5 11 9 9",key:"1mo9qw"}]]);a.d(t,{},{default:d})}};

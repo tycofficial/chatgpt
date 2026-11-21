@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[755082];export const __webpack_modules__={JIIx(a){a.exports=JSON.parse('[{"name":"eukaryotic_example: plant","initialValues":{"eukaryotic_example":"plant"}}]')}};

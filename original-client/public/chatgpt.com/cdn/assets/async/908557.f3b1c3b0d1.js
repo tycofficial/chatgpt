@@ -1,0 +1,2 @@
+/*! LICENSE: 908557.f3b1c3b0d1.js.LICENSE.txt */
+export const __rspack_esm_ids=[908557];export const __webpack_modules__={oJgw(a,b,c){c.r(b);let d=(0,c("SHUh").c)("WifiLow",[["path",{d:"M12 20h.01",key:"zekei9"}],["path",{d:"M8.5 16.429a5 5 0 0 1 7 0",key:"1bycff"}]]);c.d(b,{},{default:d})}};

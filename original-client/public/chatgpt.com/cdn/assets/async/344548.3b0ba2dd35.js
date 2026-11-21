@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[344548];export const __webpack_modules__={UNGu(e){e.exports=JSON.parse('[{"name":"configuration: Z","initialValues":{"configuration":"Z"}},{"name":"example: first-point-of-difference example","initialValues":{"example":"first-point-of-difference example"}}]')}};

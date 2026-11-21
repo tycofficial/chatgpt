@@ -1,2 +1,0 @@
-/*! LICENSE: 161433.a01dc7cca9.js.LICENSE.txt */
-export const __rspack_esm_ids=[161433];export const __webpack_modules__={DKvy(e,t,p){p.r(t);let h=(0,p("jTyp").c)("ChevronsLeftRightEllipsis",[["path",{d:"m18 8 4 4-4 4",key:"1ak13k"}],["path",{d:"m6 8-4 4 4 4",key:"15zrgr"}],["path",{d:"M8 12h.01",key:"czm47f"}],["path",{d:"M12 12h.01",key:"1mp3jc"}],["path",{d:"M16 12h.01",key:"1l6xoz"}]]);p.d(t,{},{default:h})}};

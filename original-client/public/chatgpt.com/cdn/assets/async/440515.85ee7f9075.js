@@ -1,0 +1,2 @@
+/*! LICENSE: 440515.85ee7f9075.js.LICENSE.txt */
+export const __rspack_esm_ids=[440515];export const __webpack_modules__={GAtx(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ChevronsUp",[["path",{d:"m17 11-5-5-5 5",key:"e8nh98"}],["path",{d:"m17 18-5-5-5 5",key:"2avn1x"}]]);c.d(b,{},{default:d})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 996299.eccba972dd.js.LICENSE.txt */
+export const __rspack_esm_ids=[996299];export const __webpack_modules__={xCrb(a,b,c){c.r(b);let d=(0,c("SHUh").c)("PanelRightOpen",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M15 3v18",key:"14nvp0"}],["path",{d:"m10 15-3-3 3-3",key:"1pgupc"}]]);c.d(b,{},{default:d})}};

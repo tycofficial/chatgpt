@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[371351];export const __webpack_modules__={YydD(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"generation_time_minutes":15}},{"name":"Maximum supported values","initialValues":{"generation_time_minutes":90}}]')}};

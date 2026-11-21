@@ -1,0 +1,2 @@
+/*! LICENSE: 997086.b72f1d24dd.js.LICENSE.txt */
+export const __rspack_esm_ids=[997086];export const __webpack_modules__={X23u(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Captions",[["rect",{width:"18",height:"14",x:"3",y:"5",rx:"2",ry:"2",key:"12ruh7"}],["path",{d:"M7 15h4M15 15h2M7 11h2M13 11h4",key:"1ueiar"}]]);c.d(b,{},{default:d})},jpux(a,b,c){c.r(b);var d=c("X23u");c.d(b,{default:()=>d.default})}};

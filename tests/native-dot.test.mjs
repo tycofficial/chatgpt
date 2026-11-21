@@ -437,29 +437,67 @@ test('account switches during real multipart reading abort storage; native capab
   assert.equal((await env.adapter.handle(submitted, '/cloud-aeons/avatar-snapshots')).status, 409);
   assert.equal(env.storage.values.size, 0);
   env.setIdentity({ accountId: 'neutral-site-account', userId: 'neutral-site-user' });
-  const original = { c: { old: 'capability' }, a: {}, d: {}, f: {}, b: () => false, i: () => { throw Error('original account required'); } };
+  const original = { a: {}, d: {}, e: {}, f: {}, g: {}, b: () => false, c: () => false, j: () => { throw Error('original account required'); } };
   const inputs = { source: 'account inputs' };
-  const requireOriginal = id => id === 'BolX' ? { c: (_scope, evaluate) => evaluate } : id === 'OWtl' ? { a: {} } : { m: inputs };
+  const requireOriginal = id => id === 'Q840' ? { c: (_scope, evaluate) => evaluate } : id === 'OWtl' ? { a: {} } : { n: inputs };
   const overrides = env.adapter.adaptCapabilityAtoms(original, requireOriginal);
   let auth = { authenticatedAccountId: 'neutral-site-account', authenticatedUserId: 'neutral-site-user', authLoading: true, accountLoading: false };
   const old = { isLoading: false, isError: false, isCapable: false };
-  const get = atom => atom === inputs ? auth : atom === original.c ? old : atom({ get });
-  assert.equal(get(overrides.c).isCapable, false);
-  assert.equal(get(overrides.c).isLoading, true);
+  const get = atom => atom === inputs ? auth : atom === original.d ? old : atom({ get });
+  assert.equal(get(overrides.d).isCapable, false);
+  assert.equal(get(overrides.d).isLoading, true);
+  assert.equal(get(overrides.e), false);
   auth = { ...auth, authLoading: false };
-  assert.equal(get(overrides.d), true);
+  assert.equal(get(overrides.e), true);
   assert.equal(get(overrides.a), true);
-  assert.equal(get(overrides.c).openai_cloud_entitlement, false);
+  assert.equal(get(overrides.g).isCapable, true);
+  assert.equal(get(overrides.f).isCapable, false);
+  assert.equal(get(overrides.d).openai_cloud_entitlement, false);
+  assert.equal(overrides.c({ get }, { accountId: auth.authenticatedAccountId, userId: auth.authenticatedUserId }), true);
+  assert.equal(overrides.c({ get }, { accountId: auth.authenticatedAccountId, userId: 'other-user' }), false);
   env.setLocal(false);
-  assert.equal(get(overrides.c), old);
+  assert.equal(get(overrides.d), old);
   assert.equal(overrides.b({}, 'neutral-site-account'), false);
 });
 
-test('real original BolX.c/UQAX factory closure invokes Dot policy with one context argument', async () => {
+test('b634 Q840.c passes one native context to the derived Dot account atom', async () => {
   const fs = await import('node:fs/promises');
   const vm = await import('node:vm');
   const { createHash } = await import('node:crypto');
-  const ranges = [{"id":"UQAX","file":"109308.a4430446b5.js","start":29574,"end":30097,"sha256":"e5bdab5723b4a7403f70b58b46d70ac0d27e585b2b4b74bb5bfdca9c6f9c1f41"},{"id":"AvFJ","file":"109308.a4430446b5.js","start":27240,"end":29566,"sha256":"d917bb574a53fef857f896d67087d845a0b688dce98d7116e7eecc10bc6c2d14"},{"id":"fbKo","file":"109308.a4430446b5.js","start":40689,"end":52403,"sha256":"da78512df796cd529c15feacb4ae767c5a4875737c3f5e329b7f6b4f13dbed29"},{"id":"J6iR","file":"109308.a4430446b5.js","start":32824,"end":33712,"sha256":"6342bb90268d51f150ad62b81bfbcfc15991e34b6f15f9a8e33ce2e2b1041b58"},{"id":"KoFQ","file":"109308.a4430446b5.js","start":23705,"end":27232,"sha256":"909183d4d723942dab675ff12732924c2aec23607223f7c182a0f1450a99d7e7"},{"id":"ouEa","file":"257798.13b56b362a.js","start":152136,"end":152465,"sha256":"d400408bcd13eb4ee4c88c2b292ce66e2f82a8e951061cb62148fab3cd27f5bd"},{"id":"HkKI","file":"257798.13b56b362a.js","start":152473,"end":158884,"sha256":"1a54d4b43dd130bf2ace265f89f73ebdcedb9b8b3a28fec8eb365455871bf76b"},{"id":"NxBK","file":"617936.4707466a2e.js","start":32568,"end":33940,"sha256":"2492ffbcaa205979f372dda3f4f1aff063cd8c062d558582a98a42ed98061359"},{"id":"D7Ms","file":"617936.4707466a2e.js","start":35698,"end":38668,"sha256":"ad7ecafef4f5893db856ac46c7de95de2141d2d354c379f4d0ea7c97accae679"},{"id":"pEZk","file":"617936.4707466a2e.js","start":35248,"end":35690,"sha256":"97c4c6418721b073e5c804b1c170aaab148fc922a987ed70a09afb7a37bef0a7"},{"id":"HY2m","file":"617936.4707466a2e.js","start":11392,"end":12057,"sha256":"37bbd41d5d1b5ffcd8a14e49dedbfe95c20014a56af290fef3e93d50955b9fdc"},{"id":"H4sS","file":"617936.4707466a2e.js","start":34632,"end":34937,"sha256":"9d53c5c846e62f8dd78e88478bc054c102620a18174f780cdae22a5e4f7cf1d5"},{"id":"uyLo","file":"617936.4707466a2e.js","start":34945,"end":35240,"sha256":"b0f725a5be8d9297545e0d4190ae75503ac73edad95f02271db511ebc19ccbc3"},{"id":"wYVE","file":"617936.4707466a2e.js","start":4403,"end":5147,"sha256":"ec1a252e82e87b4e0db3cdf99dde7a3c8373f1d2b599d2fc7c99018b096398fb"},{"id":"wo6g","file":"617936.4707466a2e.js","start":4288,"end":4395,"sha256":"3a6af9bd97cd3fe66b7d147e5713e7b16007b3bfacf4031c265ae5a3e970a3cc"},{"id":"PKjX","file":"109308.a4430446b5.js","start":55232,"end":56690,"sha256":"436d3d33f2ab516b64fde9f16b79f154c35aa969acfe5ccb9982be803d3c0b0b"},{"id":"PSDF","file":"109308.a4430446b5.js","start":39561,"end":40681,"sha256":"47abcdc0f4665072189384c9c308badd641d70587cf60a3c3df9978948c6a2f0"},{"id":"vMlG","file":"109308.a4430446b5.js","start":57187,"end":57476,"sha256":"cbc1ba4c51dce53dafe0eaf8f61e3578c50d990b52095e38b9b05ef210e8691a"},{"id":"WWxl","file":"257798.13b56b362a.js","start":158892,"end":159869,"sha256":"448dbd4809c6bd1e4be18915a1218754ad6b2a8ccf58e6715e28c68f2e97745f"},{"id":"XNFm","file":"109308.a4430446b5.js","start":52411,"end":54292,"sha256":"135dcfc151dd9dc60ff0a13cbc2ca85bbdfe8328609a5f25469361c4a2ef299a"},{"id":"oFsh","file":"109308.a4430446b5.js","start":54709,"end":55224,"sha256":"9f795c98c97fd5810acfab5edbdd1a01099ad2274410585de15a987cc3f49906"},{"id":"iwK1","file":"109308.a4430446b5.js","start":33720,"end":39553,"sha256":"bb38b14d5d9b54bef4bcfafa258cb528608ed777ada08b5cab9e620fcdecd34f"},{"id":"m4Vs","file":"109308.a4430446b5.js","start":56698,"end":57179,"sha256":"42f368550fc19cc40d07e74107aec540e3ccde01aa449b17836a487ca6ed1521"},{"id":"wFEO","file":"109308.a4430446b5.js","start":54300,"end":54701,"sha256":"7ce42d9f77f4757d5c3e281a05227a7821528bf6d2296730f76cdb23859cdfa7"},{"id":"suje","file":"617936.4707466a2e.js","start":19582,"end":25252,"sha256":"9436c0f4d2cdf256fb6ef09faee29647e9e5961139b00a93cb365072f5e3c748"},{"id":"OtRH","file":"617936.4707466a2e.js","start":18462,"end":19574,"sha256":"b03203599768f7b595a24ba4aab3a39e54c492d06644391194a28a2935452332"},{"id":"MtYY","file":"617936.4707466a2e.js","start":12065,"end":18454,"sha256":"5c6a1ba97164db04b4952f4ae8ab9be327377d41cdbc93d976c074387566a838"},{"id":"OLOS","file":"617936.4707466a2e.js","start":32161,"end":32560,"sha256":"5960c43fd81842cc996a0fd02d8589102c974c5649146a84cd64067d0a12873e"},{"id":"rbzn","file":"617936.4707466a2e.js","start":10994,"end":11384,"sha256":"11fa01410fef0ca20d89641a7ce0f85c8196f387894ded24dec7fb5ee559d093"},{"id":"slNz","file":"617936.4707466a2e.js","start":5155,"end":6518,"sha256":"2a7d8aa8e99181f1a55122adb4d662c7e13c391abda2f21a80bdd781b873afbe"},{"id":"UKIm","file":"617936.4707466a2e.js","start":7611,"end":10986,"sha256":"f0915d818e73f74973c90fc9ce4375f86d1e9d6b1cffc5344bf21268f27607af"},{"id":"tyzk","file":"109308.a4430446b5.js","start":31327,"end":31503,"sha256":"6c8a9f0ff93064cd7722a476b40d3d9b741f4eecfdfef4f00d21582b92f2ba43"}];
+  const ranges = [
+    {"id":"UQAX","file":"109308.4d55635a3c.js","start":28426,"end":28949,"sha256":"f4113790301efd13c49b60d3f31a740f3958b91365d1034eb476cbff1fd5c31c"},
+    {"id":"tyzk","file":"109308.4d55635a3c.js","start":30179,"end":30355,"sha256":"a3bc52c860f98c26cf8780067056f0e1a31a5b7f396d9f59c419ea5f003d6bfd"},
+    {"id":"ouEa","file":"399565.700e278f2d.js","start":600124,"end":600446,"sha256":"860afae409ae45b603070cd6f812e4af7653ba281ac232e1e137e63fe74c39d7"},
+    {"id":"AvFJ","file":"109308.4d55635a3c.js","start":26092,"end":28418,"sha256":"7bbc8b826b99722219d1b09d3e9928b672ce8fdf4ae245516c431cc9b1ade618"},
+    {"id":"iwK1","file":"109308.4d55635a3c.js","start":32572,"end":38521,"sha256":"41d99ef41c530842530a4b0ab3fa0c3c06e8f4a0d60bc6d66b2113cc672f94d4"},
+    {"id":"fbKo","file":"109308.4d55635a3c.js","start":39890,"end":51815,"sha256":"23f10c7caff927d924480e16a3f9c16bb8937f3e2a385668e1efc65540dc295c"},
+    {"id":"m4Vs","file":"109308.4d55635a3c.js","start":56110,"end":56591,"sha256":"9c96ef3d4b52f320d26fe33e48b3341e454015bcc8c0f363e9a8822765acfe23"},
+    {"id":"vMlG","file":"109308.4d55635a3c.js","start":56599,"end":56888,"sha256":"82110da560adb6855405aef4da7d667af7cca8bd9e91791d164c2a2c27838cb2"},
+    {"id":"KoFQ","file":"109308.4d55635a3c.js","start":22557,"end":26084,"sha256":"f2353f1185e2a426d8e29bda91e154152bf294224337de2ae4a1fbfc14f364f8"},
+    {"id":"HkKI","file":"399565.700e278f2d.js","start":600454,"end":606865,"sha256":"0323381dafa9be94cce36716146e8a711c609613a4ed78b42e1de1656da37341"},
+    {"id":"WWxl","file":"399565.700e278f2d.js","start":606873,"end":607850,"sha256":"e876e66c59e3b728cabef838484b558b068c1f2ce2c6bce6919ac48f9290d4e4"},
+    {"id":"PKjX","file":"109308.4d55635a3c.js","start":54644,"end":56102,"sha256":"3bdbc92b619ec19141ea60b8212106af9fe8040f6a2019b577d1d822722deb10"},
+    {"id":"wFEO","file":"109308.4d55635a3c.js","start":53712,"end":54113,"sha256":"ea823552009d005717c63506eed837c25cabcfec5165b6d9ca8e64afbb1a408a"},
+    {"id":"oFsh","file":"109308.4d55635a3c.js","start":54121,"end":54636,"sha256":"1cba620b7a131c5f8e2edc064d6d148f912264982d1c1987869d9b726e96906a"},
+    {"id":"XNFm","file":"109308.4d55635a3c.js","start":51823,"end":53704,"sha256":"b34d5ef97af3716abc0a55948d7c32189268a8200c7a4cb4c8c2c27320c06633"},
+    {"id":"NxBK","file":"async/414022.d7ac2f8f82.js","start":47187,"end":48551,"sha256":"15b3d446f55b33347584c8dc4ff15777fb0ce135488b577f54dec2842d8da418"},
+    {"id":"J6iR","file":"109308.4d55635a3c.js","start":31676,"end":32564,"sha256":"bdbec6e800bc45907c2045986de017a7ded615df6fe4e06e02693690efc71738"},
+    {"id":"PSDF","file":"109308.4d55635a3c.js","start":38762,"end":39882,"sha256":"62bf7e6b5bc14020defd8744004e8fc8809d53d7b518bda6e7c8ced895cefc1a"},
+    {"id":"suje","file":"async/414022.d7ac2f8f82.js","start":41124,"end":46786,"sha256":"6909b55ab5615af41076b7522c1418d2255cd6404c9721a47c36151f6516c312"},
+    {"id":"wYVE","file":"async/414022.d7ac2f8f82.js","start":27105,"end":27841,"sha256":"f2c79c1ac1a13265c3699d36b6191508b73e437f7d1ad6bdc84d24510b8bc18c"},
+    {"id":"HY2m","file":"async/414022.d7ac2f8f82.js","start":32967,"end":33624,"sha256":"64c1ce397db8657372cbf4455e3b371059c7040b91c8f4307c8be620187ab84b"},
+    {"id":"uyLo","file":"async/414022.d7ac2f8f82.js","start":48858,"end":49145,"sha256":"2a1445a89b2b7b2b61ef25eebc5b5c24d658539486c59675233b5e70d7231f19"},
+    {"id":"wo6g","file":"async/414022.d7ac2f8f82.js","start":27001,"end":27100,"sha256":"7a901fc692fdfcde497d764a7e7f0a301457b2726cf3aab2da1b325f6758719a"},
+    {"id":"D7Ms","file":"async/414022.d7ac2f8f82.js","start":49589,"end":52551,"sha256":"97d9650eb03ec270f97fd761c00c1f3338ea0de878b3730d9b6831c83d9ba9a6"},
+    {"id":"OtRH","file":"async/414022.d7ac2f8f82.js","start":40015,"end":41119,"sha256":"299bc3329f51a775937ceaa07c43fd3cdcba2d10a84b9cbf3694d283bc3c488b"},
+    {"id":"rbzn","file":"async/414022.d7ac2f8f82.js","start":32578,"end":32962,"sha256":"600afe0e4cdcd3045cd0779d893e998eb1f624f392fd8b2e2cffef914da6d29f"},
+    {"id":"UKIm","file":"async/414022.d7ac2f8f82.js","start":29206,"end":32573,"sha256":"a8ec2b8fb1c72e6a0b027b6f4e6090dc2dfd671c220f45c046b41b75893c4925"},
+    {"id":"H4sS","file":"async/414022.d7ac2f8f82.js","start":48556,"end":48853,"sha256":"b64fc8e7ac9ee39bb32f70183f3c7214b0ed08ec38196f66c57d309bfd9d4297"},
+    {"id":"pEZk","file":"async/414022.d7ac2f8f82.js","start":49150,"end":49584,"sha256":"feadbaf925a1f22a7969090da7756944741869eb066a2b35295bfe0350874a53"},
+    {"id":"MtYY","file":"async/414022.d7ac2f8f82.js","start":33629,"end":40010,"sha256":"77878158ed7bcf635717b260425122468d156c0e3a9987ac796cf8dea4d07a32"},
+    {"id":"OLOS","file":"async/414022.d7ac2f8f82.js","start":46791,"end":47182,"sha256":"571c65878710a83f4ce28a74d3e6ab1e9530cd6edc832f9e4213390f54f3c2c5"},
+    {"id":"slNz","file":"async/414022.d7ac2f8f82.js","start":27846,"end":29201,"sha256":"e21b15a404696ebfb22d31e4f8f10680edbcab5381d518882cbfffbe0414da2f"},
+  ];
   const context = vm.createContext({ console, setTimeout, clearTimeout, queueMicrotask, performance, TextEncoder, TextDecoder, AbortController, AbortSignal });
   const factories = new Map(), cache = new Map(), sourceFiles = new Map();
   for (const record of ranges) {
@@ -470,7 +508,8 @@ test('real original BolX.c/UQAX factory closure invokes Dot policy with one cont
     }
     const factory = source.slice(record.start, record.end);
     assert.equal(createHash('sha256').update(factory).digest('hex'), record.sha256, 'Pinned original factory changed: ' + record.id);
-    factories.set(record.id, new vm.Script('(' + factory + ')', { filename: record.file + '#' + record.id }).runInContext(context, { timeout: 1000 }));
+    const expression = factory.startsWith('(') ? 'function ' + factory : factory;
+    factories.set(record.id, new vm.Script('(' + expression + ')', { filename: record.file + '#' + record.id }).runInContext(context, { timeout: 1000 }));
   }
   function requireOriginal(id) {
     if (cache.has(id)) return cache.get(id).exports;
@@ -491,8 +530,10 @@ test('real original BolX.c/UQAX factory closure invokes Dot policy with one cont
     return get;
   };
   requireOriginal.r = exports => Object.defineProperty(exports, '__esModule', { value: true });
-  // BolX.c directly reexports UQAX.a; the original complete pure dependency
-  // closure and original Jotai store are used, not a callback-shaped mock.
+  // Q840.c reexports UQAX.a. Exercise that factory with its pinned graph and store.
+  const runtime = sourceFiles.get('109308.4d55635a3c.js');
+  const graph = runtime.slice(runtime.indexOf('Q840:(function'));
+  assert.ok(graph.includes('c:()=>N.a') && graph.includes('N=c("UQAX")'));
   const derive = requireOriginal('UQAX').a;
   const token = requireOriginal('tyzk').a('DotNativeABITest');
   function realScope() {
@@ -513,15 +554,16 @@ test('real original BolX.c/UQAX factory closure invokes Dot policy with one cont
       authenticatedAccountId: 'neutral-site-account', authenticatedUserId: 'neutral-site-user',
       authLoading: loading, accountLoading: false,
     }));
-    const original = { c: derive(token, () => old), b: () => false, i: () => {} };
-    const moduleRequire = id => id === 'BolX' ? { c: derive } : id === 'OWtl' ? { a: token } : id === 'Cslg' ? { m: inputs } : requireOriginal(id);
+    const original = { d: derive(token, () => old), b: () => false, j: () => {} };
+    const moduleRequire = id => id === 'Q840' ? { c: derive } : id === 'OWtl' ? { a: token } : id === 'Cslg' ? { n: inputs } : requireOriginal(id);
     const atoms = env.adapter.adaptCapabilityAtoms(original, moduleRequire);
     const scope = realScope();
-    assert.equal(scope.get(atoms.c).isLoading, loading);
-    assert.equal(scope.get(atoms.c).isCapable, !loading);
-    assert.equal(scope.get(atoms.d), !loading);
+    assert.equal(scope.get(atoms.d).isLoading, loading);
+    assert.equal(scope.get(atoms.d).isCapable, !loading);
+    assert.equal(scope.get(atoms.e), !loading);
     assert.equal(scope.get(atoms.a), !loading);
-    assert.equal(scope.get(atoms.f).isCapable, !loading);
+    assert.equal(scope.get(atoms.f).isCapable, false);
+    assert.equal(scope.get(atoms.g).isCapable, !loading);
   }
 });
 
@@ -642,29 +684,32 @@ test('site-owned readiness never reads native cloud entitlement during loading o
   let auth = { accountLoading: true };
   const inputs = {};
   const original = {
-    c: {},
+    d: {},
     b: () => { throw Error('Native permission must stay idle'); },
-    i: () => { throw Error('Native readiness must stay idle'); },
+    j: () => { throw Error('Native readiness must stay idle'); },
   };
-  const requireOriginal = id => id === 'BolX' ? { c: (_scope, evaluate) => evaluate } : id === 'OWtl' ? { a: {} } : { m: inputs };
+  const requireOriginal = id => id === 'Q840' ? { c: (_scope, evaluate) => evaluate } : id === 'OWtl' ? { a: {} } : { n: inputs };
   const adapted = env.adapter.adaptCapabilityAtoms(original, requireOriginal);
   const get = atom => {
-    assert.notEqual(atom, original.c, 'Native readiness must stay idle');
+    assert.notEqual(atom, original.d, 'Native readiness must stay idle');
     return atom === inputs ? auth : atom({ get });
   };
   env.setLocal(false);
-  assert.equal(get(adapted.c).isLoading, true);
-  assert.equal(get(adapted.c).isCapable, false);
+  assert.equal(get(adapted.d).isLoading, true);
+  assert.equal(get(adapted.d).isCapable, false);
+  assert.equal(get(adapted.a), null);
   env.setLocal(true);
   auth = { authenticatedAccountId: 'neutral-site-account', authenticatedUserId: 'neutral-site-user', accountLoading: false };
-  assert.equal(get(adapted.c).isCapable, false);
-  assert.equal(adapted.b({}, auth.authenticatedAccountId), false);
+  assert.equal(get(adapted.d).isCapable, false);
+  assert.equal(adapted.b({ get }, auth.authenticatedAccountId), false);
+  assert.throws(() => adapted.j({ get }), /local Dot provider is unavailable/);
   assert.equal((await request(env.adapter, '/tbo')).response.status, 403);
   access = true;
-  assert.equal(get(adapted.c).isCapable, true);
-  assert.equal(adapted.b({}, 'unexpected-account'), false);
-  assert.equal(adapted.b({}, auth.authenticatedAccountId), true);
-  assert.doesNotThrow(() => adapted.i({}));
+  assert.equal(get(adapted.e), true);
+  assert.equal(get(adapted.f).isCapable, false);
+  assert.equal(adapted.b({ get }, 'unexpected-account'), false);
+  assert.equal(adapted.b({ get }, auth.authenticatedAccountId), true);
+  assert.doesNotThrow(() => adapted.j({ get }));
 });
 
 test('Dot overview exposes disconnected computer and an empty schedule list for a new profile', async () => {

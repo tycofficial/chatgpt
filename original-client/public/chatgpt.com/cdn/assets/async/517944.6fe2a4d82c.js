@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[517944];export const __webpack_modules__={trPE(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"initialSpeedMetersPerSecond":12,"launchAngleDegrees":25}},{"name":"Maximum supported values","initialValues":{"initialSpeedMetersPerSecond":25,"launchAngleDegrees":65}}]')}};

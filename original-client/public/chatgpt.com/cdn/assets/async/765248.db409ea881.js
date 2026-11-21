@@ -1,0 +1,2 @@
+/*! LICENSE: 765248.db409ea881.js.LICENSE.txt */
+export const __rspack_esm_ids=[765248];export const __webpack_modules__={HWQ6(a,b,c){c.r(b);var d=c("NUSY");c.d(b,{default:()=>d.default})},NUSY(a,b,c){c.r(b);let d=(0,c("SHUh").c)("SquarePower",[["path",{d:"M12 7v4",key:"xawao1"}],["path",{d:"M7.998 9.003a5 5 0 1 0 8-.005",key:"1pek45"}],["rect",{x:"3",y:"3",width:"18",height:"18",rx:"2",key:"h1oib"}]]);c.d(b,{},{default:d})}};

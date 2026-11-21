@@ -1,0 +1,2 @@
+/*! LICENSE: 425912.5dc3c316ae.js.LICENSE.txt */
+export const __rspack_esm_ids=[425912];export const __webpack_modules__={oD4V(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Search",[["circle",{cx:"11",cy:"11",r:"8",key:"4ej97u"}],["path",{d:"m21 21-4.3-4.3",key:"1qie3q"}]]);c.d(b,{},{default:d})}};

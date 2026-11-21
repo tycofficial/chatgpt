@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[387171];export const __webpack_modules__={RW07(e){e.exports=JSON.parse('[{"name":"design_variant: self-paired","initialValues":{"design_variant":"self-paired"}}]')}};

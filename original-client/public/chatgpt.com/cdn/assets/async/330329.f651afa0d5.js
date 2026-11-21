@@ -1,0 +1,2 @@
+/*! LICENSE: 330329.f651afa0d5.js.LICENSE.txt */
+export const __rspack_esm_ids=[330329];export const __webpack_modules__={YC4J(a,b,c){c.r(b);let d=(0,c("SHUh").c)("BellDot",[["path",{d:"M19.4 14.9C20.2 16.4 21 17 21 17H3s3-2 3-9c0-3.3 2.7-6 6-6 .7 0 1.3.1 1.9.3",key:"xcehk"}],["path",{d:"M10.3 21a1.94 1.94 0 0 0 3.4 0",key:"qgo35s"}],["circle",{cx:"18",cy:"8",r:"3",key:"1g0gzu"}]]);c.d(b,{},{default:d})}};

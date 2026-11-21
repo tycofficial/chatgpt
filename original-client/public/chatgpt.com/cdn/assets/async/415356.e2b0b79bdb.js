@@ -1,0 +1,2 @@
+/*! LICENSE: 415356.e2b0b79bdb.js.LICENSE.txt */
+export const __rspack_esm_ids=[415356];export const __webpack_modules__={j4x7(a,b,c){c.r(b);let d=(0,c("SHUh").c)("LampCeiling",[["path",{d:"M12 2v5",key:"nd4vlx"}],["path",{d:"M6 7h12l4 9H2l4-9Z",key:"123d64"}],["path",{d:"M9.17 16a3 3 0 1 0 5.66 0",key:"1061mw"}]]);c.d(b,{},{default:d})}};

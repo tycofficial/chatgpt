@@ -1,0 +1,2 @@
+/*! LICENSE: 161062.e74e28be91.js.LICENSE.txt */
+export const __rspack_esm_ids=[161062];export const __webpack_modules__={X4Oh(a,b,c){c.r(b);let d=(0,c("SHUh").c)("CaseUpper",[["path",{d:"m3 15 4-8 4 8",key:"1vwr6u"}],["path",{d:"M4 13h6",key:"1r9ots"}],["path",{d:"M15 11h4.5a2 2 0 0 1 0 4H15V7h4a2 2 0 0 1 0 4",key:"1sqfas"}]]);c.d(b,{},{default:d})}};

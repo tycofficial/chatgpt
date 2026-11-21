@@ -1,0 +1,2 @@
+/*! LICENSE: 480689.3d78d0319e.js.LICENSE.txt */
+export const __rspack_esm_ids=[480689];export const __webpack_modules__={WpM3(a,b,c){c.r(b);let d=(0,c("SHUh").c)("RectangleHorizontal",[["rect",{width:"20",height:"12",x:"2",y:"6",rx:"2",key:"9lu3g6"}]]);c.d(b,{},{default:d})}};

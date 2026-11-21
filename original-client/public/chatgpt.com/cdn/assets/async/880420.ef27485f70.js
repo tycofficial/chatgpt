@@ -1,0 +1,2 @@
+/*! LICENSE: 880420.ef27485f70.js.LICENSE.txt */
+export const __rspack_esm_ids=[880420];export const __webpack_modules__={WjmVR(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Loader",[["path",{d:"M12 2v4",key:"3427ic"}],["path",{d:"m16.2 7.8 2.9-2.9",key:"r700ao"}],["path",{d:"M18 12h4",key:"wj9ykh"}],["path",{d:"m16.2 16.2 2.9 2.9",key:"1bxg5t"}],["path",{d:"M12 18v4",key:"jadmvz"}],["path",{d:"m4.9 19.1 2.9-2.9",key:"bwix9q"}],["path",{d:"M2 12h4",key:"j09sii"}],["path",{d:"m4.9 4.9 2.9 2.9",key:"giyufr"}]]);c.d(b,{},{default:d})}};

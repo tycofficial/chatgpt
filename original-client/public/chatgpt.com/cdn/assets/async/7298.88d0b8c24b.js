@@ -1,2 +1,0 @@
-/*! LICENSE: 7298.88d0b8c24b.js.LICENSE.txt */
-export const __rspack_esm_ids=[7298];export const __webpack_modules__={yQNt(e,t,_){_.r(t);let c=(0,_("jTyp").c)("SquareMinus",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M8 12h8",key:"1wcyev"}]]);_.d(t,{},{default:c})}};

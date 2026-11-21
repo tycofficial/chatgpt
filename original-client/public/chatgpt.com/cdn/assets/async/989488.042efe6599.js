@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[989488];export const __webpack_modules__={Ufrj(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"scaleFactor":0.5}},{"name":"Maximum supported values","initialValues":{"scaleFactor":2}}]')}};

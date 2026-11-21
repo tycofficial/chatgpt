@@ -1,0 +1,2 @@
+/*! LICENSE: 403455.6a946e1335.js.LICENSE.txt */
+export const __rspack_esm_ids=[403455];export const __webpack_modules__={wpK6(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Voicemail",[["circle",{cx:"6",cy:"12",r:"4",key:"1ehtga"}],["circle",{cx:"18",cy:"12",r:"4",key:"4vafl8"}],["line",{x1:"6",x2:"18",y1:"16",y2:"16",key:"pmt8us"}]]);c.d(b,{},{default:d})}};

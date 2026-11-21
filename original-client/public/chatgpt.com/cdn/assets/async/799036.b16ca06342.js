@@ -1,2 +1,0 @@
-/*! LICENSE: 799036.b16ca06342.js.LICENSE.txt */
-export const __rspack_esm_ids=[799036];export const __webpack_modules__={ITMG(e,p,t){t.r(p);let d=(0,t("jTyp").c)("AArrowDown",[["path",{d:"M3.5 13h6",key:"p1my2r"}],["path",{d:"m2 16 4.5-9 4.5 9",key:"ndf0b3"}],["path",{d:"M18 7v9",key:"pknjwm"}],["path",{d:"m14 12 4 4 4-4",key:"buelq4"}]]);t.d(p,{},{default:d})}};

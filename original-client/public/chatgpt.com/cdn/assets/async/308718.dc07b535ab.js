@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[308718];export const __webpack_modules__={vyI3(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"production_wheat":5,"trade_rate":0.4}},{"name":"Maximum supported values","initialValues":{"production_wheat":9,"trade_rate":1.8}}]')}};

@@ -1,2 +1,0 @@
-/*! LICENSE: 199076.1f50b1bd6d.js.LICENSE.txt */
-export const __rspack_esm_ids=[199076];export const __webpack_modules__={v5TQ(a,e,t){t.r(e);var d=t("GxN1");t.d(e,{default:()=>d.default})},GxN1(a,e,t){t.r(e);let d=(0,t("jTyp").c)("FileAxis3d",[["path",{d:"M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z",key:"1rqfz7"}],["path",{d:"M14 2v4a2 2 0 0 0 2 2h4",key:"tnqrlb"}],["path",{d:"m8 18 4-4",key:"12zab0"}],["path",{d:"M8 10v8h8",key:"tlaukw"}]]);t.d(e,{},{default:d})}};

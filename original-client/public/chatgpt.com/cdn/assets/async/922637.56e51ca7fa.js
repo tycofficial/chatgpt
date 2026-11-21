@@ -1,0 +1,2 @@
+/*! LICENSE: 922637.56e51ca7fa.js.LICENSE.txt */
+export const __rspack_esm_ids=[922637];export const __webpack_modules__={lVV8(a,b,c){c.r(b);let d=(0,c("SHUh").c)("RectangleVertical",[["rect",{width:"12",height:"20",x:"6",y:"2",rx:"2",key:"1oxtiu"}]]);c.d(b,{},{default:d})}};

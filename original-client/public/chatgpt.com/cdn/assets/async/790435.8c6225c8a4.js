@@ -1,0 +1,2 @@
+/*! LICENSE: 790435.8c6225c8a4.js.LICENSE.txt */
+export const __rspack_esm_ids=[790435];export const __webpack_modules__={aI3d(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ArrowBigLeftDash",[["path",{d:"M19 15V9",key:"1hci5f"}],["path",{d:"M15 15h-3v4l-7-7 7-7v4h3v6z",key:"16tjna"}]]);c.d(b,{},{default:d})}};

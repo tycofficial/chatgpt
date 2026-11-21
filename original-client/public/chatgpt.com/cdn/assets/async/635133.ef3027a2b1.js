@@ -1,2 +1,0 @@
-/*! LICENSE: 635133.ef3027a2b1.js.LICENSE.txt */
-export const __rspack_esm_ids=[635133];export const __webpack_modules__={G1iZ(e,_,a){a.r(_);let p=(0,a("jTyp").c)("Gauge",[["path",{d:"m12 14 4-4",key:"9kzdfg"}],["path",{d:"M3.34 19a10 10 0 1 1 17.32 0",key:"19p75a"}]]);a.d(_,{},{default:p})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 829938.5d315cbc79.js.LICENSE.txt */
+export const __rspack_esm_ids=[829938];export const __webpack_modules__={JcvX(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ArrowBigUpDash",[["path",{d:"M9 19h6",key:"456am0"}],["path",{d:"M9 15v-3H5l7-7 7 7h-4v3H9z",key:"1r2uve"}]]);c.d(b,{},{default:d})}};

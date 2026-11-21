@@ -1,0 +1,2 @@
+/*! LICENSE: 22134.b03353cd30.js.LICENSE.txt */
+export const __rspack_esm_ids=[22134];export const __webpack_modules__={BGeh(a,b,c){c.r(b);let d=(0,c("SHUh").c)("MoveHorizontal",[["path",{d:"m18 8 4 4-4 4",key:"1ak13k"}],["path",{d:"M2 12h20",key:"9i4pu4"}],["path",{d:"m6 8-4 4 4 4",key:"15zrgr"}]]);c.d(b,{},{default:d})}};

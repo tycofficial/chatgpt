@@ -1,2 +1,0 @@
-/*! LICENSE: 741160.ef3172e8ea.js.LICENSE.txt */
-export const __rspack_esm_ids=[741160];export const __webpack_modules__={Jtk7(e,t,r){r.r(t);let h=(0,r("jTyp").c)("Trello",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",ry:"2",key:"1m3agn"}],["rect",{width:"3",height:"9",x:"7",y:"7",key:"14n3xi"}],["rect",{width:"3",height:"5",x:"14",y:"7",key:"s4azjd"}]]);r.d(t,{},{default:h})}};

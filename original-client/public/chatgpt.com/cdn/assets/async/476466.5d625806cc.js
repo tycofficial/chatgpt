@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[476466];export const __webpack_modules__={Ws9B(t,e,o){var s=o("ABep"),a=o("QosV"),n=o("jqIZ");o.d(e,{},{RosalindCustomerStatusRoute:function(){let t,e=(0,a.c)(3),{search:o,hash:p}=(0,n.Y)();return e[0]!==p||e[1]!==o?(t=(0,s.jsx)(n.l,{replace:!0,to:{pathname:"/rosalind/application",search:o,hash:p}}),e[0]=p,e[1]=o,e[2]=t):t=e[2],t}})}};

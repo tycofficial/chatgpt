@@ -1,0 +1,2 @@
+/*! LICENSE: 715499.7edef536a8.js.LICENSE.txt */
+export const __rspack_esm_ids=[715499];export const __webpack_modules__={RYog(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Gauge",[["path",{d:"m12 14 4-4",key:"9kzdfg"}],["path",{d:"M3.34 19a10 10 0 1 1 17.32 0",key:"19p75a"}]]);c.d(b,{},{default:d})}};

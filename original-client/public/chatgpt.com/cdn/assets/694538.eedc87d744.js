@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[694538];export const __webpack_modules__={jara:(function(a,b,c){c.d(b,{},{a:function(){return{spacePage:null,spacePagePreview:null,spacePageSnapshot:null,nonblockingSsr:!1,inAppOpen:!0}}})})};import{__webpack_require__ as a}from"./633146.511711c8b9.js";import*as b from"./694538.eedc87d744.js";a.C(b);var c=a(a.s="jara").a;export{c as clientLoader};

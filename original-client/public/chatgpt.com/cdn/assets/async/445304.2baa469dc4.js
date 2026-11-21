@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[445304];export const __webpack_modules__={LxFO(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"deficitSize":0}},{"name":"Maximum supported values","initialValues":{"deficitSize":100}}]')}};

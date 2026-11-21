@@ -1,2 +1,0 @@
-/*! LICENSE: 169879.c125ea1a2f.js.LICENSE.txt */
-export const __rspack_esm_ids=[169879];export const __webpack_modules__={FzMl(t,e,a){a.r(e);let _=(0,a("jTyp").c)("TvMinimalPlay",[["path",{d:"M10 7.75a.75.75 0 0 1 1.142-.638l3.664 2.249a.75.75 0 0 1 0 1.278l-3.664 2.25a.75.75 0 0 1-1.142-.64z",key:"1pctta"}],["path",{d:"M7 21h10",key:"1b0cd5"}],["rect",{width:"20",height:"14",x:"2",y:"3",rx:"2",key:"48i651"}]]);a.d(e,{},{default:_})}};

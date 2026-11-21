@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[900106];export const __webpack_modules__={hmDp(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"supply_shift":-32}},{"name":"Maximum supported values","initialValues":{"supply_shift":32}}]')}};

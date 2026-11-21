@@ -1,2 +1,0 @@
-/*! LICENSE: 916039.0fe93550c4.js.LICENSE.txt */
-export const __rspack_esm_ids=[916039];export const __webpack_modules__={kHN3(e,o,t){t.r(o);let c=(0,t("jTyp").c)("ArrowDownToDot",[["path",{d:"M12 2v14",key:"jyx4ut"}],["path",{d:"m19 9-7 7-7-7",key:"1oe3oy"}],["circle",{cx:"12",cy:"21",r:"1",key:"o0uj5v"}]]);t.d(o,{},{default:c})}};

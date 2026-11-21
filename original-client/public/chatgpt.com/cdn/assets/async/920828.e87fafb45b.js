@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[920828];export const __webpack_modules__={xftA(a,b,c){var d=c("Qtkb"),e=c("B5Qz");c.d(b,{},{collectFeedbackWorkloadSummary:function(a){let b=a.get(e.j);return{schemaVersion:1,unread:d.c.getWorkloadSummary(),catalog:{published:(0,e.c)(a),reads:b?.getWorkloadSummary()??null}}}})}};

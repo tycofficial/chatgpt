@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[226466];export const __webpack_modules__={XEZd(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"coefficient":1,"exponent":-9}},{"name":"Maximum supported values","initialValues":{"coefficient":9.99,"exponent":9}}]')}};

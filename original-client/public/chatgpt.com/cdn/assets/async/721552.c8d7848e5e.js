@@ -1,0 +1,2 @@
+/*! LICENSE: 721552.c8d7848e5e.js.LICENSE.txt */
+export const __rspack_esm_ids=[721552];export const __webpack_modules__={TXQc(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ListEnd",[["path",{d:"M16 12H3",key:"1a2rj7"}],["path",{d:"M16 6H3",key:"1wxfjs"}],["path",{d:"M10 18H3",key:"13769t"}],["path",{d:"M21 6v10a2 2 0 0 1-2 2h-5",key:"ilrcs8"}],["path",{d:"m16 16-2 2 2 2",key:"kkc6pm"}]]);c.d(b,{},{default:d})}};

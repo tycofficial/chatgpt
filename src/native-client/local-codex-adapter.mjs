@@ -20,13 +20,13 @@ export const CODEX_MODEL_IDS = WORK_MODEL_IDS;
 export const CODEX_SOURCE_CONTRACT = Object.freeze({
   route: '/', routeState: 'sidebarProductMode', productMode: 'codex',
   policyModule: 'ztxE', policyExport: 'a',
-  nativeInputsModule: 'Cslg', nativeInputsExport: 'm',
-  nativeAtomModule: 'BolX', nativeAtomExport: 'c',
+  nativeInputsModule: 'Cslg', nativeInputsExport: 'n',
+  nativeAtomModule: 'Q840', nativeAtomExport: 'c',
   nativeScopeModule: 'OWtl', nativeScopeExport: 'a',
   detailMode: CODEX_DETAIL_MODE,
   composerModule: 'Tqg2', composerExport: 'CodexComposerAdapter',
   transportModule: 'EAKz', transportExport: 'b',
-  originalClientBuild: 'ef0c3fb941611420d8683bf88f61acf1a8ac6b19',
+  originalClientBuild: 'b6348792a294e8e04a67660959ba41914937938f',
 });
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const MODEL_SET = new Set(CODEX_MODEL_IDS);
@@ -130,7 +130,7 @@ export function createLocalCodexAdapter({
   } = {}) {
     if (!originalAtom || typeof createDerivedAtom !== 'function' || !scope || !inputsAtom ||
         typeof isSupportedBrowser !== 'function') {
-      throw new TypeError('Original policy/inputs atoms, BolX.c, OWtl.a and browser check are required');
+      throw new TypeError('Original policy, input and scope atoms and a browser check are required');
     }
     return createDerivedAtom(scope, ({ get }) => resolveBrowserCapability(get(originalAtom), {
       inputs: get(inputsAtom), supportedBrowser: isSupportedBrowser() === true,
@@ -141,9 +141,9 @@ export function createLocalCodexAdapter({
   function adaptBrowserCapabilityAtom(originalAtom, requireOriginal) {
     if (typeof requireOriginal !== 'function') throw new TypeError('Original module require is required');
     return createBrowserCapabilityAtom(originalAtom, {
-      createDerivedAtom: requireOriginal('BolX').c,
+      createDerivedAtom: requireOriginal('Q840').c,
       scope: requireOriginal('OWtl').a,
-      inputsAtom: requireOriginal('Cslg').m,
+      inputsAtom: requireOriginal('Cslg').n,
       isSupportedBrowser: () => requireOriginal('whbo').a() && !requireOriginal('ipGa').a(),
     });
   }
@@ -180,8 +180,24 @@ export function createLocalCodexAdapter({
   function adaptBrowserDiscoveryAtom(originalAtom, requireOriginal) {
     if (typeof requireOriginal !== 'function') throw new TypeError('Original module require is required');
     return createBrowserDiscoveryAtom(originalAtom, {
-      createDerivedAtom: requireOriginal('BolX').c, scope: requireOriginal('OWtl').a,
-      inputsAtom: requireOriginal('Cslg').m, browserCapabilityAtom: requireOriginal('StMt').a,
+      createDerivedAtom: requireOriginal('Q840').c, scope: requireOriginal('OWtl').a,
+      inputsAtom: requireOriginal('Cslg').n, browserCapabilityAtom: requireOriginal('StMt').a,
+    });
+  }
+
+  function adaptBrowserSliderConfigAtom(originalAtom, requireOriginal) {
+    const browserHost = requireOriginal('eA5w').a();
+    const scope = requireOriginal('OWtl').a;
+    const inputsAtom = requireOriginal('Cslg').n;
+    const config = models.getSliderModelsConfig?.();
+    return requireOriginal('Q840').d(scope, (request, { get }) => {
+      if (config && request?.hostId === browserHost && supportsBrowserOriginExecution()) {
+        const current = state(), inputs = get(inputsAtom);
+        if (inputs && !inputs.authLoading && !inputs.accountLoading &&
+            inputs.accountId === current.identity.accountId && inputs.authenticatedAccountId === current.identity.accountId &&
+            inputs.userId === current.identity.userId) return config;
+      }
+      return get(originalAtom, request);
     });
   }
 
@@ -273,8 +289,8 @@ export function createLocalCodexAdapter({
   }
   function adaptBrowserWorkspaceSelectionAtom(originalAtom, requireOriginal) {
     if (!originalAtom || typeof requireOriginal !== 'function') throw new TypeError('The original route project atom and module require are required');
-    const { c: derive } = requireOriginal('BolX'), scope = requireOriginal('tSEg').a;
-    const { c: read, d: query } = requireOriginal('PFP1'), keys = requireOriginal('I07G').kc, inputsAtom = requireOriginal('Cslg').m;
+    const { c: derive } = requireOriginal('Q840'), scope = requireOriginal('tSEg').a;
+    const { c: read, d: query } = requireOriginal('PFP1'), keys = requireOriginal('HI9o').a, inputsAtom = requireOriginal('Cslg').n;
     return derive(scope, ({ get, scope: route }) => resolveBrowserWorkspaceSelection(get(originalAtom), {
       routeKind: route.value.routeKind, productMode: get(requireOriginal('pasN').a), inputs: get(inputsAtom),
       selection: get(query, keys.SELECTED_PROJECT).data?.value, projects: read(get, keys.LOCAL_PROJECTS),
@@ -288,9 +304,9 @@ export function createLocalCodexAdapter({
    */
   function adaptBrowserWorkspaceResolverAtom(originalAtom, requireOriginal) {
     if (!originalAtom || typeof requireOriginal !== 'function') throw new TypeError('The original HSUP workspace resolver is required');
-    const atoms = requireOriginal('BolX'), composerScope = requireOriginal('Sd8U').a;
+    const atoms = requireOriginal('Q840'), composerScope = requireOriginal('Sd8U').a;
     const routeKindAtom = atoms.c(requireOriginal('tSEg').a, ({ scope }) => scope.value.routeKind);
-    const { c: read, d: query } = requireOriginal('PFP1'), keys = requireOriginal('I07G').kc, inputsAtom = requireOriginal('Cslg').m;
+    const { c: read, d: query } = requireOriginal('PFP1'), keys = requireOriginal('HI9o').a, inputsAtom = requireOriginal('Cslg').n;
     const requests = new WeakMap();
     return atoms.d(composerScope, (request, { get, scope }) => {
       const diagnostic = { type: 'local-codex-workspace-resolver', composerKind: ['new','local','chatgpt','cloud','other'].includes(scope.value.kind) ? scope.value.kind : 'unknown',
@@ -425,6 +441,7 @@ export function createLocalCodexAdapter({
     executionCapabilities, resolveBrowserCapability,
     createBrowserCapabilityAtom, adaptBrowserCapabilityAtom,
     resolveBrowserDiscovery, createBrowserDiscoveryAtom, adaptBrowserDiscoveryAtom, discoverySource,
+    adaptBrowserSliderConfigAtom,
     supportsBrowserOriginExecution, createBrowserExecutionCapability, getBrowserOriginHost,
     getBrowserOriginWorkspaceProject, createBrowserProjectCatalog, createBrowserExecutionHosts,
     resolveBrowserWorkspaceSelection, adaptBrowserWorkspaceSelectionAtom, adaptBrowserWorkspaceResolverAtom,

@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[64043];export const __webpack_modules__={a04S(a,e,n){var s=n("ABep"),l=n("LNJT");n.d(e,{},{ScaleneTriangleCaption:a=>(0,s.jsx)(l.a,{...a,variant:"scalene"}),ScaleneTriangleControls:a=>(0,s.jsx)(l.b,{...a,variant:"scalene"}),ScaleneTriangleVisualization:a=>(0,s.jsx)(l.c,{...a,variant:"scalene"})})}};

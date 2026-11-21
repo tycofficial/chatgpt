@@ -1,0 +1,2 @@
+/*! LICENSE: 894685.db65ea3936.js.LICENSE.txt */
+export const __rspack_esm_ids=[894685];export const __webpack_modules__={yRLx(a,b,c){c.r(b);let d=(0,c("SHUh").c)("PhilippinePeso",[["path",{d:"M20 11H4",key:"6ut86h"}],["path",{d:"M20 7H4",key:"zbl0bi"}],["path",{d:"M7 21V4a1 1 0 0 1 1-1h4a1 1 0 0 1 0 12H7",key:"1ana5r"}]]);c.d(b,{},{default:d})}};

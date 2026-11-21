@@ -1,0 +1,2 @@
+/*! LICENSE: 641972.f5eee1915f.js.LICENSE.txt */
+export const __rspack_esm_ids=[641972];export const __webpack_modules__={qXR8(a,b,c){c.r(b);let d=(0,c("SHUh").c)("BetweenVerticalStart",[["rect",{width:"7",height:"13",x:"3",y:"8",rx:"1",key:"1fjrkv"}],["path",{d:"m15 2-3 3-3-3",key:"1uh6eb"}],["rect",{width:"7",height:"13",x:"14",y:"8",rx:"1",key:"w3fjg8"}]]);c.d(b,{},{default:d})}};

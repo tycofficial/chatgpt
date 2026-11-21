@@ -1,0 +1,2 @@
+/*! LICENSE: 405666.a23dd32747.js.LICENSE.txt */
+export const __rspack_esm_ids=[405666];export const __webpack_modules__={MzlW(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ExternalLink",[["path",{d:"M15 3h6v6",key:"1q9fwt"}],["path",{d:"M10 14 21 3",key:"gplh6r"}],["path",{d:"M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6",key:"a6xqqp"}]]);c.d(b,{},{default:d})}};

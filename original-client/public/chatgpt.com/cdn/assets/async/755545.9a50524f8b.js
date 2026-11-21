@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[755545];export const __webpack_modules__={LWhC(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"volumeLiters":0.5}},{"name":"Maximum supported values","initialValues":{"volumeLiters":4}}]')}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 834282.7b5695f230.js.LICENSE.txt */
+export const __rspack_esm_ids=[834282];export const __webpack_modules__={ZCV6(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Tag",[["path",{d:"M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z",key:"vktsd0"}],["circle",{cx:"7.5",cy:"7.5",r:".5",fill:"currentColor",key:"kqv944"}]]);c.d(b,{},{default:d})}};

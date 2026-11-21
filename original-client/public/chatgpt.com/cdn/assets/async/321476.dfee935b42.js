@@ -1,0 +1,2 @@
+/*! LICENSE: 321476.dfee935b42.js.LICENSE.txt */
+export const __rspack_esm_ids=[321476];export const __webpack_modules__={CcwB(a,b,c){c.r(b);let d=(0,c("SHUh").c)("SquareChevronRight",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"m10 8 4 4-4 4",key:"1wy4r4"}]]);c.d(b,{},{default:d})}};

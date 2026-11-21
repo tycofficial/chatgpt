@@ -1,0 +1,2 @@
+/*! LICENSE: 878175.b6fde09bc9.js.LICENSE.txt */
+export const __rspack_esm_ids=[878175];export const __webpack_modules__={ks2y(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Navigation2",[["polygon",{points:"12 2 19 21 12 17 5 21 12 2",key:"x8c0qg"}]]);c.d(b,{},{default:d})}};

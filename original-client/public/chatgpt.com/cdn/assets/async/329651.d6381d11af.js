@@ -1,2 +1,0 @@
-/*! LICENSE: 329651.d6381d11af.js.LICENSE.txt */
-export const __rspack_esm_ids=[329651];export const __webpack_modules__={Gn3f(e,t,h){h.r(t);let a=(0,h("jTyp").c)("AlignVerticalSpaceBetween",[["rect",{width:"14",height:"6",x:"5",y:"15",rx:"2",key:"1w91an"}],["rect",{width:"10",height:"6",x:"7",y:"3",rx:"2",key:"17wqzy"}],["path",{d:"M2 21h20",key:"1nyx9w"}],["path",{d:"M2 3h20",key:"91anmk"}]]);h.d(t,{},{default:a})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 592444.bf1ddbdd3b.js.LICENSE.txt */
+export const __rspack_esm_ids=[592444];export const __webpack_modules__={hPbe(a,b,c){c.r(b);let d=(0,c("SHUh").c)("TextCursor",[["path",{d:"M17 22h-1a4 4 0 0 1-4-4V6a4 4 0 0 1 4-4h1",key:"uvaxm9"}],["path",{d:"M7 22h1a4 4 0 0 0 4-4v-1",key:"11xy8d"}],["path",{d:"M7 2h1a4 4 0 0 1 4 4v1",key:"1uw06m"}]]);c.d(b,{},{default:d})}};

@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[884845];export const __webpack_modules__={Y3P1(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"money_supply_change":-2,"money_demand_change":-1.5}},{"name":"Maximum supported values","initialValues":{"money_supply_change":2,"money_demand_change":1.5}}]')}};

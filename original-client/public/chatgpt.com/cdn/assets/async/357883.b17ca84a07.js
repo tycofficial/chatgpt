@@ -1,0 +1,2 @@
+/*! LICENSE: 357883.b17ca84a07.js.LICENSE.txt */
+export const __rspack_esm_ids=[357883];export const __webpack_modules__={KqlP(a,b,c){c.r(b);let d=(0,c("SHUh").c)("PanelLeft",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M9 3v18",key:"fh3hqa"}]]);c.d(b,{},{default:d})}};

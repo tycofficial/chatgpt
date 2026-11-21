@@ -1,0 +1,2 @@
+/*! LICENSE: 694482.c3446d29e3.js.LICENSE.txt */
+export const __rspack_esm_ids=[694482];export const __webpack_modules__={QwqI(a,b,c){c.r(b);let d=(0,c("SHUh").c)("FishSymbol",[["path",{d:"M2 16s9-15 20-4C11 23 2 8 2 8",key:"h4oh4o"}]]);c.d(b,{},{default:d})}};

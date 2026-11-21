@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[929706];export const __webpack_modules__={pbK3(i){i.exports=JSON.parse('[{"name":"initial_focus: light reactions","initialValues":{"initial_focus":"light reactions"}},{"name":"initial_focus: Calvin cycle","initialValues":{"initial_focus":"Calvin cycle"}}]')}};

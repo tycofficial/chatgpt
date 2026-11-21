@@ -1,0 +1,2 @@
+/*! LICENSE: 798787.daf327e345.js.LICENSE.txt */
+export const __rspack_esm_ids=[798787];export const __webpack_modules__={iDrq(a,b,c){c.r(b);let d=(0,c("SHUh").c)("CircleUser",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["circle",{cx:"12",cy:"10",r:"3",key:"ilqhr7"}],["path",{d:"M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662",key:"154egf"}]]);c.d(b,{},{default:d})}};

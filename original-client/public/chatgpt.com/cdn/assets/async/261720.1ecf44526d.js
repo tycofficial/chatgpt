@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[261720];export const __webpack_modules__={dlt8(a){a.exports=JSON.parse('[{"name":"example: collidingBalls","initialValues":{"example":"collidingBalls"}},{"name":"example: boxOnTable","initialValues":{"example":"boxOnTable"}}]')}};

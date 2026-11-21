@@ -1,2 +1,0 @@
-/*! LICENSE: 106886.b33cd3ea2f.js.LICENSE.txt */
-export const __rspack_esm_ids=[106886];export const __webpack_modules__={cIhe(e,t,l){l.r(t);var r=l("zlWo");l.d(t,{default:()=>r.default})},zlWo(e,t,l){l.r(t);let r=(0,l("jTyp").c)("LaptopMinimal",[["rect",{width:"18",height:"12",x:"3",y:"4",rx:"2",ry:"2",key:"1qhy41"}],["line",{x1:"2",x2:"22",y1:"20",y2:"20",key:"ni3hll"}]]);l.d(t,{},{default:r})}};

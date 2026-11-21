@@ -1,0 +1,2 @@
+/*! LICENSE: 281432.91c0da7fc2.js.LICENSE.txt */
+export const __rspack_esm_ids=[281432];export const __webpack_modules__={Dr1U(a,b,c){c.r(b);let d=(0,c("SHUh").c)("SquareLibrary",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M7 7v10",key:"d5nglc"}],["path",{d:"M11 7v10",key:"pptsnr"}],["path",{d:"m15 7 2 10",key:"1m7qm5"}]]);c.d(b,{},{default:d})}};

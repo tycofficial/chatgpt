@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[784276];export const __webpack_modules__={cVEk(a){a.exports=JSON.parse('[{"name":"compound: magnesium oxide","initialValues":{"compound":"magnesium oxide"}},{"name":"compound: magnesium chloride","initialValues":{"compound":"magnesium chloride"}},{"name":"compound: sodium oxide","initialValues":{"compound":"sodium oxide"}}]')}};

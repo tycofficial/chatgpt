@@ -1,0 +1,2 @@
+/*! LICENSE: 79579.6191ee9335.js.LICENSE.txt */
+export const __rspack_esm_ids=[79579];export const __webpack_modules__={pyek(a,b,c){c.r(b);let d=(0,c("SHUh").c)("MoveDownRight",[["path",{d:"M19 13V19H13",key:"10vkzq"}],["path",{d:"M5 5L19 19",key:"5zm2fv"}]]);c.d(b,{},{default:d})}};

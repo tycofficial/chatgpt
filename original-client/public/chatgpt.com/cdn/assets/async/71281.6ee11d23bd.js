@@ -1,0 +1,2 @@
+/*! LICENSE: 71281.6ee11d23bd.js.LICENSE.txt */
+export const __rspack_esm_ids=[71281];export const __webpack_modules__={iUEZ(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Dice3",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",ry:"2",key:"1m3agn"}],["path",{d:"M16 8h.01",key:"cr5u4v"}],["path",{d:"M12 12h.01",key:"1mp3jc"}],["path",{d:"M8 16h.01",key:"18s6g9"}]]);c.d(b,{},{default:d})}};

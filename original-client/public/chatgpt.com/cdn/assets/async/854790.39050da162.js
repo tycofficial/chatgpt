@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[854790];export const __webpack_modules__={ryqr(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"auroc":0.5,"threshold":0}},{"name":"Maximum supported values","initialValues":{"auroc":0.95,"threshold":1}}]')}};

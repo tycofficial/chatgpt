@@ -1,0 +1,2 @@
+/*! LICENSE: 878176.01c6b33fbd.js.LICENSE.txt */
+export const __rspack_esm_ids=[878176];export const __webpack_modules__={Iof0(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Navigation",[["polygon",{points:"3 11 22 2 13 21 11 13 3 11",key:"1ltx0t"}]]);c.d(b,{},{default:d})}};

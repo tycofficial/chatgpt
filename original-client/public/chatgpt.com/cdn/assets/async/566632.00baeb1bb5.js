@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[566632];export const __webpack_modules__={PRTi(s){s.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"mass":1,"velocity":-10}},{"name":"Maximum supported values","initialValues":{"mass":9,"velocity":10}}]')}};

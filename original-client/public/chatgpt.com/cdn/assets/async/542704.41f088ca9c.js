@@ -1,2 +1,0 @@
-/*! LICENSE: 542704.41f088ca9c.js.LICENSE.txt */
-export const __rspack_esm_ids=[542704];export const __webpack_modules__={yUWX(a,e,p){p.r(e);let s=(0,p("jTyp").c)("Newspaper",[["path",{d:"M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2",key:"7pis2x"}],["path",{d:"M18 14h-8",key:"sponae"}],["path",{d:"M15 18h-5",key:"95g1m2"}],["path",{d:"M10 6h8v4h-8V6Z",key:"smlsk5"}]]);p.d(e,{},{default:s})}};

@@ -1,2 +1,0 @@
-/*! LICENSE: 876067.3b47632bcf.js.LICENSE.txt */
-export const __rspack_esm_ids=[876067];export const __webpack_modules__={Sypy(e,p,t){t.r(p);let y=(0,t("jTyp").c)("Merge",[["path",{d:"m8 6 4-4 4 4",key:"ybng9g"}],["path",{d:"M12 2v10.3a4 4 0 0 1-1.172 2.872L4 22",key:"1hyw0i"}],["path",{d:"m20 22-5-5",key:"1m27yz"}]]);t.d(p,{},{default:y})}};

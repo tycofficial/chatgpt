@@ -1,2 +1,0 @@
-/*! LICENSE: 66212.5dc984eb62.js.LICENSE.txt */
-export const __rspack_esm_ids=[66212];export const __webpack_modules__={E6Tn(e,l,_){_.r(l);let o=(0,_("jTyp").c)("Terminal",[["polyline",{points:"4 17 10 11 4 5",key:"akl6gq"}],["line",{x1:"12",x2:"20",y1:"19",y2:"19",key:"q2wloq"}]]);_.d(l,{},{default:o})}};

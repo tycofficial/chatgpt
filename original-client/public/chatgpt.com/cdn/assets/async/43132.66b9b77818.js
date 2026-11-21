@@ -1,0 +1,2 @@
+/*! LICENSE: 43132.66b9b77818.js.LICENSE.txt */
+export const __rspack_esm_ids=[43132];export const __webpack_modules__={uu9J(a,b,c){c.r(b);let d=(0,c("SHUh").c)("MessageSquareText",[["path",{d:"M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z",key:"1lielz"}],["path",{d:"M13 8H7",key:"14i4kc"}],["path",{d:"M17 12H7",key:"16if0g"}]]);c.d(b,{},{default:d})}};

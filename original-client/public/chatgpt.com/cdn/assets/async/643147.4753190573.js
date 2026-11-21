@@ -1,2 +1,0 @@
-/*! LICENSE: 643147.4753190573.js.LICENSE.txt */
-export const __rspack_esm_ids=[643147];export const __webpack_modules__={aL7b(t,e,i){i.r(e);let r=(0,i("jTyp").c)("AlignVerticalJustifyCenter",[["rect",{width:"14",height:"6",x:"5",y:"16",rx:"2",key:"1i8z2d"}],["rect",{width:"10",height:"6",x:"7",y:"2",rx:"2",key:"ypihtt"}],["path",{d:"M2 12h20",key:"9i4pu4"}]]);i.d(e,{},{default:r})}};

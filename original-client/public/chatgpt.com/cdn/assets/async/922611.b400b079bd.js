@@ -1,0 +1,2 @@
+/*! LICENSE: 922611.b400b079bd.js.LICENSE.txt */
+export const __rspack_esm_ids=[922611];export const __webpack_modules__={a1WG(a,b,c){c.r(b);let d=(0,c("SHUh").c)("CornerUpRight",[["polyline",{points:"15 14 20 9 15 4",key:"1tbx3s"}],["path",{d:"M4 20v-7a4 4 0 0 1 4-4h12",key:"1lu4f8"}]]);c.d(b,{},{default:d})}};

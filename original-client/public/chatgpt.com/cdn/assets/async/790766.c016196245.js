@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[790766];export const __webpack_modules__={Tx9j(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"growthPercent":0}},{"name":"Maximum supported values","initialValues":{"growthPercent":45}}]')}};

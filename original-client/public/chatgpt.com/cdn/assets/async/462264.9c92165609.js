@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[462264];export const __webpack_modules__={dNac(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"interest_rate_difference":-3}},{"name":"Maximum supported values","initialValues":{"interest_rate_difference":3}}]')}};

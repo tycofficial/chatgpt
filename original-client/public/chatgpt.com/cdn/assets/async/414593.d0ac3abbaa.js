@@ -1,0 +1,2 @@
+/*! LICENSE: 414593.d0ac3abbaa.js.LICENSE.txt */
+export const __rspack_esm_ids=[414593];export const __webpack_modules__={B1xo(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Diamond",[["path",{d:"M2.7 10.3a2.41 2.41 0 0 0 0 3.41l7.59 7.59a2.41 2.41 0 0 0 3.41 0l7.59-7.59a2.41 2.41 0 0 0 0-3.41l-7.59-7.59a2.41 2.41 0 0 0-3.41 0Z",key:"1f1r0c"}]]);c.d(b,{},{default:d})}};

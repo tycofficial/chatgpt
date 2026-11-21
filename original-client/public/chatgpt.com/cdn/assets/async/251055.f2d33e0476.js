@@ -1,2 +1,0 @@
-/*! LICENSE: 251055.f2d33e0476.js.LICENSE.txt */
-export const __rspack_esm_ids=[251055];export const __webpack_modules__={XBLB(e,c,d){d.r(c);var r=d("dTcK");d.d(c,{default:()=>r.default})},dTcK(e,c,d){d.r(c);let r=(0,d("jTyp").c)("CircleChevronLeft",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["path",{d:"m14 16-4-4 4-4",key:"ojs7w8"}]]);d.d(c,{},{default:r})}};

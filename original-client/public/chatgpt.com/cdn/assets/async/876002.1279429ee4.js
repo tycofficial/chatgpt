@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[876002];export const __webpack_modules__={jHN4(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"world_price":18}},{"name":"Maximum supported values","initialValues":{"world_price":82}}]')}};

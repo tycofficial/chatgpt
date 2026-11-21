@@ -1,2 +1,0 @@
-/*! LICENSE: 844422.e8b9752a68.js.LICENSE.txt */
-export const __rspack_esm_ids=[844422];export const __webpack_modules__={TSPv(e,c,a){a.r(c);let p=(0,a("jTyp").c)("CircleDollarSign",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["path",{d:"M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8",key:"1h4pet"}],["path",{d:"M12 18V6",key:"zqpxq5"}]]);a.d(c,{},{default:p})}};

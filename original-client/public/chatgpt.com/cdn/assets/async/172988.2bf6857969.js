@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[172988];export const __webpack_modules__={QEjU(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"voltage":0,"resistance":0.1}},{"name":"Maximum supported values","initialValues":{"voltage":1000,"resistance":100000}}]')}};

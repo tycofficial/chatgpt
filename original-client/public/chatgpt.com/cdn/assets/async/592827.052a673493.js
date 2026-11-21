@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[592827];export const __webpack_modules__={DOJy(a,b,c){var d=c("JGJK");c("jrFX"),c.d(b,{createArchitectureServices:()=>d.a})}};

@@ -1,2 +1,0 @@
-/*! LICENSE: 994560.7b8026675e.js.LICENSE.txt */
-export const __rspack_esm_ids=[994560];export const __webpack_modules__={Ji6n(a,e,t){t.r(e);var d=t("NTM4");t.d(e,{default:()=>d.default})},NTM4(a,e,t){t.r(e);let d=(0,t("jTyp").c)("FolderPen",[["path",{d:"M2 11.5V5a2 2 0 0 1 2-2h3.9c.7 0 1.3.3 1.7.9l.8 1.2c.4.6 1 .9 1.7.9H20a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-9.5",key:"a8xqs0"}],["path",{d:"M11.378 13.626a1 1 0 1 0-3.004-3.004l-5.01 5.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z",key:"1saktj"}]]);t.d(e,{},{default:d})}};

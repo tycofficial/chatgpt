@@ -1,0 +1,2 @@
+/*! LICENSE: 227667.17e1ef3d16.js.LICENSE.txt */
+export const __rspack_esm_ids=[227667];export const __webpack_modules__={nbEz(a,b,c){c.r(b);let d=(0,c("SHUh").c)("GalleryVertical",[["path",{d:"M3 2h18",key:"15qxfx"}],["rect",{width:"18",height:"12",x:"3",y:"6",rx:"2",key:"1439r6"}],["path",{d:"M3 22h18",key:"8prr45"}]]);c.d(b,{},{default:d})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 328636.9d466400d7.js.LICENSE.txt */
+export const __rspack_esm_ids=[328636];export const __webpack_modules__={ayGG(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ArrowRightLeft",[["path",{d:"m16 3 4 4-4 4",key:"1x1c3m"}],["path",{d:"M20 7H4",key:"zbl0bi"}],["path",{d:"m8 21-4-4 4-4",key:"h9nckh"}],["path",{d:"M4 17h16",key:"g4d7ey"}]]);c.d(b,{},{default:d})}};

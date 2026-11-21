@@ -1,0 +1,2 @@
+/*! LICENSE: 123346.b426751046.js.LICENSE.txt */
+export const __rspack_esm_ids=[123346];export const __webpack_modules__={kxvg(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Clock3",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["polyline",{points:"12 6 12 12 16.5 12",key:"1aq6pp"}]]);c.d(b,{},{default:d})}};

@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[841068];export const __webpack_modules__={at3n(s,e,_){s.exports=_.p+"assets/soccer-ball.314f75ef48.svg"}};

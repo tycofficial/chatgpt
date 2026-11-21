@@ -1,2 +1,0 @@
-/*! LICENSE: 523044.bd2a2c6ee7.js.LICENSE.txt */
-export const __rspack_esm_ids=[523044];export const __webpack_modules__={Tv6V(e,t,p){p.r(t);let _=(0,p("jTyp").c)("MoveHorizontal",[["path",{d:"m18 8 4 4-4 4",key:"1ak13k"}],["path",{d:"M2 12h20",key:"9i4pu4"}],["path",{d:"m6 8-4 4 4 4",key:"15zrgr"}]]);p.d(t,{},{default:_})}};

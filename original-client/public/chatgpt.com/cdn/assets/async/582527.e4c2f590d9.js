@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[582527];export const __webpack_modules__={wrCb(o,n,_){_.d(n,{},{a:function(o){return new URL(o,window.location.origin).href}})}};

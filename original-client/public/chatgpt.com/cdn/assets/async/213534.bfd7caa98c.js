@@ -1,2 +1,0 @@
-/*! LICENSE: 213534.bfd7caa98c.js.LICENSE.txt */
-export const __rspack_esm_ids=[213534];export const __webpack_modules__={XMWw(e,_,o){o.r(_);let s=(0,o("jTyp").c)("ChevronDown",[["path",{d:"m6 9 6 6 6-6",key:"qrunsl"}]]);o.d(_,{},{default:s})}};

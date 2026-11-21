@@ -1,0 +1,2 @@
+/*! LICENSE: 442229.1fa1a80c8d.js.LICENSE.txt */
+export const __rspack_esm_ids=[442229];export const __webpack_modules__={Iv6x(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ArrowBigUp",[["path",{d:"M9 18v-6H5l7-7 7 7h-4v6H9z",key:"1x06kx"}]]);c.d(b,{},{default:d})}};

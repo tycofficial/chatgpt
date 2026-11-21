@@ -8,14 +8,14 @@ import test from 'node:test';
 import {createPortableConversationShare} from '../src/native-client/portable-conversation-share.mjs';
 
 // No schema substitutes: bsEp and the entire real Zod closure below execute
-// unmodified public factory bodies verified by exact SHA-256. The original lBzi
+// unmodified public factory bodies verified by exact SHA-256. The original CKur
 // shared-query callback uses transparent constructor carriers plus explicit host
 // request/install observers; this is no React/Scope/QueryClient rendering proof.
 const repository=process.env.SHARE_VALIDATOR_REPOSITORY_ROOT??path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const sha=value=>createHash('sha256').update(value).digest('hex');
 const originalInputs=JSON.parse(await fs.readFile(new URL('./support/native-portable-share-factories.json',import.meta.url),'utf8'));
 const records=new Map(originalInputs.map(row=>[row.id,row]));
-const schemaIds=originalInputs.filter(row=>row.id!=='lBzi').map(row=>row.id);
+const schemaIds=originalInputs.filter(row=>row.id!=='CKur').map(row=>row.id);
 const factorySources=new Map(),bundles=new Map();
 for(const row of originalInputs){
  assert(row.file.startsWith('original-client/public/chatgpt.com/cdn/assets/')&&!row.file.includes('..'));
@@ -23,7 +23,7 @@ for(const row of originalInputs){
  const source=text.slice(row.startUTF16,row.endUTF16);assert.equal(sha(source),row.sha256,'Exact original factory changed: '+row.id);factorySources.set(row.id,source);
 }
 const context=vm.createContext({URL,TextEncoder,TextDecoder,AbortController,AbortSignal,DOMException,Date,setTimeout,clearTimeout,console});
-const factories=new Map([...factorySources].map(([id,source])=>[id,new vm.Script('('+source+')',{filename:records.get(id).file+'#'+id}).runInContext(context)]));
+const factories=new Map([...factorySources].map(([id,source])=>[id,new vm.Script('('+(records.get(id).format==='method'?'function ':'')+source+')',{filename:records.get(id).file+'#'+id}).runInContext(context)]));
 function define(exports,getters={},values={}){for(const[key,get]of Object.entries(getters))Object.defineProperty(exports,key,{enumerable:true,get});for(const[key,value]of Object.entries(values))Object.defineProperty(exports,key,{enumerable:true,value});}
 const modules=new Map();
 function pure(id){if(modules.has(id))return modules.get(id).exports;assert(schemaIds.includes(id),'No schema dependency stubs permitted: '+id);const module={exports:{}};modules.set(id,module);factories.get(id)(module,module.exports,pure);return module.exports;}
@@ -63,16 +63,16 @@ await test('Original continuation URL security/path contract rejects wrong id, p
 const carrier=(scope,factory)=>Object.freeze({scope,factory});
 const BolX=Object.fromEntries(['u','q','d','c','r'].map(key=>[key,carrier]));
 let responseTransform=value=>value;const requestLog=[],installed=[];
-const dependencies=Object.fromEntries(records.get('lBzi').requires.map(id=>[id,{}]));
-Object.assign(dependencies,{BolX,OWtl:{a:Symbol('neutral-application-scope')},bsEp,rvFo:{b:{ONE_MINUTE:60000,INFINITE:Infinity}},dQRk:{kc:(scope,data)=>{assert.equal(scope,scopeFixture);installed.push(data);}},Kwur:{Request:{safeGet:async(template,options)=>{
+const dependencies=Object.fromEntries(records.get('CKur').requires.map(id=>[id,{}]));
+Object.assign(dependencies,{Q840:BolX,OWtl:{a:Symbol('neutral-application-scope')},bsEp,rvFo:{b:{ONE_MINUTE:60000,INFINITE:Infinity}},dQRk:{mc:(scope,data)=>{assert.equal(scope,scopeFixture);installed.push(data);}},Kwur:{Request:{safeGet:async(template,options)=>{
  assert.equal(template,'/share/{shared_conversation_id}');assert.equal(options.redirect,'error');assert(options.signal instanceof AbortSignal);options.signal.throwIfAborted();
  const id=options.parameters.path.shared_conversation_id;requestLog.push({template,id,redirect:options.redirect});
  const response=await reader.handle(new Request(base+'__codex-api/share/'+id,{signal:options.signal}),'/share/'+id);assert.equal(response.status,200);return responseTransform(await response.json());
 }}}});
 const requireRoute=id=>{assert(Object.hasOwn(dependencies,id),'Unexpected isolated route dependency '+id);return dependencies[id];};requireRoute.d=define;requireRoute.n=pure.n;
-const routeModule={exports:{}};factories.get('lBzi')(routeModule,routeModule.exports,requireRoute);
+const routeModule={exports:{}};factories.get('CKur')(routeModule,routeModule.exports,requireRoute);
 const scopeFixture=Object.freeze({kind:'isolated-share-query-host'});
-await test('Unchanged original lBzi.n shared-route query consumes real canonical anonymous GET and forwards validated complete mapping',async()=>{
+await test('Unchanged original CKur.n shared-route query consumes real canonical anonymous GET and forwards validated complete mapping',async()=>{
  const query=routeModule.exports.n.factory(acknowledgement.share_id,{scope:scopeFixture});assert.equal(query.enabled,true);assert.equal(query.retry,false);assert.equal(JSON.stringify(query.queryKey),JSON.stringify(['chatgpt-shared-conversation',acknowledgement.share_id]));
  const before=requestLog.length,answer=await query.queryFn({signal:new AbortController().signal});assert.equal(requestLog.length,before+1);assert.equal(installed.at(-1),answer);assert.equal(answer.current_node,answerId);assert.equal(answer.mapping[userId].children[0],answerId);assert.equal(creatorReads,1);assert.equal(bsEp.c(answer,acknowledgement.share_id),undefined);
 });

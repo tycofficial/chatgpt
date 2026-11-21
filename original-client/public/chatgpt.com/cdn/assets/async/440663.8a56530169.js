@@ -1,2 +1,0 @@
-/*! LICENSE: 440663.8a56530169.js.LICENSE.txt */
-export const __rspack_esm_ids=[440663];export const __webpack_modules__={a0mP(e,c,t){t.r(c);let a=(0,t("jTyp").c)("FileStack",[["path",{d:"M21 7h-3a2 2 0 0 1-2-2V2",key:"9rb54x"}],["path",{d:"M21 6v6.5c0 .8-.7 1.5-1.5 1.5h-7c-.8 0-1.5-.7-1.5-1.5v-9c0-.8.7-1.5 1.5-1.5H17Z",key:"1059l0"}],["path",{d:"M7 8v8.8c0 .3.2.6.4.8.2.2.5.4.8.4H15",key:"16874u"}],["path",{d:"M3 12v8.8c0 .3.2.6.4.8.2.2.5.4.8.4H11",key:"k2ox98"}]]);t.d(c,{},{default:a})}};

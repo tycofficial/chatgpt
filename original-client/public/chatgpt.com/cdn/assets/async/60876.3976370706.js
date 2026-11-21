@@ -1,0 +1,2 @@
+/*! LICENSE: 60876.3976370706.js.LICENSE.txt */
+export const __rspack_esm_ids=[60876];export const __webpack_modules__={WDoN(a,b,c){c.r(b);let d=(0,c("SHUh").c)("MoveUpLeft",[["path",{d:"M5 11V5H11",key:"3q78g9"}],["path",{d:"M5 5L19 19",key:"5zm2fv"}]]);c.d(b,{},{default:d})}};

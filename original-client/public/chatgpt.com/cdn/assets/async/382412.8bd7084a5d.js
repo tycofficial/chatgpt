@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[382412];export const __webpack_modules__={tBpY(o){o.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"solutionX":-2,"solutionY":-2}},{"name":"Maximum supported values","initialValues":{"solutionX":2,"solutionY":2}},{"name":"Fractional solution","initialValues":{"solutionX":0.5,"solutionY":-1.25}}]')}};

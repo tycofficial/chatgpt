@@ -13,11 +13,16 @@ const homepage = 'https://chatgpt.com/';
 const mib = 1024 ** 2;
 const metadataReserve = 20 * mib;
 const maxFileBytes = 128 * mib;
-const staticExtension = /\.(?:m?js|css|json|webmanifest|wasm|bin|data|svg|woff2?|ttf|otf|eot|png|jpe?g|webp|avif|gif|ico|mp3|mp4|m4a|ogg|wav|webm|xlsx|docx|pptx|task|icc|lottie|tgs|riv|br|gz)$/i;
+const staticExtension = /\.(?:m?js|css|json|webmanifest|wasm|onnx|bin|data|svg|woff2?|ttf|otf|eot|png|jpe?g|webp|avif|gif|ico|mp3|mp4|m4a|ogg|wav|webm|xlsx|docx|pptx|task|icc|lottie|tgs|riv|br|gz)$/i;
+const rendererPackage = /^\/_orbit-renderer\/assets\/orbit-character-[a-f\d]{16}\/(.+)$/;
+const rendererFrame = /^[a-f\d]{16}\/frame\.html$/;
+const rendererLicense = /^[a-f\d]{16}\/THIRD_PARTY_NOTICES\.txt$/;
+const rendererSelector = /^[a-f\d]{16}\/runtime\.mjs$/;
+const rendererEngine = /^runtime\/(?:single-thread\/)?orbit-characters\.mjs$/;
 const assetHosts = new Map([
   ['chatgpt.com', ['/cdn/assets/', '/_orbit-renderer/']],
   ['cdn.oaistatic.com', ['/']],
-  ['persistent.oaistatic.com', ['/images/']],
+  ['persistent.oaistatic.com', ['/images/', '/voice/silero-vad-']],
   ['cdn.openai.com', ['/']],
 ]);
 const args = process.argv.slice(2);
@@ -64,26 +69,46 @@ function parseJS(text) {
   try { return parse(text, { ecmaVersion: 'latest', sourceType: 'module' }); }
   catch { return parse(text, { ecmaVersion: 'latest', sourceType: 'script' }); }
 }
+function rendererPath(url) {
+  if (url?.origin !== 'https://chatgpt.com' || url.search) return '';
+  return rendererPackage.exec(url.pathname)?.[1] ?? '';
+}
 function assetURL(literal, base) {
   if (typeof literal !== 'string' || !literal || /^\s*(?:#|data:|blob:|mailto:|javascript:)/i.test(literal)) return null;
   let url;
   try { url = new URL(literal, base); } catch { return null; }
   const prefixes = assetHosts.get(url.hostname);
-  if (url.protocol !== 'https:' || url.port || url.username || url.password || !prefixes?.some(prefix => url.pathname.startsWith(prefix)) || !staticExtension.test(url.pathname)) return null;
+  if (url.protocol !== 'https:' || url.port || url.username || url.password || !prefixes?.some(prefix => url.pathname.startsWith(prefix))) return null;
+  if (!staticExtension.test(url.pathname)) {
+    const rendererFile = rendererPath(url);
+    if (!rendererFrame.test(rendererFile) && !rendererLicense.test(rendererFile)) return null;
+  }
   // Limit filenames and query keys before making any request or logging any URL.
   if (!/^\/[\w/.-]+$/.test(url.pathname) || url.pathname.split('/').some(segment => segment === '.' || segment === '..') ||
       [...url.searchParams].some(([name, value]) => !['v','version','hash','build'].includes(name) || !/^[\w.-]{1,64}$/.test(value))) return null;
   url.hash = '';
+  if (!url.search) url.search = '';
   return url;
 }
 function publishedPath(literal) {
   return /^(?:https?:\/\/|\/\/|\/cdn\/assets\/|\/_orbit-renderer\/)/i.test(literal);
 }
-function staticString(node) {
+function staticString(node, bindings) {
   if (node?.type === 'Literal' && typeof node.value === 'string') return node.value;
-  if (node?.type === 'TemplateLiteral' && !node.expressions.length) return node.quasis[0]?.value.cooked ?? null;
+  if (node?.type === 'Identifier') return bindings?.get(node.name) ?? null;
+  if (node?.type === 'TemplateLiteral') {
+    if (!node.expressions.length) return node.quasis[0]?.value.cooked ?? null;
+    if (!bindings) return null;
+    let value = node.quasis[0].value.cooked;
+    for (const [index, expression] of node.expressions.entries()) {
+      const resolved = staticString(expression, bindings);
+      if (resolved == null) return null;
+      value += resolved + node.quasis[index + 1].value.cooked;
+    }
+    return value;
+  }
   if (node?.type === 'BinaryExpression' && node.operator === '+') {
-    const left = staticString(node.left), right = staticString(node.right);
+    const left = staticString(node.left, bindings), right = staticString(node.right, bindings);
     if (left != null && right != null) return left + right;
   }
   return null;
@@ -99,9 +124,11 @@ async function responseAt(url, isShell = false) {
       continue;
     }
     if (response.status === 200) {
-      if (!isShell && /(?:text\/html|application\/xhtml\+xml)/i.test(response.headers.get('content-type') || '')) {
+      const html = /(?:text\/html|application\/xhtml\+xml)/i.test(response.headers.get('content-type') || '');
+      const compiledFrame = rendererFrame.test(rendererPath(url));
+      if (!isShell && html !== compiledFrame) {
         await response.body?.cancel();
-        throw Error('The static resource returned an HTML page');
+        throw Error(compiledFrame ? 'The compiled renderer frame did not return HTML' : 'The static resource returned an HTML page');
       }
       return response;
     }
@@ -117,6 +144,11 @@ async function readShell() {
   const { document } = parseHTML(source.toString('utf8'));
   const build = document.documentElement.dataset.build;
   if (!buildPattern.test(build ?? '')) throw Error('The public response does not contain an official frontend build identifier');
+  const spriteReference = document.documentElement.getAttribute('data-icon-sprite-url');
+  const iconSprite = assetURL(spriteReference, homepage);
+  if (spriteReference && !iconSprite) throw Error('The public icon sprite could not be resolved');
+  const stylesheets = [...document.querySelectorAll('link[rel~="stylesheet"][href]')]
+    .map(link => assetURL(link.getAttribute('href'), homepage)?.href).filter(Boolean);
   const scripts = [...document.querySelectorAll('script[type="module"]:not([src])')].map(node => node.textContent);
   const shellModule = scripts.find(text => text.includes('__reactRouterRouteModules'));
   if (!shellModule) throw Error('The public frontend route bootstrap is missing');
@@ -132,7 +164,7 @@ async function readShell() {
   const manifest = bootstrap.body.filter(node => node.type === 'ImportDeclaration').map(node => assetURL(node.source.value, homepage))
     .find(url => url && /\/manifest-[a-f\d]+\.js$/i.test(url.pathname));
   if (!manifest) throw Error('The public route manifest is missing');
-  return { document, build, manifest, scripts, routes, date: response.headers.get('date'), sha256: sha(source) };
+  return { document, build, manifest, iconSprite, stylesheets, scripts, routes, date: response.headers.get('date'), sha256: sha(source) };
 }
 
 /** Evaluate only this loader's constant filename expressions, without running vendor code. */
@@ -260,7 +292,9 @@ function add(url, from, relation, chunkId) {
 }
 function discover(value, base, from, relation) {
   const url = assetURL(value, base);
-  if (url) add(url, from, relation);
+  const rendererFile = rendererPath(url);
+  // Only the compiled frame factory can introduce HTML, and only that frame links its notice.
+  if (url && !rendererFrame.test(rendererFile) && !rendererLicense.test(rendererFile)) add(url, from, relation);
   // Omitted external links, data URLs and API destinations are outside the public static graph.
 }
 function cssReferences(source, url) {
@@ -268,8 +302,126 @@ function cssReferences(source, url) {
     discover(match[1] ?? match[2], url, url, 'stylesheet-reference');
   }
 }
+const onnxFallbackName = 'ort-wasm-simd-threaded.wasm';
+const onnxFallbackSources = new Set();
+const sileroSelections = new Map();
+function isMember(node, name) {
+  return node?.type === 'MemberExpression' && !node.computed && node.property.name === name;
+}
+function variableValue(statements, name) {
+  return statements?.flatMap(statement => (statement.declaration ?? statement).declarations ?? [])
+    .find(declaration => declaration.id.name === name)?.init;
+}
+function returnedValue(fn) {
+  return fn?.body?.type === 'BlockStatement'
+    ? fn.body.body.find(statement => statement.type === 'ReturnStatement')?.argument
+    : fn?.body;
+}
+function isRouterBasename(expression) {
+  const source = expression?.callee?.object;
+  const dataset = source?.left?.object;
+  const html = dataset?.object;
+  return isMember(expression?.callee, 'replace') &&
+    expression.arguments[0]?.regex?.pattern === '\\/$' && staticString(expression.arguments[1]) === '' &&
+    source?.operator === '??' && staticString(source.right) === '' &&
+    isMember(source.left, 'routerBasename') && isMember(dataset, 'dataset') &&
+    isMember(html, 'documentElement') && html.object.name === 'document';
+}
+function inspectRendererFrameFactory(factory, url) {
+  const frames = new Map();
+  walk(factory, node => {
+    if (!['FunctionExpression', 'ArrowFunctionExpression'].includes(node.type)) return;
+    const result = returnedValue(node);
+    let pathname = staticString(result);
+    if (result?.type === 'TemplateLiteral' && result.expressions.length === 1 && result.quasis[0].value.cooked === '') {
+      const basename = result.expressions[0];
+      if (basename.type === 'Identifier' && isRouterBasename(variableValue(node.body.body, basename.name))) {
+        pathname = staticString(result, new Map([[basename.name, '']]));
+      }
+    }
+    const target = assetURL(pathname, url);
+    if (rendererFrame.test(rendererPath(target))) frames.set(target.href, target);
+  });
+  if (frames.size !== 1) throw Error('The native Dot renderer factory does not identify one compiled frame');
+  add(frames.values().next().value, url, 'orbit-renderer-factory');
+}
+function rendererHtmlReferences(source, url) {
+  const { document } = parseHTML(source);
+  if (!document.querySelector('canvas#character') || !document.querySelector('script[type="module"][src]') ||
+      document.querySelector('script:not([src]), form')) throw Error('The renderer URL did not return a compiled frame');
+  const packageBase = new URL('../', url).href;
+  for (const element of document.querySelectorAll('script[src], link[href]')) {
+    const target = assetURL(element.getAttribute('src') ?? element.getAttribute('href'), url);
+    if (!target?.href.startsWith(packageBase) || rendererFrame.test(rendererPath(target))) {
+      throw Error('The compiled frame references an asset outside its package');
+    }
+    add(target, url, 'orbit-renderer-frame-resource');
+  }
+}
+function rendererRuntimeReferences(program, url) {
+  const selector = program.body.map(node => node.declaration ?? node)
+    .find(node => node.type === 'FunctionDeclaration' && node.id.name === 'selectRuntime');
+  const pathFunction = ownProperty(returnedValue(selector), 'path');
+  const pathChoice = returnedValue(pathFunction);
+  const filename = pathFunction?.params[0]?.name;
+  const shared = staticString(pathChoice?.test?.right);
+  const directory = pathChoice?.alternate?.left?.name;
+  const directoryChoice = variableValue(selector?.body.body, directory);
+  const fallback = staticString(variableValue(program.body, 'fallbackDirectory'));
+  const extensions = variableValue(program.body, 'runtimeExtensions')?.elements?.map(node => staticString(node)) ?? [];
+  if (pathChoice?.type !== 'ConditionalExpression' || pathChoice.test.operator !== '===' ||
+      pathChoice.test.left.name !== filename || pathChoice.alternate.operator !== '+' ||
+      pathChoice.alternate.right.name !== filename || !/^orbit-characters\.data$/.test(shared ?? '') ||
+      directoryChoice?.type !== 'ConditionalExpression' || !fallback ||
+      !['mjs', 'wasm', 'data'].every(extension => extensions.includes(extension)) ||
+      extensions.some(extension => !['mjs', 'wasm', 'data'].includes(extension))) {
+    throw Error('The original renderer runtime selector could not be resolved statically');
+  }
+  // Read both branches of the runtime selector and its shared package rule.
+  const constants = new Map([['fallbackDirectory', fallback]]);
+  const packageBase = new URL('../', url).href;
+  for (const [expression, branch] of [
+    [directoryChoice.consequent, 'threaded'],
+    [directoryChoice.alternate, 'single-thread'],
+  ]) {
+    const selectedDirectory = staticString(expression, constants);
+    for (const extension of extensions) {
+      const file = shared.slice(0, -4) + extension;
+      const path = file === shared ? pathChoice.consequent : pathChoice.alternate;
+      const bindings = new Map([[directory, selectedDirectory], [filename, file]]);
+      const target = assetURL(staticString(path, bindings), url);
+      if (!selectedDirectory || !target?.href.startsWith(packageBase)) {
+        throw Error('The renderer runtime path could not be resolved inside its package');
+      }
+      add(target, url, 'orbit-renderer-runtime-' + branch);
+    }
+  }
+}
+function rendererEngineReferences(program, url) {
+  walk(program, node => {
+    if (node.type === 'VariableDeclarator' && node.id.name === 'REMOTE_PACKAGE_BASE') {
+      const filename = staticString(node.init);
+      if (filename === 'orbit-characters.data') discover(filename, url, url, 'orbit-renderer-engine-package');
+      return;
+    }
+    const target = node.arguments?.[0];
+    if (node.type !== 'NewExpression' || node.callee.name !== 'Worker' ||
+        target?.type !== 'CallExpression' || target.callee.name !== 'locateFile') return;
+    const filename = staticString(target.arguments[0]);
+    if (!/^[\w-]+\.mjs$/.test(filename ?? '')) throw Error('The renderer engine worker filename could not be resolved statically');
+    discover(filename, url, url, 'orbit-renderer-engine-worker');
+  });
+}
+function inspectOnnxFallback(node, url) {
+  if (node.type !== 'ConditionalExpression' || !isMember(node.test, 'locateFile') || !isMember(node.alternate, 'href')) return;
+  const fallback = node.alternate.object;
+  const [name, base] = fallback.arguments ?? [];
+  if (fallback.type === 'NewExpression' && fallback.callee.name === 'URL' && staticString(name) === onnxFallbackName &&
+      isMember(base, 'url') && base.object.type === 'MetaProperty' && base.object.meta.name === 'import') onnxFallbackSources.add(url.href);
+}
 function javascriptReferences(program, url) {
   walk(program, node => {
+    inspectOnnxFallback(node, url);
     const literal = staticString(node.source);
     if (literal && ['ImportDeclaration','ExportNamedDeclaration','ExportAllDeclaration','ImportExpression'].includes(node.type)) discover(literal, url, url, 'module-reference');
     else if (node.type === 'NewExpression' && node.callee.name === 'URL') {
@@ -285,7 +437,61 @@ function javascriptReferences(program, url) {
     }
   });
 }
+// Rspack emits static files as tiny factories returning its public path plus a filename.
+const unresolvedPublicPathAssets = [];
+function emittedAssetReferences(program, url) {
+  const filenames = [];
+  for (const node of program.body) {
+    const declaration = node.type === 'ExportNamedDeclaration' ? node.declaration : node;
+    for (const member of declaration?.declarations ?? []) {
+      if (member.id.name !== '__webpack_modules__' || member.init?.type !== 'ObjectExpression') continue;
+      for (const property of member.init.properties) {
+        const factory = property.value;
+        if (key(property) === 'OrBF') inspectRendererFrameFactory(factory, url);
+        const [module, , require] = factory?.params ?? [];
+        const assignment = factory?.body?.body?.length === 1 ? factory.body.body[0].expression : null;
+        if (!module?.name || !require?.name || assignment?.type !== 'AssignmentExpression' || assignment.operator !== '=' ||
+            assignment.left.type !== 'MemberExpression' || assignment.left.object.name !== module.name || assignment.left.property.name !== 'exports') continue;
+        const value = assignment.right;
+        if (value.type !== 'BinaryExpression' || value.operator !== '+' || value.left.type !== 'MemberExpression' ||
+            value.left.object.name !== require.name || value.left.property.name !== 'p') continue;
+        const filename = staticString(value.right);
+        if (!filename?.startsWith('assets/') || !staticExtension.test(filename)) continue;
+        filenames.push(filename);
+        if (loader) discover(filename, loader.publicPath, url, 'webpack-emitted-asset');
+        else unresolvedPublicPathAssets.push({ filename, url });
+      }
+    }
+  }
+  return filenames;
+}
+function rememberSileroSelection(program, url, filenames) {
+  if (!loader) return;
+  const scripts = filenames.filter(name => /^assets\/ort\.wasm\.bundle\.min\.[a-f\d]{10}\.mjs$/.test(name));
+  const binaries = filenames.filter(name => /^assets\/[a-f\d]{10}\.module\.wasm$/.test(name));
+  if (scripts.length !== 1 || binaries.length !== 1) return;
+  const compiledScript = assetURL(scripts[0], loader.publicPath).href;
+  const compiledWasm = assetURL(binaries[0], loader.publicPath).href;
+  const selections = [];
+  walk(program, node => {
+    if (node.type !== 'SequenceExpression') return;
+    const [threads, paths] = node.expressions;
+    if (threads?.type !== 'AssignmentExpression' || threads.operator !== '=' || !isMember(threads.left, 'numThreads') || threads.right.value !== 1 ||
+        paths?.type !== 'AssignmentExpression' || paths.operator !== '=' || !isMember(paths.left, 'wasmPaths') ||
+        !isMember(threads.left.object, 'wasm') || !isMember(paths.left.object, 'wasm') ||
+        threads.left.object.object.name == null || threads.left.object.object.name !== paths.left.object.object.name) return;
+    const script = assetURL(staticString(ownProperty(paths.right, 'mjs')), url);
+    const wasm = assetURL(staticString(ownProperty(paths.right, 'wasm')), url);
+    if (script?.origin !== 'https://persistent.oaistatic.com' || wasm?.origin !== script.origin ||
+        !/^\/voice\/silero-vad-v\d+\/ort-wasm-simd-threaded\.[a-f\d]{64}\.module\.js$/.test(script.pathname) ||
+        !/^\/voice\/silero-vad-v\d+\/ort-wasm-simd-threaded\.[a-f\d]{64}\.binary\.wasm$/.test(wasm.pathname) ||
+        path.posix.dirname(script.pathname) !== path.posix.dirname(wasm.pathname)) return;
+    selections.push({ script: script.href, wasm: wasm.href });
+  });
+  if (selections.length === 1) sileroSelections.set(url.href, { ...selections[0], compiledScript, compiledWasm });
+}
 add(shell.manifest, homepage, 'shell-manifest');
+if (shell.iconSprite) add(shell.iconSprite, homepage, 'shell-icon-sprite');
 for (const element of shell.document.querySelectorAll('script[src],link[href],img[src],source[src],video[poster]')) {
   discover(element.getAttribute('src') ?? element.getAttribute('href') ?? element.getAttribute('poster'), homepage, homepage, 'shell-resource');
 }
@@ -300,8 +506,10 @@ for (const script of shell.scripts) {
 
 async function analyze(url, file) {
   const type = path.posix.extname(url.pathname).toLowerCase();
-  if (!['.js','.mjs','.css','.json','.webmanifest','.svg'].includes(type)) return;
+  const rendererFile = rendererPath(url);
+  if (!['.js','.mjs','.css','.json','.webmanifest','.svg'].includes(type) && !rendererFrame.test(rendererFile)) return;
   const text = await readFile(file, 'utf8');
+  if (type === '.html') { rendererHtmlReferences(text, url); return; }
   if (type === '.css') { cssReferences(text, url); return; }
   if (type === '.svg') {
     for (const match of text.matchAll(/\b(?:href|src)=["']([^"']+)["']/g)) discover(match[1], url, url, 'svg-reference');
@@ -309,7 +517,10 @@ async function analyze(url, file) {
     return;
   }
   if (type === '.json' || type === '.webmanifest') {
-    const values = [JSON.parse(text)];
+    const payload = JSON.parse(text);
+    // Locale messages give a user-created sketch its download filename.
+    if (type === '.json' && payload && typeof payload['composer.sketch.fileName'] === 'string') delete payload['composer.sketch.fileName'];
+    const values = [payload];
     while (values.length) {
       const value = values.pop();
       if (value && typeof value === 'object') values.push(...Object.values(value));
@@ -319,6 +530,10 @@ async function analyze(url, file) {
   }
   const program = parseJS(text);
   javascriptReferences(program, url);
+  if (rendererSelector.test(rendererFile)) rendererRuntimeReferences(program, url);
+  if (rendererEngine.test(rendererFile)) rendererEngineReferences(program, url);
+  const emitted = emittedAssetReferences(program, url);
+  if (text.includes('silero-vad-') && text.includes('wasmPaths')) rememberSileroSelection(program, url, emitted);
   if (url.href === shell.manifest.href) {
     const root = program.body.find(node => node.expression?.type === 'AssignmentExpression' && node.expression.left.property?.name === '__reactRouterManifest')?.expression.right;
     sourceVersion = staticString(ownProperty(root, 'version'));
@@ -334,7 +549,12 @@ async function analyze(url, file) {
     if (!runtimeUrl) throw Error('The official entry does not identify its public runtime');
     add(runtimeUrl, url, 'entry-runtime');
   }
-  if (url.href === runtimeUrl?.href) loader = inspectResolver(program, url, add);
+  if (url.href === runtimeUrl?.href) {
+    loader = inspectResolver(program, url, add);
+    for (const { filename, url: owner } of unresolvedPublicPathAssets.splice(0)) {
+      discover(filename, loader.publicPath, owner, 'webpack-emitted-asset');
+    }
+  }
 }
 
 async function digestFile(file) {
@@ -428,6 +648,32 @@ for (let cursor = 0; cursor < queue.length && attempts < maxAssets && !exhausted
   await Promise.all(batch.map(collect));
   if (attempts % 100 < concurrency && maxAssets === Infinity) console.log(JSON.stringify({ captured: completed.size, discovered: known.size, failed: failed.size, written }));
 }
+// A bundled Emscripten default remains an ordinary dependency unless the
+// only captured importer supplies a matching public WASM location explicitly.
+const conditionalFallbacks = [];
+for (const [url, failure] of failed) {
+  if (failure.reason !== 'HTTP 404' || path.posix.basename(new URL(url).pathname) !== onnxFallbackName) continue;
+  const incoming = links.filter(edge => edge.to === url);
+  const resolved = incoming.map(edge => {
+    if (edge.relation !== 'constructed-static-url' || !onnxFallbackSources.has(edge.from)) return null;
+    const parents = links.filter(parent => parent.to === edge.from);
+    if (parents.length !== 1) return null;
+    const parent = parents[0];
+    const selected = sileroSelections.get(parent.from);
+    if (!selected || (parent.relation === 'webpack-emitted-asset' ? selected.compiledScript : selected.script) !== edge.from ||
+        ![selected.compiledScript, selected.compiledWasm, selected.script, selected.wasm].every(source => completed.has(source))) return null;
+    const declaredDigestsMatch = [selected.script, selected.wasm].every(source => {
+      const digest = new URL(source).pathname.match(/[a-f\d]{64}/)?.[0];
+      return digest === completed.get(source)?.sha256;
+    });
+    return declaredDigestsMatch ? { ...edge, selectedBy: parent.from, selectedWasm: selected.wasm, httpStatus: 404 } : null;
+  });
+  if (!resolved.length || resolved.some(edge => edge == null)) continue;
+  conditionalFallbacks.push(...resolved);
+  known.delete(url);
+  failed.delete(url);
+}
+const activeLinks = links.filter(edge => known.has(edge.to));
 const pending = [...known.keys()].filter(url => !completed.has(url) && !failed.has(url));
 const diagnostic = maxAssets !== Infinity || maxBytes !== Infinity;
 if (!exhausted && pending.length && attempts >= maxAssets) exhausted = `Diagnostic asset limit reached (${maxAssets})`;
@@ -443,11 +689,13 @@ const result = {
   schemaVersion: 1, status: complete ? 'complete' : 'incomplete',
   scope: 'Public shell bootstrap, versioned manifest, original runtime filename maps, and public static references discovered from captured resources',
   sourceBuild: shell.build, sourceVersion: sourceVersion ?? null, currentAtCompletion,
-  shell: { date: shell.date, sha256: shell.sha256, origin: homepage, manifest: shell.manifest.href },
+  shell: { date: shell.date, sha256: shell.sha256, origin: homepage, manifest: shell.manifest.href,
+    iconSprite: shell.iconSprite?.href ?? null, stylesheets: shell.stylesheets },
   entry: entryUrl?.href ?? null, entryModules: entryModules ?? [], runtime: runtimeUrl?.href ?? null, initialRoutes: shell.routes, loader: loader ?? null,
   limits: { maxAssets: Number.isFinite(maxAssets) ? maxAssets : null, maxBytes: Number.isFinite(maxBytes) ? maxBytes : null, reserveBytes, initialFreeBytes, captureBudget, stoppedBy: exhausted },
   discoveredAssets: known.size, capturedAssets: completed.size, capturedBytes: [...completed.values()].reduce((total, item) => total + item.bytes, 0),
-  assets: [...completed.values()].sort((left, right) => left.url.localeCompare(right.url)), links, pending, failed: [...failed.values()], unresolved,
+  assets: [...completed.values()].sort((left, right) => left.url.localeCompare(right.url)), links: activeLinks,
+  pending, failed: [...failed.values()], unresolved, conditionalFallbacks,
 };
 const partialManifest = path.join(stage, 'capture-manifest.' + crypto.randomUUID() + '.partial');
 await writeFile(partialManifest, JSON.stringify(result, null, 2) + '\n', { flag: 'wx' });

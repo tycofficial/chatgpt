@@ -1,0 +1,2 @@
+/*! LICENSE: 236959.8c94e31c90.js.LICENSE.txt */
+export const __rspack_esm_ids=[236959];export const __webpack_modules__={oRlx(a,b,c){c.r(b);let d=(0,c("SHUh").c)("FlaskRound",[["path",{d:"M10 2v7.31",key:"5d1hyh"}],["path",{d:"M14 9.3V1.99",key:"14k4l0"}],["path",{d:"M8.5 2h7",key:"csnxdl"}],["path",{d:"M14 9.3a6.5 6.5 0 1 1-4 0",key:"1r8fvy"}],["path",{d:"M5.52 16h12.96",key:"46hh1i"}]]);c.d(b,{},{default:d})}};

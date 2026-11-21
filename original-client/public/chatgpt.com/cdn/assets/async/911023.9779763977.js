@@ -1,0 +1,2 @@
+/*! LICENSE: 911023.9779763977.js.LICENSE.txt */
+export const __rspack_esm_ids=[911023];export const __webpack_modules__={SVjP(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Eraser",[["path",{d:"m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21",key:"182aya"}],["path",{d:"M22 21H7",key:"t4ddhn"}],["path",{d:"m5 11 9 9",key:"1mo9qw"}]]);c.d(b,{},{default:d})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 683425.cf68d5ca01.js.LICENSE.txt */
+export const __rspack_esm_ids=[683425];export const __webpack_modules__={PuqG(a,b,c){c.r(b);let d=(0,c("SHUh").c)("History",[["path",{d:"M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8",key:"1357e3"}],["path",{d:"M3 3v5h5",key:"1xhq8a"}],["path",{d:"M12 7v5l4 2",key:"1fdv2h"}]]);c.d(b,{},{default:d})}};

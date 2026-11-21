@@ -1,0 +1,2 @@
+/*! LICENSE: 401719.b3f83d3ab2.js.LICENSE.txt */
+export const __rspack_esm_ids=[401719];export const __webpack_modules__={qBtd(a,b,c){c.r(b);let d=(0,c("SHUh").c)("BookOpen",[["path",{d:"M12 7v14",key:"1akyts"}],["path",{d:"M3 18a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h5a4 4 0 0 1 4 4 4 4 0 0 1 4-4h5a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1h-6a3 3 0 0 0-3 3 3 3 0 0 0-3-3z",key:"ruj8y"}]]);c.d(b,{},{default:d})}};

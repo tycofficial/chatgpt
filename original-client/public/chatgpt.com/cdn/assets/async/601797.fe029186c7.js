@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[601797];export const __webpack_modules__={ioRE(e){e.exports=JSON.parse('[{"name":"Coincident triangles","initialValues":{"scale":1}},{"name":"Nearby corresponding sides","initialValues":{"scale":1.15}},{"name":"Minimum supported values","initialValues":{"scale":0.5}},{"name":"Maximum supported values","initialValues":{"scale":2}}]')}};

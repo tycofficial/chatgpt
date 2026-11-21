@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[113803];export const __webpack_modules__={o3Fw(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"a":0.1,"b":-10000,"c":-10000}},{"name":"Maximum supported values","initialValues":{"a":100,"b":10000,"c":10000}}]')}};

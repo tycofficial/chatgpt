@@ -1,0 +1,2 @@
+/*! LICENSE: 567277.79fae5609f.js.LICENSE.txt */
+export const __rspack_esm_ids=[567277];export const __webpack_modules__={s3U0(a,b,c){c.r(b);let d=(0,c("SHUh").c)("FolderRoot",[["path",{d:"M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.93a2 2 0 0 1-1.66-.9l-.82-1.2A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z",key:"1fr9dc"}],["circle",{cx:"12",cy:"13",r:"2",key:"1c1ljs"}],["path",{d:"M12 15v5",key:"11xva1"}]]);c.d(b,{},{default:d})}};

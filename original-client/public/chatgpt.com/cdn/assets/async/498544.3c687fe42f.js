@@ -1,0 +1,2 @@
+/*! LICENSE: 498544.3c687fe42f.js.LICENSE.txt */
+export const __rspack_esm_ids=[498544];export const __webpack_modules__={TIEt(a,b,c){c.r(b);let d=(0,c("SHUh").c)("PoundSterling",[["path",{d:"M18 7c0-5.333-8-5.333-8 0",key:"1prm2n"}],["path",{d:"M10 7v14",key:"18tmcs"}],["path",{d:"M6 21h12",key:"4dkmi1"}],["path",{d:"M6 13h10",key:"ybwr4a"}]]);c.d(b,{},{default:d})}};

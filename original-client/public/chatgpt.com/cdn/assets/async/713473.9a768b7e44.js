@@ -1,0 +1,2 @@
+/*! LICENSE: 713473.9a768b7e44.js.LICENSE.txt */
+export const __rspack_esm_ids=[713473];export const __webpack_modules__={DBHo(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Wind",[["path",{d:"M12.8 19.6A2 2 0 1 0 14 16H2",key:"148xed"}],["path",{d:"M17.5 8a2.5 2.5 0 1 1 2 4H2",key:"1u4tom"}],["path",{d:"M9.8 4.4A2 2 0 1 1 11 8H2",key:"75valh"}]]);c.d(b,{},{default:d})}};

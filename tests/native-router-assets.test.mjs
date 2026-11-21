@@ -6,25 +6,33 @@ import { localizeRouterAssets } from '../src/native-client/startup-compatibility
 
 test('browser preloads and dynamic navigation resolve inside the Pages project for every archived route', () => {
   const context = { window: {} };
-  const archive = new URL('../original-client/public/chatgpt.com/cdn/assets/manifest-98f8ff8a.js', import.meta.url);
+  const archivedHost = 'original-client/public/chatgpt.com';
+  const plan = JSON.parse(fs.readFileSync(new URL('../src/native-client/entry-plan.json', import.meta.url), 'utf8'));
+  const archive = new URL('../' + archivedHost + plan.manifest, import.meta.url);
   vm.runInNewContext(fs.readFileSync(archive, 'utf8'), context);
   const manifest = context.window.__reactRouterManifest;
+  assert.equal(manifest.version, plan.sourceVersion);
   const home = new URL('https://fixture.test/chatgpt/');
   const entry = new URL('native-client/entry-library.mjs?v=fixture', home).href;
   const paths = Object.values(manifest.routes).map(route => route.path);
   localizeRouterAssets(manifest, home, entry);
   assert.equal(manifest.entry.module, entry);
   assert.deepEqual(Object.values(manifest.routes).map(route => route.path), paths);
+  const localPaths = new Set();
   for (const record of [manifest.entry, ...Object.values(manifest.routes)]) {
     for (const [key, value] of Object.entries(record)) {
       if (key !== 'module' && !key.endsWith('Module') && key !== 'imports' && key !== 'css') continue;
       for (const reference of [value].flat()) {
         if (typeof reference !== 'string') continue;
         assert.ok(reference.startsWith(home.href), reference);
+        localPaths.add(new URL(reference).pathname.slice(home.pathname.length));
       }
     }
   }
-  assert.equal(new URL(manifest.url).pathname, '/chatgpt/original-client/public/chatgpt.com/cdn/assets/manifest-98f8ff8a.js');
+  for (const relativePath of localPaths) {
+    assert.ok(fs.existsSync(new URL('../' + relativePath, import.meta.url)), 'Missing deployed route resource ' + relativePath);
+  }
+  assert.equal(new URL(manifest.url).pathname, '/chatgpt/' + archivedHost + plan.manifest);
 });
 
 test('the archived shell preloads its entry chunks without preloading them for sign-in', () => {

@@ -1,0 +1,2 @@
+/*! LICENSE: 984885.e1a5d3b1e5.js.LICENSE.txt */
+export const __rspack_esm_ids=[984885];export const __webpack_modules__={YEHV(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Ungroup",[["rect",{width:"8",height:"6",x:"5",y:"4",rx:"1",key:"nzclkv"}],["rect",{width:"8",height:"6",x:"11",y:"14",rx:"1",key:"4tytwb"}]]);c.d(b,{},{default:d})}};

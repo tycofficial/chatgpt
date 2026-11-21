@@ -1,0 +1,2 @@
+/*! LICENSE: 600909.d49115d0fa.js.LICENSE.txt */
+export const __rspack_esm_ids=[600909];export const __webpack_modules__={aIwS(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Bandage",[["path",{d:"M10 10.01h.01",key:"1e9xi7"}],["path",{d:"M10 14.01h.01",key:"ac23bv"}],["path",{d:"M14 10.01h.01",key:"2wfrvf"}],["path",{d:"M14 14.01h.01",key:"8tw8yn"}],["path",{d:"M18 6v11.5",key:"dkbidh"}],["path",{d:"M6 6v12",key:"vkc79e"}],["rect",{x:"2",y:"6",width:"20",height:"12",rx:"2",key:"1wpnh2"}]]);c.d(b,{},{default:d})}};

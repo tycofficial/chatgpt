@@ -1,2 +1,0 @@
-/*! LICENSE: 672542.e5c0226139.js.LICENSE.txt */
-export const __rspack_esm_ids=[672542];export const __webpack_modules__={AKxv(e,t,d){d.r(t);let p=(0,d("jTyp").c)("PanelTopClose",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M3 9h18",key:"1pudct"}],["path",{d:"m9 16 3-3 3 3",key:"1idcnm"}]]);d.d(t,{},{default:p})}};

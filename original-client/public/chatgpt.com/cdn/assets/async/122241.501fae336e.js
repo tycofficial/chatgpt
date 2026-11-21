@@ -1,0 +1,2 @@
+/*! LICENSE: 122241.501fae336e.js.LICENSE.txt */
+export const __rspack_esm_ids=[122241];export const __webpack_modules__={sEVG(a,b,c){c.r(b);let d=(0,c("SHUh").c)("MessageCircleCode",[["path",{d:"M10 9.5 8 12l2 2.5",key:"3mjy60"}],["path",{d:"m14 9.5 2 2.5-2 2.5",key:"1bir2l"}],["path",{d:"M7.9 20A9 9 0 1 0 4 16.1L2 22z",key:"k85zhp"}]]);c.d(b,{},{default:d})}};

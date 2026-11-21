@@ -1,0 +1,2 @@
+/*! LICENSE: 777742.782815d27f.js.LICENSE.txt */
+export const __rspack_esm_ids=[777742];export const __webpack_modules__={GmOP(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ChevronsRight",[["path",{d:"m6 17 5-5-5-5",key:"xnjwq"}],["path",{d:"m13 17 5-5-5-5",key:"17xmmf"}]]);c.d(b,{},{default:d})}};

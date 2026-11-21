@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[138691];export const __webpack_modules__={RSTy(e){e.exports=JSON.parse('[{"name":"cell_type: plant","initialValues":{"cell_type":"plant"}}]')}};

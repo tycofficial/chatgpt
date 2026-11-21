@@ -1,2 +1,0 @@
-/*! LICENSE: 242647.19f5b7f559.js.LICENSE.txt */
-export const __rspack_esm_ids=[242647];export const __webpack_modules__={KUM3(a,e,t){t.r(e);var d=t("IiGr");t.d(e,{default:()=>d.default})},IiGr(a,e,t){t.r(e);let d=(0,t("jTyp").c)("FileChartColumnIncreasing",[["path",{d:"M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z",key:"1rqfz7"}],["path",{d:"M14 2v4a2 2 0 0 0 2 2h4",key:"tnqrlb"}],["path",{d:"M8 18v-2",key:"qcmpov"}],["path",{d:"M12 18v-4",key:"q1q25u"}],["path",{d:"M16 18v-6",key:"15y0np"}]]);t.d(e,{},{default:d})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 748350.b2ce524554.js.LICENSE.txt */
+export const __rspack_esm_ids=[748350];export const __webpack_modules__={ie6v(a,b,c){c.r(b);let d=(0,c("SHUh").c)("GitCommitVertical",[["path",{d:"M12 3v6",key:"1holv5"}],["circle",{cx:"12",cy:"12",r:"3",key:"1v7zrd"}],["path",{d:"M12 15v6",key:"a9ows0"}]]);c.d(b,{},{default:d})}};

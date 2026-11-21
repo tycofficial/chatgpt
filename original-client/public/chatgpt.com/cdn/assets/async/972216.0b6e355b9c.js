@@ -1,0 +1,2 @@
+/*! LICENSE: 972216.0b6e355b9c.js.LICENSE.txt */
+export const __rspack_esm_ids=[972216];export const __webpack_modules__={XK7B(a,b,c){c.r(b);let d=(0,c("SHUh").c)("WholeWord",[["circle",{cx:"7",cy:"12",r:"3",key:"12clwm"}],["path",{d:"M10 9v6",key:"17i7lo"}],["circle",{cx:"17",cy:"12",r:"3",key:"gl7c2s"}],["path",{d:"M14 7v8",key:"dl84cr"}],["path",{d:"M22 17v1c0 .5-.5 1-1 1H3c-.5 0-1-.5-1-1v-1",key:"lt2kga"}]]);c.d(b,{},{default:d})}};

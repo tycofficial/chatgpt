@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[418582];export const __webpack_modules__={gK7W(a,b,c){a.exports=c.p+"assets/national-museum.d920e3ee98.svg"}};

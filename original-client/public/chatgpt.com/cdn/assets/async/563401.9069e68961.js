@@ -1,0 +1,2 @@
+/*! LICENSE: 563401.9069e68961.js.LICENSE.txt */
+export const __rspack_esm_ids=[563401];export const __webpack_modules__={Xtva(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Check",[["path",{d:"M20 6 9 17l-5-5",key:"1gmf2c"}]]);c.d(b,{},{default:d})}};

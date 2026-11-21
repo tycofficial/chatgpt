@@ -1,0 +1,2 @@
+/*! LICENSE: 549442.a7b989ddab.js.LICENSE.txt */
+export const __rspack_esm_ids=[549442];export const __webpack_modules__={aPd9(a,b,c){c.r(b);let d=(0,c("SHUh").c)("CornerLeftUp",[["polyline",{points:"14 9 9 4 4 9",key:"m9oyvo"}],["path",{d:"M20 20h-7a4 4 0 0 1-4-4V4",key:"1blwi3"}]]);c.d(b,{},{default:d})}};

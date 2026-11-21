@@ -1,0 +1,2 @@
+/*! LICENSE: 673744.712c199bda.js.LICENSE.txt */
+export const __rspack_esm_ids=[673744];export const __webpack_modules__={IUzJ(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Percent",[["line",{x1:"19",x2:"5",y1:"5",y2:"19",key:"1x9vlm"}],["circle",{cx:"6.5",cy:"6.5",r:"2.5",key:"4mh3h7"}],["circle",{cx:"17.5",cy:"17.5",r:"2.5",key:"1mdrzq"}]]);c.d(b,{},{default:d})}};

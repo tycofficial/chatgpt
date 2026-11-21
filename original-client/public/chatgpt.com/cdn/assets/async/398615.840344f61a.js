@@ -1,0 +1,2 @@
+/*! LICENSE: 398615.840344f61a.js.LICENSE.txt */
+export const __rspack_esm_ids=[398615];export const __webpack_modules__={mdVR(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Square",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}]]);c.d(b,{},{default:d})}};

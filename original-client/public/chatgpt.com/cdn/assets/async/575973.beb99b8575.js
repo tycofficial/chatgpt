@@ -1,2 +1,0 @@
-/*! LICENSE: 575973.beb99b8575.js.LICENSE.txt */
-export const __rspack_esm_ids=[575973];export const __webpack_modules__={T0VC(e,t,_){_.r(t);let r=(0,_("jTyp").c)("CreditCard",[["rect",{width:"20",height:"14",x:"2",y:"5",rx:"2",key:"ynyp8z"}],["line",{x1:"2",x2:"22",y1:"10",y2:"10",key:"1b3vmo"}]]);_.d(t,{},{default:r})}};

@@ -1,2 +1,0 @@
-/*! LICENSE: 766446.0215ef89db.js.LICENSE.txt */
-export const __rspack_esm_ids=[766446];export const __webpack_modules__={wzBl(e,t,r){r.r(t);var c=r("Ei15");r.d(t,{default:()=>c.default})},Ei15(e,t,r){r.r(t);let c=(0,r("jTyp").c)("SquareDot",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["circle",{cx:"12",cy:"12",r:"1",key:"41hilf"}]]);r.d(t,{},{default:c})}};

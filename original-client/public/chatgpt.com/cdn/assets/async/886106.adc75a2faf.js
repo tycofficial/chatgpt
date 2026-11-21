@@ -1,0 +1,2 @@
+/*! LICENSE: 886106.adc75a2faf.js.LICENSE.txt */
+export const __rspack_esm_ids=[886106];export const __webpack_modules__={v2Zr(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Import",[["path",{d:"M12 3v12",key:"1x0j5s"}],["path",{d:"m8 11 4 4 4-4",key:"1dohi6"}],["path",{d:"M8 5H4a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-4",key:"1ywtjm"}]]);c.d(b,{},{default:d})}};

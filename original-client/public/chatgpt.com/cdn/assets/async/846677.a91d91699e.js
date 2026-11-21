@@ -1,2 +1,0 @@
-/*! LICENSE: 846677.a91d91699e.js.LICENSE.txt */
-export const __rspack_esm_ids=[846677];export const __webpack_modules__={FZur(e,t,_){_.r(t);let r=(0,_("jTyp").c)("Square",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}]]);_.d(t,{},{default:r})}};

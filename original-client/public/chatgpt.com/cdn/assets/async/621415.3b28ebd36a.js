@@ -1,0 +1,2 @@
+/*! LICENSE: 621415.3b28ebd36a.js.LICENSE.txt */
+export const __rspack_esm_ids=[621415];export const __webpack_modules__={XJlv(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Mountain",[["path",{d:"m8 3 4 8 5-5 5 15H2L8 3z",key:"otkl63"}]]);c.d(b,{},{default:d})}};

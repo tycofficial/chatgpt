@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[706786];export const __webpack_modules__={HXN4(s){s.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"celsius":-40}},{"name":"Maximum supported values","initialValues":{"celsius":120}}]')}};

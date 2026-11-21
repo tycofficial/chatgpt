@@ -1,0 +1,2 @@
+/*! LICENSE: 262646.a989e6f09a.js.LICENSE.txt */
+export const __rspack_esm_ids=[262646];export const __webpack_modules__={SY7m(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Clock10",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["polyline",{points:"12 6 12 12 8 10",key:"atfzqc"}]]);c.d(b,{},{default:d})}};

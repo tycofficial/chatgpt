@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[727911];export const __webpack_modules__={r5iK(e){e.exports=JSON.parse('[{"name":"molecule: ethane","initialValues":{"molecule":"ethane"}}]')}};

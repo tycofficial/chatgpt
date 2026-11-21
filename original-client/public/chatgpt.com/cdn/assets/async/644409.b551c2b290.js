@@ -1,0 +1,2 @@
+/*! LICENSE: 644409.b551c2b290.js.LICENSE.txt */
+export const __rspack_esm_ids=[644409];export const __webpack_modules__={xTJG(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Landmark",[["line",{x1:"3",x2:"21",y1:"22",y2:"22",key:"j8o0r"}],["line",{x1:"6",x2:"6",y1:"18",y2:"11",key:"10tf0k"}],["line",{x1:"10",x2:"10",y1:"18",y2:"11",key:"54lgf6"}],["line",{x1:"14",x2:"14",y1:"18",y2:"11",key:"380y"}],["line",{x1:"18",x2:"18",y1:"18",y2:"11",key:"1kevvc"}],["polygon",{points:"12 2 20 7 4 7",key:"jkujk7"}]]);c.d(b,{},{default:d})}};

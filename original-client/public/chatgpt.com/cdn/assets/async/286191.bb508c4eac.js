@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[286191];export const __webpack_modules__={A8ze(i){i.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"sodiumToPotassiumPermeabilityRatio":0,"chlorideToPotassiumPermeabilityRatio":0}},{"name":"Maximum supported values","initialValues":{"sodiumToPotassiumPermeabilityRatio":1,"chlorideToPotassiumPermeabilityRatio":1}}]')}};

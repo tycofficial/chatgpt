@@ -11,18 +11,20 @@ import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs';
 import { getPrototypeLocalSession, getPrototypeLocalAuth, isPrototypeLocalSession, getPrototypeLocalAuthGeneration, clearPrototypeLocalSession } from './local-identity.mjs';
 import { createLocalHostSettingsClass } from './local-host-settings.mjs';
 import { createLocalWorkPolicy } from './local-work-policy.mjs';
-import { hasModelSelectionAccess, getSiteLoginUrl, getSiteHomeUrl } from './site-account.mjs';
+import { hasModelSelectionAccess, getSiteAccount, getSiteLoginUrl, getSiteHomeUrl } from './site-account.mjs';
 import { createNativeSiteTrialCard } from './native-pricing-trials.mjs';
-import { createNativeSiteSignOut } from './site-signout.mjs';
+import { createNativeSiteUsageLayout } from './local-pricing.mjs';
+import { createNativeSiteSignOut, isSiteSignOutPage } from './site-signout.mjs';
 import { createNativeSiteLoginRoute } from './native-site-login.mjs';
 import { localizeRouterAssets } from './startup-compatibility.mjs';
 import { siteSignOut, localAppServer as timingServer } from './service-boundary.mjs';
-import { wrapNativeReasoningGroups } from './classic-chat-adapter.mjs';
+import { wrapNativeChatPreamble, wrapNativeClassicChatTiming, wrapNativeClassicStatus, wrapNativeClassicTiming, wrapNativeReasoningGroups } from './classic-chat-adapter.mjs';
 import { wrapNativeCodexWorkTiming, wrapNativeWorkedDuration } from './local-app-server.mjs';
 import { createNativeModelSelectionPolicy, createNativeThinkingEntryPolicy } from './local-model-selection-policy.mjs';
 import { createLocalHostClaimsReader } from './local-token-identity.mjs';
 import { wrapNativeFileUploadClass } from './local-native-upload.mjs';
 import { wrapNativeDownloadServices } from './local-native-download.mjs';
+import { createLocalDotVoiceTargetWrapper, createLocalDotVoiceWrappers } from './local-dot-browser-voice.mjs';
 
 const boundary = installNetworkBoundary();
 globalThis.__originalClientProbe = boundary.diagnostics;
@@ -32,7 +34,7 @@ const threadOnEntry = location.pathname.match(/\/(?:c|conversation|tasks|local)\
 const needsHistoryBeforeMount = threadOnEntry && !timingServer.threads.has(threadOnEntry);
 const initialHistory = initializeLocalAccountHistory({ threadOnEntry });
 void initialHistory.then(() => initializeLocalPublishedResources()).catch(() => {});
-installSyntheticDocumentState();
+installSyntheticDocumentState(localCodexAdapter.mergeConfiguration);
 
 const plan = await (await fetch('/__prototype/entry-plan.json')).json();
 const { __webpack_require__: requireOriginal } = await import(plan.runtime);
@@ -118,15 +120,15 @@ function readAloudBindings() {
   });
   return nativeReadAloudBindings = createNativeReadAloudBindings({
     controller,
-    mutableAtom: (...args) => requireOriginal('BolX').u(...args),
-    derivedAtom: (...args) => requireOriginal('BolX').d(...args),
+    mutableAtom: (...args) => requireOriginal('Q840').u(...args),
+    derivedAtom: (...args) => requireOriginal('Q840').d(...args),
     scopeAtom: rootScope,
-    // This getter is read at playback time after BJ43 instantiation. Its own
+    // Read the player's stop action after its factory has instantiated.
     // wrapped stop is safe: the new speech record has not been created yet.
-    stopNative: scope => requireOriginal('BJ43').b(scope),
+    stopNative: scope => requireOriginal('WNfO').b(scope),
   });
 }
-overrideExports('BJ43', {}, { deferred: true }, {
+overrideExports('WNfO', {}, { deferred: true }, {
   a: original => readAloudBindings().wrapStatus(original),
   b: original => readAloudBindings().wrapStop(original),
   c: original => readAloudBindings().wrapConversationStop(original),
@@ -144,14 +146,14 @@ const invalidateOriginalLibrary = (...args) => {
 // Keep the original decoder/writer and its original atom as the dependency.
 // Only the deprecated saved Luna UI Zero value is represented as Low.
 overrideExports('pQ72', {}, { deferred: true }, {
-  b: originalAtom => requireOriginal('BolX').c(
+  b: originalAtom => requireOriginal('Q840').c(
     requireOriginal('OWtl').a,
     ({ get }) => normalizeWorkUIStoredPreference(get(originalAtom)),
   ),
 });
 // END LOCAL LUNA SAVED-PREFERENCE READ BOUNDARY
 
-overrideExports('BolX', {}, { deferred: true }, {
+overrideExports('Q840', {}, { deferred: true }, {
   a: OriginalProvider => function NativeLibraryQueryProvider(props) {
     registerNativeLibrarySource(props.queryClient, invalidateOriginalLibrary);
     return requireOriginal('zd8w').createElement(OriginalProvider, props);
@@ -170,8 +172,8 @@ overrideExports('GaA7', {}, { deferred: true }, {
       isTemporaryPath: path => requireOriginal('Afr7').c(path),
       getTemporaryFile: path => requireOriginal('Afr7').b(path),
       getDefaultFileName: path => requireOriginal('bnxy').j(path),
-      sanitizeFileName: value => requireOriginal('I07G').kh(value),
-      maxBytes: requireOriginal('I07G').Hd,
+      sanitizeFileName: value => requireOriginal('yZpl').oh(value),
+      maxBytes: requireOriginal('yZpl').Jd,
       createTooLargeError: size => new (requireOriginal('smHt').b)(size),
       wrapRpcMethod: callback => new (requireOriginal('ZG9f').b)(callback),
       downloadVerifiedBytes: (...input) => localOwnedDownloadTransport.downloadVerifiedBytes(...input),
@@ -222,6 +224,11 @@ overrideExports('cKRc', {}, { deferred: true }, {
   d: atom => localCodexAdapter.adaptBrowserDiscoveryAtom(atom, requireOriginal),
 });
 
+// The native browser-host model slider consumes the site's shared Work presets.
+overrideExports('agZi', {}, { deferred: true }, {
+  a: atom => localCodexAdapter.adaptBrowserSliderConfigAtom(atom, requireOriginal),
+});
+
 // The site supplies a real text/tool executor over browser-origin storage.
 // Retain native permissions/workspace/config checks and unsupported OS errors.
 overrideExports('ckTT', {}, { deferred: true }, {
@@ -255,7 +262,7 @@ adaptFactory('jiwy', factory => function(module, exports, require) {
       for (const [name, read] of Object.entries(getters || {})) Object.defineProperty(original, name, { get: read, enumerable: true, configurable: true });
       let adapted;
       const nextGetters = { ...getters }, nextValues = { ...values };
-      for (const name of ['a','c','d','f','b','i']) {
+      for (const name of ['a','b','c','d','e','f','g','j']) {
         nextGetters[name] = () => (adapted ??= localDotAdapter.adaptCapabilityAtoms(original, require))[name];
         delete nextValues[name];
       }
@@ -298,12 +305,46 @@ overrideExports('AqQr', {}, { deferred: true }, {
 overrideExports('waM8', {}, { deferred: true }, {
   a: wrapNativeWorkedDuration,
 });
+overrideExports('AuIy', {}, { deferred: true }, { o: wrapNativeChatPreamble });
 overrideExports('hUUF', {}, { deferred: true }, { b: wrapNativeReasoningGroups });
-const siteLoginRoute = () => createNativeSiteLoginRoute({
-  useLocation: requireOriginal('jqIZ').Y, useEffect: requireOriginal('zd8w').useEffect,
+overrideExports('R2pa', {}, { deferred: true }, {
+  a: original => wrapNativeClassicTiming(wrapNativeClassicChatTiming(original)),
 });
-overrideExports('mjCR', {}, { deferred: true }, { Nb: siteLoginRoute, T: siteLoginRoute });
-overrideExports('AqC0', {}, { deferred: true }, { e: original => wrapNativeCodexWorkTiming(original, timingServer) });
+function ChatElapsedStatus({ durationMs }) {
+  const { jsx } = requireOriginal('ABep');
+  const { locale } = requireOriginal('Wf1j').a();
+  const elapsed = requireOriginal('waM8').a(durationMs, locale);
+  const summary = jsx(requireOriginal('oyxz').a, {
+    id: 'reasoningItem.thoughtWithElapsed', defaultMessage: 'Thought for {elapsed}', values: { elapsed },
+  });
+  return jsx(requireOriginal('q5qu').a, { padding: 'offset',
+    children: jsx(requireOriginal('IgqH').a, { summary, canExpand: false }),
+  });
+}
+// Preserve the native timing row when there is no collapsible activity.
+overrideExports('dDrQ', {}, { deferred: true }, {
+  a: original => wrapNativeClassicStatus(original, {
+    getThread: id => timingServer.threads.get(id),
+    renderTurn: (Component, props) => requireOriginal('ABep').jsx(Component, props),
+    renderStatus: (turn, status) => {
+      const { jsx, jsxs, Fragment } = requireOriginal('ABep');
+      return jsxs(Fragment, { children: [turn, jsx(requireOriginal('XSEO').a, status)] });
+    },
+    renderChatElapsed: (turn, durationMs) => {
+      const { jsx, jsxs, Fragment } = requireOriginal('ABep');
+      return jsxs(Fragment, { children: [turn, jsx(ChatElapsedStatus, { durationMs })] });
+    },
+  }),
+});
+const { o: voicePhase, q: voiceFailure, r: voiceBlock, v: startVoice, ...voiceControls } =
+  createLocalDotVoiceWrappers({ adapter: localDotAdapter, requireOriginal });
+overrideExports('Sd1s', {}, { deferred: true }, { ...voiceControls, n: voicePhase, p: voiceFailure, q: voiceBlock, u: startVoice });
+overrideExports('AXK1', {}, { deferred: true }, { b: createLocalDotVoiceTargetWrapper({ adapter: localDotAdapter, requireOriginal }) });
+const siteLoginRoute = () => createNativeSiteLoginRoute({
+  useLocation: requireOriginal('rEML').Z, useEffect: requireOriginal('zd8w').useEffect,
+});
+overrideExports('jEbc', {}, { deferred: true }, { Mb: siteLoginRoute, S: siteLoginRoute });
+overrideExports('cOHk', {}, { deferred: true }, { e: original => wrapNativeCodexWorkTiming(original, timingServer) });
 overrideExports('OrBF', {}, { deferred: true }, {
   a: frameURL => (...args) => {
     const path = frameURL(...args);
@@ -313,7 +354,7 @@ overrideExports('OrBF', {}, { deferred: true }, {
 });
 
 // The native curated option already offers the automatic selection and slider.
-overrideExports('dU23', {}, { deferred: true }, {
+overrideExports('majR', {}, { deferred: true }, {
   a: NativePicker => function SiteWorkModelPicker(props) {
     const modelListConfig = consolidateWorkDefaults(props.modelListConfig, WORK_DEFAULT_OPTION.label);
     return requireOriginal('ABep').jsx(NativePicker, { ...props, modelListConfig });
@@ -327,6 +368,25 @@ overrideExports('Y0ov', {}, { deferred: true }, {
   }),
 });
 
+const isSiteUsageRoute = () => Boolean(getSiteAccount()) &&
+  location.pathname.replace(/\/$/, '') === new URL('settings/usage', getSiteHomeUrl()).pathname;
+overrideExports('jxU8', {}, { deferred: true }, {
+  a: Layout => createNativeSiteUsageLayout(Layout, {
+    React: requireOriginal('zd8w'), Section: requireOriginal('BSnr').a,
+    Group: requireOriginal('ZEx5').a, Row: requireOriginal('AWNZ').d,
+    useUsage: () => requireOriginal('Q840').z(requireOriginal('gPv1').c),
+    getIdentity: getPrototypeLocalAuth, isUsageRoute: isSiteUsageRoute,
+  }),
+});
+overrideExports('WXto', {}, { deferred: true }, {
+  g: original => function useSiteCreditSettings(...args) {
+    const settings = original.apply(this, args);
+    return args[1] === 'usage' && isSiteUsageRoute()
+      ? { ...settings, canManageCreditSettings: false, canPurchaseBusinessCredits: false }
+      : settings;
+  },
+});
+
 // Preserve the original host class/RpcTarget inheritance and all public setting
 // definitions. Only its browser-storage implementation changes; UI/controller
 // readiness still follows the real readAll result through original ADAj.
@@ -335,7 +395,11 @@ adaptFactory('YCTv', factory => function(module, exports, require) {
     get(target, key, receiver) {
       if (key !== 'd') return Reflect.get(target, key, receiver);
       return (destination, getters, values) => {
-        if (destination === exports && values?.b) values = { ...values, b: createLocalHostSettingsClass(values.b, { canSelectModels: hasModelSelectionAccess, settings: require('I07G'), browser: require('vOiO'), cookie: require('ZhRn'), cookieValue: require('NGML') }) };
+        if (destination === exports && values?.b) {
+          const definitions = require('osjx');
+          const settings = { Od: definitions.b, lf: definitions.k, lh: definitions.q, Ij: definitions.x, mh: definitions.r, uh: definitions.s };
+          values = { ...values, b: createLocalHostSettingsClass(values.b, { canSelectModels: hasModelSelectionAccess, settings, browser: require('vOiO'), cookie: require('ZhRn'), cookieValue: require('NGML') }) };
+        }
         return require.d(destination, getters, values);
       };
     },
@@ -378,8 +442,8 @@ adaptFactory('pPWr', factory => function(module, exports, require) {
   return factory.call(this, module, exports, scopedRequire);
 });
 
-overrideExports('IBeT', {}, undefined, {
-  a: OriginalPicker => createNativeModelSelectionPolicy(OriginalPicker, requireOriginal('zd8w').createElement, hasModelSelectionAccess),
+overrideExports('cE61', {}, undefined, {
+  b: OriginalPicker => createNativeModelSelectionPolicy(OriginalPicker, requireOriginal('zd8w').createElement, hasModelSelectionAccess),
 });
 
 // Free keeps the source's original + menu Think item without a model controller.
@@ -410,8 +474,11 @@ function isSiteLoginPage() {
   const login = target.pathname.replace(/\/+$/, '') || '/';
   return path === login || path === login.replace(/\/login$/, '/auth/login');
 }
+function shouldSkipSiteLogin() {
+  return siteLoginRedirecting || isSiteLoginPage() || isSiteSignOutPage(location.href, getSiteHomeUrl());
+}
 function redirectToSiteLogin() {
-  if (siteLoginRedirecting || isSiteLoginPage()) return;
+  if (shouldSkipSiteLogin()) return;
   const target = new URL(getSiteLoginUrl(), location.href);
   if (target.origin !== location.origin) throw Error('Site login must use the current origin');
   target.searchParams.set('next', location.pathname + location.search + location.hash);
@@ -419,7 +486,7 @@ function redirectToSiteLogin() {
   location.assign(target.href);
 }
 function maybeRedirectToSiteLogin() {
-  if (isPrototypeLocalSession() || siteLoginRedirecting || isSiteLoginPage()) return false;
+  if (isPrototypeLocalSession() || shouldSkipSiteLogin()) return false;
   redirectToSiteLogin();
   return true;
 }
@@ -454,6 +521,17 @@ overrideExports('QdUF', {
 
 // Browser-saved HTML omits the initial module bootstrap. Reconstitute the exact
 // five-route module envelope found in chatgpt-public.html, before original hxQI.
+overrideExports('okWI', {}, { deferred: true }, {
+  a: original => async args => {
+    const id = args.params?.entityId;
+    if (typeof id !== 'string' || !/^lbe1_[A-Za-z0-9_-]{24}$/.test(id)) return original(args);
+    const response = await fetch('/__codex-api/local/entities/' + encodeURIComponent(id), { signal: args.request?.signal });
+    if (response.status === 404) return null;
+    if (!response.ok) throw response;
+    const { business } = await response.json();
+    return { place: business, canonicalUrl: new URL('maps/' + id, getSiteHomeUrl()).href, image: null, richLinkRendersEnabled: false };
+  },
+});
 await import(plan.manifest);
 if (globalThis.__CHATGPT_REPLICA_ENV__?.directAssetHost) {
   const siteRoot = new URL(globalThis.__CHATGPT_REPLICA_ENV__.basePath, location.origin);

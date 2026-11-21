@@ -1,0 +1,2 @@
+/*! LICENSE: 639123.02e7490ae3.js.LICENSE.txt */
+export const __rspack_esm_ids=[639123];export const __webpack_modules__={fHEz(a,b,c){c.r(b);var d=c("Luby");c.d(b,{default:()=>d.default})},Luby(a,b,c){c.r(b);let d=(0,c("SHUh").c)("CircleArrowDown",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["path",{d:"M12 8v8",key:"napkw2"}],["path",{d:"m8 12 4 4 4-4",key:"k98ssh"}]]);c.d(b,{},{default:d})}};

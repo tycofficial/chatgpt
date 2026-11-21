@@ -1,0 +1,2 @@
+/*! LICENSE: 43950.c13b8ddc91.js.LICENSE.txt */
+export const __rspack_esm_ids=[43950];export const __webpack_modules__={RtFD(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Webcam",[["circle",{cx:"12",cy:"10",r:"8",key:"1gshiw"}],["circle",{cx:"12",cy:"10",r:"3",key:"ilqhr7"}],["path",{d:"M7 22h10",key:"10w4w3"}],["path",{d:"M12 22v-4",key:"1utk9m"}]]);c.d(b,{},{default:d})}};

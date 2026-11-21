@@ -1,0 +1,2 @@
+/*! LICENSE: 586041.6cfe9c7248.js.LICENSE.txt */
+export const __rspack_esm_ids=[586041];export const __webpack_modules__={q9X9(a,b,c){c.r(b);let d=(0,c("SHUh").c)("CalendarCheck",[["path",{d:"M8 2v4",key:"1cmpym"}],["path",{d:"M16 2v4",key:"4m81vk"}],["rect",{width:"18",height:"18",x:"3",y:"4",rx:"2",key:"1hopcy"}],["path",{d:"M3 10h18",key:"8toen8"}],["path",{d:"m9 16 2 2 4-4",key:"19s6y9"}]]);c.d(b,{},{default:d})}};

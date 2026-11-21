@@ -1,0 +1,2 @@
+/*! LICENSE: 537442.b3f3e26139.js.LICENSE.txt */
+export const __rspack_esm_ids=[537442];export const __webpack_modules__={dXaD(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Squircle",[["path",{d:"M12 3c7.2 0 9 1.8 9 9s-1.8 9-9 9-9-1.8-9-9 1.8-9 9-9",key:"garfkc"}]]);c.d(b,{},{default:d})}};

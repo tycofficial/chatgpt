@@ -1,7 +1,8 @@
-import * as catalog from '../model-catalog.js?v=ca63aad189abab8c';
-import { createModelCatalogAdapter } from './model-catalog-adapter.mjs?v=ca63aad189abab8c';
-import { getPrototypeStatsigUser, isPrototypeLocalSession } from './local-identity.mjs?v=ca63aad189abab8c';
-import { hasModelSelectionAccess, getSitePlanCapabilities } from './site-account.mjs?v=ca63aad189abab8c';
+import * as catalog from '../model-catalog.js?v=91ed19db286dc9e0';
+import { createModelCatalogAdapter } from './model-catalog-adapter.mjs?v=91ed19db286dc9e0';
+import { getPrototypeStatsigUser, isPrototypeLocalSession } from './local-identity.mjs?v=91ed19db286dc9e0';
+import { hasModelSelectionAccess, getSitePlanCapabilities } from './site-account.mjs?v=91ed19db286dc9e0';
+import { hasLocalDotBrowserVoice } from './local-dot-browser-voice.mjs?v=91ed19db286dc9e0';
 const models = createModelCatalogAdapter(catalog);
 let readLibraryAvailability = () => false;
 /** The Library gate is enabled only after its real local file provider exists. */
@@ -19,6 +20,8 @@ export function getPrototypeConfiguration(user = getPrototypeStatsigUser()) {
   const rail = { name: '3085093835', value: true, rule_id: 'local-observed-public-layout', secondary_exposures: [], adapter_source: 'captured-public-ui-layout' };
   const localWork = { name: '1625797156', value: isPrototypeLocalSession() && getSitePlanCapabilities().work, rule_id: 'local-text-provider', secondary_exposures: [], adapter_source: 'local-app-server-not-openai-cloud' };
   const localDots = { name: '1202965598', value: isPrototypeLocalSession() && getSitePlanCapabilities().dot, rule_id: 'site-local-dot-provider', secondary_exposures: [], adapter_source: 'public-original-dot-ui-with-local-profile-service' };
+  const localDotNavigation = { ...localDots, name: '3406878059' };
+  const localDotVoice = { name: '548063743', value: localDots.value && hasLocalDotBrowserVoice(), rule_id: 'site-local-dot-voice', secondary_exposures: [], adapter_source: 'browser-speech' };
   const localLibrary = { name: '224248639', value: isPrototypeLocalSession() && readLibraryAvailability() === true, rule_id: 'site-local-library-provider', secondary_exposures: [], adapter_source: 'original-library-ui-with-browser-origin-files' };
   // User-selected source layout: keep Chat and Work as separate native modes.
   // rbaa.k/vYe0.X: all captured source screens use the original zh-CN catalog.
@@ -32,7 +35,16 @@ export function getPrototypeConfiguration(user = getPrototypeStatsigUser()) {
   return {
     has_updates: true, time: Date.now(), hash_used: 'none',
     user: structuredClone(user), evaluated_keys: { userID: user.userID, customIDs: user.customIDs },
-    feature_gates: { '3085093835': rail, [hash('3085093835')]: rail, '1625797156': localWork, [hash('1625797156')]: localWork, '1202965598': localDots, [hash('1202965598')]: localDots, '224248639': localLibrary, [hash('224248639')]: localLibrary, '536305374': ultraSelection, [hash('536305374')]: ultraSelection, '1186680773': ultraCatalog, [hash('1186680773')]: ultraCatalog },
+    feature_gates: {
+      '3085093835': rail, [hash('3085093835')]: rail,
+      '1625797156': localWork, [hash('1625797156')]: localWork,
+      '1202965598': localDots, [hash('1202965598')]: localDots,
+      '3406878059': localDotNavigation, [hash('3406878059')]: localDotNavigation,
+      '548063743': localDotVoice, [hash('548063743')]: localDotVoice,
+      '224248639': localLibrary, [hash('224248639')]: localLibrary,
+      '536305374': ultraSelection, [hash('536305374')]: ultraSelection,
+      '1186680773': ultraCatalog, [hash('1186680773')]: ultraCatalog,
+    },
     dynamic_configs: { '423260384': slider, [hash('423260384')]: slider },
     layer_configs: { '3040264819': pickerLayer, [hash('3040264819')]: pickerLayer, '72216192': i18n, [hash('72216192')]: i18n }, param_stores: {}, sdkInfo: {}, sdkParams: {}, sdk_configs: {},
     can_record_session: false, session_recording_rate: 0, recording_blocked: true,

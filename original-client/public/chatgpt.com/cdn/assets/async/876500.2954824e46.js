@@ -1,2 +1,0 @@
-/*! LICENSE: 876500.2954824e46.js.LICENSE.txt */
-export const __rspack_esm_ids=[876500];export const __webpack_modules__={OUxl(e,t,_){_.r(t);let c=(0,_("jTyp").c)("TestTube",[["path",{d:"M14.5 2v17.5c0 1.4-1.1 2.5-2.5 2.5c-1.4 0-2.5-1.1-2.5-2.5V2",key:"125lnx"}],["path",{d:"M8.5 2h7",key:"csnxdl"}],["path",{d:"M14.5 16h-5",key:"1ox875"}]]);_.d(t,{},{default:c})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 145145.4986c0a27d.js.LICENSE.txt */
+export const __rspack_esm_ids=[145145];export const __webpack_modules__={lRLc(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Sailboat",[["path",{d:"M22 18H2a4 4 0 0 0 4 4h12a4 4 0 0 0 4-4Z",key:"1404fh"}],["path",{d:"M21 14 10 2 3 14h18Z",key:"1nzg7v"}],["path",{d:"M10 2v16",key:"1labyt"}]]);c.d(b,{},{default:d})}};

@@ -1,2 +1,0 @@
-/*! LICENSE: 368956.f1f65392aa.js.LICENSE.txt */
-export const __rspack_esm_ids=[368956];export const __webpack_modules__={S5Pb(e,a,d){d.r(a);var t=d("klik");d.d(a,{default:()=>t.default})},klik(e,a,d){d.r(a);let t=(0,d("jTyp").c)("IceCreamCone",[["path",{d:"m7 11 4.08 10.35a1 1 0 0 0 1.84 0L17 11",key:"1v6356"}],["path",{d:"M17 7A5 5 0 0 0 7 7",key:"151p3v"}],["path",{d:"M17 7a2 2 0 0 1 0 4H7a2 2 0 0 1 0-4",key:"1sdaij"}]]);d.d(a,{},{default:t})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 301740.d623845842.js.LICENSE.txt */
+export const __rspack_esm_ids=[301740];export const __webpack_modules__={aGu0(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Banknote",[["rect",{width:"20",height:"12",x:"2",y:"6",rx:"2",key:"9lu3g6"}],["circle",{cx:"12",cy:"12",r:"2",key:"1c9p78"}],["path",{d:"M6 12h.01M18 12h.01",key:"113zkx"}]]);c.d(b,{},{default:d})}};

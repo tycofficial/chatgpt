@@ -1,2 +1,0 @@
-/*! LICENSE: 433039.3496176143.js.LICENSE.txt */
-export const __rspack_esm_ids=[433039];export const __webpack_modules__={o5qe(e,t,d){d.r(t);let p=(0,d("jTyp").c)("Asterisk",[["path",{d:"M12 6v12",key:"1vza4d"}],["path",{d:"M17.196 9 6.804 15",key:"1ah31z"}],["path",{d:"m6.804 9 10.392 6",key:"1b6pxd"}]]);d.d(t,{},{default:p})}};

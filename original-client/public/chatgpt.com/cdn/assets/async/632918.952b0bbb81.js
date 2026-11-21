@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[632918];export const __webpack_modules__={HLfK(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"quotaUnits":2}},{"name":"Maximum supported values","initialValues":{"quotaUnits":16}}]')}};

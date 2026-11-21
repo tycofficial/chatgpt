@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[754917];export const __webpack_modules__={icqk(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"temperatureCelsius":0}},{"name":"Maximum supported values","initialValues":{"temperatureCelsius":70}}]')}};

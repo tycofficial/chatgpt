@@ -1,6 +1,6 @@
-import { publicAuthEnvelope } from './public-auth-envelope.mjs?v=ca63aad189abab8c';
-import { getPrototypeLocalSession, isPrototypeLocalSession } from './local-identity.mjs?v=ca63aad189abab8c';
-import { getPrototypeConfiguration } from './local-configuration.mjs?v=ca63aad189abab8c';
+import { publicAuthEnvelope } from './public-auth-envelope.mjs?v=91ed19db286dc9e0';
+import { getPrototypeLocalSession, isPrototypeLocalSession } from './local-identity.mjs?v=91ed19db286dc9e0';
+import { getPrototypeConfiguration } from './local-configuration.mjs?v=91ed19db286dc9e0';
 
 /** Plain-JSON subset of the format consumed by original jqIZ.nl (447351...). */
 export function encodeRouterState(value) {
@@ -28,7 +28,7 @@ export function encodeRouterState(value) {
   return `${JSON.stringify(flattened)}\n`;
 }
 
-export function installSyntheticDocumentState() {
+export function installSyntheticDocumentState(adaptConfiguration = configuration => configuration) {
   const bootstrap = {
     // This synthetic identity is local; signing out must not affect an official session.
     auth: { ...structuredClone(publicAuthEnvelope), federatedLogoutUrl: null },
@@ -48,7 +48,7 @@ export function installSyntheticDocumentState() {
     isBrowserSideChat: false,
     optimizeStartup: false,
     composerMode: 'chat',
-    statsigPayload: JSON.stringify(getPrototypeConfiguration()),
+    statsigPayload: JSON.stringify(adaptConfiguration(getPrototypeConfiguration())),
     statsigBootstrap: { deferredConfigNames: [] },
     statsigContext: { locale: 'zh-CN', deviceId: 'local-prototype' },
     adapterIdentity: isPrototypeLocalSession() ? 'prototype-local-only-not-google-or-openai' : null,

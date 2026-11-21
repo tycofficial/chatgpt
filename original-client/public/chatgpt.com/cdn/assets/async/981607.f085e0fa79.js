@@ -1,0 +1,2 @@
+/*! LICENSE: 981607.f085e0fa79.js.LICENSE.txt */
+export const __rspack_esm_ids=[981607];export const __webpack_modules__={I5yU(a,b,c){c.r(b);let d=(0,c("SHUh").c)("SquareDashedBottom",[["path",{d:"M5 21a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2",key:"as5y1o"}],["path",{d:"M9 21h1",key:"15o7lz"}],["path",{d:"M14 21h1",key:"v9vybs"}]]);c.d(b,{},{default:d})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 311085.008f1be145.js.LICENSE.txt */
+export const __rspack_esm_ids=[311085];export const __webpack_modules__={sEKr(a,b,c){c.r(b);let d=(0,c("SHUh").c)("PenOff",[["path",{d:"m10 10-6.157 6.162a2 2 0 0 0-.5.833l-1.322 4.36a.5.5 0 0 0 .622.624l4.358-1.323a2 2 0 0 0 .83-.5L14 13.982",key:"bjo8r8"}],["path",{d:"m12.829 7.172 4.359-4.346a1 1 0 1 1 3.986 3.986l-4.353 4.353",key:"16h5ne"}],["path",{d:"m2 2 20 20",key:"1ooewy"}]]);c.d(b,{},{default:d})}};

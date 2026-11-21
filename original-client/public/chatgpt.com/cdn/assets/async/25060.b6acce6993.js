@@ -1,2 +1,0 @@
-/*! LICENSE: 25060.b6acce6993.js.LICENSE.txt */
-export const __rspack_esm_ids=[25060];export const __webpack_modules__={X0Q1(e,a,s){s.r(a);let t=(0,s("jTyp").c)("MessageCircleHeart",[["path",{d:"M7.9 20A9 9 0 1 0 4 16.1L2 22Z",key:"vv11sd"}],["path",{d:"M15.8 9.2a2.5 2.5 0 0 0-3.5 0l-.3.4-.35-.3a2.42 2.42 0 1 0-3.2 3.6l3.6 3.5 3.6-3.5c1.2-1.2 1.1-2.7.2-3.7",key:"43lnbm"}]]);s.d(a,{},{default:t})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 908068.d47091b233.js.LICENSE.txt */
+export const __rspack_esm_ids=[908068];export const __webpack_modules__={SSoT(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ListMinus",[["path",{d:"M11 12H3",key:"51ecnj"}],["path",{d:"M16 6H3",key:"1wxfjs"}],["path",{d:"M16 18H3",key:"12xzn7"}],["path",{d:"M21 12h-6",key:"bt1uis"}]]);c.d(b,{},{default:d})}};

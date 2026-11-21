@@ -1,0 +1,2 @@
+/*! LICENSE: 76704.2d27187f77.js.LICENSE.txt */
+export const __rspack_esm_ids=[76704];export const __webpack_modules__={AEtq(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Frame",[["line",{x1:"22",x2:"2",y1:"6",y2:"6",key:"15w7dq"}],["line",{x1:"22",x2:"2",y1:"18",y2:"18",key:"1ip48p"}],["line",{x1:"6",x2:"6",y1:"2",y2:"22",key:"a2lnyx"}],["line",{x1:"18",x2:"18",y1:"2",y2:"22",key:"8vb6jd"}]]);c.d(b,{},{default:d})}};

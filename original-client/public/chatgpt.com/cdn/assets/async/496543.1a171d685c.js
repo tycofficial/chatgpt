@@ -1,2 +1,0 @@
-/*! LICENSE: 496543.1a171d685c.js.LICENSE.txt */
-export const __rspack_esm_ids=[496543];export const __webpack_modules__={Q31K(e,c,_){_.r(c);let p=(0,_("jTyp").c)("CirclePlus",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["path",{d:"M8 12h8",key:"1wcyev"}],["path",{d:"M12 8v8",key:"napkw2"}]]);_.d(c,{},{default:p})}};

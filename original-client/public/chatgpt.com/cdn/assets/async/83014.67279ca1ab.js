@@ -1,2 +1,0 @@
-/*! LICENSE: 83014.67279ca1ab.js.LICENSE.txt */
-export const __rspack_esm_ids=[83014];export const __webpack_modules__={Qf24(e,c,p){p.r(c);let t=(0,p("jTyp").c)("UserRoundX",[["path",{d:"M2 21a8 8 0 0 1 11.873-7",key:"74fkxq"}],["circle",{cx:"10",cy:"8",r:"5",key:"o932ke"}],["path",{d:"m17 17 5 5",key:"p7ous7"}],["path",{d:"m22 17-5 5",key:"gqnmv0"}]]);p.d(c,{},{default:t})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 901920.4484977ed1.js.LICENSE.txt */
+export const __rspack_esm_ids=[901920];export const __webpack_modules__={nE1p(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Rss",[["path",{d:"M4 11a9 9 0 0 1 9 9",key:"pv89mb"}],["path",{d:"M4 4a16 16 0 0 1 16 16",key:"k0647b"}],["circle",{cx:"5",cy:"19",r:"1",key:"bfqh0e"}]]);c.d(b,{},{default:d})}};

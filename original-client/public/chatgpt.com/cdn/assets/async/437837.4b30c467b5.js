@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[437837];export const __webpack_modules__={iieC(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"frequency":0.1,"wavelength":0.1}},{"name":"Maximum supported values","initialValues":{"frequency":20000,"wavelength":10000}}]')}};

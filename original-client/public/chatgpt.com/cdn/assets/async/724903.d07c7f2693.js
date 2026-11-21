@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[724903];export const __webpack_modules__={irnV(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"delta_h_kj_per_mol":-120,"delta_s_j_per_mol_k":-240}},{"name":"Maximum supported values","initialValues":{"delta_h_kj_per_mol":120,"delta_s_j_per_mol_k":240}}]')}};

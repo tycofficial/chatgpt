@@ -1,2 +1,0 @@
-/*! LICENSE: 486365.0d45b9084d.js.LICENSE.txt */
-export const __rspack_esm_ids=[486365];export const __webpack_modules__={qkfA(e,t,c){c.r(t);let _=(0,c("jTyp").c)("ToyBrick",[["rect",{width:"18",height:"12",x:"3",y:"8",rx:"1",key:"158fvp"}],["path",{d:"M10 8V5c0-.6-.4-1-1-1H6a1 1 0 0 0-1 1v3",key:"s0042v"}],["path",{d:"M19 8V5c0-.6-.4-1-1-1h-3a1 1 0 0 0-1 1v3",key:"9wmeh2"}]]);c.d(t,{},{default:_})}};

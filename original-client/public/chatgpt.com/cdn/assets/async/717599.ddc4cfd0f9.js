@@ -1,0 +1,2 @@
+/*! LICENSE: 717599.ddc4cfd0f9.js.LICENSE.txt */
+export const __rspack_esm_ids=[717599];export const __webpack_modules__={Sm5h(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ArrowUpRight",[["path",{d:"M7 7h10v10",key:"1tivn9"}],["path",{d:"M7 17 17 7",key:"1vkiza"}]]);c.d(b,{},{default:d})}};

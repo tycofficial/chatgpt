@@ -1,2 +1,0 @@
-/*! LICENSE: 569045.eaf5c13166.js.LICENSE.txt */
-export const __rspack_esm_ids=[569045];export const __webpack_modules__={akF7(e,s,_){_.r(s);let t=(0,_("jTyp").c)("Plus",[["path",{d:"M5 12h14",key:"1ays0h"}],["path",{d:"M12 5v14",key:"s699le"}]]);_.d(s,{},{default:t})}};

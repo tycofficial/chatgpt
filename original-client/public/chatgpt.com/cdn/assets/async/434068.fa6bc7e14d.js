@@ -1,0 +1,2 @@
+/*! LICENSE: 434068.fa6bc7e14d.js.LICENSE.txt */
+export const __rspack_esm_ids=[434068];export const __webpack_modules__={ay8Z(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ArrowLeftFromLine",[["path",{d:"m9 6-6 6 6 6",key:"7v63n9"}],["path",{d:"M3 12h14",key:"13k4hi"}],["path",{d:"M21 19V5",key:"b4bplr"}]]);c.d(b,{},{default:d})}};

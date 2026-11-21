@@ -1,2 +1,0 @@
-/*! LICENSE: 869135.fe3e57bf91.js.LICENSE.txt */
-export const __rspack_esm_ids=[869135];export const __webpack_modules__={opiy(e,c,t){t.r(c);let y=(0,t("jTyp").c)("Settings2",[["path",{d:"M20 7h-9",key:"3s1dr2"}],["path",{d:"M14 17H5",key:"gfn3mx"}],["circle",{cx:"17",cy:"17",r:"3",key:"18b49y"}],["circle",{cx:"7",cy:"7",r:"3",key:"dfmy0x"}]]);t.d(c,{},{default:y})}};

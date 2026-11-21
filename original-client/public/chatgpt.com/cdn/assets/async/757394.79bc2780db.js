@@ -1,2 +1,0 @@
-/*! LICENSE: 757394.79bc2780db.js.LICENSE.txt */
-export const __rspack_esm_ids=[757394];export const __webpack_modules__={jJPc(e,t,_){_.r(t);let d=(0,_("jTyp").c)("Grid2x2",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M3 12h18",key:"1i2n21"}],["path",{d:"M12 3v18",key:"108xh3"}]]);_.d(t,{},{default:d})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 51734.6d8b2b106d.js.LICENSE.txt */
+export const __rspack_esm_ids=[51734];export const __webpack_modules__={rRIF(a,b,c){c.r(b);let d=(0,c("SHUh").c)("SmartphoneCharging",[["rect",{width:"14",height:"20",x:"5",y:"2",rx:"2",ry:"2",key:"1yt0o3"}],["path",{d:"M12.667 8 10 12h4l-2.667 4",key:"h9lk2d"}]]);c.d(b,{},{default:d})}};

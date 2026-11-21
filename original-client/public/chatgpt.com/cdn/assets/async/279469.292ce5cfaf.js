@@ -1,0 +1,2 @@
+/*! LICENSE: 279469.292ce5cfaf.js.LICENSE.txt */
+export const __rspack_esm_ids=[279469];export const __webpack_modules__={qTEG(a,b,c){c.r(b);let d=(0,c("SHUh").c)("TreeDeciduous",[["path",{d:"M8 19a4 4 0 0 1-2.24-7.32A3.5 3.5 0 0 1 9 6.03V6a3 3 0 1 1 6 0v.04a3.5 3.5 0 0 1 3.24 5.65A4 4 0 0 1 16 19Z",key:"oadzkq"}],["path",{d:"M12 19v3",key:"npa21l"}]]);c.d(b,{},{default:d})}};

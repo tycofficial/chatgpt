@@ -1,0 +1,2 @@
+/*! LICENSE: 306219.96bc2dd847.js.LICENSE.txt */
+export const __rspack_esm_ids=[306219];export const __webpack_modules__={kezs(a,b,c){c.r(b);let d=(0,c("SHUh").c)("StickyNote",[["path",{d:"M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8Z",key:"qazsjp"}],["path",{d:"M15 3v4a2 2 0 0 0 2 2h4",key:"40519r"}]]);c.d(b,{},{default:d})}};

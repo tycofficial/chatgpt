@@ -1,2 +1,0 @@
-/*! LICENSE: 124645.8ac8170f41.js.LICENSE.txt */
-export const __rspack_esm_ids=[124645];export const __webpack_modules__={Io37(e,t,a){a.r(t);var c=a("am2W");a.d(t,{default:()=>c.default})},am2W(e,t,a){a.r(t);let c=(0,a("jTyp").c)("ContactRound",[["path",{d:"M16 2v2",key:"scm5qe"}],["path",{d:"M17.915 22a6 6 0 0 0-12 0",key:"suqz9p"}],["path",{d:"M8 2v2",key:"pbkmx"}],["circle",{cx:"12",cy:"12",r:"4",key:"4exip2"}],["rect",{x:"3",y:"4",width:"18",height:"18",rx:"2",key:"12vinp"}]]);a.d(t,{},{default:c})}};

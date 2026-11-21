@@ -1,0 +1,2 @@
+/*! LICENSE: 648762.b1a6d35985.js.LICENSE.txt */
+export const __rspack_esm_ids=[648762];export const __webpack_modules__={Ocbk(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ArrowDownToLine",[["path",{d:"M12 17V3",key:"1cwfxf"}],["path",{d:"m6 11 6 6 6-6",key:"12ii2o"}],["path",{d:"M19 21H5",key:"150jfl"}]]);c.d(b,{},{default:d})}};

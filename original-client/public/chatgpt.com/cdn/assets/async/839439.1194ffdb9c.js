@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[839439];export const __webpack_modules__={iNyZ(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"currentStrengthAmperes":1}},{"name":"Maximum supported values","initialValues":{"currentStrengthAmperes":10}},{"name":"currentDirection: down","initialValues":{"currentDirection":"down"}}]')}};

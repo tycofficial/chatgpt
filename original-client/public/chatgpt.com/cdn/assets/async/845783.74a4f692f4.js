@@ -1,0 +1,2 @@
+/*! LICENSE: 845783.74a4f692f4.js.LICENSE.txt */
+export const __rspack_esm_ids=[845783];export const __webpack_modules__={Pcoz(a,b,c){c.r(b);let d=(0,c("SHUh").c)("MouseOff",[["path",{d:"M12 6v.343",key:"1gyhex"}],["path",{d:"M18.218 18.218A7 7 0 0 1 5 15V9a7 7 0 0 1 .782-3.218",key:"ukzz01"}],["path",{d:"M19 13.343V9A7 7 0 0 0 8.56 2.902",key:"104jy9"}],["path",{d:"M22 22 2 2",key:"1r8tn9"}]]);c.d(b,{},{default:d})}};

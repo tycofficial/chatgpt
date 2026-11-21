@@ -1,0 +1,2 @@
+/*! LICENSE: 530338.01945d3b00.js.LICENSE.txt */
+export const __rspack_esm_ids=[530338];export const __webpack_modules__={sCqF(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Pause",[["rect",{x:"14",y:"4",width:"4",height:"16",rx:"1",key:"zuxfzm"}],["rect",{x:"6",y:"4",width:"4",height:"16",rx:"1",key:"1okwgv"}]]);c.d(b,{},{default:d})}};

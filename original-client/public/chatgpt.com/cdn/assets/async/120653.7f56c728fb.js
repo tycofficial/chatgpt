@@ -1,0 +1,2 @@
+/*! LICENSE: 120653.7f56c728fb.js.LICENSE.txt */
+export const __rspack_esm_ids=[120653];export const __webpack_modules__={mFqZ(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Globe",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["path",{d:"M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20",key:"13o1zl"}],["path",{d:"M2 12h20",key:"9i4pu4"}]]);c.d(b,{},{default:d})}};

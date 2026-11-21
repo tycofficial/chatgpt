@@ -1,0 +1,2 @@
+/*! LICENSE: 991490.2ced7974e6.js.LICENSE.txt */
+export const __rspack_esm_ids=[991490];export const __webpack_modules__={lBEK(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Shrub",[["path",{d:"M12 22v-7l-2-2",key:"eqv9mc"}],["path",{d:"M17 8v.8A6 6 0 0 1 13.8 20H10A6.5 6.5 0 0 1 7 8a5 5 0 0 1 10 0Z",key:"ubcgy"}],["path",{d:"m14 14-2 2",key:"847xa2"}]]);c.d(b,{},{default:d})}};

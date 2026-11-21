@@ -1,0 +1,2 @@
+/*! LICENSE: 576535.c1ca8b2014.js.LICENSE.txt */
+export const __rspack_esm_ids=[576535];export const __webpack_modules__={n5kaJ(a,b,c){c.r(b);let d=(0,c("SHUh").c)("MoveUpRight",[["path",{d:"M13 5H19V11",key:"1n1gyv"}],["path",{d:"M19 5L5 19",key:"72u4yj"}]]);c.d(b,{},{default:d})}};

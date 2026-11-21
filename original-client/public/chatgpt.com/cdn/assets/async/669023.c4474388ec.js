@@ -1,0 +1,2 @@
+/*! LICENSE: 669023.c4474388ec.js.LICENSE.txt */
+export const __rspack_esm_ids=[669023];export const __webpack_modules__={UDn9(a,b,c){c.r(b);let d=(0,c("SHUh").c)("RotateCcwSquare",[["path",{d:"M20 9V7a2 2 0 0 0-2-2h-6",key:"19z8uc"}],["path",{d:"m15 2-3 3 3 3",key:"177bxs"}],["path",{d:"M20 13v5a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2",key:"d36hnl"}]]);c.d(b,{},{default:d})}};

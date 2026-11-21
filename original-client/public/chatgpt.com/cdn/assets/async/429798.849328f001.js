@@ -1,0 +1,2 @@
+/*! LICENSE: 429798.849328f001.js.LICENSE.txt */
+export const __rspack_esm_ids=[429798];export const __webpack_modules__={IdNy(a,b,c){c.r(b);let d=(0,c("SHUh").c)("GalleryVerticalEnd",[["path",{d:"M7 2h10",key:"nczekb"}],["path",{d:"M5 6h14",key:"u2x4p"}],["rect",{width:"18",height:"12",x:"3",y:"10",rx:"2",key:"l0tzu3"}]]);c.d(b,{},{default:d})}};

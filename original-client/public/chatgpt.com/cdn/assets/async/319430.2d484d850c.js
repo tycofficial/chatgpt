@@ -1,0 +1,2 @@
+/*! LICENSE: 319430.2d484d850c.js.LICENSE.txt */
+export const __rspack_esm_ids=[319430];export const __webpack_modules__={zGzV(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ArrowUpLeft",[["path",{d:"M7 17V7h10",key:"11bw93"}],["path",{d:"M17 17 7 7",key:"2786uv"}]]);c.d(b,{},{default:d})}};

@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[461377];export const __webpack_modules__={Bqu3(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"policySize":0}},{"name":"Maximum supported values","initialValues":{"policySize":36}},{"name":"externalityType: positive","initialValues":{"externalityType":"positive"}}]')}};

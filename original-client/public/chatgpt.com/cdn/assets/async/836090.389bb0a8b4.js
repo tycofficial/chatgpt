@@ -1,0 +1,2 @@
+/*! LICENSE: 836090.389bb0a8b4.js.LICENSE.txt */
+export const __rspack_esm_ids=[836090];export const __webpack_modules__={Rh4t(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Bookmark",[["path",{d:"m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z",key:"1fy3hk"}]]);c.d(b,{},{default:d})}};

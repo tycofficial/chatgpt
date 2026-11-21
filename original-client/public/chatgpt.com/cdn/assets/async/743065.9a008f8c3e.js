@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[743065];export const __webpack_modules__={Czic(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"forceNewtons":0,"areaSquareMeters":0.25}},{"name":"Maximum supported values","initialValues":{"forceNewtons":200,"areaSquareMeters":5}}]')}};

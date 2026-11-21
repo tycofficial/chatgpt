@@ -1,2 +1,0 @@
-/*! LICENSE: 292112.81de1196ed.js.LICENSE.txt */
-export const __rspack_esm_ids=[292112];export const __webpack_modules__={qQC9(e,o,p){p.r(o);let _=(0,p("jTyp").c)("StepBack",[["line",{x1:"18",x2:"18",y1:"20",y2:"4",key:"cun8e5"}],["polygon",{points:"14,20 4,12 14,4",key:"ypakod"}]]);p.d(o,{},{default:_})}};

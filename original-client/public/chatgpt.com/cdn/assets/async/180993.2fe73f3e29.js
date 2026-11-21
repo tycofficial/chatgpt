@@ -1,0 +1,2 @@
+/*! LICENSE: 180993.2fe73f3e29.js.LICENSE.txt */
+export const __rspack_esm_ids=[180993];export const __webpack_modules__={eQbw(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ShoppingCart",[["circle",{cx:"8",cy:"21",r:"1",key:"jimo8o"}],["circle",{cx:"19",cy:"21",r:"1",key:"13723u"}],["path",{d:"M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12",key:"9zh506"}]]);c.d(b,{},{default:d})}};

@@ -1,2 +1,0 @@
-/*! LICENSE: 62656.445dd9daa9.js.LICENSE.txt */
-export const __rspack_esm_ids=[62656];export const __webpack_modules__={vC4k(e,a,p){p.r(a);let t=(0,p("jTyp").c)("ShieldEllipsis",[["path",{d:"M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z",key:"oel41y"}],["path",{d:"M8 12h.01",key:"czm47f"}],["path",{d:"M12 12h.01",key:"1mp3jc"}],["path",{d:"M16 12h.01",key:"1l6xoz"}]]);p.d(a,{},{default:t})}};

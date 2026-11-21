@@ -1,0 +1,2 @@
+/*! LICENSE: 270212.4f4f686db5.js.LICENSE.txt */
+export const __rspack_esm_ids=[270212];export const __webpack_modules__={Ljla(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Dice1",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",ry:"2",key:"1m3agn"}],["path",{d:"M12 12h.01",key:"1mp3jc"}]]);c.d(b,{},{default:d})}};

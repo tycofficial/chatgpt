@@ -1,2 +1,0 @@
-/*! LICENSE: 454680.05ac969a21.js.LICENSE.txt */
-export const __rspack_esm_ids=[454680];export const __webpack_modules__={KgTI(e,a,d){d.r(a);var t=d("B84C");d.d(a,{default:()=>t.default})},B84C(e,a,d){d.r(a);let t=(0,d("jTyp").c)("LoaderCircle",[["path",{d:"M21 12a9 9 0 1 1-6.219-8.56",key:"13zald"}]]);d.d(a,{},{default:t})}};

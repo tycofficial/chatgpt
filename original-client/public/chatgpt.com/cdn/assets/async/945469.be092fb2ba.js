@@ -1,0 +1,2 @@
+/*! LICENSE: 945469.be092fb2ba.js.LICENSE.txt */
+export const __rspack_esm_ids=[945469];export const __webpack_modules__={eCSJ(a,b,c){c.r(b);let d=(0,c("SHUh").c)("PilcrowRight",[["path",{d:"M10 3v11",key:"o3l5kj"}],["path",{d:"M10 9H7a1 1 0 0 1 0-6h8",key:"1wb1nc"}],["path",{d:"M14 3v11",key:"mlfb7b"}],["path",{d:"m18 14 4 4H2",key:"4r8io1"}],["path",{d:"m22 18-4 4",key:"1hjjrd"}]]);c.d(b,{},{default:d})}};

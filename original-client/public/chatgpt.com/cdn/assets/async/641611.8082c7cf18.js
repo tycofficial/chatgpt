@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[641611];export const __webpack_modules__={lGEB(i){i.exports=JSON.parse('[{"name":"initial_addition: anti-halogenation","initialValues":{"initial_addition":"anti-halogenation"}},{"name":"initial_addition: nonstereospecific-hydrohalogenation","initialValues":{"initial_addition":"nonstereospecific-hydrohalogenation"}}]')}};

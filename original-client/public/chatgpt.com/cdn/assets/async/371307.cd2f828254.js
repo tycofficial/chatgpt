@@ -1,2 +1,0 @@
-/*! LICENSE: 371307.cd2f828254.js.LICENSE.txt */
-export const __rspack_esm_ids=[371307];export const __webpack_modules__={Jcyz(e,t,_){_.r(t);let c=(0,_("jTyp").c)("SquareSlash",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["line",{x1:"9",x2:"15",y1:"15",y2:"9",key:"1dfufj"}]]);_.d(t,{},{default:c})}};

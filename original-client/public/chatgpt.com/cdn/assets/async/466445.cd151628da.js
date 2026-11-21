@@ -1,2 +1,0 @@
-/*! LICENSE: 466445.cd151628da.js.LICENSE.txt */
-export const __rspack_esm_ids=[466445];export const __webpack_modules__={qWaG(t,e,_){_.r(e);let p=(0,_("jTyp").c)("ArrowUpRight",[["path",{d:"M7 7h10v10",key:"1tivn9"}],["path",{d:"M7 17 17 7",key:"1vkiza"}]]);_.d(e,{},{default:p})}};

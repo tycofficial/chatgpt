@@ -1,2 +1,0 @@
-/*! LICENSE: 396231.27184f907b.js.LICENSE.txt */
-export const __rspack_esm_ids=[396231];export const __webpack_modules__={SoFL(c,e,o){o.r(e);let r=(0,o("jTyp").c)("ShoppingCart",[["circle",{cx:"8",cy:"21",r:"1",key:"jimo8o"}],["circle",{cx:"19",cy:"21",r:"1",key:"13723u"}],["path",{d:"M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12",key:"9zh506"}]]);o.d(e,{},{default:r})}};

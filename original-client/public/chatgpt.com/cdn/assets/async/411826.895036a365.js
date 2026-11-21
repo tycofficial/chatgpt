@@ -1,0 +1,2 @@
+/*! LICENSE: 411826.895036a365.js.LICENSE.txt */
+export const __rspack_esm_ids=[411826];export const __webpack_modules__={Qun6(a,b,c){c.r(b);let d=(0,c("SHUh").c)("SquareChevronUp",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"m8 14 4-4 4 4",key:"fy2ptz"}]]);c.d(b,{},{default:d})}};

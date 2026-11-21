@@ -1,0 +1,2 @@
+/*! LICENSE: 172867.3c1a9e0a02.js.LICENSE.txt */
+export const __rspack_esm_ids=[172867];export const __webpack_modules__={jCQI(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ArrowBigLeft",[["path",{d:"M18 15h-6v4l-7-7 7-7v4h6v6z",key:"lbrdak"}]]);c.d(b,{},{default:d})}};

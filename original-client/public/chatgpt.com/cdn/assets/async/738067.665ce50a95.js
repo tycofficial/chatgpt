@@ -1,0 +1,2 @@
+/*! LICENSE: 738067.665ce50a95.js.LICENSE.txt */
+export const __rspack_esm_ids=[738067];export const __webpack_modules__={qNZF(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ChartNoAxesColumn",[["line",{x1:"18",x2:"18",y1:"20",y2:"10",key:"1xfpm4"}],["line",{x1:"12",x2:"12",y1:"20",y2:"4",key:"be30l9"}],["line",{x1:"6",x2:"6",y1:"20",y2:"14",key:"1r4le6"}]]);c.d(b,{},{default:d})}};

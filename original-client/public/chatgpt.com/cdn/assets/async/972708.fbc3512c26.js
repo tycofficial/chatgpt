@@ -1,2 +1,0 @@
-/*! LICENSE: 972708.fbc3512c26.js.LICENSE.txt */
-export const __rspack_esm_ids=[972708];export const __webpack_modules__={VHC6(e,t,p){p.r(t);let a=(0,p("jTyp").c)("Tickets",[["path",{d:"m4.5 8 10.58-5.06a1 1 0 0 1 1.342.488L18.5 8",key:"12lg5p"}],["path",{d:"M6 10V8",key:"1y41hn"}],["path",{d:"M6 14v1",key:"cao2tf"}],["path",{d:"M6 19v2",key:"1loha6"}],["rect",{x:"2",y:"8",width:"20",height:"13",rx:"2",key:"p3bz5l"}]]);p.d(t,{},{default:a})}};

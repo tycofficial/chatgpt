@@ -1,0 +1,2 @@
+/*! LICENSE: 630018.6d6bcf9219.js.LICENSE.txt */
+export const __rspack_esm_ids=[630018];export const __webpack_modules__={CYNu(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Droplet",[["path",{d:"M12 22a7 7 0 0 0 7-7c0-2-1-3.9-3-5.5s-3.5-4-4-6.5c-.5 2.5-2 4.9-4 6.5C6 11.1 5 13 5 15a7 7 0 0 0 7 7z",key:"c7niix"}]]);c.d(b,{},{default:d})}};

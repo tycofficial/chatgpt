@@ -6,13 +6,15 @@
  * Its home query directly uses nearby_entities.flatMap,
  * personalized_prompts.map and map_center.latitude/longitude.
  *
- * No captured location, geolocation request, fake business, recommendation,
- * external geocoder, translation or provider credential is used here.
+ * An explicit account-owned place search can attach public Photon results.
+ * Ordinary map reads still use saved, source-backed records.
  */
 export const LOCAL_MAPS_SOURCE = 'site-local-map-records';
 export const LOCAL_MAPS_WORLD_CENTER = Object.freeze({ latitude: 0, longitude: 0 });
 const ENTITY_ID = /^lbe1_[A-Za-z0-9_-]{24}$/;
 const PREFIX = 'site-local-map-records:v1:';
+const PHOTON_ENDPOINT = 'https://photon.komoot.io/api/';
+const PHOTON_SOURCE = 'Photon / OpenStreetMap';
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const copy = value => structuredClone(value);
 const fault = (message, status = 400, code = 'LOCAL_MAP_ERROR') => Object.assign(new Error(message), { status, code });
@@ -45,6 +47,32 @@ function entity(value) {
   return { entity_id: value.entity_id, business: copy(value.business) };
 }
 
+const placeText = value => typeof value === 'string' ? value.trim().slice(0, 250) : '';
+
+async function photonPlace(feature) {
+  if (feature?.type !== 'Feature' || feature.geometry?.type !== 'Point' ||
+      !Array.isArray(feature.geometry.coordinates) || !object(feature.properties)) return null;
+  const [longitude, latitude] = feature.geometry.coordinates;
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return null;
+  const properties = feature.properties;
+  const osmType = placeText(properties.osm_type).toUpperCase();
+  const osmId = String(properties.osm_id ?? '');
+  if (!/^[NWR]$/.test(osmType) || !/^\d{1,20}$/.test(osmId)) return null;
+  const street = [placeText(properties.street), placeText(properties.housenumber)].filter(Boolean).join(' ');
+  const district = placeText(properties.district);
+  const city = placeText(properties.city) || placeText(properties.locality);
+  const name = placeText(properties.name) || street || city || district;
+  if (!name) return null;
+  const address = [...new Set([street, district, city, placeText(properties.state), placeText(properties.postcode), placeText(properties.country)].filter(Boolean))].join(', ');
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('osm:' + osmType + ':' + osmId));
+  const key = btoa(String.fromCharCode(...new Uint8Array(digest, 0, 18))).replace(/\+/g, '-').replace(/\//g, '_');
+  const id = 'lbe1_' + key;
+  return entity({
+    entity_id: id,
+    business: { id, entity_lookup_id: id, name, latitude, longitude, ...(address && { address }), provider: 'openstreetmap' },
+  });
+}
+
 /**
  * .handle(request, canonicalPath) -> Response|null.
  * readEntity may be an explicitly attached real provider; null means unknown.
@@ -54,9 +82,11 @@ export function createLocalMapsService({
   storage = globalThis.localStorage,
   getAccountId = () => null,
   readEntity,
+  geocodeFetch,
   diagnostics = [],
   now = Date.now,
 } = {}) {
+  const geocoderConnected = typeof geocodeFetch === 'function';
   const account = required => {
     const id = getAccountId();
     if (typeof id === 'string' && id) return id;
@@ -116,6 +146,49 @@ export function createLocalMapsService({
     saveState(id, state);
     return copy(state.center);
   }
+  async function searchPlaces(query, { signal, limit = 6 } = {}) {
+    const id = account(true);
+    const term = typeof query === 'string' ? query.trim() : '';
+    if (!term || term.length > 180 || !Number.isSafeInteger(limit) || limit < 1 || limit > 6) {
+      throw fault('请输入 1–180 个字符的地点名称。', 400, 'LOCAL_MAP_SEARCH_INVALID');
+    }
+    if (!geocoderConnected) throw fault('本站尚未连接地点搜索。', 503, 'LOCAL_MAP_SEARCH_UNAVAILABLE');
+    signal?.throwIfAborted();
+    const url = new URL(PHOTON_ENDPOINT);
+    url.search = new URLSearchParams({ q: term, limit: String(limit) });
+    const timeout = AbortSignal.timeout(10_000);
+    let upstream;
+    try {
+      upstream = await geocodeFetch(url, {
+        headers: { Accept: 'application/json' }, credentials: 'omit', redirect: 'error',
+        signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+      });
+    } catch {
+      signal?.throwIfAborted();
+      throw fault('暂时无法连接地点搜索，请稍后重试。', 502, 'LOCAL_MAP_SEARCH_UPSTREAM');
+    }
+    if (!upstream.ok) {
+      throw fault('地点搜索暂时无法返回结果。', upstream.status === 429 ? 429 : 502, 'LOCAL_MAP_SEARCH_UPSTREAM');
+    }
+    const data = await upstream.json().catch(() => null);
+    signal?.throwIfAborted();
+    if (!Array.isArray(data?.features)) throw fault('地点搜索返回的内容无法读取。', 502, 'LOCAL_MAP_SEARCH_FORMAT');
+    const places = [...new Map((await Promise.all(data.features.slice(0, limit).map(photonPlace)))
+      .filter(Boolean).map(record => [record.entity_id, record])).values()];
+    signal?.throwIfAborted();
+    if (data.features.length && !places.length) throw fault('地点搜索返回的坐标或地点编号无法读取。', 502, 'LOCAL_MAP_SEARCH_FORMAT');
+    if (account(true) !== id) throw fault('The site account changed during this map operation', 409, 'LOCAL_MAP_ACCOUNT_CHANGED');
+    if (places.length) {
+      const state = readState(id);
+      const savedAt = new Date(now()).toISOString();
+      for (const record of places) {
+        state.entities[record.entity_id] = { ...record, adapter_source: LOCAL_MAPS_SOURCE,
+          local_provenance: { kind: 'public-provider', source: PHOTON_SOURCE }, saved_at: savedAt };
+      }
+      saveState(id, state);
+    }
+    return { places, source: PHOTON_SOURCE };
+  }
   async function handle(request, canonicalPath) {
     const url = new URL(request.url);
     const path = (canonicalPath ?? url.pathname).replace(/^\/(?:backend-api|__codex-api)(?=\/)/, '').replace(/\/+$/, '') || '/';
@@ -132,7 +205,7 @@ export function createLocalMapsService({
           map_center: copy(state.center ?? LOCAL_MAPS_WORLD_CENTER),
           adapter_source: LOCAL_MAPS_SOURCE,
           recommendation_source: 'no-local-recommendations',
-          geographic_search_available: false,
+          geographic_search_available: geocoderConnected,
         });
       }
       let entityId;
@@ -159,7 +232,7 @@ export function createLocalMapsService({
     }
   }
   return Object.freeze({
-    handle, saveEntityRecord, removeEntityRecord, setMapCenter,
-    source: Object.freeze({ provider: LOCAL_MAPS_SOURCE, capturedLocationUsed: false, syntheticBusinesses: false, geocoderConnected: false }),
+    handle, saveEntityRecord, removeEntityRecord, setMapCenter, searchPlaces,
+    source: Object.freeze({ provider: LOCAL_MAPS_SOURCE, capturedLocationUsed: false, syntheticBusinesses: false, geocoderConnected }),
   });
 }

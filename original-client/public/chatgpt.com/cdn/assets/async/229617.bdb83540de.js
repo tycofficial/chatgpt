@@ -1,0 +1,2 @@
+/*! LICENSE: 229617.bdb83540de.js.LICENSE.txt */
+export const __rspack_esm_ids=[229617];export const __webpack_modules__={l9we(a,b,c){c.r(b);let d=(0,c("SHUh").c)("FileTerminal",[["path",{d:"M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z",key:"1rqfz7"}],["path",{d:"M14 2v4a2 2 0 0 0 2 2h4",key:"tnqrlb"}],["path",{d:"m8 16 2-2-2-2",key:"10vzyd"}],["path",{d:"M12 18h4",key:"1wd2n7"}]]);c.d(b,{},{default:d})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 260078.2ca0c58201.js.LICENSE.txt */
+export const __rspack_esm_ids=[260078];export const __webpack_modules__={UyUb(a,b,c){c.r(b);let d=(0,c("SHUh").c)("InspectionPanel",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M7 7h.01",key:"7u93v4"}],["path",{d:"M17 7h.01",key:"14a9sn"}],["path",{d:"M7 17h.01",key:"19xn7k"}],["path",{d:"M17 17h.01",key:"1sd3ek"}]]);c.d(b,{},{default:d})}};

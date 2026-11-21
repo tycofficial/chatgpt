@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[138001];export const __webpack_modules__={ldau(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"period":0.000000001}},{"name":"Nanosecond-scale period","initialValues":{"period":0.00000025}},{"name":"Maximum supported values","initialValues":{"period":1000}}]')}};

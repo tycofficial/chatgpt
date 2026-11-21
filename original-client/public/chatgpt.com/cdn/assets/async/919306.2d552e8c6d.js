@@ -1,2 +1,0 @@
-/*! LICENSE: 919306.2d552e8c6d.js.LICENSE.txt */
-export const __rspack_esm_ids=[919306];export const __webpack_modules__={QexR(e,t,_){_.r(t);let c=(0,_("jTyp").c)("SquareCheck",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"m9 12 2 2 4-4",key:"dzmm74"}]]);_.d(t,{},{default:c})}};

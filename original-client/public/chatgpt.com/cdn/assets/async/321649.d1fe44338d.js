@@ -1,2 +1,0 @@
-/*! LICENSE: 321649.d1fe44338d.js.LICENSE.txt */
-export const __rspack_esm_ids=[321649];export const __webpack_modules__={ipEJ(e,t,h){h.r(t);let d=(0,h("jTyp").c)("ListTodo",[["rect",{x:"3",y:"5",width:"6",height:"6",rx:"1",key:"1defrl"}],["path",{d:"m3 17 2 2 4-4",key:"1jhpwq"}],["path",{d:"M13 6h8",key:"15sg57"}],["path",{d:"M13 12h8",key:"h98zly"}],["path",{d:"M13 18h8",key:"oe0vm4"}]]);h.d(t,{},{default:d})}};

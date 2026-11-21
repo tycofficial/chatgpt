@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[333236];export const __webpack_modules__={PGQv(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"atomic_number":3}},{"name":"Maximum supported values","initialValues":{"atomic_number":18}}]')}};

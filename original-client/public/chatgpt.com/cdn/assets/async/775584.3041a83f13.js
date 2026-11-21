@@ -1,0 +1,2 @@
+/*! LICENSE: 775584.3041a83f13.js.LICENSE.txt */
+export const __rspack_esm_ids=[775584];export const __webpack_modules__={zdey(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Sheet",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",ry:"2",key:"1m3agn"}],["line",{x1:"3",x2:"21",y1:"9",y2:"9",key:"1vqk6q"}],["line",{x1:"3",x2:"21",y1:"15",y2:"15",key:"o2sbyz"}],["line",{x1:"9",x2:"9",y1:"9",y2:"21",key:"1ib60c"}],["line",{x1:"15",x2:"15",y1:"9",y2:"21",key:"1n26ft"}]]);c.d(b,{},{default:d})}};

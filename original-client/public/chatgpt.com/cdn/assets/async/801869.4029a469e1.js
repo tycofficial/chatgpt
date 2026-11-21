@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[801869];export const __webpack_modules__={iTup(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"demand_shift":-20,"supply_shift":-20}},{"name":"Maximum supported values","initialValues":{"demand_shift":20,"supply_shift":20}}]')}};

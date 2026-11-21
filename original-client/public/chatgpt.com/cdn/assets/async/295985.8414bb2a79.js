@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[295985];export const __webpack_modules__={PaLl(e){e.exports=JSON.parse('[{"name":"ecosystem: freshwater","initialValues":{"ecosystem":"freshwater"}},{"name":"ecosystem: marine","initialValues":{"ecosystem":"marine"}}]')}};

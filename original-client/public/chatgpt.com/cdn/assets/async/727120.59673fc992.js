@@ -1,2 +1,0 @@
-/*! LICENSE: 727120.59673fc992.js.LICENSE.txt */
-export const __rspack_esm_ids=[727120];export const __webpack_modules__={ojWA(e,t,c){c.r(t);let r=(0,c("jTyp").c)("AlignEndVertical",[["rect",{width:"16",height:"6",x:"2",y:"4",rx:"2",key:"10wcwx"}],["rect",{width:"9",height:"6",x:"9",y:"14",rx:"2",key:"4p5bwg"}],["path",{d:"M22 22V2",key:"12ipfv"}]]);c.d(t,{},{default:r})}};

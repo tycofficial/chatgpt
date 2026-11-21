@@ -1,0 +1,2 @@
+/*! LICENSE: 720760.e084c6f814.js.LICENSE.txt */
+export const __rspack_esm_ids=[720760];export const __webpack_modules__={OBm8(a,b,c){c.r(b);let d=(0,c("SHUh").c)("AlignStartHorizontal",[["rect",{width:"6",height:"16",x:"4",y:"6",rx:"2",key:"1n4dg1"}],["rect",{width:"6",height:"9",x:"14",y:"6",rx:"2",key:"17khns"}],["path",{d:"M22 2H2",key:"fhrpnj"}]]);c.d(b,{},{default:d})}};

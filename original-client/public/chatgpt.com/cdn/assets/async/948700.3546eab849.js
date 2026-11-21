@@ -1,0 +1,2 @@
+/*! LICENSE: 948700.3546eab849.js.LICENSE.txt */
+export const __rspack_esm_ids=[948700];export const __webpack_modules__={okfv(a,b,c){c.r(b);var d=c("E9ZT");c.d(b,{default:()=>d.default})},E9ZT(a,b,c){c.r(b);let d=(0,c("SHUh").c)("SquareChevronDown",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"m16 10-4 4-4-4",key:"894hmk"}]]);c.d(b,{},{default:d})}};

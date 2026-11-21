@@ -1,0 +1,2 @@
+/*! LICENSE: 233966.3ac52c929e.js.LICENSE.txt */
+export const __rspack_esm_ids=[233966];export const __webpack_modules__={qcbX(a,b,c){c.r(b);let d=(0,c("SHUh").c)("PanelBottomClose",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"M3 15h18",key:"5xshup"}],["path",{d:"m15 8-3 3-3-3",key:"1oxy1z"}]]);c.d(b,{},{default:d})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 65390.1261592477.js.LICENSE.txt */
+export const __rspack_esm_ids=[65390];export const __webpack_modules__={cm4b(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Package2",[["path",{d:"M3 9h18v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9Z",key:"1ront0"}],["path",{d:"m3 9 2.45-4.9A2 2 0 0 1 7.24 3h9.52a2 2 0 0 1 1.8 1.1L21 9",key:"19h2x1"}],["path",{d:"M12 3v6",key:"1holv5"}]]);c.d(b,{},{default:d})}};

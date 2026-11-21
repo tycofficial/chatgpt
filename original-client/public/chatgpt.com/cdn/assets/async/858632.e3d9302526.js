@@ -1,0 +1,2 @@
+/*! LICENSE: 858632.e3d9302526.js.LICENSE.txt */
+export const __rspack_esm_ids=[858632];export const __webpack_modules__={khz5(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Headset",[["path",{d:"M3 11h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5Zm0 0a9 9 0 1 1 18 0m0 0v5a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3Z",key:"12oyoe"}],["path",{d:"M21 16v2a4 4 0 0 1-4 4h-5",key:"1x7m43"}]]);c.d(b,{},{default:d})}};

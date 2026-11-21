@@ -1,0 +1,2 @@
+/*! LICENSE: 742212.695e0de72f.js.LICENSE.txt */
+export const __rspack_esm_ids=[742212];export const __webpack_modules__={J4p4(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Pilcrow",[["path",{d:"M13 4v16",key:"8vvj80"}],["path",{d:"M17 4v16",key:"7dpous"}],["path",{d:"M19 4H9.5a4.5 4.5 0 0 0 0 9H13",key:"sh4n9v"}]]);c.d(b,{},{default:d})}};

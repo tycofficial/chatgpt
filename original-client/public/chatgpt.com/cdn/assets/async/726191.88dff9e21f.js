@@ -1,2 +1,0 @@
-/*! LICENSE: 726191.88dff9e21f.js.LICENSE.txt */
-export const __rspack_esm_ids=[726191];export const __webpack_modules__={kKzW(e,t,a){a.r(t);var d=a("YwGa");a.d(t,{default:()=>d.default})},YwGa(e,t,a){a.r(t);let d=(0,a("jTyp").c)("TvMinimal",[["path",{d:"M7 21h10",key:"1b0cd5"}],["rect",{width:"20",height:"14",x:"2",y:"3",rx:"2",key:"48i651"}]]);a.d(t,{},{default:d})}};

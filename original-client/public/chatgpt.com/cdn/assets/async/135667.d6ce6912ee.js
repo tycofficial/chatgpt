@@ -1,0 +1,2 @@
+/*! LICENSE: 135667.d6ce6912ee.js.LICENSE.txt */
+export const __rspack_esm_ids=[135667];export const __webpack_modules__={Jn6K(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Reply",[["polyline",{points:"9 17 4 12 9 7",key:"hvgpf2"}],["path",{d:"M20 18v-2a4 4 0 0 0-4-4H4",key:"5vmcpk"}]]);c.d(b,{},{default:d})}};

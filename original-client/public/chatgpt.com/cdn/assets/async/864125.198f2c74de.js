@@ -1,0 +1,2 @@
+/*! LICENSE: 864125.198f2c74de.js.LICENSE.txt */
+export const __rspack_esm_ids=[864125];export const __webpack_modules__={u9f7(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Pocket",[["path",{d:"M4 3h16a2 2 0 0 1 2 2v6a10 10 0 0 1-10 10A10 10 0 0 1 2 11V5a2 2 0 0 1 2-2z",key:"1mz881"}],["polyline",{points:"8 10 12 14 16 10",key:"w4mbv5"}]]);c.d(b,{},{default:d})}};

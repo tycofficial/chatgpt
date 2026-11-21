@@ -1,2 +1,0 @@
-/*! LICENSE: 694300.0e6f1564a8.js.LICENSE.txt */
-export const __rspack_esm_ids=[694300];export const __webpack_modules__={RTcV(c,e,p){p.r(e);let _=(0,p("jTyp").c)("Clock3",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["polyline",{points:"12 6 12 12 16.5 12",key:"1aq6pp"}]]);p.d(e,{},{default:_})}};

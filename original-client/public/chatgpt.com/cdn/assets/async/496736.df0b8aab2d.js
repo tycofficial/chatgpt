@@ -1,0 +1,2 @@
+/*! LICENSE: 496736.df0b8aab2d.js.LICENSE.txt */
+export const __rspack_esm_ids=[496736];export const __webpack_modules__={vmpu(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Grid2x2X",[["path",{d:"M12 3v17a1 1 0 0 1-1 1H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v6a1 1 0 0 1-1 1H3",key:"11za1p"}],["path",{d:"m16 16 5 5",key:"8tpb07"}],["path",{d:"m16 21 5-5",key:"193jll"}]]);c.d(b,{},{default:d})}};

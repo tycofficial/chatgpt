@@ -1,0 +1,2 @@
+/*! LICENSE: 222475.3d9965a1df.js.LICENSE.txt */
+export const __rspack_esm_ids=[222475];export const __webpack_modules__={ryOf(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ConciergeBell",[["path",{d:"M3 20a1 1 0 0 1-1-1v-1a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v1a1 1 0 0 1-1 1Z",key:"1pvr1r"}],["path",{d:"M20 16a8 8 0 1 0-16 0",key:"1pa543"}],["path",{d:"M12 4v4",key:"1bq03y"}],["path",{d:"M10 4h4",key:"1xpv9s"}]]);c.d(b,{},{default:d})}};

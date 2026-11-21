@@ -1,0 +1,2 @@
+/*! LICENSE: 271746.3ae74d5141.js.LICENSE.txt */
+export const __rspack_esm_ids=[271746];export const __webpack_modules__={aODc(a,b,c){c.r(b);let d=(0,c("SHUh").c)("SquareCode",[["path",{d:"M10 9.5 8 12l2 2.5",key:"3mjy60"}],["path",{d:"m14 9.5 2 2.5-2 2.5",key:"1bir2l"}],["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}]]);c.d(b,{},{default:d})}};

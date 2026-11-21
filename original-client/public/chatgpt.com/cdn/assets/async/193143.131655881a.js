@@ -1,2 +1,0 @@
-/*! LICENSE: 193143.131655881a.js.LICENSE.txt */
-export const __rspack_esm_ids=[193143];export const __webpack_modules__={wseP(c,e,y){y.r(e);let r=(0,y("jTyp").c)("GitBranch",[["line",{x1:"6",x2:"6",y1:"3",y2:"15",key:"17qcm7"}],["circle",{cx:"18",cy:"6",r:"3",key:"1h7g24"}],["circle",{cx:"6",cy:"18",r:"3",key:"fqmcym"}],["path",{d:"M18 9a9 9 0 0 1-9 9",key:"n2h4wq"}]]);y.d(e,{},{default:r})}};

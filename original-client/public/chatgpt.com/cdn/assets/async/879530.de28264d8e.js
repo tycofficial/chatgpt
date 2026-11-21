@@ -1,2 +1,0 @@
-/*! LICENSE: 879530.de28264d8e.js.LICENSE.txt */
-export const __rspack_esm_ids=[879530];export const __webpack_modules__={gkxu(e,t,p){p.r(t);let _=(0,p("jTyp").c)("ArrowLeftRight",[["path",{d:"M8 3 4 7l4 4",key:"9rb6wj"}],["path",{d:"M4 7h16",key:"6tx8e3"}],["path",{d:"m16 21 4-4-4-4",key:"siv7j2"}],["path",{d:"M20 17H4",key:"h6l3hr"}]]);p.d(t,{},{default:_})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 556110.e2e4ba4be2.js.LICENSE.txt */
+export const __rspack_esm_ids=[556110];export const __webpack_modules__={WsDa(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Stamp",[["path",{d:"M5 22h14",key:"ehvnwv"}],["path",{d:"M19.27 13.73A2.5 2.5 0 0 0 17.5 13h-11A2.5 2.5 0 0 0 4 15.5V17a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-1.5c0-.66-.26-1.3-.73-1.77Z",key:"1sy9ra"}],["path",{d:"M14 13V8.5C14 7 15 7 15 5a3 3 0 0 0-3-3c-1.66 0-3 1-3 3s1 2 1 3.5V13",key:"cnxgux"}]]);c.d(b,{},{default:d})}};

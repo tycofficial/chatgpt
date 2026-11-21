@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[861003];export const __webpack_modules__={nita(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"netForceNewtons":2,"massKilograms":1}},{"name":"Maximum supported values","initialValues":{"netForceNewtons":12,"massKilograms":4}}]')}};

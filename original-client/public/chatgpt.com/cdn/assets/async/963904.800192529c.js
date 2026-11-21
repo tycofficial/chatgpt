@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[963904];export const __webpack_modules__={uU0y(a,b,c){var d=c("ABep"),e=c("LNJT");c.d(b,{},{ObtuseTriangleCaption:a=>(0,d.jsx)(e.a,{...a,variant:"obtuse"}),ObtuseTriangleControls:a=>(0,d.jsx)(e.b,{...a,variant:"obtuse"}),ObtuseTriangleVisualization:a=>(0,d.jsx)(e.c,{...a,variant:"obtuse"})})}};

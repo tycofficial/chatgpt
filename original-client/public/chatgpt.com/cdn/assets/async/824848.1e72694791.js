@@ -1,0 +1,2 @@
+/*! LICENSE: 824848.1e72694791.js.LICENSE.txt */
+export const __rspack_esm_ids=[824848];export const __webpack_modules__={u6to(a,b,c){c.r(b);let d=(0,c("SHUh").c)("PictureInPicture2",[["path",{d:"M21 9V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v10c0 1.1.9 2 2 2h4",key:"daa4of"}],["rect",{width:"10",height:"7",x:"12",y:"13",rx:"2",key:"1nb8gs"}]]);c.d(b,{},{default:d})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 915061.0f020a3820.js.LICENSE.txt */
+export const __rspack_esm_ids=[915061];export const __webpack_modules__={rtMD(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Music2",[["circle",{cx:"8",cy:"18",r:"4",key:"1fc0mg"}],["path",{d:"M12 18V2l7 4",key:"g04rme"}]]);c.d(b,{},{default:d})}};

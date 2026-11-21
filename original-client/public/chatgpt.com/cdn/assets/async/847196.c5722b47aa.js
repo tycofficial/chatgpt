@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[847196];export const __webpack_modules__={D3By(i){i.exports=JSON.parse('[{"name":"initial_trend: first ionization energy","initialValues":{"initial_trend":"first ionization energy"}},{"name":"initial_trend: electronegativity","initialValues":{"initial_trend":"electronegativity"}}]')}};

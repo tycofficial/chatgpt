@@ -1,0 +1,2 @@
+/*! LICENSE: 478113.3e612be8d7.js.LICENSE.txt */
+export const __rspack_esm_ids=[478113];export const __webpack_modules__={BuqX(a,b,c){c.r(b);let d=(0,c("SHUh").c)("StarHalf",[["path",{d:"M12 18.338a2.1 2.1 0 0 0-.987.244L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.12 2.12 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.12 2.12 0 0 0 1.597-1.16l2.309-4.679A.53.53 0 0 1 12 2",key:"2ksp49"}]]);c.d(b,{},{default:d})}};

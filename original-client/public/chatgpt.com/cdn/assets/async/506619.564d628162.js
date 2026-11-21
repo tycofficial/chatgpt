@@ -1,2 +1,0 @@
-/*! LICENSE: 506619.564d628162.js.LICENSE.txt */
-export const __rspack_esm_ids=[506619];export const __webpack_modules__={BQMO(e,t,p){p.r(t);let _=(0,p("jTyp").c)("Gem",[["path",{d:"M6 3h12l4 6-10 13L2 9Z",key:"1pcd5k"}],["path",{d:"M11 3 8 9l4 13 4-13-3-6",key:"1fcu3u"}],["path",{d:"M2 9h20",key:"16fsjt"}]]);p.d(t,{},{default:_})}};

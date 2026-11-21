@@ -1,0 +1,2 @@
+/*! LICENSE: 710233.be1b86ea18.js.LICENSE.txt */
+export const __rspack_esm_ids=[710233];export const __webpack_modules__={vyP9(a,b,c){c.r(b);let d=(0,c("SHUh").c)("MoveVertical",[["path",{d:"M12 2v20",key:"t6zp3m"}],["path",{d:"m8 18 4 4 4-4",key:"bh5tu3"}],["path",{d:"m8 6 4-4 4 4",key:"ybng9g"}]]);c.d(b,{},{default:d})}};

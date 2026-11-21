@@ -1,2 +1,0 @@
-/*! LICENSE: 21673.c6e48e2f75.js.LICENSE.txt */
-export const __rspack_esm_ids=[21673];export const __webpack_modules__={ppLU(e,c,t){t.r(c);let r=(0,t("jTyp").c)("GitPullRequestDraft",[["circle",{cx:"18",cy:"18",r:"3",key:"1xkwt0"}],["circle",{cx:"6",cy:"6",r:"3",key:"1lh9wr"}],["path",{d:"M18 6V5",key:"1oao2s"}],["path",{d:"M18 11v-1",key:"11c8tz"}],["line",{x1:"6",x2:"6",y1:"9",y2:"21",key:"rroup"}]]);t.d(c,{},{default:r})}};

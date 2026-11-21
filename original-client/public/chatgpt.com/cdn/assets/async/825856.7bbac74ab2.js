@@ -1,0 +1,2 @@
+/*! LICENSE: 825856.7bbac74ab2.js.LICENSE.txt */
+export const __rspack_esm_ids=[825856];export const __webpack_modules__={Vzep(a,b,c){c.r(b);let d=(0,c("SHUh").c)("BatteryLow",[["rect",{width:"16",height:"10",x:"2",y:"7",rx:"2",ry:"2",key:"1w10f2"}],["line",{x1:"22",x2:"22",y1:"11",y2:"13",key:"4dh1rd"}],["line",{x1:"6",x2:"6",y1:"11",y2:"13",key:"1wd6dw"}]]);c.d(b,{},{default:d})}};

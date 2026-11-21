@@ -1,0 +1,2 @@
+/*! LICENSE: 545580.637f374da1.js.LICENSE.txt */
+export const __rspack_esm_ids=[545580];export const __webpack_modules__={AzyJ(a,b,c){c.r(b);let d=(0,c("SHUh").c)("CodeXml",[["path",{d:"m18 16 4-4-4-4",key:"1inbqp"}],["path",{d:"m6 8-4 4 4 4",key:"15zrgr"}],["path",{d:"m14.5 4-5 16",key:"e7oirm"}]]);c.d(b,{},{default:d})}};

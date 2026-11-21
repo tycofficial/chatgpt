@@ -1,0 +1,2 @@
+/*! LICENSE: 213206.e677fad7d9.js.LICENSE.txt */
+export const __rspack_esm_ids=[213206];export const __webpack_modules__={rQjM(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Rewind",[["polygon",{points:"11 19 2 12 11 5 11 19",key:"14yba5"}],["polygon",{points:"22 19 13 12 22 5 22 19",key:"1pi1cj"}]]);c.d(b,{},{default:d})}};

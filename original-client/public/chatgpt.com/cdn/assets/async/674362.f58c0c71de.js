@@ -1,0 +1,2 @@
+/*! LICENSE: 674362.f58c0c71de.js.LICENSE.txt */
+export const __rspack_esm_ids=[674362];export const __webpack_modules__={miFX(a,b,c){c.r(b);let d=(0,c("SHUh").c)("BookMarked",[["path",{d:"M10 2v8l3-3 3 3V2",key:"sqw3rj"}],["path",{d:"M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20",key:"k3hazp"}]]);c.d(b,{},{default:d})}};

@@ -1,2 +1,0 @@
-/*! LICENSE: 803247.424b9bad9f.js.LICENSE.txt */
-export const __rspack_esm_ids=[803247];export const __webpack_modules__={G93b(e,t,_){_.r(t);let o=(0,_("jTyp").c)("ChevronLast",[["path",{d:"m7 18 6-6-6-6",key:"lwmzdw"}],["path",{d:"M17 6v12",key:"1o0aio"}]]);_.d(t,{},{default:o})}};

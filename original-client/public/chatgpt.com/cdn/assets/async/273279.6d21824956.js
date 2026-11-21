@@ -1,2 +1,0 @@
-/*! LICENSE: 273279.6d21824956.js.LICENSE.txt */
-export const __rspack_esm_ids=[273279];export const __webpack_modules__={GnQc(e,t,a){a.r(t);let r=(0,a("jTyp").c)("SquareArrowOutUpLeft",[["path",{d:"M13 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-6",key:"14mv1t"}],["path",{d:"m3 3 9 9",key:"rks13r"}],["path",{d:"M3 9V3h6",key:"ira0h2"}]]);a.d(t,{},{default:r})}};

@@ -1,2 +1,0 @@
-/*! LICENSE: 548523.a3335a0d1e.js.LICENSE.txt */
-export const __rspack_esm_ids=[548523];export const __webpack_modules__={LM8Z(e,t,_){_.r(t);let p=(0,_("jTyp").c)("Diff",[["path",{d:"M12 3v14",key:"7cf3v8"}],["path",{d:"M5 10h14",key:"elsbfy"}],["path",{d:"M5 21h14",key:"11awu3"}]]);_.d(t,{},{default:p})}};

@@ -1,2 +1,0 @@
-/*! LICENSE: 166584.405dcfe5f1.js.LICENSE.txt */
-export const __rspack_esm_ids=[166584];export const __webpack_modules__={uDev(e,t,r){r.r(t);let _=(0,r("jTyp").c)("Workflow",[["rect",{width:"8",height:"8",x:"3",y:"3",rx:"2",key:"by2w9f"}],["path",{d:"M7 11v4a2 2 0 0 0 2 2h4",key:"xkn7yn"}],["rect",{width:"8",height:"8",x:"13",y:"13",rx:"2",key:"1cgmvn"}]]);r.d(t,{},{default:_})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 494186.f0b22d223b.js.LICENSE.txt */
+export const __rspack_esm_ids=[494186];export const __webpack_modules__={STVr(a,b,c){c.r(b);let d=(0,c("SHUh").c)("LoaderPinwheel",[["path",{d:"M22 12a1 1 0 0 1-10 0 1 1 0 0 0-10 0",key:"1lzz15"}],["path",{d:"M7 20.7a1 1 0 1 1 5-8.7 1 1 0 1 0 5-8.6",key:"1gnrpi"}],["path",{d:"M7 3.3a1 1 0 1 1 5 8.6 1 1 0 1 0 5 8.6",key:"u9yy5q"}],["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}]]);c.d(b,{},{default:d})}};

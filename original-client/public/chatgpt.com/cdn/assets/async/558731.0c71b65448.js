@@ -1,2 +1,0 @@
-/*! LICENSE: 558731.0c71b65448.js.LICENSE.txt */
-export const __rspack_esm_ids=[558731];export const __webpack_modules__={WpH3(o,_,e){e.r(_);let p=(0,e("jTyp").c)("Play",[["polygon",{points:"6 3 20 12 6 21 6 3",key:"1oa8hb"}]]);e.d(_,{},{default:p})}};

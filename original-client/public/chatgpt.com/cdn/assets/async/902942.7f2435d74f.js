@@ -1,0 +1,2 @@
+/*! LICENSE: 902942.7f2435d74f.js.LICENSE.txt */
+export const __rspack_esm_ids=[902942];export const __webpack_modules__={o3UR(a,b,c){c.r(b);let d=(0,c("SHUh").c)("TestTube",[["path",{d:"M14.5 2v17.5c0 1.4-1.1 2.5-2.5 2.5c-1.4 0-2.5-1.1-2.5-2.5V2",key:"125lnx"}],["path",{d:"M8.5 2h7",key:"csnxdl"}],["path",{d:"M14.5 16h-5",key:"1ox875"}]]);c.d(b,{},{default:d})}};

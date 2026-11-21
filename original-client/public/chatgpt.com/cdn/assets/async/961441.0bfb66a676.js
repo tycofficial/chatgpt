@@ -1,0 +1,2 @@
+/*! LICENSE: 961441.0bfb66a676.js.LICENSE.txt */
+export const __rspack_esm_ids=[961441];export const __webpack_modules__={bwcj(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Highlighter",[["path",{d:"m9 11-6 6v3h9l3-3",key:"1a3l36"}],["path",{d:"m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4",key:"14a9rk"}]]);c.d(b,{},{default:d})}};

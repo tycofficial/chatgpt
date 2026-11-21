@@ -1,2 +1,0 @@
-/*! LICENSE: 875545.d2d99ea423.js.LICENSE.txt */
-export const __rspack_esm_ids=[875545];export const __webpack_modules__={oBGx(e,t,a){a.r(t);let h=(0,a("jTyp").c)("Combine",[["path",{d:"M10 18H5a3 3 0 0 1-3-3v-1",key:"ru65g8"}],["path",{d:"M14 2a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2",key:"e30een"}],["path",{d:"M20 2a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2",key:"2ahx8o"}],["path",{d:"m7 21 3-3-3-3",key:"127cv2"}],["rect",{x:"14",y:"14",width:"8",height:"8",rx:"2",key:"1b0bso"}],["rect",{x:"2",y:"2",width:"8",height:"8",rx:"2",key:"1x09vl"}]]);a.d(t,{},{default:h})}};

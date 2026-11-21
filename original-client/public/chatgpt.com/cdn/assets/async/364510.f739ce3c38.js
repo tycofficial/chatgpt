@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[364510];export const __webpack_modules__={GViv(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"relativeDetergentAmountPercent":0}},{"name":"Maximum supported values","initialValues":{"relativeDetergentAmountPercent":100}}]')}};

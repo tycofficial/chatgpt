@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[233093];export const __webpack_modules__={XylM(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"x1":-10000,"y1":-10000,"x2":-10000,"y2":-10000}},{"name":"Maximum supported values","initialValues":{"x1":10000,"y1":10000,"x2":10000,"y2":10000}}]')}};

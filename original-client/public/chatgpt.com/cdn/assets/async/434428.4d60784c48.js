@@ -1,2 +1,0 @@
-/*! LICENSE: 434428.4d60784c48.js.LICENSE.txt */
-export const __rspack_esm_ids=[434428];export const __webpack_modules__={qhLB(e,_,p){p.r(_);let t=(0,p("jTyp").c)("ChevronUp",[["path",{d:"m18 15-6-6-6 6",key:"153udz"}]]);p.d(_,{},{default:t})}};

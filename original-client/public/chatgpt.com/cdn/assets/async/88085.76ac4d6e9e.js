@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[88085];export const __webpack_modules__={c8Eb(e){e.exports=JSON.parse('[{"name":"initial_pathway: MHC II (exogenous)","initialValues":{"initial_pathway":"MHC II (exogenous)"}}]')}};

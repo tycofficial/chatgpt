@@ -1,0 +1,2 @@
+/*! LICENSE: 546782.5fec8f0a05.js.LICENSE.txt */
+export const __rspack_esm_ids=[546782];export const __webpack_modules__={H6LZ(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Tv",[["rect",{width:"20",height:"15",x:"2",y:"7",rx:"2",ry:"2",key:"10ag99"}],["polyline",{points:"17 2 12 7 7 2",key:"11pgbg"}]]);c.d(b,{},{default:d})}};

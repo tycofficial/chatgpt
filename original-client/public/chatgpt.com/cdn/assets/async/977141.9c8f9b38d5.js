@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[977141];export const __webpack_modules__={Ri7d(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"meanDifference":-3,"standardError":0.75,"degreesOfFreedom":2}},{"name":"Maximum supported values","initialValues":{"meanDifference":3,"standardError":3,"degreesOfFreedom":200}}]')}};

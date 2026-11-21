@@ -1,2 +1,0 @@
-/*! LICENSE: 84133.7106fe029c.js.LICENSE.txt */
-export const __rspack_esm_ids=[84133];export const __webpack_modules__={jJok(e,c,t){t.r(c);let p=(0,t("jTyp").c)("CirclePercent",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["path",{d:"m15 9-6 6",key:"1uzhvr"}],["path",{d:"M9 9h.01",key:"1q5me6"}],["path",{d:"M15 15h.01",key:"lqbp3k"}]]);t.d(c,{},{default:p})}};

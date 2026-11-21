@@ -1,0 +1,2 @@
+/*! LICENSE: 531897.1ec6ff2651.js.LICENSE.txt */
+export const __rspack_esm_ids=[531897];export const __webpack_modules__={zVDy(a,b,c){c.r(b);let d=(0,c("SHUh").c)("SquareDivide",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",ry:"2",key:"1m3agn"}],["line",{x1:"8",x2:"16",y1:"12",y2:"12",key:"1jonct"}],["line",{x1:"12",x2:"12",y1:"16",y2:"16",key:"aqc6ln"}],["line",{x1:"12",x2:"12",y1:"8",y2:"8",key:"1mkcni"}]]);c.d(b,{},{default:d})}};

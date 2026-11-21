@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[968962];export const __webpack_modules__={mOGs:(function(a,b,c){c.d(b,{},{a:function(a){let{serverLoader:b}=a;return b()}})})};import{__webpack_require__ as a}from"./633146.511711c8b9.js";import*as b from"./968962.131f674381.js";a.C(b);var c=a(a.s="mOGs").a;export{c as clientLoader};

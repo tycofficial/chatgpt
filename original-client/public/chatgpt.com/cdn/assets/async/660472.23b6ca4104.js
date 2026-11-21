@@ -1,0 +1,2 @@
+/*! LICENSE: 660472.23b6ca4104.js.LICENSE.txt */
+export const __rspack_esm_ids=[660472];export const __webpack_modules__={yFN2(a,b,c){c.r(b);var d=c("fEsx");c.d(b,{default:()=>d.default})},fEsx(a,b,c){c.r(b);let d=(0,c("SHUh").c)("UsersRound",[["path",{d:"M18 21a8 8 0 0 0-16 0",key:"3ypg7q"}],["circle",{cx:"10",cy:"8",r:"5",key:"o932ke"}],["path",{d:"M22 20c0-3.37-2-6.5-4-8a5 5 0 0 0-.45-8.3",key:"10s06x"}]]);c.d(b,{},{default:d})}};

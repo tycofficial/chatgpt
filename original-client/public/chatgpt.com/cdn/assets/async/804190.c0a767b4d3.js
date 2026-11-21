@@ -1,2 +1,0 @@
-/*! LICENSE: 804190.c0a767b4d3.js.LICENSE.txt */
-export const __rspack_esm_ids=[804190];export const __webpack_modules__={aiSF(e,t,_){_.r(t);let p=(0,_("jTyp").c)("ChevronsRightLeft",[["path",{d:"m20 17-5-5 5-5",key:"30x0n2"}],["path",{d:"m4 17 5-5-5-5",key:"16spf4"}]]);_.d(t,{},{default:p})}};

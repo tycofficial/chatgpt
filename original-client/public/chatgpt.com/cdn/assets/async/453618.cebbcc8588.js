@@ -1,2 +1,0 @@
-/*! LICENSE: 453618.cebbcc8588.js.LICENSE.txt */
-export const __rspack_esm_ids=[453618];export const __webpack_modules__={Db1U(e,c,d){d.r(c);let r=(0,d("jTyp").c)("CircleMinus",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["path",{d:"M8 12h8",key:"1wcyev"}]]);d.d(c,{},{default:r})},d44j(e,c,d){d.r(c);var r=d("Db1U");d.d(c,{default:()=>r.default})}};

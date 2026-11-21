@@ -1,2 +1,0 @@
-/*! LICENSE: 147503.db75987b38.js.LICENSE.txt */
-export const __rspack_esm_ids=[147503];export const __webpack_modules__={uE49(e,t,h){h.r(t);let r=(0,h("jTyp").c)("LayoutPanelLeft",[["rect",{width:"7",height:"18",x:"3",y:"3",rx:"1",key:"2obqm"}],["rect",{width:"7",height:"7",x:"14",y:"3",rx:"1",key:"6d4xhi"}],["rect",{width:"7",height:"7",x:"14",y:"14",rx:"1",key:"nxv5o0"}]]);h.d(t,{},{default:r})}};

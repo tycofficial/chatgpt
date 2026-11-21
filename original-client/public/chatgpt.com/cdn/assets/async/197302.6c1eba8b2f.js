@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[197302];export const __webpack_modules__={AaO5(e){e.exports=JSON.parse('[{"name":"example: butadiene-and-methyl-vinyl-ketone","initialValues":{"example":"butadiene-and-methyl-vinyl-ketone"}},{"name":"example: butadiene-and-maleic-anhydride","initialValues":{"example":"butadiene-and-maleic-anhydride"}}]')}};

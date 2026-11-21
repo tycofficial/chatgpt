@@ -1,2 +1,0 @@
-/*! LICENSE: 908934.62cfe303c0.js.LICENSE.txt */
-export const __rspack_esm_ids=[908934];export const __webpack_modules__={anaK(e,c,t){t.r(c);let a=(0,t("jTyp").c)("GitPullRequestArrow",[["circle",{cx:"5",cy:"6",r:"3",key:"1qnov2"}],["path",{d:"M5 9v12",key:"ih889a"}],["circle",{cx:"19",cy:"18",r:"3",key:"1qljk2"}],["path",{d:"m15 9-3-3 3-3",key:"1lwv8l"}],["path",{d:"M12 6h5a2 2 0 0 1 2 2v7",key:"1yj91y"}]]);t.d(c,{},{default:a})}};

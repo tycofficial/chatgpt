@@ -1,2 +1,0 @@
-/*! LICENSE: 560708.677bee8ae1.js.LICENSE.txt */
-export const __rspack_esm_ids=[560708];export const __webpack_modules__={yfDY(e,t,p){p.r(t);let _=(0,p("jTyp").c)("ReceiptText",[["path",{d:"M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z",key:"q3az6g"}],["path",{d:"M14 8H8",key:"1l3xfs"}],["path",{d:"M16 12H8",key:"1fr5h0"}],["path",{d:"M13 16H8",key:"wsln4y"}]]);p.d(t,{},{default:_})}};

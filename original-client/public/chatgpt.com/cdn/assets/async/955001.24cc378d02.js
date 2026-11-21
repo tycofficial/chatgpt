@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[955001];export const __webpack_modules__={VHTL(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"radius":0.8,"strength":-1.2}},{"name":"Maximum supported values","initialValues":{"radius":1.9,"strength":1.2}},{"name":"Zero source strength","initialValues":{"strength":0}}]')}};

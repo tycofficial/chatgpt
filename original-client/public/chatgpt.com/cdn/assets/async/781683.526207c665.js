@@ -1,2 +1,0 @@
-/*! LICENSE: 781683.526207c665.js.LICENSE.txt */
-export const __rspack_esm_ids=[781683];export const __webpack_modules__={kbFa(e,t,_){_.r(t);let a=(0,_("jTyp").c)("ArrowRightToLine",[["path",{d:"M17 12H3",key:"8awo09"}],["path",{d:"m11 18 6-6-6-6",key:"8c2y43"}],["path",{d:"M21 5v14",key:"nzette"}]]);_.d(t,{},{default:a})}};

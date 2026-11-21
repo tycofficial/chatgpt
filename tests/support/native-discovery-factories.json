@@ -1,0 +1,50 @@
+[
+  {
+    "id": "z1SE",
+    "file": "original-client/public/chatgpt.com/cdn/assets/async/337230.3ecd9af264.js",
+    "startUTF16": 31858,
+    "endUTF16": 33278,
+    "sha256": "e821081c9c2e40f8972c7c282343256c9d96c6323246bdb8fc543eb54e855e84",
+    "format": "method",
+    "requires": [
+      "S2r0",
+      "lAQI",
+      "ufra"
+    ]
+  },
+  {
+    "id": "PXhB",
+    "file": "original-client/public/chatgpt.com/cdn/assets/async/337230.3ecd9af264.js",
+    "startUTF16": 11197,
+    "endUTF16": 12003,
+    "sha256": "1d3d291e54fc90904e484912512ab82432f2f4cb86305ff990afd9b90141fe1a",
+    "format": "method",
+    "requires": []
+  },
+  {
+    "id": "aFrt",
+    "file": "original-client/public/chatgpt.com/cdn/assets/731863.ace382bf58.js",
+    "startUTF16": 284707,
+    "endUTF16": 290211,
+    "sha256": "6b85a5ef82e1d8929556385c2fbb585162f5cd49f85b6d8cd66e76f4cf0e75d4",
+    "requires": [
+      "D4ZO",
+      "SaEY",
+      "SlNh",
+      "k7G6",
+      "ueue",
+      "yZpl"
+    ]
+  },
+  {
+    "id": "TDk3",
+    "file": "original-client/public/chatgpt.com/cdn/assets/956483.f7260d7dd1.js",
+    "startUTF16": 756530,
+    "endUTF16": 760783,
+    "sha256": "8eed9bf596191ea83975aa1025ff4970044288ef6f92fd110e91fea5b0222cc9",
+    "requires": [
+      "IRAT",
+      "lAQI"
+    ]
+  }
+]

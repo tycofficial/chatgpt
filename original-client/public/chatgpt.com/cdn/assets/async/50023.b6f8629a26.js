@@ -1,2 +1,0 @@
-/*! LICENSE: 50023.b6f8629a26.js.LICENSE.txt */
-export const __rspack_esm_ids=[50023];export const __webpack_modules__={uLLT(t,e,r){r.r(e);let i=(0,r("jTyp").c)("AlignHorizontalJustifyStart",[["rect",{width:"6",height:"14",x:"6",y:"5",rx:"2",key:"hsirpf"}],["rect",{width:"6",height:"10",x:"16",y:"7",rx:"2",key:"13zkjt"}],["path",{d:"M2 2v20",key:"1ivd8o"}]]);r.d(e,{},{default:i})}};

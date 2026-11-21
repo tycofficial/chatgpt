@@ -1,0 +1,2 @@
+/*! LICENSE: 842683.04541d5510.js.LICENSE.txt */
+export const __rspack_esm_ids=[842683];export const __webpack_modules__={JqLw(a,b,c){c.r(b);let d=(0,c("SHUh").c)("LampWallDown",[["path",{d:"M11 13h6l3 7H8l3-7Z",key:"9n3qlo"}],["path",{d:"M14 13V8a2 2 0 0 0-2-2H8",key:"1hu4hb"}],["path",{d:"M4 9h2a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2H4v6Z",key:"s053bc"}]]);c.d(b,{},{default:d})}};

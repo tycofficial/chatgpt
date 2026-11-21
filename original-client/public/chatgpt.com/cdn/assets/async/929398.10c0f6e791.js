@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[929398];export const __webpack_modules__={KhlF(o){o.exports=JSON.parse('[{"name":"compound: CO2","initialValues":{"compound":"CO2"}},{"name":"compound: NaCl","initialValues":{"compound":"NaCl"}},{"name":"compound: Ca(OH)2","initialValues":{"compound":"Ca(OH)2"}},{"name":"compound: Al2(SO4)3","initialValues":{"compound":"Al2(SO4)3"}}]')}};

@@ -1,2 +1,0 @@
-/*! LICENSE: 869220.454f45412a.js.LICENSE.txt */
-export const __rspack_esm_ids=[869220];export const __webpack_modules__={wmAg(e,t,_){_.r(t);let p=(0,_("jTyp").c)("ArrowUpLeft",[["path",{d:"M7 17V7h10",key:"11bw93"}],["path",{d:"M17 17 7 7",key:"2786uv"}]]);_.d(t,{},{default:p})}};

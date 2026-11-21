@@ -6,7 +6,7 @@ import { wrapNativeDownloadServices } from '../src/native-client/local-native-do
 
 // Execute the exact pinned public factories, without modifying their bodies.
 // No browser or fake RPC implementation is involved in these lifecycle checks.
-function originalFactory(file, hash, start, end, imports = {}) {
+function originalFactory(file, hash, id, nextId, imports = {}) {
   const bytes = fs.readFileSync(new URL('../original-client/public/chatgpt.com/cdn/assets/' + file, import.meta.url));
   assert.equal(createHash('sha256').update(bytes).digest('hex'), hash);
   const exports = {}, require = id => { if (!(id in imports)) throw Error('Unexpected native import ' + id); return imports[id]; };
@@ -14,12 +14,21 @@ function originalFactory(file, hash, start, end, imports = {}) {
     for (const [key, getter] of Object.entries(getters)) Object.defineProperty(target, key, { enumerable: true, get: getter });
     for (const [key, value] of Object.entries(values)) Object.defineProperty(target, key, { enumerable: true, value });
   };
-  const factory = Function('return (' + bytes.toString('utf8').slice(start, end) + ')')();
+  const source = bytes.toString('utf8');
+  const marker = source.indexOf(id + ':(function');
+  assert(marker >= 0, 'Missing original factory ' + id);
+  const start = marker + id.length + 1;
+  const end = source.indexOf(',' + nextId + ':(function', start);
+  assert(end > start, 'Missing boundary after ' + id);
+  const factory = Function('return (' + source.slice(start, end) + ')')();
   factory({ exports }, exports, require); return exports;
 }
-const rpc = originalFactory('399565.6af208675d.js', '7ecf34206e1d7d363ba6ba049ecaa5b773de7967bcb75bd96c235465a7aa3a68', 438468, 492235);
+const rpc = originalFactory('399565.700e278f2d.js', 'f50ab4416402df1800059525a3db6d96f9b684b6a5e3aa8045e3f7e65aebd95e', 'ZG9f', 'QkCx');
 const basename = value => value.replaceAll('\\', '/').replace(/\/+$/, '').split('/').at(-1) ?? value;
-const temporary = originalFactory('7078.c420b9a2f6.js', 'b6fbe284d86c1e8e82f10b4fc3799e5b0fa60c1d92436930636d1c8dcc8e23f5', 136916, 137241, { bnxy: { j: basename } });
+const temporary = originalFactory('955979.17a59d5e45.js', '8e87e7d34bbcdd3ca24abdd9be485f546a41bb9c2bcadf2e654afd0691d0bf48', 'Afr7', 'JmpW', {
+  bnxy: { j: basename },
+  Z8fU: { a: '/__codex_browser_temporary_files__/' },
+});
 const sanitize = value => { const result = basename(value).replace(/[<>:"|?*]/gu, '_').replaceAll('\0', '_'); return !result || result === '.' || result === '..' ? 'download' : result; };
 const data = value => new TextEncoder().encode(value);
 class TooLarge extends Error { constructor(length) { super('File exceeds the preview size limit'); this.byteLength = length; } }

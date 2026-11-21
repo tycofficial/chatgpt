@@ -151,7 +151,7 @@ export function createModelCatalogAdapter(catalog) {
         isDefault: model === selection.model,
         defaultReasoningEffort: defaults.get(model),
         supportedReasoningEfforts: manual.get(model).map(choice => ({ reasoningEffort: choice.effort, description: '', ...(choice.effort === 'ultra' ? { adapterExecutionMode: catalog.SITE_ULTRA_ORCHESTRATION } : {}) })),
-        inputModalities: ['text'],
+        inputModalities: ['text', 'image'],
         serviceTiers: [{ id: 'fast', name: 'Fast', description: '' }],
         adapterServiceTierCapability: { uiPreference: true, providerPriorityVerified: false },
         adapterCapabilitySource: catalog.WORK_CATALOG_PROVENANCE.pinned,

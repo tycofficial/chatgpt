@@ -1,0 +1,2 @@
+/*! LICENSE: 629148.a3f0527fd0.js.LICENSE.txt */
+export const __rspack_esm_ids=[629148];export const __webpack_modules__={iZX6(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Laptop",[["path",{d:"M20 16V7a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v9m16 0H4m16 0 1.28 2.55a1 1 0 0 1-.9 1.45H3.62a1 1 0 0 1-.9-1.45L4 16",key:"tarvll"}]]);c.d(b,{},{default:d})}};

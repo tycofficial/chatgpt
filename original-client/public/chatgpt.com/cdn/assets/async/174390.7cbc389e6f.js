@@ -1,0 +1,2 @@
+/*! LICENSE: 174390.7cbc389e6f.js.LICENSE.txt */
+export const __rspack_esm_ids=[174390];export const __webpack_modules__={ezXz(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Anchor",[["path",{d:"M12 22V8",key:"qkxhtm"}],["path",{d:"M5 12H2a10 10 0 0 0 20 0h-3",key:"1hv3nh"}],["circle",{cx:"12",cy:"5",r:"3",key:"rqqgnr"}]]);c.d(b,{},{default:d})}};

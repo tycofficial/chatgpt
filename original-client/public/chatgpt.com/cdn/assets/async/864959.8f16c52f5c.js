@@ -1,0 +1,2 @@
+/*! LICENSE: 864959.8f16c52f5c.js.LICENSE.txt */
+export const __rspack_esm_ids=[864959];export const __webpack_modules__={iJS5(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ListChecks",[["path",{d:"m3 17 2 2 4-4",key:"1jhpwq"}],["path",{d:"m3 7 2 2 4-4",key:"1obspn"}],["path",{d:"M13 6h8",key:"15sg57"}],["path",{d:"M13 12h8",key:"h98zly"}],["path",{d:"M13 18h8",key:"oe0vm4"}]]);c.d(b,{},{default:d})}};

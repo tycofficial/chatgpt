@@ -1,2 +1,0 @@
-/*! LICENSE: 982756.3ac19e0ced.js.LICENSE.txt */
-export const __rspack_esm_ids=[982756];export const __webpack_modules__={BfVU(e,l,x){x.r(l);var y=x("aHF3");x.d(l,{default:()=>y.default})},aHF3(e,l,x){x.r(l);let y=(0,x("jTyp").c)("ChartNoAxesColumn",[["line",{x1:"18",x2:"18",y1:"20",y2:"10",key:"1xfpm4"}],["line",{x1:"12",x2:"12",y1:"20",y2:"4",key:"be30l9"}],["line",{x1:"6",x2:"6",y1:"20",y2:"14",key:"1r4le6"}]]);x.d(l,{},{default:y})}};

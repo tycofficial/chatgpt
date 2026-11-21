@@ -1,0 +1,2 @@
+/*! LICENSE: 345622.90481426af.js.LICENSE.txt */
+export const __rspack_esm_ids=[345622];export const __webpack_modules__={k4no(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Undo",[["path",{d:"M3 7v6h6",key:"1v2h90"}],["path",{d:"M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13",key:"1r6uu6"}]]);c.d(b,{},{default:d})}};

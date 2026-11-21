@@ -1,0 +1,2 @@
+/*! LICENSE: 692216.7030ab2cfe.js.LICENSE.txt */
+export const __rspack_esm_ids=[692216];export const __webpack_modules__={jGBZ(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Clock9",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["polyline",{points:"12 6 12 12 7.5 12",key:"1k60p0"}]]);c.d(b,{},{default:d})}};

@@ -1,2 +1,0 @@
-/*! LICENSE: 655347.f7eb484677.js.LICENSE.txt */
-export const __rspack_esm_ids=[655347];export const __webpack_modules__={Bj5d(e,a,t){t.r(a);let _=(0,t("jTyp").c)("BookCheck",[["path",{d:"M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H19a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H6.5a1 1 0 0 1 0-5H20",key:"k3hazp"}],["path",{d:"m9 9.5 2 2 4-4",key:"1dth82"}]]);t.d(a,{},{default:_})}};

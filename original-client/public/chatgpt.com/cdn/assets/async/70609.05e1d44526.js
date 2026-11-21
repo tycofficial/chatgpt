@@ -1,2 +1,0 @@
-/*! LICENSE: 70609.05e1d44526.js.LICENSE.txt */
-export const __rspack_esm_ids=[70609];export const __webpack_modules__={xGdT(t,e,_){_.r(e);let a=(0,_("jTyp").c)("Ghost",[["path",{d:"M9 10h.01",key:"qbtxuw"}],["path",{d:"M15 10h.01",key:"1qmjsl"}],["path",{d:"M12 2a8 8 0 0 0-8 8v12l3-3 2.5 2.5L12 19l2.5 2.5L17 19l3 3V10a8 8 0 0 0-8-8z",key:"uwwb07"}]]);_.d(e,{},{default:a})}};

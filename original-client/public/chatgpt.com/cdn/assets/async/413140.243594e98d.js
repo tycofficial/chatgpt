@@ -1,0 +1,2 @@
+/*! LICENSE: 413140.243594e98d.js.LICENSE.txt */
+export const __rspack_esm_ids=[413140];export const __webpack_modules__={vDyp(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Undo2",[["path",{d:"M9 14 4 9l5-5",key:"102s5s"}],["path",{d:"M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11",key:"f3b9sd"}]]);c.d(b,{},{default:d})}};

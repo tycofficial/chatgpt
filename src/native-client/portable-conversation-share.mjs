@@ -11,14 +11,46 @@ const shareUUID=value=>typeof value==='string'&&/^[a-f0-9]{8}-[a-f0-9]{4}-5[a-f0
 // The original bsEp.b requires a GUID; retain122 content-addressed checksum bits.
 const idForDigest=hex=>hex.slice(0,8)+'-'+hex.slice(8,12)+'-5'+hex.slice(13,16)+'-'+(8+(parseInt(hex[16],16)&3)).toString(16)+hex.slice(17,20)+'-'+hex.slice(20,32);
 
-function publicSnapshot(conversation,currentNode,limits){
+function branchNodes(conversation,currentNode,limits){
  if(!object(conversation?.mapping)||!safeId(currentNode))throw failure('SHARE_NODE_NOT_FOUND','The selected conversation node is unavailable',404);
  const chain=[],seen=new Set();let id=currentNode;
  while(id!==null){if(!safeId(id)||seen.has(id)||chain.length>=limits.maxNodes)throw failure('SHARE_GRAPH_INVALID','The selected conversation branch is invalid');seen.add(id);const node=conversation.mapping[id];if(!object(node)||node.id!==id)throw failure('SHARE_NODE_NOT_FOUND','The selected conversation branch is unavailable',404);chain.push(node);id=node.parent??null;}
- chain.reverse();const root=chain[0]?.message==null?chain[0].id:'portable-root',mapping={[root]:{id:root,message:null,parent:null,children:[]}};let parent=root,count=0;
- for(const node of chain){const value=node.message;if(!value)continue;const role=value.author?.role;
+ return chain.reverse();
+}
+
+function selectedBranch(conversation, messageIds, limits) {
+ if (!object(conversation?.mapping)) throw failure('SHARE_NODE_NOT_FOUND', 'The selected conversation is unavailable', 404);
+ const requested = new Set(messageIds), found = new Map();
+ for (const [id, node] of Object.entries(conversation.mapping)) {
+  if (node?.id !== id || !object(node.message)) continue;
+  for (const key of new Set([id, node.message.id])) {
+   if (!requested.has(key)) continue;
+   if (found.has(key) && found.get(key) !== id) throw failure('SHARE_SELECTION_INVALID', 'A selected message ID is ambiguous');
+   found.set(key, id);
+  }
+ }
+ if (found.size !== requested.size) throw failure('SHARE_NODE_NOT_FOUND', 'A selected message is unavailable', 404);
+ const nodes = new Set(found.values());
+ if (nodes.size !== requested.size) throw failure('SHARE_SELECTION_INVALID', 'Each selected message must be unique');
+ let currentNode, ancestors = new Set();
+ for (const node of nodes) {
+  if (ancestors.has(node)) continue;
+  const branch = new Set(branchNodes(conversation, node, limits).map(item => item.id));
+  if (currentNode && !branch.has(currentNode)) throw failure('SHARE_SELECTION_INVALID', 'Selected messages must belong to one branch');
+  currentNode = node;
+  ancestors = branch;
+ }
+ return { currentNode, nodes };
+}
+
+function publicSnapshot(conversation,currentNode,limits,selection=null){
+ const chain=branchNodes(conversation,currentNode,limits);
+ const root=!selection&&chain[0]?.message==null?chain[0].id:'portable-root',mapping={[root]:{id:root,message:null,parent:null,children:[]}};let parent=root,count=0;
+ for(const node of chain){const value=node.message;if(!value||selection&&!selection.nodes.has(node.id))continue;const role=value.author?.role;
   if(!['user','assistant'].includes(role)||value.metadata?.is_visually_hidden_from_conversation===true||role==='assistant'&&value.channel!=null&&value.channel!=='final')continue;
+  if(selection&&(value.metadata?.clientOnlyMessage!=null||value.metadata?.isOptimistic===true||value.metadata?.is_thinking_preamble_message===true))continue;
   if(value.status==='in_progress')throw failure('SHARE_STILL_RUNNING','Wait for this response to finish before sharing',409);
+  if(selection&&!['finished_successfully','finished_partial_completion'].includes(value.status))continue;
   const parts=value.content?.parts;if(!['text','multimodal_text'].includes(value.content?.content_type)||!Array.isArray(parts))continue;
   const text=parts.filter(part=>typeof part==='string').join('\n');if(!text)continue;
   if(text.length>limits.maxMessageCharacters||++count>limits.maxMessages)throw failure('PORTABLE_SHARE_TOO_LARGE','This conversation exceeds the portable-link limit',413);
@@ -26,24 +58,61 @@ function publicSnapshot(conversation,currentNode,limits){
   const message={id:node.id,author:{role,name:null,metadata:{}},content:{content_type:'text',parts:[text]},create_time:Number.isFinite(value.create_time)?value.create_time:null,update_time:null,status:value.status==='finished_partial_completion'?'finished_partial_completion':'finished_successfully',end_turn:role==='assistant'?value.end_turn!==false:null,recipient:'all',channel:role==='assistant'?'final':null,weight:1,metadata:{is_complete:true,adapter_source:'portable-conversation-text-snapshot'}};
   mapping[node.id]={id:node.id,message,parent,children:[]};mapping[parent].children.push(node.id);parent=node.id;
  }
+ if(selection&&count!==selection.nodes.size)throw failure('SHARE_SELECTION_UNSUPPORTED','Only selected visible text messages can be shared',422);
  if(!count)throw failure('SHARE_TEXT_UNAVAILABLE','There is no supported conversation text to share',422);
- return{title:String(conversation.title??'New chat').slice(0,200),mapping,current_node:parent,create_time:Number.isFinite(conversation.create_time)?conversation.create_time:null,update_time:Number.isFinite(conversation.update_time)?conversation.update_time:null,is_read_only:true,is_temporary_chat:false,conversation_origin:conversation.conversation_origin==='tpp'?'tpp':null,moderation_results:[],safe_urls:[],blocked_urls:[],async_status:null};
+ return{title:selection?selection.title:String(conversation.title??'New chat').slice(0,200),mapping,current_node:parent,create_time:!selection&&Number.isFinite(conversation.create_time)?conversation.create_time:null,update_time:!selection&&Number.isFinite(conversation.update_time)?conversation.update_time:null,is_read_only:true,is_temporary_chat:false,conversation_origin:!selection&&conversation.conversation_origin==='tpp'?'tpp':null,moderation_results:[],safe_urls:[],blocked_urls:[],async_status:null};
 }
 
 export function createPortableConversationShare({getIdentity,getConversation,baseURL,getLocation=()=>globalThis.location.href,limits={}}){
  const bounds={maxNodes:1000,maxMessages:200,maxMessageCharacters:20000,maxPayloadBytes:24000,maxURLCharacters:33000,...limits};
  const base=new URL(baseURL);if(!['http:','https:'].includes(base.protocol)||base.username||base.password||base.search||base.hash||!base.pathname.endsWith('/'))throw Error('An explicit site base URL is required');
  const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json','Cache-Control':'no-store'}});
- async function create(body,signal){
+ function requireOwner(){
   const owner=identity(getIdentity());if(!owner)throw failure('SHARE_LOGIN_REQUIRED','Sign in before creating a share link',401);
-  if(!object(body)||Object.keys(body).some(key=>!['conversation_id','current_node_id','is_anonymous'].includes(key))||!safeId(body.conversation_id)||!safeId(body.current_node_id)||body.is_anonymous!==true)throw failure('SHARE_INPUT_INVALID','Unsupported share request');
-  signal?.throwIfAborted();const conversation=await getConversation(body.conversation_id);if(identity(getIdentity())!==owner)throw failure('SHARE_OWNER_CHANGED','The active account changed',409);
-  const document=publicSnapshot(conversation,body.current_node_id,bounds),payload={version:1,kind:'portable-conversation',document};
+  return owner;
+ }
+ async function ownedConversation(conversationId,owner,signal){
+  signal?.throwIfAborted();const conversation=await getConversation(conversationId);if(identity(getIdentity())!==owner)throw failure('SHARE_OWNER_CHANGED','The active account changed',409);
+  return conversation;
+ }
+ async function publish(conversation,currentNode,owner,signal,selection){
+  const document=publicSnapshot(conversation,currentNode,bounds,selection),payload={version:1,kind:'portable-conversation',document};
   const bytes=encoder.encode(JSON.stringify(payload));if(bytes.length>bounds.maxPayloadBytes)throw failure('PORTABLE_SHARE_TOO_LARGE','This conversation exceeds the portable-link limit',413);
   const checksum=await digest(bytes);signal?.throwIfAborted();if(identity(getIdentity())!==owner)throw failure('SHARE_OWNER_CHANGED','The active account changed',409);
   const shareId=idForDigest(checksum),url=new URL('share/'+shareId,base);url.hash='snapshot='+encode(bytes);
   if(url.href.length>bounds.maxURLCharacters)throw failure('PORTABLE_SHARE_TOO_LARGE','This conversation exceeds the portable-link limit',413);
-  return{share_id:shareId,share_url:url.href,current_node_id:body.current_node_id,highlighted_message_id:null,is_anonymous:true,is_public:true,is_visible:true,title:document.title,moderation_state:{},adapter_source:'portable-url-snapshot',server_stored:false,file_bytes_included:false};
+  return{share_id:shareId,share_url:url.href,current_node_id:currentNode,highlighted_message_id:null,is_anonymous:true,is_public:true,is_visible:true,title:document.title,moderation_state:{},adapter_source:'portable-url-snapshot',server_stored:false,file_bytes_included:false};
+ }
+ async function create(body,signal){
+  const owner=requireOwner();
+  if(!object(body)||Object.keys(body).some(key=>!['conversation_id','current_node_id','is_anonymous'].includes(key))||!safeId(body.conversation_id)||!safeId(body.current_node_id)||body.is_anonymous!==true)throw failure('SHARE_INPUT_INVALID','Unsupported share request');
+  const conversation=await ownedConversation(body.conversation_id,owner,signal);
+  return publish(conversation,body.current_node_id,owner,signal);
+ }
+ async function createPost(body, signal) {
+  const owner = requireOwner();
+  if (!object(body) || Object.keys(body).some(key => key !== 'attachments_to_create') ||
+      !Array.isArray(body.attachments_to_create) || body.attachments_to_create.length !== 1) {
+   throw failure('SHARE_INPUT_INVALID', 'Select one group of text messages to share');
+  }
+  const attachment = body.attachments_to_create[0];
+  if (!object(attachment) || Object.keys(attachment).some(key => !['conversation_id','kind','message_ids'].includes(key)) ||
+      !safeId(attachment.conversation_id) || !['message_slice','prompt'].includes(attachment.kind) ||
+      !Array.isArray(attachment.message_ids) || !attachment.message_ids.length ||
+      attachment.message_ids.length > bounds.maxMessages || !attachment.message_ids.every(safeId) ||
+      new Set(attachment.message_ids).size !== attachment.message_ids.length ||
+      attachment.kind === 'prompt' && attachment.message_ids.length !== 1) {
+   throw failure('SHARE_INPUT_INVALID', 'Unsupported share request');
+  }
+  const conversation = await ownedConversation(attachment.conversation_id, owner, signal);
+  const selection = selectedBranch(conversation, attachment.message_ids, bounds);
+  const prompt = attachment.kind === 'prompt';
+  if (prompt && conversation.mapping[selection.currentNode]?.message?.author?.role !== 'user') {
+   throw failure('SHARE_SELECTION_UNSUPPORTED', 'Select a user prompt to share', 422);
+  }
+  const shared = await publish(conversation, selection.currentNode, owner, signal,
+    { nodes: selection.nodes, title: prompt ? '共享提示词' : '共享消息' });
+  return { post: { id: shared.share_id, permissions: { share_setting: 'public' }, permalink: shared.share_url } };
  }
  async function read(shareId){
   const location=new URL(getLocation());if(!shareUUID(shareId)||location.origin!==base.origin||location.pathname!==new URL('share/'+shareId,base).pathname||location.hash.length>bounds.maxURLCharacters)throw failure('PORTABLE_SHARE_NOT_FOUND','This portable share is unavailable',404);
@@ -59,6 +128,7 @@ export function createPortableConversationShare({getIdentity,getConversation,bas
  return{create,read,async handle(request,pathname=new URL(request.url).pathname){
   try{
    if(request.method==='POST'&&['/share/create','/share/v2/create'].includes(pathname))return json(await create(await request.json(),request.signal));
+   if(request.method==='POST'&&pathname==='/share/post')return json(await createPost(await request.json(),request.signal));
    const match=/^\/share\/([a-f0-9-]{36})$/.exec(pathname);if(match&&shareUUID(match[1])&&request.method==='GET')return json(await read(match[1]));
    if(match&&['PATCH','DELETE'].includes(request.method))return json({error:{code:'PORTABLE_SHARE_IMMUTABLE',message:'A portable snapshot is immutable and cannot be revoked on a server'}},405);
    return null;

@@ -1,0 +1,2 @@
+/*! LICENSE: 909611.e9770432ba.js.LICENSE.txt */
+export const __rspack_esm_ids=[909611];export const __webpack_modules__={ONtz(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ArrowBigRight",[["path",{d:"M6 9h6V5l7 7-7 7v-4H6V9z",key:"7fvt9c"}]]);c.d(b,{},{default:d})}};

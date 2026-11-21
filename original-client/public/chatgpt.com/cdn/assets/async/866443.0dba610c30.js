@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[866443];export const __webpack_modules__={zBpX(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"marketPrice":1}},{"name":"Maximum supported values","initialValues":{"marketPrice":6}}]')}};

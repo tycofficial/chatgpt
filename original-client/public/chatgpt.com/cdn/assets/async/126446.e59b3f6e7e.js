@@ -1,0 +1,2 @@
+/*! LICENSE: 126446.e59b3f6e7e.js.LICENSE.txt */
+export const __rspack_esm_ids=[126446];export const __webpack_modules__={DNMt(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Cigarette",[["path",{d:"M17 12H3a1 1 0 0 0-1 1v2a1 1 0 0 0 1 1h14",key:"1mb5g1"}],["path",{d:"M18 8c0-2.5-2-2.5-2-5",key:"1il607"}],["path",{d:"M21 16a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1",key:"1yl5r7"}],["path",{d:"M22 8c0-2.5-2-2.5-2-5",key:"1gah44"}],["path",{d:"M7 12v4",key:"jqww69"}]]);c.d(b,{},{default:d})}};

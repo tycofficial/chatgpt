@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[582026];export const __webpack_modules__={m7Ul(a){a.exports=JSON.parse('[{"name":"mixture_example: colored solution","initialValues":{"mixture_example":"colored solution"}},{"name":"mixture_example: widely separated liquids","initialValues":{"mixture_example":"widely separated liquids"}}]')}};

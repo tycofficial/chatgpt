@@ -1,0 +1,2 @@
+/*! LICENSE: 206214.22da953465.js.LICENSE.txt */
+export const __rspack_esm_ids=[206214];export const __webpack_modules__={XILx(a,b,c){c.r(b);let d=(0,c("SHUh").c)("SkipBack",[["polygon",{points:"19 20 9 12 19 4 19 20",key:"o2sva"}],["line",{x1:"5",x2:"5",y1:"19",y2:"5",key:"1ocqjk"}]]);c.d(b,{},{default:d})}};

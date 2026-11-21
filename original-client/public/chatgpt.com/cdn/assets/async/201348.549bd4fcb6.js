@@ -1,0 +1,2 @@
+/*! LICENSE: 201348.549bd4fcb6.js.LICENSE.txt */
+export const __rspack_esm_ids=[201348];export const __webpack_modules__={P4of(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Egg",[["path",{d:"M12 22c6.23-.05 7.87-5.57 7.5-10-.36-4.34-3.95-9.96-7.5-10-3.55.04-7.14 5.66-7.5 10-.37 4.43 1.27 9.95 7.5 10z",key:"1c39pg"}]]);c.d(b,{},{default:d})}};

@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[422263];export const __webpack_modules__={G2Kj(e){e.exports=JSON.parse('[{"name":"initial_season: winter","initialValues":{"initial_season":"winter"}}]')}};

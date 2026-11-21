@@ -1,2 +1,0 @@
-/*! LICENSE: 185909.e6dd63fa90.js.LICENSE.txt */
-export const __rspack_esm_ids=[185909];export const __webpack_modules__={p8rp(c,e,p){p.r(e);let k=(0,p("jTyp").c)("Spline",[["circle",{cx:"19",cy:"5",r:"2",key:"mhkx31"}],["circle",{cx:"5",cy:"19",r:"2",key:"v8kfzx"}],["path",{d:"M5 17A12 12 0 0 1 17 5",key:"1okkup"}]]);p.d(e,{},{default:k})}};

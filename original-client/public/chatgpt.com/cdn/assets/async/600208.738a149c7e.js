@@ -1,0 +1,2 @@
+/*! LICENSE: 600208.738a149c7e.js.LICENSE.txt */
+export const __rspack_esm_ids=[600208];export const __webpack_modules__={zNaF(a,b,c){c.r(b);let d=(0,c("SHUh").c)("MonitorX",[["path",{d:"m14.5 12.5-5-5",key:"1jahn5"}],["path",{d:"m9.5 12.5 5-5",key:"1k2t7b"}],["rect",{width:"20",height:"14",x:"2",y:"3",rx:"2",key:"48i651"}],["path",{d:"M12 17v4",key:"1riwvh"}],["path",{d:"M8 21h8",key:"1ev6f3"}]]);c.d(b,{},{default:d})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 137971.6d1e21b5fe.js.LICENSE.txt */
+export const __rspack_esm_ids=[137971];export const __webpack_modules__={vOcX(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Dice5",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",ry:"2",key:"1m3agn"}],["path",{d:"M16 8h.01",key:"cr5u4v"}],["path",{d:"M8 8h.01",key:"1e4136"}],["path",{d:"M8 16h.01",key:"18s6g9"}],["path",{d:"M16 16h.01",key:"1f9h7w"}],["path",{d:"M12 12h.01",key:"1mp3jc"}]]);c.d(b,{},{default:d})}};

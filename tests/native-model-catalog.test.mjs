@@ -28,7 +28,31 @@ test('Ultra is never advertised as a provider reasoning_effort value',()=>{for(c
 test('raw display title contains only thinking option and each Chat family owns its version field',()=>{const raw=adapter.getChatGptModels();for(const version of raw.versions){for(const preset of version.intelligence_presets){assert.equal(preset.selected_display_title,preset.title);assert(!/GPT|Luna|Sol|Astra/.test(preset.selected_display_title));assert.equal(preset.selected_display_version,version.display_text);}}});
 test('legacy auto remains GPT-6 standard and Chat never gains Work orchestration',()=>{const raw=adapter.getChatGptModels();assert(!raw.models.find(m=>m.slug==='auto').thinking_efforts.some(e=>e.thinking_effort==='ultra'));assert(raw.versions.every(v=>v.intelligence_presets.every(e=>e.thinking_effort!=='ultra')));assert.equal(catalog.resolveChatSelection('auto').model,'gpt-6-sol');});
 test('the six observed default presets remain distinct from manual model capabilities',()=>{assert.equal(adapter.getSliderModelsConfig().presets[0].length,6);assert.deepEqual(adapter.getSliderModelsConfig().presets[0].map(e=>[e.model,e.reasoning_effort]),catalog.WORK_PRESETS.map(e=>[e.model,e.effort]));});
-test('source mode separation and both Ultra gates use verified site permission',()=>{const source=fs.readFileSync(new URL('../src/native-client/local-configuration.mjs',import.meta.url),'utf8').replace(/^import .*;\r?$/gm,'').replace(/^export\s+/gm,'');for(const access of [false,true]){const context=vm.createContext({catalog,createModelCatalogAdapter,getPrototypeStatsigUser:()=>({userID:'fixture-user',customIDs:{}}),isPrototypeLocalSession:()=>true,hasModelSelectionAccess:()=>access,getSitePlanCapabilities:()=>({work:access,dot:access}),structuredClone,Date});new vm.Script(source+'\nglobalThis.fixtureConfig=getPrototypeConfiguration();',{filename:'local-configuration.mjs (isolated fixture)'}).runInContext(context);const config=context.fixtureConfig;assert.equal(config.layer_configs['3040264819'].value.merged_picker,false);for(const id of ['536305374','1186680773']){assert.equal(config.feature_gates[id].value,access);assert.equal(Object.values(config.feature_gates).filter(g=>g.name===id).length,2);}}});
+test('source mode separation, Dot navigation and Ultra gates use verified site permission', () => {
+  const source = fs.readFileSync(new URL('../src/native-client/local-configuration.mjs', import.meta.url), 'utf8')
+    .replace(/^import .*;\r?$/gm, '').replace(/^export\s+/gm, '');
+  for (const access of [false, true]) {
+    const context = vm.createContext({
+      catalog, createModelCatalogAdapter,
+      getPrototypeStatsigUser: () => ({ userID: 'fixture-user', customIDs: {} }),
+      isPrototypeLocalSession: () => true,
+      hasModelSelectionAccess: () => access,
+      getSitePlanCapabilities: () => ({ work: access, dot: access }),
+      hasLocalDotBrowserVoice: () => false,
+      structuredClone, Date,
+    });
+    new vm.Script(source + '\nglobalThis.fixtureConfig=getPrototypeConfiguration();', {
+      filename: 'local-configuration.mjs (isolated fixture)',
+    }).runInContext(context);
+    const config = context.fixtureConfig;
+    assert.equal(config.layer_configs['3040264819'].value.merged_picker, false);
+    assert.equal(config.feature_gates['548063743'].value, false);
+    for (const id of ['536305374', '1186680773', '3406878059']) {
+      assert.equal(config.feature_gates[id].value, access);
+      assert.equal(Object.values(config.feature_gates).filter(gate => gate.name === id).length, 2);
+    }
+  }
+});
 
 test('Fast survives the source TFzY two-level service-tier filter without adding it to Chat',()=>{
   const raw=adapter.getWorkModels(),chat=adapter.getChatGptModels();

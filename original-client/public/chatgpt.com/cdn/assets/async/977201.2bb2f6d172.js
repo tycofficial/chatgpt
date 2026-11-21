@@ -1,0 +1,2 @@
+/*! LICENSE: 977201.2bb2f6d172.js.LICENSE.txt */
+export const __rspack_esm_ids=[977201];export const __webpack_modules__={zGJR(a,b,c){c.r(b);let d=(0,c("SHUh").c)("CircleArrowLeft",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["path",{d:"M16 12H8",key:"1fr5h0"}],["path",{d:"m12 8-4 4 4 4",key:"15vm53"}]]);c.d(b,{},{default:d})}};

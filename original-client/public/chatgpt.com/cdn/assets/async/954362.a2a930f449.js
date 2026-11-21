@@ -1,2 +1,0 @@
-/*! LICENSE: 954362.a2a930f449.js.LICENSE.txt */
-export const __rspack_esm_ids=[954362];export const __webpack_modules__={S6W3(a,e,_){_.r(e);let t=(0,_("jTyp").c)("TypeOutline",[["path",{d:"M14 16.5a.5.5 0 0 0 .5.5h.5a2 2 0 0 1 0 4H9a2 2 0 0 1 0-4h.5a.5.5 0 0 0 .5-.5v-9a.5.5 0 0 0-.5-.5h-3a.5.5 0 0 0-.5.5V8a2 2 0 0 1-4 0V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v3a2 2 0 0 1-4 0v-.5a.5.5 0 0 0-.5-.5h-3a.5.5 0 0 0-.5.5Z",key:"1reda3"}]]);_.d(e,{},{default:t})}};

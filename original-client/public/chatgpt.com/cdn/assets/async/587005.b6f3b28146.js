@@ -1,2 +1,0 @@
-/*! LICENSE: 587005.b6f3b28146.js.LICENSE.txt */
-export const __rspack_esm_ids=[587005];export const __webpack_modules__={V3RT(e,c,_){_.r(c);let o=(0,_("jTyp").c)("UserRoundMinus",[["path",{d:"M2 21a8 8 0 0 1 13.292-6",key:"bjp14o"}],["circle",{cx:"10",cy:"8",r:"5",key:"o932ke"}],["path",{d:"M22 19h-6",key:"vcuq98"}]]);_.d(c,{},{default:o})}};

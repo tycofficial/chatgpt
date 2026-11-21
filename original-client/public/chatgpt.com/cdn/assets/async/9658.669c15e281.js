@@ -1,2 +1,0 @@
-/*! LICENSE: 9658.669c15e281.js.LICENSE.txt */
-export const __rspack_esm_ids=[9658];export const __webpack_modules__={PigM(e,c,_){_.r(c);let l=(0,_("jTyp").c)("Clock9",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["polyline",{points:"12 6 12 12 7.5 12",key:"1k60p0"}]]);_.d(c,{},{default:l})}};

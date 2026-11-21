@@ -1,2 +1,0 @@
-/*! LICENSE: 926477.43c076ed25.js.LICENSE.txt */
-export const __rspack_esm_ids=[926477];export const __webpack_modules__={TDgI(e,t,r){r.r(t);let _=(0,r("jTyp").c)("SquareArrowUp",[["rect",{width:"18",height:"18",x:"3",y:"3",rx:"2",key:"afitv7"}],["path",{d:"m16 12-4-4-4 4",key:"177agl"}],["path",{d:"M12 16V8",key:"1sbj14"}]]);r.d(t,{},{default:_})}};

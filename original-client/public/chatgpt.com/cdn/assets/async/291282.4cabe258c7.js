@@ -1,2 +1,0 @@
-/*! LICENSE: 291282.4cabe258c7.js.LICENSE.txt */
-export const __rspack_esm_ids=[291282];export const __webpack_modules__={nRGK(e,c,r){r.r(c);let _=(0,r("jTyp").c)("Percent",[["line",{x1:"19",x2:"5",y1:"5",y2:"19",key:"1x9vlm"}],["circle",{cx:"6.5",cy:"6.5",r:"2.5",key:"4mh3h7"}],["circle",{cx:"17.5",cy:"17.5",r:"2.5",key:"1mdrzq"}]]);r.d(c,{},{default:_})}};

@@ -1,2 +1,0 @@
-/*! LICENSE: 424918.8baa188d94.js.LICENSE.txt */
-export const __rspack_esm_ids=[424918];export const __webpack_modules__={Drpt(e,t,a){a.r(t);let p=(0,a("jTyp").c)("ListCollapse",[["path",{d:"m3 10 2.5-2.5L3 5",key:"i6eama"}],["path",{d:"m3 19 2.5-2.5L3 14",key:"w2gmor"}],["path",{d:"M10 6h11",key:"c7qv1k"}],["path",{d:"M10 12h11",key:"6m4ad9"}],["path",{d:"M10 18h11",key:"11hvi2"}]]);a.d(t,{},{default:p})}};

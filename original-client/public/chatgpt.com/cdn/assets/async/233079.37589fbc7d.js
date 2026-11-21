@@ -1,2 +1,0 @@
-/*! LICENSE: 233079.37589fbc7d.js.LICENSE.txt */
-export const __rspack_esm_ids=[233079];export const __webpack_modules__={rzRR(c,e,r){r.r(e);let l=(0,r("jTyp").c)("CaseLower",[["circle",{cx:"7",cy:"12",r:"3",key:"12clwm"}],["path",{d:"M10 9v6",key:"17i7lo"}],["circle",{cx:"17",cy:"12",r:"3",key:"gl7c2s"}],["path",{d:"M14 7v8",key:"dl84cr"}]]);r.d(e,{},{default:l})}};

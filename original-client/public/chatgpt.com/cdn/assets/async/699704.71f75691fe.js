@@ -1,2 +1,0 @@
-/*! LICENSE: 699704.71f75691fe.js.LICENSE.txt */
-export const __rspack_esm_ids=[699704];export const __webpack_modules__={ASl3(e,y,x){x.r(y);let c=(0,x("jTyp").c)("Meh",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["line",{x1:"8",x2:"16",y1:"15",y2:"15",key:"1xb1d9"}],["line",{x1:"9",x2:"9.01",y1:"9",y2:"9",key:"yxxnd0"}],["line",{x1:"15",x2:"15.01",y1:"9",y2:"9",key:"1p4y9e"}]]);x.d(y,{},{default:c})}};

@@ -1,2 +1,0 @@
-/*! LICENSE: 63890.f65096b9e9.js.LICENSE.txt */
-export const __rspack_esm_ids=[63890];export const __webpack_modules__={H7qz(e,c,_){_.r(c);let t=(0,_("jTyp").c)("Ban",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["path",{d:"m4.9 4.9 14.2 14.2",key:"1m5liu"}]]);_.d(c,{},{default:t})}};

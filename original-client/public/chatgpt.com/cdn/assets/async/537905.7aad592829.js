@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[537905];export const __webpack_modules__={h6ps(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"earlier_cpi":50,"later_cpi":50}},{"name":"Maximum supported values","initialValues":{"earlier_cpi":300,"later_cpi":300}},{"name":"comparison_interval: one_month","initialValues":{"comparison_interval":"one_month"}}]')}};

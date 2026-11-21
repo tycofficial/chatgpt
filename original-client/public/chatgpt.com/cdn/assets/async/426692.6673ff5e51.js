@@ -1,2 +1,0 @@
-/*! LICENSE: 426692.6673ff5e51.js.LICENSE.txt */
-export const __rspack_esm_ids=[426692];export const __webpack_modules__={WugU(e,_,p){p.r(_);let t=(0,p("jTyp").c)("ArrowUp",[["path",{d:"m5 12 7-7 7 7",key:"hav0vg"}],["path",{d:"M12 19V5",key:"x0mq9r"}]]);p.d(_,{},{default:t})}};

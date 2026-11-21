@@ -1,2 +1,0 @@
-/*! LICENSE: 483673.6a2f5f8e32.js.LICENSE.txt */
-export const __rspack_esm_ids=[483673];export const __webpack_modules__={x7FV(e,p,_){_.r(p);let t=(0,_("jTyp").c)("Reply",[["polyline",{points:"9 17 4 12 9 7",key:"hvgpf2"}],["path",{d:"M20 18v-2a4 4 0 0 0-4-4H4",key:"5vmcpk"}]]);_.d(p,{},{default:t})}};

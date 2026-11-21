@@ -1,0 +1,2 @@
+/*! LICENSE: 520102.7283c25ec0.js.LICENSE.txt */
+export const __rspack_esm_ids=[520102];export const __webpack_modules__={TOFv(a,b,c){c.r(b);let d=(0,c("SHUh").c)("MoveDown",[["path",{d:"M8 18L12 22L16 18",key:"cskvfv"}],["path",{d:"M12 2V22",key:"r89rzk"}]]);c.d(b,{},{default:d})}};

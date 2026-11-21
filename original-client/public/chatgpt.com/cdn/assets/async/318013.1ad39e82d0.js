@@ -1,0 +1,2 @@
+/*! LICENSE: 318013.1ad39e82d0.js.LICENSE.txt */
+export const __rspack_esm_ids=[318013];export const __webpack_modules__={dnmL(a,b,c){c.r(b);let d=(0,c("SHUh").c)("X",[["path",{d:"M18 6 6 18",key:"1bl5f8"}],["path",{d:"m6 6 12 12",key:"d8bk6v"}]]);c.d(b,{},{default:d})}};

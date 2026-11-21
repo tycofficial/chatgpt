@@ -1,0 +1,2 @@
+/*! LICENSE: 939373.5a4462281f.js.LICENSE.txt */
+export const __rspack_esm_ids=[939373];export const __webpack_modules__={oMXb(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Lollipop",[["circle",{cx:"11",cy:"11",r:"8",key:"4ej97u"}],["path",{d:"m21 21-4.3-4.3",key:"1qie3q"}],["path",{d:"M11 11a2 2 0 0 0 4 0 4 4 0 0 0-8 0 6 6 0 0 0 12 0",key:"107gwy"}]]);c.d(b,{},{default:d})}};

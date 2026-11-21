@@ -1,0 +1,2 @@
+/*! LICENSE: 263992.83c6e66a22.js.LICENSE.txt */
+export const __rspack_esm_ids=[263992];export const __webpack_modules__={AaYJ(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Torus",[["ellipse",{cx:"12",cy:"11",rx:"3",ry:"2",key:"1b2qxu"}],["ellipse",{cx:"12",cy:"12.5",rx:"10",ry:"8.5",key:"h8emeu"}]]);c.d(b,{},{default:d})}};

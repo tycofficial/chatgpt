@@ -1,0 +1,2 @@
+/*! LICENSE: 842005.7aa8af42bd.js.LICENSE.txt */
+export const __rspack_esm_ids=[842005];export const __webpack_modules__={KMNT(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Clock5",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["polyline",{points:"12 6 12 12 14.5 16",key:"1pcbox"}]]);c.d(b,{},{default:d})}};

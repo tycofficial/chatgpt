@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[950285];export const __webpack_modules__={FPYR(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"supportSegments":2}},{"name":"Maximum supported values","initialValues":{"supportSegments":6}}]')}};

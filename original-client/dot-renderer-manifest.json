@@ -1,304 +1,107 @@
 {
   "format": "exact-public-dot-renderer-v1",
-  "rootURL": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/",
-  "frameURL": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/4d3311b40f55a3e2/frame.html",
-  "sourceContract": {
-    "module": "OrBF.a",
-    "file": "7078.c420b9a2f6.js",
-    "start": 296630,
-    "end": 296882,
-    "sourcePath": "/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/4d3311b40f55a3e2/frame.html",
-    "iframeSandbox": "allow-scripts allow-same-origin",
-    "singleThreadFallback": "crossOriginIsolated && SharedArrayBuffer selects threaded; otherwise original single-thread"
-  },
-  "privacy": {
-    "originalPublicStaticOnly": true,
-    "cookies": false,
-    "authorization": false,
-    "accountMaterials": false
-  },
+  "sourceBuild": "b6348792a294e8e04a67660959ba41914937938f",
   "assets": [
     {
-      "url": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/4d3311b40f55a3e2/activity.mjs",
-      "path": "_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/4d3311b40f55a3e2/activity.mjs",
-      "bytes": 2076,
-      "sha256": "30e36b94b8ddac04b5c7c42bd8933790dc09241cbbc0ad3eee0c727304390dbf",
-      "contentType": "application/javascript; charset=UTF-8",
-      "contentLength": null
+      "url": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-97341a6ccd8f9b7c/8a99a99685b92b37/activity.mjs",
+      "path": "_orbit-renderer/assets/orbit-character-97341a6ccd8f9b7c/8a99a99685b92b37/activity.mjs",
+      "bytes": 8348,
+      "sha256": "03aab476dbfe0136aaebc1b58068e431021e7e7c347bb33b4f4bb16ea9020463"
     },
     {
-      "url": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/4d3311b40f55a3e2/frame.css",
-      "path": "_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/4d3311b40f55a3e2/frame.css",
+      "url": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-97341a6ccd8f9b7c/8a99a99685b92b37/frame.css",
+      "path": "_orbit-renderer/assets/orbit-character-97341a6ccd8f9b7c/8a99a99685b92b37/frame.css",
       "bytes": 410,
-      "sha256": "cea95029ff21540848257a2767620ad9730e9106416f29708511867e90c009e4",
-      "contentType": "text/css; charset=UTF-8",
-      "contentLength": null
+      "sha256": "cea95029ff21540848257a2767620ad9730e9106416f29708511867e90c009e4"
     },
     {
-      "url": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/4d3311b40f55a3e2/frame.html",
-      "path": "_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/4d3311b40f55a3e2/frame.html",
+      "url": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-97341a6ccd8f9b7c/8a99a99685b92b37/frame.html",
+      "path": "_orbit-renderer/assets/orbit-character-97341a6ccd8f9b7c/8a99a99685b92b37/frame.html",
       "bytes": 593,
-      "sha256": "1c4358077e4fc3632386e352e1c77949ff56510bcaefa15fdb4fe18fa22cd19f",
-      "contentType": "text/html; charset=UTF-8",
-      "contentLength": null
+      "sha256": "1c4358077e4fc3632386e352e1c77949ff56510bcaefa15fdb4fe18fa22cd19f"
     },
     {
-      "url": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/4d3311b40f55a3e2/frame.mjs",
-      "path": "_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/4d3311b40f55a3e2/frame.mjs",
-      "bytes": 8520,
-      "sha256": "051ec53b4f475e3501fdc87e08e6a1eef80c952ccfccdcecd96cba4f79d43b15",
-      "contentType": "application/javascript; charset=UTF-8",
-      "contentLength": null
+      "url": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-97341a6ccd8f9b7c/8a99a99685b92b37/frame.mjs",
+      "path": "_orbit-renderer/assets/orbit-character-97341a6ccd8f9b7c/8a99a99685b92b37/frame.mjs",
+      "bytes": 7518,
+      "sha256": "5000ce4ca31aa45d12ff2dd05483dbeaae13d8f2dcab74774406c0ce2cfe4495"
     },
     {
-      "url": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/4d3311b40f55a3e2/presentation.mjs",
-      "path": "_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/4d3311b40f55a3e2/presentation.mjs",
-      "bytes": 63991,
-      "sha256": "ee666f5514110f8eae35914ca7769e535235af3ee242808fa1d57644467aa674",
-      "contentType": "application/javascript; charset=UTF-8",
-      "contentLength": null
+      "url": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-97341a6ccd8f9b7c/8a99a99685b92b37/presentation.mjs",
+      "path": "_orbit-renderer/assets/orbit-character-97341a6ccd8f9b7c/8a99a99685b92b37/presentation.mjs",
+      "bytes": 78161,
+      "sha256": "647064fa2bc61fb47d83e47faba505ebdf109e69f68c9b858344e168e906331a"
     },
     {
-      "url": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/4d3311b40f55a3e2/preset-previews.mjs",
-      "path": "_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/4d3311b40f55a3e2/preset-previews.mjs",
-      "bytes": 12079,
-      "sha256": "9234f6eb438e8392b00f5579216e5d83456da380aaa4db20a493bdb05b0248ec",
-      "contentType": "application/javascript; charset=UTF-8",
-      "contentLength": null
+      "url": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-97341a6ccd8f9b7c/8a99a99685b92b37/preset-previews.mjs",
+      "path": "_orbit-renderer/assets/orbit-character-97341a6ccd8f9b7c/8a99a99685b92b37/preset-previews.mjs",
+      "bytes": 12226,
+      "sha256": "a378ac0e9dae6248828705fd60c45119f2bf0cc37b0a5aea6408bdf784d251d9"
     },
     {
-      "url": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/4d3311b40f55a3e2/THIRD_PARTY_NOTICES.txt",
-      "path": "_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/4d3311b40f55a3e2/THIRD_PARTY_NOTICES.txt",
-      "bytes": 80955,
-      "sha256": "9f0430b2ac14cfa08af4fc977de4916898663c76fad16dff151313e5d9d39f86",
-      "contentType": "text/plain; charset=UTF-8",
-      "contentLength": null
+      "url": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-97341a6ccd8f9b7c/8a99a99685b92b37/runtime.mjs",
+      "path": "_orbit-renderer/assets/orbit-character-97341a6ccd8f9b7c/8a99a99685b92b37/runtime.mjs",
+      "bytes": 1812,
+      "sha256": "f9c0dfc8918f3f9f001958f2cc785147a3799eced562be1e25b77bb6addf1763"
     },
     {
-      "url": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/orbit-characters.data",
-      "path": "_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/orbit-characters.data",
-      "bytes": 3548847,
-      "sha256": "e37ccf13bacedcfe04cff3facf545ebc96c7c02173bbe813ec4d54d68dc79fed",
-      "contentType": "application/octet-stream",
-      "contentLength": "2462031"
+      "url": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-97341a6ccd8f9b7c/8a99a99685b92b37/THIRD_PARTY_NOTICES.txt",
+      "path": "_orbit-renderer/assets/orbit-character-97341a6ccd8f9b7c/8a99a99685b92b37/THIRD_PARTY_NOTICES.txt",
+      "bytes": 80957,
+      "sha256": "710e5c97d4fbee0c6006df27225d1872979100e0004778c3341645801e774606"
     },
     {
-      "url": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/orbit-characters.mjs",
-      "path": "_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/orbit-characters.mjs",
-      "bytes": 240521,
-      "sha256": "a376cecc81337e1943f905bd070fa010c3629ef6d3007eaba75ec1b2a9adac6c",
-      "contentType": "application/javascript; charset=UTF-8",
-      "contentLength": null
+      "url": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-97341a6ccd8f9b7c/runtime/orbit-characters.data",
+      "path": "_orbit-renderer/assets/orbit-character-97341a6ccd8f9b7c/runtime/orbit-characters.data",
+      "bytes": 1826752,
+      "sha256": "b0c8e5cd46036005caeb910fb296863b7f9d79761438d95e0828e06522dcc614"
     },
     {
-      "url": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/orbit-characters.wasm",
-      "path": "_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/orbit-characters.wasm",
-      "bytes": 6566898,
-      "sha256": "865f3c39e61ee3691d37203058159baa2a565cb17c15e9d8246fc897b5ca5775",
-      "contentType": "application/wasm",
-      "contentLength": null
+      "url": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-97341a6ccd8f9b7c/runtime/orbit-characters.mjs",
+      "path": "_orbit-renderer/assets/orbit-character-97341a6ccd8f9b7c/runtime/orbit-characters.mjs",
+      "bytes": 231124,
+      "sha256": "389162b235c40e2b6f350eb564f356e168ef823b0848c3e1489316a6b80dd6bd"
     },
     {
-      "url": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/orbit-enums.mjs",
-      "path": "_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/orbit-enums.mjs",
-      "bytes": 1731,
-      "sha256": "8ac48c6a46a9da8f6f48f067278ed049739df5934a3bee42719f67d69c1ddc73",
-      "contentType": "application/javascript; charset=UTF-8",
-      "contentLength": null
+      "url": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-97341a6ccd8f9b7c/runtime/orbit-characters.wasm",
+      "path": "_orbit-renderer/assets/orbit-character-97341a6ccd8f9b7c/runtime/orbit-characters.wasm",
+      "bytes": 6330901,
+      "sha256": "35ba8dd4ec3a0d682fb33329fab876c1c41fa244694a7b5dd796c62dfeaf5a4d"
     },
     {
-      "url": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/single-thread/orbit-characters.data",
-      "path": "_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/single-thread/orbit-characters.data",
-      "bytes": 3548847,
-      "sha256": "e37ccf13bacedcfe04cff3facf545ebc96c7c02173bbe813ec4d54d68dc79fed",
-      "contentType": "application/octet-stream",
-      "contentLength": "2462031"
+      "url": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-97341a6ccd8f9b7c/runtime/orbit-enums.mjs",
+      "path": "_orbit-renderer/assets/orbit-character-97341a6ccd8f9b7c/runtime/orbit-enums.mjs",
+      "bytes": 2991,
+      "sha256": "813f56aacf77bbd8e688dc37213c225239608891e8a2d16e1418290a571859bd"
     },
     {
-      "url": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/single-thread/orbit-characters.mjs",
-      "path": "_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/single-thread/orbit-characters.mjs",
-      "bytes": 225186,
-      "sha256": "61d28b159b5b4d3669ec8526b67edc1183cce6e317d1550cb47f73b90ccde120",
-      "contentType": "application/javascript; charset=UTF-8",
-      "contentLength": null
+      "url": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-97341a6ccd8f9b7c/runtime/single-thread/orbit-characters.data",
+      "path": "_orbit-renderer/assets/orbit-character-97341a6ccd8f9b7c/runtime/single-thread/orbit-characters.data",
+      "bytes": 1826752,
+      "sha256": "b0c8e5cd46036005caeb910fb296863b7f9d79761438d95e0828e06522dcc614"
     },
     {
-      "url": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/single-thread/orbit-characters.wasm",
-      "path": "_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/single-thread/orbit-characters.wasm",
-      "bytes": 6651850,
-      "sha256": "10c43c3139ff0d415a8d95b9a6adb22dd2bfc7f7a0dc5eca3a1edf8ede8e11d3",
-      "contentType": "application/wasm",
-      "contentLength": null
-    }
-  ],
-  "failures": [],
-  "edges": [
-    {
-      "from": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/4d3311b40f55a3e2/frame.html",
-      "to": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/4d3311b40f55a3e2/THIRD_PARTY_NOTICES.txt",
-      "proof": "HTML attribute"
+      "url": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-97341a6ccd8f9b7c/runtime/single-thread/orbit-characters.mjs",
+      "path": "_orbit-renderer/assets/orbit-character-97341a6ccd8f9b7c/runtime/single-thread/orbit-characters.mjs",
+      "bytes": 211573,
+      "sha256": "b7338516d9eda1205c07cfc5ba69f12df3ca9394deaf309899f043a233891499"
     },
     {
-      "from": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/4d3311b40f55a3e2/frame.html",
-      "to": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/4d3311b40f55a3e2/frame.css",
-      "proof": "HTML attribute"
+      "url": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-97341a6ccd8f9b7c/runtime/single-thread/orbit-characters.wasm",
+      "path": "_orbit-renderer/assets/orbit-character-97341a6ccd8f9b7c/runtime/single-thread/orbit-characters.wasm",
+      "bytes": 6408436,
+      "sha256": "16b16effec9e94abe02a4897ec226dfd68f6feed5c7e4bc49e887d151e0d02a3"
     },
     {
-      "from": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/4d3311b40f55a3e2/frame.html",
-      "to": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/4d3311b40f55a3e2/frame.mjs",
-      "proof": "HTML attribute"
-    },
-    {
-      "from": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/4d3311b40f55a3e2/frame.mjs",
-      "to": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/4d3311b40f55a3e2/presentation.mjs",
-      "proof": "ESM import/export"
-    },
-    {
-      "from": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/4d3311b40f55a3e2/frame.mjs",
-      "to": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/orbit-characters.mjs",
-      "proof": "ESM dynamic literal import"
-    },
-    {
-      "from": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/4d3311b40f55a3e2/frame.mjs",
-      "to": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/single-thread/orbit-characters.mjs",
-      "proof": "ESM dynamic literal import"
-    },
-    {
-      "from": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/4d3311b40f55a3e2/frame.mjs",
-      "to": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/orbit-characters.mjs",
-      "proof": "Pinned frame preload loop and runtime ternary"
-    },
-    {
-      "from": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/4d3311b40f55a3e2/frame.mjs",
-      "to": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/orbit-characters.wasm",
-      "proof": "Pinned frame preload loop and runtime ternary"
-    },
-    {
-      "from": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/4d3311b40f55a3e2/frame.mjs",
-      "to": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/orbit-characters.data",
-      "proof": "Pinned frame preload loop and runtime ternary"
-    },
-    {
-      "from": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/4d3311b40f55a3e2/frame.mjs",
-      "to": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/single-thread/orbit-characters.mjs",
-      "proof": "Pinned frame preload loop and runtime ternary"
-    },
-    {
-      "from": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/4d3311b40f55a3e2/frame.mjs",
-      "to": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/single-thread/orbit-characters.wasm",
-      "proof": "Pinned frame preload loop and runtime ternary"
-    },
-    {
-      "from": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/4d3311b40f55a3e2/frame.mjs",
-      "to": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/single-thread/orbit-characters.data",
-      "proof": "Pinned frame preload loop and runtime ternary"
-    },
-    {
-      "from": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/4d3311b40f55a3e2/presentation.mjs",
-      "to": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/orbit-enums.mjs",
-      "proof": "ESM import/export"
-    },
-    {
-      "from": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/4d3311b40f55a3e2/presentation.mjs",
-      "to": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/4d3311b40f55a3e2/activity.mjs",
-      "proof": "ESM import/export"
-    },
-    {
-      "from": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/4d3311b40f55a3e2/presentation.mjs",
-      "to": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/4d3311b40f55a3e2/preset-previews.mjs",
-      "proof": "ESM import/export"
-    },
-    {
-      "from": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/orbit-characters.mjs",
-      "to": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/orbit-characters.data",
-      "proof": "Emscripten exact runtime filename"
-    },
-    {
-      "from": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/orbit-characters.mjs",
-      "to": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/orbit-characters.data",
-      "proof": "Emscripten exact runtime filename"
-    },
-    {
-      "from": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/orbit-characters.mjs",
-      "to": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/orbit-characters.wasm",
-      "proof": "Emscripten exact runtime filename"
-    },
-    {
-      "from": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/orbit-characters.mjs",
-      "to": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/orbit-characters.wasm",
-      "proof": "new URL literal"
-    },
-    {
-      "from": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/orbit-characters.mjs",
-      "to": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/orbit-characters.wasm",
-      "proof": "Emscripten exact runtime filename"
-    },
-    {
-      "from": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/orbit-characters.mjs",
-      "to": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/orbit-characters.mjs",
-      "proof": "new URL literal"
-    },
-    {
-      "from": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/orbit-characters.mjs",
-      "to": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/orbit-characters.mjs",
-      "proof": "Emscripten exact runtime filename"
-    },
-    {
-      "from": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/single-thread/orbit-characters.mjs",
-      "to": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/single-thread/orbit-characters.data",
-      "proof": "Emscripten exact runtime filename"
-    },
-    {
-      "from": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/single-thread/orbit-characters.mjs",
-      "to": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/single-thread/orbit-characters.data",
-      "proof": "Emscripten exact runtime filename"
-    },
-    {
-      "from": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/single-thread/orbit-characters.mjs",
-      "to": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/single-thread/orbit-characters.wasm",
-      "proof": "Emscripten exact runtime filename"
-    },
-    {
-      "from": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/single-thread/orbit-characters.mjs",
-      "to": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/single-thread/orbit-characters.wasm",
-      "proof": "new URL literal"
-    },
-    {
-      "from": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/single-thread/orbit-characters.mjs",
-      "to": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/single-thread/orbit-characters.wasm",
-      "proof": "Emscripten exact runtime filename"
-    },
-    {
-      "from": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/single-thread/orbit-characters.mjs",
-      "to": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/single-thread/orbit-characters.wasm",
-      "proof": "Emscripten exact runtime filename"
-    },
-    {
-      "from": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/single-thread/orbit-characters.mjs",
-      "to": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/single-thread/orbit-characters.data",
-      "proof": "Emscripten exact runtime filename"
-    },
-    {
-      "from": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/4d3311b40f55a3e2/preset-previews.mjs",
-      "to": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/orbit-enums.mjs",
-      "proof": "ESM import/export"
-    },
-    {
-      "from": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/4d3311b40f55a3e2/preset-previews.mjs",
-      "to": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/4d3311b40f55a3e2/activity.mjs",
-      "proof": "ESM import/export"
-    },
-    {
-      "from": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/4d3311b40f55a3e2/activity.mjs",
-      "to": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-16ed1c7d9045dbdf/runtime/orbit-enums.mjs",
-      "proof": "ESM import/export"
+      "url": "https://chatgpt.com/_orbit-renderer/assets/orbit-character-97341a6ccd8f9b7c/runtime/single-thread/preparation-worker.mjs",
+      "path": "_orbit-renderer/assets/orbit-character-97341a6ccd8f9b7c/runtime/single-thread/preparation-worker.mjs",
+      "bytes": 981,
+      "sha256": "8748f758ec1aa2c4164944b1278f405da1e96efe17bef0eba253099389feeaca"
     }
   ],
   "summary": {
-    "known": 14,
-    "available": 14,
-    "failed": 0,
-    "pending": 0,
-    "bytes": 20952504
-  }
+    "count": 16,
+    "pending": 0
+  },
+  "failures": []
 }

@@ -1,0 +1,2 @@
+/*! LICENSE: 486880.e33ede99eb.js.LICENSE.txt */
+export const __rspack_esm_ids=[486880];export const __webpack_modules__={Ax2I(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Divide",[["circle",{cx:"12",cy:"6",r:"1",key:"1bh7o1"}],["line",{x1:"5",x2:"19",y1:"12",y2:"12",key:"13b5wn"}],["circle",{cx:"12",cy:"18",r:"1",key:"lqb9t5"}]]);c.d(b,{},{default:d})}};

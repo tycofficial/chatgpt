@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[122743];export const __webpack_modules__={DUJj(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"q1":-10000,"q2":-10000,"distance":0.01}},{"name":"Maximum supported values","initialValues":{"q1":10000,"q2":10000,"distance":10000}}]')}};

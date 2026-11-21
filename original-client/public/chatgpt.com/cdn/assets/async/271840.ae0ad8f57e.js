@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[271840];export const __webpack_modules__={rTms(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"demand_change":-16,"cost_change":-16}},{"name":"Maximum supported values","initialValues":{"demand_change":16,"cost_change":16}}]')}};

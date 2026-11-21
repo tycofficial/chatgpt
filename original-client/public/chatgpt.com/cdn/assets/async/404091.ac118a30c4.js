@@ -1,2 +1,0 @@
-/*! LICENSE: 404091.ac118a30c4.js.LICENSE.txt */
-export const __rspack_esm_ids=[404091];export const __webpack_modules__={GpyO(e,p,_){_.r(p);let o=(0,_("jTyp").c)("ChevronsDownUp",[["path",{d:"m7 20 5-5 5 5",key:"13a0gw"}],["path",{d:"m7 4 5 5 5-5",key:"1kwcof"}]]);_.d(p,{},{default:o})}};

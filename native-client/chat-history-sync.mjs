@@ -1,4 +1,6 @@
 /** Account-owned text history sync. No model transport or executable remote checkpoint. */
+import { isSiteInferenceCheckpoint } from './site-inference-transport.mjs?v=91ed19db286dc9e0';
+
 export const CHAT_HISTORY_SYNC_SCHEMA = 1;
 export const CHAT_HISTORY_SYNC_LIMITS = Object.freeze({ documentBytes: 1_000_000, pageSize: 100, flushMutations: 40, queuedMutations: 2000, threads: 2000, requestTimeoutMs: 15000 });
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -155,6 +157,48 @@ export function projectChatHistoryThread(thread) {
   if (encoder.encode(serialized).byteLength > CHAT_HISTORY_SYNC_LIMITS.documentBytes) fail('SYNC_DOCUMENT_TOO_LARGE', 'This conversation exceeds the cloud text-history budget; its complete local copy was retained.', { status: 413 });
   return out;
 }
+
+function unfinishedTurnView(turn) {
+  const { adapterMetadata, completedAt, durationMs, items, ...fields } = turn;
+  const { interruption, reasoningLifecycle, apiTranscript, ...metadata } = adapterMetadata;
+  if (reasoningLifecycle) {
+    const { completedAtMs, workDurationMs, ...clock } = reasoningLifecycle;
+    metadata.reasoningLifecycle = clock;
+  }
+  return { ...fields, adapterMetadata: metadata, items: items.map(item => {
+    if (item.type !== 'reasoning' || item.status !== 'cancelled') return item;
+    const { completedAtMs, durationMs, ...view } = item;
+    return view;
+  }) };
+}
+
+function followsLocalRecovery(head, document, original, ownerId) {
+  const latest = original?.turns.at(-1), local = latest?.adapterMetadata;
+  const transport = local?.checkpoint?.inFlight?.transport;
+  if (latest?.status !== 'interrupted' || local?.resumePolicy !== 'automatic' || local.resumable !== true ||
+      !isSiteInferenceCheckpoint(transport) || transport.ownerId !== ownerId) return false;
+  const { turns: earlier, updatedAt: oldUpdate, recencyAt: oldRecency, ...oldThread } = head;
+  const { turns: current, updatedAt, recencyAt, ...currentThread } = document;
+  if (!Array.isArray(earlier) || !equal(oldThread, currentThread) || updatedAt < oldUpdate || recencyAt < oldRecency ||
+      current.length < earlier.length || current.length > earlier.length + 1) return false;
+  if (!earlier.slice(0, current.length - 1).every((turn, index) => equal(turn, current[index]))) return false;
+  if (current.length > earlier.length) return true;
+
+  const pending = earlier.at(-1), recovered = current.at(-1);
+  if (pending.status !== 'interrupted' || pending.completedAt != null ||
+      pending.adapterMetadata?.interruption !== 'cloud-history-restored-without-execution-checkpoint') return false;
+  const { items: savedItems, ...saved } = unfinishedTurnView(pending);
+  const { items: recoveredItems, ...recovery } = unfinishedTurnView(recovered);
+  return equal(saved, recovery) && savedItems.every((savedItem, index) => {
+    const item = recoveredItems[index];
+    if (!item) return false;
+    if (savedItem.type === 'agentMessage' && item.type === 'agentMessage' && item.text.startsWith(savedItem.text)) {
+      return equal({ ...savedItem, text: item.text }, item);
+    }
+    return equal(savedItem, item);
+  });
+}
+
 function freshState() { return { schemaVersion: 1, cursor: null, heads: Object.create(null), known: Object.create(null), outbox: [], conflicts: Object.create(null), localIds: [] }; }
 function validateState(value) { if (!value) return freshState(); if (value.schemaVersion !== 1 || !object(value.heads) || !object(value.known) || !Array.isArray(value.outbox) || !object(value.conflicts) || !Array.isArray(value.localIds)) fail('SYNC_LOCAL_STATE_INVALID', 'The durable sync state could not be loaded.'); for (const key of ['heads', 'known', 'conflicts']) Object.setPrototypeOf(value[key], null); return value; }
 /** Atomic read-modify-write; callback must be synchronous and never does network I/O. */
@@ -195,7 +239,7 @@ export function createChatHistorySync({ baseURL, fetchImpl = globalThis.fetch?.b
   if (base.username || base.password || base.search || base.hash || base.protocol !== 'https:' && !(base.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(base.hostname))) fail('SYNC_INVALID_CONFIGURATION', 'Use an explicit trusted account-service origin.');
   if (base.pathname !== '/') fail('SYNC_INVALID_CONFIGURATION', 'The account-service base must be an origin.');
   if (typeof fetchImpl !== 'function' || typeof getIdentity !== 'function' || typeof getSessionToken !== 'function') fail('SYNC_INVALID_CONFIGURATION', 'Verified account and transport callbacks are required.');
-  const bootScope = identityScope(getIdentity());
+  const identity = getIdentity(), bootScope = identityScope(identity);
   const stateStore = store ?? createIndexedDBChatHistoryStore();
   let serial = Promise.resolve(), disposed = false, localBaseline = null;
   let observedRevisions = new Map();
@@ -235,14 +279,19 @@ export function createChatHistorySync({ baseURL, fetchImpl = globalThis.fetch?.b
     if (!Array.isArray(threads) || threads.length > CHAT_HISTORY_SYNC_LIMITS.threads) fail('SYNC_INVALID_DOCUMENT', 'A bounded complete local thread snapshot is required.');
     const documents = threads.map(projectChatHistoryThread).filter(Boolean), ids = documents.map(doc => doc.id);
     if (new Set(ids).size !== ids.length) fail('SYNC_INVALID_DOCUMENT', 'Duplicate local conversation IDs.');
-    const previousLocal = localBaseline;
+    const previousLocal = localBaseline, originals = initial ? new Map(threads.map(thread => [thread.id, thread])) : null;
     const result = await update(state => {
       for (const document of documents) {
         const id = document.id;
         if (previousLocal?.has(id) && equal(previousLocal.get(id), document)) continue;
         if (state.known[id]?.deleted) { state.conflicts[id] = { id, reason: 'remote-deleted', local: document, remote: null, remoteMetadata: clone(state.known[id]), createdAt: now() }; delete state.heads[id]; continue; }
         if (state.heads[id] && equal(state.heads[id], document)) continue;
-        if (state.heads[id] && ((initial && (state.known[id]?.revision || state.outbox.some(item => item.id === id))) || previousLocal?.has(id) && !equal(previousLocal.get(id), state.heads[id]))) {
+        const head = state.heads[id];
+        // A page can finish saving browser progress before its history capture
+        // runs. Continue that one local journal turn through normal CAS without
+        // discarding an earlier attempted mutation or adopting a remote edit.
+        const localRecovery = initial && head && !state.conflicts[id] && followsLocalRecovery(head, document, originals.get(id), identity?.ownerId);
+        if (head && !localRecovery && ((initial && (state.known[id]?.revision || state.outbox.some(item => item.id === id))) || previousLocal?.has(id) && !equal(previousLocal.get(id), head))) {
           state.conflicts[id] = { id, reason: initial ? 'startup-local-diverged' : 'concurrent-local-context', local: clone(document), remote: clone(state.heads[id]), remoteMetadata: clone(state.known[id] ?? { id, revision: 0, deleted: false, sequence: 0 }), createdAt: now() };
           state.outbox = state.outbox.filter(item => item.id !== id);
         }

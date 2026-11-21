@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[176341];export const __webpack_modules__={wNQ6(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"event":0,"shift_magnitude":0.2}},{"name":"Maximum supported values","initialValues":{"event":2,"shift_magnitude":5.5}}]')}};

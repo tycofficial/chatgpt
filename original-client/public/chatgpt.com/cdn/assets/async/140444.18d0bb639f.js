@@ -1,2 +1,0 @@
-/*! LICENSE: 140444.18d0bb639f.js.LICENSE.txt */
-export const __rspack_esm_ids=[140444];export const __webpack_modules__={r5M3(e,c,t){t.r(c);let _=(0,t("jTyp").c)("Info",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["path",{d:"M12 16v-4",key:"1dtifu"}],["path",{d:"M12 8h.01",key:"e9boi3"}]]);t.d(c,{},{default:_})}};

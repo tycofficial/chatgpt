@@ -1,0 +1,2 @@
+/*! LICENSE: 51700.4c1cd79033.js.LICENSE.txt */
+export const __rspack_esm_ids=[51700];export const __webpack_modules__={nxB3(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ArrowBigDown",[["path",{d:"M15 6v6h4l-7 7-7-7h4V6h6z",key:"1thax2"}]]);c.d(b,{},{default:d})}};

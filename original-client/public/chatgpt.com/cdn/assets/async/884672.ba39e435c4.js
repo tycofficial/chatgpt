@@ -1,0 +1,1 @@
+export const __rspack_esm_ids=[884672];export const __webpack_modules__={mLjX(a){a.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"latitude_degrees":-80}},{"name":"Maximum supported values","initialValues":{"latitude_degrees":80}}]')}};

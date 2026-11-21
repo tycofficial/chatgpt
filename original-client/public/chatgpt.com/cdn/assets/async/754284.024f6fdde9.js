@@ -1,0 +1,2 @@
+/*! LICENSE: 754284.024f6fdde9.js.LICENSE.txt */
+export const __rspack_esm_ids=[754284];export const __webpack_modules__={gDpO(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Braces",[["path",{d:"M8 3H7a2 2 0 0 0-2 2v5a2 2 0 0 1-2 2 2 2 0 0 1 2 2v5c0 1.1.9 2 2 2h1",key:"ezmyqa"}],["path",{d:"M16 21h1a2 2 0 0 0 2-2v-5c0-1.1.9-2 2-2a2 2 0 0 1-2-2V5a2 2 0 0 0-2-2h-1",key:"e1hn23"}]]);c.d(b,{},{default:d})},Od64(a,b,c){c.r(b);var d=c("gDpO");c.d(b,{default:()=>d.default})}};

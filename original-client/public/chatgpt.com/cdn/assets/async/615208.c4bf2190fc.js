@@ -1,0 +1,2 @@
+/*! LICENSE: 615208.c4bf2190fc.js.LICENSE.txt */
+export const __rspack_esm_ids=[615208];export const __webpack_modules__={MAIA(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Barcode",[["path",{d:"M3 5v14",key:"1nt18q"}],["path",{d:"M8 5v14",key:"1ybrkv"}],["path",{d:"M12 5v14",key:"s699le"}],["path",{d:"M17 5v14",key:"ycjyhj"}],["path",{d:"M21 5v14",key:"nzette"}]]);c.d(b,{},{default:d})}};

@@ -1,0 +1,2 @@
+/*! LICENSE: 699695.15cb768bf9.js.LICENSE.txt */
+export const __rspack_esm_ids=[699695];export const __webpack_modules__={BLrx(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Code",[["polyline",{points:"16 18 22 12 16 6",key:"z7tu5w"}],["polyline",{points:"8 6 2 12 8 18",key:"1eg1df"}]]);c.d(b,{},{default:d})}};

@@ -1,2 +1,0 @@
-/*! LICENSE: 921565.3064e167eb.js.LICENSE.txt */
-export const __rspack_esm_ids=[921565];export const __webpack_modules__={qVNG(e,r,a){a.r(r);var c=a("o310");a.d(r,{default:()=>c.default})},o310(e,r,a){a.r(r);let c=(0,a("jTyp").c)("CircleArrowDown",[["circle",{cx:"12",cy:"12",r:"10",key:"1mglay"}],["path",{d:"M12 8v8",key:"napkw2"}],["path",{d:"m8 12 4 4 4-4",key:"k98ssh"}]]);a.d(r,{},{default:c})}};

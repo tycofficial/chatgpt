@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[832325];export const __webpack_modules__={PfG2(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"initialDepositUsd":100,"reserveRatioPercent":5}},{"name":"Maximum supported values","initialValues":{"initialDepositUsd":2000,"reserveRatioPercent":50}}]')}};

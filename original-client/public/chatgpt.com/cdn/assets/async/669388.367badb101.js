@@ -1,0 +1,2 @@
+/*! LICENSE: 669388.367badb101.js.LICENSE.txt */
+export const __rspack_esm_ids=[669388];export const __webpack_modules__={wGp2(a,b,c){c.r(b);let d=(0,c("SHUh").c)("FileCheck",[["path",{d:"M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z",key:"1rqfz7"}],["path",{d:"M14 2v4a2 2 0 0 0 2 2h4",key:"tnqrlb"}],["path",{d:"m9 15 2 2 4-4",key:"1grp1n"}]]);c.d(b,{},{default:d})}};

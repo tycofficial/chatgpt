@@ -1,0 +1,2 @@
+/*! LICENSE: 874812.02efa9d31a.js.LICENSE.txt */
+export const __rspack_esm_ids=[874812];export const __webpack_modules__={UIwD(a,b,c){c.r(b);let d=(0,c("SHUh").c)("SearchX",[["path",{d:"m13.5 8.5-5 5",key:"1cs55j"}],["path",{d:"m8.5 8.5 5 5",key:"a8mexj"}],["circle",{cx:"11",cy:"11",r:"8",key:"4ej97u"}],["path",{d:"m21 21-4.3-4.3",key:"1qie3q"}]]);c.d(b,{},{default:d})}};

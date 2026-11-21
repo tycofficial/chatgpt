@@ -1,2 +1,0 @@
-/*! LICENSE: 570690.5f14e350d4.js.LICENSE.txt */
-export const __rspack_esm_ids=[570690];export const __webpack_modules__={fpzU(a,e,t){t.r(e);let p=(0,t("jTyp").c)("TextCursor",[["path",{d:"M17 22h-1a4 4 0 0 1-4-4V6a4 4 0 0 1 4-4h1",key:"uvaxm9"}],["path",{d:"M7 22h1a4 4 0 0 0 4-4v-1",key:"11xy8d"}],["path",{d:"M7 2h1a4 4 0 0 1 4 4v1",key:"1uw06m"}]]);t.d(e,{},{default:p})}};

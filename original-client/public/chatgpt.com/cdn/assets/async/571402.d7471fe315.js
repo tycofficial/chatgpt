@@ -1,0 +1,2 @@
+/*! LICENSE: 571402.d7471fe315.js.LICENSE.txt */
+export const __rspack_esm_ids=[571402];export const __webpack_modules__={YpqQ(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Battery",[["rect",{width:"16",height:"10",x:"2",y:"7",rx:"2",ry:"2",key:"1w10f2"}],["line",{x1:"22",x2:"22",y1:"11",y2:"13",key:"4dh1rd"}]]);c.d(b,{},{default:d})}};

@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[449592];export const __webpack_modules__={fpST(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"gini_coefficient":0,"population_share":0}},{"name":"Maximum supported values","initialValues":{"gini_coefficient":0.65,"population_share":100}}]')}};

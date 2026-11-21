@@ -1,2 +1,0 @@
-/*! LICENSE: 343436.72c4849b03.js.LICENSE.txt */
-export const __rspack_esm_ids=[343436];export const __webpack_modules__={BloN(e,t,d){d.r(t);let a=(0,d("jTyp").c)("AlarmClockMinus",[["circle",{cx:"12",cy:"13",r:"8",key:"3y4lt7"}],["path",{d:"M5 3 2 6",key:"18tl5t"}],["path",{d:"m22 6-3-3",key:"1opdir"}],["path",{d:"M6.38 18.7 4 21",key:"17xu3x"}],["path",{d:"M17.64 18.67 20 21",key:"kv2oe2"}],["path",{d:"M9 13h6",key:"1uhe8q"}]]);d.d(t,{},{default:a})},OVQ6(e,t,d){d.r(t);var a=d("BloN");d.d(t,{default:()=>a.default})}};

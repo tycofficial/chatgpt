@@ -1,0 +1,2 @@
+/*! LICENSE: 205743.e345dee14d.js.LICENSE.txt */
+export const __rspack_esm_ids=[205743];export const __webpack_modules__={Y95b(a,b,c){c.r(b);let d=(0,c("SHUh").c)("SkipForward",[["polygon",{points:"5 4 15 12 5 20 5 4",key:"16p6eg"}],["line",{x1:"19",x2:"19",y1:"5",y2:"19",key:"futhcm"}]]);c.d(b,{},{default:d})}};

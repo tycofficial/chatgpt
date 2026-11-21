@@ -1,0 +1,2 @@
+/*! LICENSE: 543232.2f71be09b4.js.LICENSE.txt */
+export const __rspack_esm_ids=[543232];export const __webpack_modules__={WfZ8(a,b,c){c.r(b);let d=(0,c("SHUh").c)("ReceiptSwissFranc",[["path",{d:"M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z",key:"q3az6g"}],["path",{d:"M10 17V7h5",key:"k7jq18"}],["path",{d:"M10 11h4",key:"1i0mka"}],["path",{d:"M8 15h5",key:"vxg57a"}]]);c.d(b,{},{default:d})}};

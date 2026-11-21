@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[562209];export const __webpack_modules__={DXLn(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"demand_shift":-28}},{"name":"Maximum supported values","initialValues":{"demand_shift":28}}]')}};

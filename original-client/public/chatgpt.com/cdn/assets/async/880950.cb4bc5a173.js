@@ -1,2 +1,0 @@
-/*! LICENSE: 880950.cb4bc5a173.js.LICENSE.txt */
-export const __rspack_esm_ids=[880950];export const __webpack_modules__={HUJ7(e,y,_){_.r(y);let l=(0,_("jTyp").c)("Equal",[["line",{x1:"5",x2:"19",y1:"9",y2:"9",key:"1nwqeh"}],["line",{x1:"5",x2:"19",y1:"15",y2:"15",key:"g8yjpy"}]]);_.d(y,{},{default:l})}};

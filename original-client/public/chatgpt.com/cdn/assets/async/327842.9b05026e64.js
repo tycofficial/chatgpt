@@ -1,2 +1,0 @@
-/*! LICENSE: 327842.9b05026e64.js.LICENSE.txt */
-export const __rspack_esm_ids=[327842];export const __webpack_modules__={kMsN(e,t,k){k.r(t);let _=(0,k("jTyp").c)("Dock",[["path",{d:"M2 8h20",key:"d11cs7"}],["rect",{width:"20",height:"16",x:"2",y:"4",rx:"2",key:"18n3k1"}],["path",{d:"M6 16h12",key:"u522kt"}]]);k.d(t,{},{default:_})}};

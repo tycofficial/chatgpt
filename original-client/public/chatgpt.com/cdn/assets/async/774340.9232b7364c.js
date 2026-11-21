@@ -1,2 +1,0 @@
-/*! LICENSE: 774340.9232b7364c.js.LICENSE.txt */
-export const __rspack_esm_ids=[774340];export const __webpack_modules__={pboq(e,p,t){t.r(p);let _=(0,t("jTyp").c)("CircleCheckBig",[["path",{d:"M21.801 10A10 10 0 1 1 17 3.335",key:"yps3ct"}],["path",{d:"m9 11 3 3L22 4",key:"1pflzl"}]]);t.d(p,{},{default:_})}};

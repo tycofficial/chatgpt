@@ -1,2 +1,0 @@
-/*! LICENSE: 13355.6718a1593e.js.LICENSE.txt */
-export const __rspack_esm_ids=[13355];export const __webpack_modules__={EQFD(e,t,_){_.r(t);let o=(0,_("jTyp").c)("ArrowLeftToLine",[["path",{d:"M3 19V5",key:"rwsyhb"}],["path",{d:"m13 6-6 6 6 6",key:"1yhaz7"}],["path",{d:"M7 12h14",key:"uoisry"}]]);_.d(t,{},{default:o})}};

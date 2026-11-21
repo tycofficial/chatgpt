@@ -1,0 +1,2 @@
+/*! LICENSE: 307184.232bcb8520.js.LICENSE.txt */
+export const __rspack_esm_ids=[307184];export const __webpack_modules__={goa2(a,b,c){c.r(b);let d=(0,c("SHUh").c)("Tally5",[["path",{d:"M4 4v16",key:"6qkkli"}],["path",{d:"M9 4v16",key:"81ygyz"}],["path",{d:"M14 4v16",key:"12vmem"}],["path",{d:"M19 4v16",key:"8ij5ei"}],["path",{d:"M22 6 2 18",key:"h9moai"}]]);c.d(b,{},{default:d})}};

@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[293765];export const __webpack_modules__={OMSK(i){i.exports=JSON.parse('[{"name":"initial_organ: stem","initialValues":{"initial_organ":"stem"}},{"name":"initial_organ: leaf","initialValues":{"initial_organ":"leaf"}},{"name":"initial_transport_tissue: phloem","initialValues":{"initial_transport_tissue":"phloem"}}]')}};

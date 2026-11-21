@@ -129,6 +129,8 @@ const EMPTY_BILLING_READS = new Map([
   ['/payments/billing_info', () => ({ name: null, email: null, address: null, tax_ids: [], adapter_source: LOCAL_MARKER })],
   ['/payments/transaction-history', () => ({ transactions: [], next_cursor: null, adapter_source: LOCAL_MARKER })],
   ['/payments/invoice-expensing', () => ({ eligible: false, destination: null, adapter_source: LOCAL_MARKER })],
+  ['/wham/rate-limit-reset-credits', () => ({ credits: [], available_count: 0, history_enabled: false, adapter_source: LOCAL_MARKER })],
+  ['/wham/usage/credit-usage-events', () => ({ data: [], adapter_source: LOCAL_MARKER })],
   ['/subscriptions/credits/discount-offer', () => ({ offer: null, adapter_source: LOCAL_MARKER })],
   ['/subscriptions/auto_top_up/settings', () => ({
     is_enabled: false, payment_method: null, recharge_threshold: null,
@@ -200,6 +202,30 @@ function nativeUsage(receipt, membership, identity, currentTime) {
     },
     adapter_source: siteUsageSource,
     site_usage: { requests: requested, completed, token_reports: reports, input_tokens: input, output_tokens: output },
+  };
+}
+
+/** Present the verified site receipt in the original settings layout. */
+export function createNativeSiteUsageLayout(Layout, { React, Section, Group, Row, useUsage, getIdentity, isUsageRoute }) {
+  const { createElement } = React;
+  function SiteUsageSummary() {
+    const { data } = useUsage();
+    const identity = getIdentity();
+    if (!identity || data?.adapter_source !== siteUsageSource ||
+        data.user_id !== identity.userId || data.account_id !== identity.accountId) return null;
+    const usage = data.ambient_usage?.default;
+    const rows = usage?.menu?.rows;
+    if (!usage?.source?.heading || !rows?.length) return null;
+    return createElement(Section, { id: 'site-usage-summary' },
+      createElement(Section.Header, { title: usage.source.heading }),
+      createElement(Section.Content, null, createElement(Group, null, rows.map(({ label, value }) =>
+        createElement(Row, { key: label, label, control: createElement('span', { className: 'tabular-nums' }, value.text) }),
+      ))),
+    );
+  }
+  return function SiteUsageLayout(props) {
+    if (props.scrollResetKey !== 'usage' || !isUsageRoute()) return createElement(Layout, props);
+    return createElement(Layout, props, createElement(SiteUsageSummary), props.children);
   };
 }
 

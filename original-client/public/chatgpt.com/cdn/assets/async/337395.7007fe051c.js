@@ -1,1 +1,0 @@
-export const __rspack_esm_ids=[337395];export const __webpack_modules__={sIJc(e){e.exports=JSON.parse('[{"name":"Minimum supported values","initialValues":{"standard_cell_potential_v":0.1,"transferred_electrons":1}},{"name":"Maximum supported values","initialValues":{"standard_cell_potential_v":1.3,"transferred_electrons":4}}]')}};

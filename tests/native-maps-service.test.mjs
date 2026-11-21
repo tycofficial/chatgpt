@@ -124,20 +124,26 @@ test('a real attached map reader must return the requested identity and cannot c
   assert.equal((await request(switched, '/local/entities/' + knownId)).response.status, 409);
 });
 
-test('the actual original jeQp home/shared query code consumes local service responses and treats unknown entities as 404', async () => {
-  const ranges = [{"id":"ea","file":"async/40409.e01ea662d1.js","start":5184,"end":7482,"sha256":"60e65989366dfa96eb05382028a5e869ffee65f841f5dd17963fc6053e9b61c4"},{"id":"ek","file":"async/40409.e01ea662d1.js","start":16097,"end":16742,"sha256":"08e261b55f9703bdac5f414e644998d3381b2f1310e108ac3cd7abe8b1579a83"}];
-  const original = await fs.readFile(new URL('../original-client/public/chatgpt.com/cdn/assets/async/40409.e01ea662d1.js', import.meta.url), 'utf8');
+test('the actual original sm3b home/shared query code consumes local service responses and treats unknown entities as 404', async () => {
+  const file = 'async/297551.0d77275a5e.js';
+  const ranges = [
+    {"id":"aL","start":28287,"end":30161,"sha256":"14b39c7862bee3524606557051bab3cdfc8e8bef5b9aabc623041f8688f51b94"},
+    {"id":"aM","start":30163,"end":30635,"sha256":"022e4f36d57ed70f0d491166f7746f24f7c676169238f9f3fa4a5f1881d272cf"},
+    {"id":"cb","start":69705,"end":70352,"sha256":"9623db1b4703ba505d1ce889ac28a583ed2af340913f71a2ba5093716683c1f7"},
+  ];
+  const original = await fs.readFile(new URL('../original-client/public/chatgpt.com/cdn/assets/' + file, import.meta.url), 'utf8');
   const env = fixture();
   const calls = [];
   class FetchError extends Error {
     constructor(status) { super('fixture HTTP ' + status); this.status = status; }
   }
   const context = vm.createContext({
-    g: { f: 'account', k: 'user', o: 'authenticated' }, f: { a: 'guest' },
-    X: { a: 'locale' }, O: { c: () => ({}) }, eN: { FetchError },
-    ee: { safeParse: () => { throw Error('No fabricated nearby business should reach parsing'); } },
-    Y: { v: () => { throw Error('No invented nearby business should be normalized'); } },
-    $: { Request: { async safeGet(path, options) {
+    r: { f: 'account', k: 'user', p: 'authenticated' }, s: { a: 'guest' },
+    aI: { a: 'locale' }, R: { c: () => ({}) }, ca: { FetchError },
+    aJ: { a: '/local/home' },
+    aK: { safeParse: () => { throw Error('No fabricated nearby business should reach parsing'); } },
+    aF: { v: () => { throw Error('No invented nearby business should be normalized'); } },
+    aH: { Request: { async safeGet(path, options) {
       calls.push({ path, options });
       const resolved = path.replace('{entity_id}', options.parameters?.path?.entity_id ?? '');
       const actual = await request(env.adapter, resolved);
@@ -149,11 +155,12 @@ test('the actual original jeQp home/shared query code consumes local service res
   for (const range of ranges) {
     const source = original.slice(range.start, range.end);
     assert.equal(createHash('sha256').update(source).digest('hex'), range.sha256);
-    queryDefinitions[range.id] = new vm.Script('(' + source + ')', { filename: range.file + '#' + range.id }).runInContext(context, { timeout: 1000 });
+    queryDefinitions[range.id] = new vm.Script('(' + source + ')', { filename: file + '#' + range.id }).runInContext(context, { timeout: 1000 });
   }
+  context.aM = queryDefinitions.aM;
   const get = key => ({ account: 'neutral-site-account', user: 'neutral-site-user', authenticated: true, guest: false, locale: { locale: 'zh-CN' } })[key];
   const signal = new AbortController().signal;
-  const nativeHome = queryDefinitions.ea('neutral-query-key', { get });
+  const nativeHome = queryDefinitions.aL('neutral-query-key', { get });
   const home = await nativeHome.queryFn({ signal });
   assert.deepEqual(Array.from(home.cards), []);
   assert.deepEqual(Array.from(home.places), []);
@@ -162,13 +169,13 @@ test('the actual original jeQp home/shared query code consumes local service res
   assert.equal(calls[0].options.additionalHeaders['ChatGPT-Account-ID'], 'neutral-site-account');
   assert.equal(calls[0].options.additionalHeaders['oai-language'], 'zh-CN');
   assert.equal(calls.length, 1, 'Empty genuine local suggestions must not trigger translation or recommendation requests');
-  const unknown = queryDefinitions.ek(missingId, { get });
+  const unknown = queryDefinitions.cb(missingId, { get });
   assert.equal(await unknown.queryFn({ signal }), null);
   env.adapter.saveEntityRecord(actualRecord(), actualSource);
-  const saved = await queryDefinitions.ek(knownId, { get }).queryFn({ signal });
+  const saved = await queryDefinitions.cb(knownId, { get }).queryFn({ signal });
   assert.equal(saved.id, knownId);
   assert.equal(saved.entity_lookup_id, knownId);
   const count = calls.length;
-  assert.equal(await queryDefinitions.ek('invalid-id', { get }).queryFn({ signal }), null);
+  assert.equal(await queryDefinitions.cb('invalid-id', { get }).queryFn({ signal }), null);
   assert.equal(calls.length, count, 'Original code rejects malformed entity lookups before requesting');
 });
