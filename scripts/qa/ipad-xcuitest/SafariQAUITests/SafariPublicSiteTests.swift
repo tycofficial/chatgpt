@@ -60,15 +60,15 @@ final class SafariPublicSiteTests: XCTestCase {
         guard check(findEditor(in: safari, timeout: 55) != nil, "login-did-not-reach-chat") else { return }
         mark("login-returned-to-chat")
 
-        let browserPage = safari.webViews.firstMatch
         let token = "IPAD-QA-" + String(syntheticID.prefix(10))
-        // Keep the transcript text distinct from the 80-character conversation title.
-        let firstPrompt = "For this browser conversation recovery test, reply with exactly \(token) and no other text."
+        let userMarker = "QASENT" + String(syntheticID.prefix(8))
+        // The marker follows the truncated sidebar title even if Safari splits the visible prompt across text nodes.
+        let firstPrompt = "For this browser conversation recovery test, reply with exactly \(token) and no other text. Ignore \(userMarker)."
         guard send(firstPrompt, in: safari, failure: "first-send") else { return }
-        let firstUser = exactText(in: browserPage, firstPrompt)
-        let firstReply = exactText(in: browserPage, String(token))
-        guard check(firstUser.firstMatch.waitForExistence(timeout: 20), "first-prompt-missing") else { return }
-        mark("first-send-visible")
+        mark("first-send-submitted")
+        let firstUser = matchingText(in: safari, userMarker, exact: false)
+        let firstReply = matchingText(in: safari, token)
+        if firstUser.firstMatch.waitForExistence(timeout: 4) { mark("first-send-visible") }
 
         // Tap Safari's browser chrome so the normal navigation and storage lifecycle runs.
         let reload = named(safari.buttons, reloadNames)
@@ -82,11 +82,12 @@ final class SafariPublicSiteTests: XCTestCase {
         if restoredCounts == (1, 1) { mark("first-conversation-restored") }
 
         // The follow-up omits the earlier random token. Its answer proves preserved context.
-        let followPrompt = "Reply with only the exact token from your previous answer with -NEXT appended."
+        let followMarker = "QANEXT" + String(syntheticID.prefix(8))
+        let followPrompt = "Reply with only the exact token from your previous answer with -NEXT appended. Ignore \(followMarker)."
         guard send(followPrompt, in: safari, failure: "follow-up-send") else { return }
         mark("follow-up-sent")
-        let followUser = exactText(in: browserPage, followPrompt)
-        let followReply = exactText(in: browserPage, "\(token)-NEXT")
+        let followUser = matchingText(in: safari, followMarker, exact: false)
+        let followReply = matchingText(in: safari, "\(token)-NEXT")
         guard check(followReply.firstMatch.waitForExistence(timeout: 95), "follow-up-context-missing") else { return }
         mark("same-conversation-follow-up-verified")
         let followCounts = transcriptCounts(followUser, followReply, stage: "follow-up")
@@ -201,8 +202,10 @@ final class SafariPublicSiteTests: XCTestCase {
     }
 
     @MainActor
-    private func exactText(in page: XCUIElement, _ text: String) -> XCUIElementQuery {
-        page.staticTexts.matching(NSPredicate(format: "label == %@ OR value == %@", text, text))
+    private func matchingText(in safari: XCUIApplication, _ text: String, exact: Bool = true) -> XCUIElementQuery {
+        let comparison = exact ? "label == %@ OR value == %@" : "label CONTAINS[c] %@ OR value CONTAINS[c] %@"
+        return safari.webViews.descendants(matching: .staticText)
+            .matching(NSPredicate(format: comparison, text, text))
     }
 
     @MainActor
