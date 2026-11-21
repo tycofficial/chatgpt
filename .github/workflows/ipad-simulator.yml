@@ -25,20 +25,42 @@ jobs:
           xcodebuild -version
           xcrun simctl list devices available -j | node scripts/qa/ipad-simulator.mjs select-device >> "$GITHUB_ENV"
 
-      - name: Install Appium and its XCUITest driver
+      - name: Install and enable Safari WebDriver
+        timeout-minutes: 5
         run: |
           node --version
           npm --version
           export APPIUM_HOME="$RUNNER_TEMP/ipad-appium-home"
           cd "$RUNNER_TEMP"
           npm install --prefix "$RUNNER_TEMP/ipad-appium" --no-audit --no-fund appium@4.0.0
-          "$RUNNER_TEMP/ipad-appium/node_modules/.bin/appium" driver install xcuitest@13.5.0
+          "$RUNNER_TEMP/ipad-appium/node_modules/.bin/appium" driver install safari@6.0.4
+          "$RUNNER_TEMP/ipad-appium/node_modules/.bin/appium" driver list --installed
+          sudo -n /usr/bin/safaridriver --enable
+
+      - name: Boot the selected iPad Simulator
+        timeout-minutes: 8
+        run: |
+          xcrun simctl bootstatus "$IPAD_UDID" -b
+          xcrun simctl list devices booted
 
       - name: Verify the public site in simulator Safari
+        timeout-minutes: 10
         run: |
           export APPIUM_HOME="$RUNNER_TEMP/ipad-appium-home"
-          xcrun simctl bootstatus "$IPAD_UDID" -b
-          "$RUNNER_TEMP/ipad-appium/node_modules/.bin/appium" server --address 127.0.0.1 --port 4723 --log-level warn > "$RUNNER_TEMP/ipad-appium.log" 2>&1 &
+          export IPAD_SESSION_READY_MARKER="$RUNNER_TEMP/ipad-safari-session-ready"
+          appium_log="$RUNNER_TEMP/ipad-appium.log"
+          "$RUNNER_TEMP/ipad-appium/node_modules/.bin/appium" server --address 127.0.0.1 --port 4723 --log-no-colors --log-level info > "$appium_log" 2>&1 &
           appium_pid=$!
-          trap 'kill "$appium_pid" 2>/dev/null || true' EXIT
+          cleanup() {
+            local status=$?
+            kill "$appium_pid" 2>/dev/null || true
+            # Startup logs precede every account/form command. Later failures use
+            # the script's structured phases because driver logs may contain inputs.
+            if [[ "$status" != 0 && ! -e "$IPAD_SESSION_READY_MARKER" ]]; then
+              echo '::group::Safari WebDriver startup log'
+              tail -n 120 "$appium_log" || true
+              echo '::endgroup::'
+            fi
+          }
+          trap cleanup EXIT
           node scripts/qa/ipad-simulator.mjs
