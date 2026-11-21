@@ -74,7 +74,17 @@ jobs:
       - name: Exercise Safari using Apple XCTest UI automation
         timeout-minutes: 11
         run: |
-          xcrun simctl openurl "$IPAD_UDID" 'https://tycofficial.github.io/chatgpt/auth/login/'
+          login_url='https://tycofficial.github.io/chatgpt/auth/login/'
+          for attempt in 1 2 3; do
+            if xcrun simctl openurl "$IPAD_UDID" "$login_url"; then
+              break
+            fi
+            if [[ "$attempt" == 3 ]]; then
+              echo '::error::The booted iPad simulator could not open the public login URL.'
+              exit 1
+            fi
+            sleep 4
+          done
           # XCTest may include form values in raw diagnostics or attachments.
           # Only fixed phase tags and numeric counts leave the runner.
           umask 077
