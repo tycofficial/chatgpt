@@ -1,4 +1,4 @@
-name: Inspect the actual browser Codex inference receipt
+name: Compare several real browser Codex response boundaries
 on:
   push:
     branches: [qa/codex-public-summary-heading]
@@ -7,7 +7,7 @@ permissions:
 jobs:
   codex:
     runs-on: windows-2025
-    timeout-minutes: 8
+    timeout-minutes: 10
     defaults:
       run:
         shell: bash
@@ -53,9 +53,6 @@ jobs:
           assert.equal(trial.user?.siteTrial?.tier, 'pro');
           stage('activated-a-normal-site-pro-trial');
 
-          const browser = await chromium.launch({ channel: 'msedge', headless: true });
-          const inference = [], errors = [];
-          let observedId;
           const itemHash = id => id ? createHash('sha256').update(id).digest('hex').slice(0, 7) : null;
           const texts = new Map();
           const patches = [];
@@ -126,95 +123,54 @@ jobs:
             console.log('Codex receipt transitions ' + JSON.stringify({ status,state,output:statusCounts,events,patches }));
           }
 
-          const isModel = request => request.method() === 'POST' && request.url() === API + '/inference/v1/responses';
+          const creationCount = 3;
+          const browser = await chromium.launch({ channel: 'msedge', headless: true });
+          const known = [];
           try {
-            const context = await browser.newContext({ locale:'zh-CN' });
-            const page = await context.newPage();
-            page.on('request', request => {
-              if (!isModel(request)) return;
-              observedId = request.headers()['x-chat-request-id'];
-              const body = request.postDataJSON();
-              inference.push({ model: body?.model, effort:body?.reasoning?.effort, tier:body?.service_tier,
-                python:body?.tools?.some(tool => (tool.name ?? tool.function?.name) === 'python') });
-            });
-            page.on('pageerror', error => { if (errors.length < 10) errors.push(error.name); });
-            try {
-              await page.goto(new URL('auth/login/',home).href,{waitUntil:'domcontentloaded',timeout:40000});
-              await page.locator('#site-username').fill(username);
-              await page.locator('#site-password').fill(password);
-              const [reply] = await Promise.all([
-                page.waitForResponse(r=>r.url()===API+'/auth/login'&&r.request().method()==='POST',{timeout:35000}),
-                page.getByRole('button',{name:'继续',exact:true}).click(),
-              ]);
-              assert.equal(reply.status(),200);
-              await page.waitForURL(url=>url.origin===home.origin&&url.pathname===home.pathname,{timeout:40000});
-              const plan = await page.evaluate(async release => {
-                const a = await import('./native-client/site-account.mjs?v=' + release);
-                return (a.getSiteAccount() ?? await a.refreshSiteAccount())?.planType;
-              }, RELEASE);
-              assert.equal(plan,'pro');
-              await page.waitForFunction(release=>window.__CHATGPT_REPLICA_ENV__?.release===release, RELEASE,{timeout:30000});
-              await page.waitForFunction(()=>Array.isArray(window.__originalClientProbe),undefined,{timeout:30000});
-              const relevantControls = () => page.evaluate(() => [...document.querySelectorAll('button, a, [role="menuitem"], [role="tab"]')]
-                .filter(node => node.getClientRects().length)
-                .map(node => ({tag:node.tagName, role:node.getAttribute('role'), name:node.innerText?.trim().slice(0,70),
-                  label:node.getAttribute('aria-label'), title:node.getAttribute('title'), testId:node.getAttribute('data-testid')}))
-                .filter(x => x.name || x.label || x.title || x.testId).slice(0,90));
-              await page.getByRole('button',{name:/探索|Explore/i}).first().waitFor({state:'visible',timeout:25000});
-              const codexName = /^(?:(?:进入|切换至|切换到|打开|前往)\s*)?Codex(?:\s*模式)?$/i;
-              const choice = page.getByRole('button',{name:codexName})
-                .or(page.getByRole('link',{name:codexName}))
-                .or(page.getByRole('menuitem',{name:codexName}))
-                .or(page.getByRole('tab',{name:codexName})).filter({visible:true});
-              let selected = choice.first();
-              if (!(await selected.isVisible())) {
-                stage('home-visible-controls', await relevantControls());
-                const trigger = page.getByRole('button',{name:/^(?:探索|Explore)$/i}).filter({visible:true}).first();
-                if (await trigger.isVisible()) await trigger.click();
-                selected = choice.first();
-                await selected.waitFor({state:'visible',timeout:10000}).catch(async error => {
-                  stage('available-mode-controls', await relevantControls());
-                  throw error;
-                });
-              }
-              await selected.click();
-              await page.waitForFunction(() =>
-                (history.state?.usr?.sidebarProductMode ?? history.state?.sidebarProductMode) === 'codex',
-                undefined,{timeout:17000});
-              stage('selected-codex-in-the-original-home-interface');
-              const composer = page.locator('main #prompt-textarea[contenteditable="true"], main .ProseMirror[contenteditable="true"], main textarea:not([disabled]), [data-testid="codex-composer"] [contenteditable="true"], textarea:not([disabled]), [role="textbox"][contenteditable="true"]').filter({visible:true}).first();
-              await composer.waitFor({state:'visible',timeout:28000});
-              stage('opened-the-codex-composer-without-selecting-a-project');
-              async function send(prompt) {
-                await composer.click();
-                await page.keyboard.insertText(prompt);
-                const sendButton = page.locator('#composer-submit-button, button[data-testid="send-button"], button[data-testid="composer-submit-button"], button[aria-label="发送"], button[aria-label="发送消息"], button[aria-label="发送提示"], button[aria-label="Send message"], button[aria-label="Send prompt"]')
-                  .filter({visible:true}).first();
-                const click = await sendButton.isVisible() && await sendButton.isEnabled();
-                await Promise.all([
-                  page.waitForRequest(isModel,{timeout:58000}),
-                  click ? sendButton.click({timeout:15000}) : composer.press('Enter',{timeout:15000}),
+            for (let run = 0; run < creationCount; run++) {
+              const context = await browser.newContext({ locale:'zh-CN' });
+              try {
+                const page = await context.newPage();
+                const firstPrompt = run === 0 ? query : '先在对话里简短说明会做什么，再真正调用工具。' + query + ' 新检查 ' + run + '。';
+                const isModel = r => r.method()==='POST'&&r.url()===API+'/inference/v1/responses';
+                await page.goto(new URL('auth/login/',home).href,{waitUntil:'domcontentloaded',timeout:40000});
+                await page.locator('#site-username').fill(username);
+                await page.locator('#site-password').fill(password);
+                const [reply] = await Promise.all([
+                  page.waitForResponse(r=>r.url()===API+'/auth/login'&&r.request().method()==='POST',{timeout:35000}),
+                  page.getByRole('button',{name:'继续',exact:true}).click(),
                 ]);
-              }
-              await send(query);
-              stage('first-model-request');
-              await traceReceipt(assigned.token, observedId);
-              const [logout] = await Promise.all([
-                page.waitForResponse(r=>r.url()===API+'/auth/logout'&&r.request().method()==='POST',{timeout:22000}),
-                page.goto(new URL('auth/logout/',home).href,{waitUntil:'domcontentloaded',timeout:30000}),
-              ]);
-              assert.ok(logout.ok());
-              await page.waitForURL(u=>u.origin===home.origin&&u.pathname===home.pathname,{timeout:22000});
-              stage('signed-out-on-original-base-path');
-            } finally {
-              const details = await page.evaluate(({sample})=>({
-                mode:history.state?.usr?.sidebarProductMode ?? history.state?.sidebarProductMode ?? null,
-                path:location.pathname.replace(/(\/(?:c|t)\/)[^/]+/,'$1<thread>'),
-                release:window.__CHATGPT_REPLICA_ENV__?.release,
-                text:document.body?.innerText.replaceAll(sample,'<qa-token>').slice(0,360),
-                editors:[...document.querySelectorAll('textarea,[contenteditable="true"]')].slice(0,10).map(el=>[el.id,el.getAttribute('placeholder'),el.getAttribute('data-testid')]),
-              }),{sample}).catch(()=>null);
-              stage('details',{details,inference,errors});
+                assert.equal(reply.status(),200);
+                await page.waitForURL(url=>url.origin===home.origin&&url.pathname===home.pathname,{timeout:40000});
+                await page.waitForFunction(release=>window.__CHATGPT_REPLICA_ENV__?.release===release, RELEASE,{timeout:30000});
+                const next = page.getByRole('button',{name:/^(?:探索|Explore)$/i}).filter({visible:true}).first();
+                await next.click({timeout:30000});
+                await page.getByRole('button',{name:/^Codex$/i}).or(page.getByRole('link',{name:/^Codex$/i})).or(page.getByRole('menuitem',{name:/^Codex$/i})).or(page.getByRole('tab',{name:/^Codex$/i})).filter({visible:true}).first().click({timeout:16000});
+                await page.waitForFunction(() => history.state?.usr?.sidebarProductMode==='codex', undefined, {timeout:16000});
+                const composer = page.locator('main #prompt-textarea[contenteditable="true"], main .ProseMirror[contenteditable="true"], main textarea:not([disabled]), [data-testid="codex-composer"] [contenteditable="true"], textarea:not([disabled]), [role="textbox"][contenteditable="true"]').filter({visible:true}).first();
+                await composer.click({timeout:28000});
+                await page.keyboard.insertText(firstPrompt);
+                const button = page.locator('#composer-submit-button, button[data-testid="send-button"], button[data-testid="composer-submit-button"], button[aria-label="发送"], button[aria-label="发送消息"], button[aria-label="发送提示"], button[aria-label="Send message"], button[aria-label="Send prompt"]').filter({visible:true}).first();
+                const [sent] = await Promise.all([page.waitForRequest(isModel,{timeout:48000}),await button.isVisible() && await button.isEnabled() ? button.click() : composer.press('Enter')]);
+                await traceReceipt(assigned.token,sent.headers()['x-chat-request-id']);
+                const madeProgress = await page.waitForFunction(() => {
+                  if (document.body?.innerText?.includes('Gateway replaced already streamed assistant text')) return 'prefix-error';
+                  for (const key of Object.keys(localStorage).filter(k=>k.includes('cg-original-app-server:v1:account:'))) {
+                    for (const thread of JSON.parse(localStorage.getItem(key)).threads) {
+                      if (location.pathname.split('/').filter(Boolean).at(-1)!==thread.id) continue;
+                      const turn=thread.turns.at(-1);
+                      if (turn?.items.some(item=>item.type==='mcpToolCall'&&item.tool==='python')) return 'python-tool';
+                      if (['failed','interrupted'].includes(turn?.status)) return turn.status;
+                    }
+                  }
+                  return null;
+                },undefined,{timeout:22000}).then(handle=>handle.jsonValue()).catch(()=>null);
+                known.push({run,madeProgress});
+                console.log('Codex production projection ' + JSON.stringify({ run,madeProgress }));
+              } catch (error) {
+                console.log('Codex trace control ' + JSON.stringify({run,error:error.name,message:error.message.slice(0,170)}));
+              } finally { await context.close(); }
+              if (known.at(-1)?.madeProgress==='prefix-error') break;
             }
           } finally { await browser.close(); }
           NODE
