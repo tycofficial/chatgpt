@@ -1,6 +1,6 @@
 {
   "sourceBuild": "b6348792a294e8e04a67660959ba41914937938f",
-  "release": "dee4682939543502",
+  "release": "b12212a94966c6ff",
   "deploymentBase": "/chatgpt/",
   "preservedRegistrationEntry": "./entry-library.mjs?v=5c7eb02b441bce39",
   "builderSha256": "5cdd09b640a00651d52177264812fbdd891ffcc28feacc6923df4a77df23d333",
@@ -1374,12 +1374,12 @@
     {
       "file": "boot-adapter.mjs",
       "inputSha256": "60cfb8550e4676d1ed2b303be472635300b9747293dc5b45d52a3b08e34b7e71",
-      "publishedSha256": "badfa91a79e38c6a8cee00a3ed049d0de1d6177cb755a58934efc4c5b2b500c1"
+      "publishedSha256": "46eeb781157d4ddc98a19183a737f331593f139e68375ed8eae1115e8cd6399f"
     },
     {
       "file": "startup-compatibility.mjs",
       "inputSha256": "361894aefa22a9d2baf67eab4b7bcf568a7e57a87fc51fbf58190f0d96b4f374",
-      "publishedSha256": "1a509ea5ed33bd04cc560b8025b14857f0798235d6967210afed30c7bf5b066e"
+      "publishedSha256": "685dec698502a47c54bdc4da4a0a81aec8df002f13cb2534c8f43367970ac0df"
     },
     {
       "file": "image-input-compression.mjs",
@@ -1389,7 +1389,7 @@
     {
       "file": "service-boundary.mjs",
       "inputSha256": "b1dbb9f6ac3703b5c0026a636e87dd7f09811d17f24de50cd1c7eb7133fd7fea",
-      "publishedSha256": "c15c89f69262ad056a133aebfdb981698605de280afcfc150d8add30310c2c1a"
+      "publishedSha256": "971c0ccf8bef0ba1254335d693725641eee819d83b9b3b635186dd0bfc7a707e"
     },
     {
       "file": "provider-routing.mjs",
@@ -1414,7 +1414,7 @@
     {
       "file": "synthetic-bootstrap.mjs",
       "inputSha256": "f860bf34398db1f9171ba844e0663de3bec081b60e005eadbb0ffc54bfc3f2cf",
-      "publishedSha256": "322c3a4158521ddc3cd83aecce45cc76b65a7d59d834bb453619f7b2523b91fc"
+      "publishedSha256": "90b43985d0684b4c54026991ef9d957a1b953edcf98fc6de7ce5e985fc4c0e97"
     },
     {
       "file": "public-auth-envelope.mjs",
@@ -1424,7 +1424,7 @@
     {
       "file": "local-identity.mjs",
       "inputSha256": "c9fd2fa9a234515ca9aca15b7527f374731a51d25a6fa5f9a0b567b1ac71994e",
-      "publishedSha256": "edcf679709b5fd0b7ed00943fb96698c5479483929c1e689e7a2a05206f12f44"
+      "publishedSha256": "0473b37455c167b0a59719cf25ffae858531f4492498fb96b1e554b4882322a4"
     },
     {
       "file": "local-token-identity.mjs",
@@ -1434,12 +1434,12 @@
     {
       "file": "site-account.mjs",
       "inputSha256": "7c6948715164c236e5d93dd51063b898c4bfa19accb4aaadbaf59ff8a25581ac",
-      "publishedSha256": "df702248a75f27bad0445442d991ae6f997d5ed12d4cfa821eaeb9fccb2eab89"
+      "publishedSha256": "9b55ccb214480656ba4ffc36c78de2593bb3dc4d9ba66b5596cbdad5b0f0afc3"
     },
     {
       "file": "chat-history-sync.mjs",
-      "inputSha256": "ce067f702f93fcf9b0f5794dfb6f3fd3cb79839c783d39ba3bacb321065db5b3",
-      "publishedSha256": "b33aa85df4013670ef274caaa514851ad722b0d9f56fdd94f10aa1ab4fb99702"
+      "inputSha256": "62def6aa30d126215ef4744f6cdb6bcb3bd0b39487cb3bd8cbdc535368e853bc",
+      "publishedSha256": "134f55db1e878291a37e087f6420147a8287db5a5c38260f0a2ab5ccf88c6200"
     },
     {
       "file": "account-history-coordinator.mjs",
@@ -1459,12 +1459,12 @@
     {
       "file": "local-configuration.mjs",
       "inputSha256": "dee39f2d8e6618eb7eecb24edecbfb363a39108bd2c58a2295af723bd7579fe3",
-      "publishedSha256": "340a63f20a5ea976fe7679eb628376a4146eaf0426826bae1da71fa58691967b"
+      "publishedSha256": "1d6007a515a51674c82fb7c4bf97c4fe9017e004e911ad9e7f813f561222d435"
     },
     {
       "file": "local-user-preferences.mjs",
       "inputSha256": "efa3b14a28c8e7ae6cd1cb82519630f2dda357400ebc31ab414bc04f1822e811",
-      "publishedSha256": "529e88506c3a47600519dfc9e9afdf33129a59d35bf07d081be6551cfe7eaa88"
+      "publishedSha256": "2d60251ea3bf6937074d36eab991139971a887d865ea9a57abf8a50df60842c9"
     },
     {
       "file": "local-personalization-service.mjs",
@@ -1474,7 +1474,7 @@
     {
       "file": "local-personalization-context.mjs",
       "inputSha256": "ca0a616e1d0eefbee08c29659b2fdf6192557861c7f8e9ae5f4ebdfc5dd39dd1",
-      "publishedSha256": "0f520a01d9f03a98e90128a5216124bd0c3e5c16b5134dbd8167f097b78959d4"
+      "publishedSha256": "23a8c3735563f8c95cd1ce3287d06bf2500c62a74ae7388b1202d9bf284f3bcd"
     },
     {
       "file": "local-host-settings.mjs",
@@ -1489,12 +1489,12 @@
     {
       "file": "local-codex-adapter.mjs",
       "inputSha256": "0b0666f5456c3f52d1ca87906dacb2311b5788a8d12619b2ebeca56f91e92cd2",
-      "publishedSha256": "d861f5a46ad48bcaf365b8e5708b03f2b1ba4d035f48b227a39450375414a65a"
+      "publishedSha256": "f15042b801a5c36efb38b5cb020940cf45c8650298ef5a5b2349dcdc499f791b"
     },
     {
       "file": "local-dot-adapter.mjs",
       "inputSha256": "f913ffce39c24d724b8c945b1b79fe56dab65c707da3afc55d79064d4d3bb90d",
-      "publishedSha256": "540b60e4f19bedb0e78f70e2c05c47dc4496c671080a086038b814e6f5688b9b"
+      "publishedSha256": "77bb7c8da420617396b467f3ba00423622fe4ae0d6ef4110871b5bbcabc76929"
     },
     {
       "file": "local-map-provider.mjs",
@@ -1509,7 +1509,7 @@
     {
       "file": "local-discovery.mjs",
       "inputSha256": "fa5d28147cf1b54e308a8c91bc3a3e183d759b7bdb8abfac95cd3fd99daeac1a",
-      "publishedSha256": "356f6268211b7254c288c411bbe0813a3ac995c53384bf7df2be8526c8f6f8d4"
+      "publishedSha256": "51313ae7cf6f3f9d72ead7f2899dfc8692a12db58ad7ca2a8fe78af119b2c1bb"
     },
     {
       "file": "public-plugin-catalog.mjs",
@@ -1529,12 +1529,12 @@
     {
       "file": "local-app-server.mjs",
       "inputSha256": "ad9fdbcd43582a88dac7afc50d08b65c7b590d3523821f1062d841b65859e86b",
-      "publishedSha256": "66f468aee236ec66723a838457964ed900e139d1a7332f2d835a0afeae9fb1d6"
+      "publishedSha256": "6d68084811b5aeca62afb4c26f6606701bbb2a1faac1c1ad1b381fb66807fe6b"
     },
     {
       "file": "classic-chat-adapter.mjs",
       "inputSha256": "1ee61435e1885e3ef3c286b87d9e9d6af41a228a3f94f0223ae66fa3b1cd8530",
-      "publishedSha256": "2095533b18cbb220a9065928554699162799a23f071e893f5f12e575723a161a"
+      "publishedSha256": "ff525d80487947e764bc363a468566298dd898bafa9ee6f5c49ded78faa588da"
     },
     {
       "file": "portable-conversation-share.mjs",
@@ -1554,12 +1554,12 @@
     {
       "file": "agent-turn-runner.mjs",
       "inputSha256": "f2f378bd56fefefba0578847dba8fcfda5507b8e868ce5f1acf8535e12b2bda2",
-      "publishedSha256": "5bcc2244b087d887d3d7693946cebfce8dafab44eda85dbccd9bd5b7686f10da"
+      "publishedSha256": "c14dc659360e822b71fcfca35a54fcc863dbd36eae0a168bcf1187b0348321c9"
     },
     {
       "file": "site-ultra-orchestrator.mjs",
       "inputSha256": "05f369e035dee2fd96bb54bc8487ce7ec27b0075a39833f1d67b9edbe57a742f",
-      "publishedSha256": "2d0333ab8fa95282e05eb83e3cb5a95e934c84dd982feec75dfe7708d11a69d9"
+      "publishedSha256": "b8af4a274875ec57eebf4c76536d61dcdc1133db6e89f0a4bb822301bd80f60f"
     },
     {
       "file": "browser-tool-executor.mjs",
@@ -1574,7 +1574,7 @@
     {
       "file": "document-text-worker.mjs",
       "inputSha256": "6169ece3e37f4c9f6068f1d4e797d0e6ea01fc1cabcb8f92d4c250f7dc62b340",
-      "publishedSha256": "2c5b7d79c79a83ad8fc2699c539044cd0afdfc00365eeb972fbf0ac1299cdcc0"
+      "publishedSha256": "707bcd60acb578c66aff41bfcc39d7baf690e2aca7f20e49843b1f6ac7de9251"
     },
     {
       "file": "local-ooxml-container.mjs",
@@ -1584,22 +1584,22 @@
     {
       "file": "local-office-xml.mjs",
       "inputSha256": "4d648d7ee9dd653c137b622ed449a4b70f1f650511415e959a5896e3e53d9aca",
-      "publishedSha256": "f9673d6a2ef31c4bd37df3180dc742049b4ea6a76bbd071b78582644e3309a29"
+      "publishedSha256": "ccefcb7a4281bf19229cdd6fa31ccafa14ca947d6a46bdafadcf9e6824a77bca"
     },
     {
       "file": "local-xlsx-extraction.mjs",
       "inputSha256": "d0bdcbdff61649b6ddef332f98db88ec2b11d2735e1bcf1bc0c4a83c969c2354",
-      "publishedSha256": "3c409805e277d99da5c78b0a73e8fb355b3d05d361eae9eebb5b73a8eef235e3"
+      "publishedSha256": "22c8046b3c3260e2d0e90bd9ca40aed2961abda77f3fada5e64fdcb31978cbe9"
     },
     {
       "file": "local-pptx-extraction.mjs",
       "inputSha256": "8d977f5e731f9236fd18a60d205ca5c4d4d737700de25e5402db90f755303bdd",
-      "publishedSha256": "732a3e7c82b150c6c259e40e2120b186230e72339749f59d704e5623e3c8b9cb"
+      "publishedSha256": "b1f2d9f95b75d85fe6b786c956053fb24663749cc6198c8eb1f1e55bee838988"
     },
     {
       "file": "local-files-service.mjs",
       "inputSha256": "81635ddedb061cc1bb89387e9aa3a434a6c6c1412f759319e147a91710c2b696",
-      "publishedSha256": "2c4bd22da755046f62b77bd094a27a0e8c59bac7d5127009056d8b57801dc2bb"
+      "publishedSha256": "0f7258f388f51e1f1e3f68472ae805f30d004a89cc71e3c222fb64d1c4c45570"
     },
     {
       "file": "local-library-service.mjs",
@@ -1609,7 +1609,7 @@
     {
       "file": "local-library-publisher.mjs",
       "inputSha256": "aabf6f5ee250122eba1740824118812e09f712241e4817b35251360be9be893c",
-      "publishedSha256": "d37f3c51282bc3c5ee516adc5f798a76aad985251991ea9303ff695a11e82973"
+      "publishedSha256": "5b8ea8009810b48550bace34aeb96184d755b33f3a759392d4a22cf9a1f11332"
     },
     {
       "file": "published-resource-rehydration.mjs",
@@ -1639,7 +1639,7 @@
     {
       "file": "local-native-upload.mjs",
       "inputSha256": "4686c5128e7d42671741cdb9a81ffb19294eed31d39a4d0b67423591d684d73f",
-      "publishedSha256": "865d12e29db8544ca4d3de37bc5272df2ffc61ceb9b94d5b5df64f45ca958c2a"
+      "publishedSha256": "9f43684060c8814a77347cb646db036cb2c8ce8a14aa467105863d4b9680de42"
     },
     {
       "file": "local-native-download.mjs",
@@ -1669,7 +1669,7 @@
     {
       "file": "local-pricing.mjs",
       "inputSha256": "2230e6896b0cd42f545251a6eb2eb8a3c2dabbf48682b41eaa27a2966485ee39",
-      "publishedSha256": "d72f7131fd28a044e82970718beb675c8005cff8d174644078199e0de01d89c1"
+      "publishedSha256": "f8cfc627b27c006bc3e99f2c35d5bbfe902189e3e09816713e0b0946f0956e47"
     },
     {
       "file": "entry-library.mjs",
@@ -1679,17 +1679,17 @@
     {
       "file": "native-pricing-trials.mjs",
       "inputSha256": "20371cb376971d2eb543d761fe68012bfb7eabd9d9979d2ada80f44d4f4b072d",
-      "publishedSha256": "8c3e143455eb5b8d096106547bd916cb2b4f4836b453dc52af1e609a5d95ca8b"
+      "publishedSha256": "d77e82e419181e4672812fcef255c46daeca7faf141ee2a6fba1627c9615360a"
     },
     {
       "file": "site-signout.mjs",
       "inputSha256": "335166f7b0187eadcdad4d3395ea6d7aad569cff8f5da066141c7b56790bd47b",
-      "publishedSha256": "5b313060d45906c3aa99583afedea73e01c3d5dc51601edab9418d8a8352b228"
+      "publishedSha256": "659f4779e66f4d5eafcf4dc53c9177b32eb5774f422062a415b28d293e70a08e"
     },
     {
       "file": "native-site-login.mjs",
       "inputSha256": "734b9a3129adb0d954aa33d75576d2067b4e2a454109d3adfbf2f2feae63da1f",
-      "publishedSha256": "48bff97d1a9e09cf53e8f666d97be6600a73e7355aaf857019775eba53c11ec3"
+      "publishedSha256": "88a9e553e8b82c7ca1d3d249a025aded404a6938d1510205fd73982ddfdffae8"
     },
     {
       "file": "site-paths.mjs",
@@ -1709,7 +1709,7 @@
     {
       "file": "local-dot-browser-voice.mjs",
       "inputSha256": "f8cee0784784c6e4b295e5f308fd726341fd987aa8df6ed94da8e377dfce05de",
-      "publishedSha256": "2ed380d056940eb9298d962a9a325d7f8f534856b6e58c5bb56e33b5a6851932"
+      "publishedSha256": "fcb4e26691482ccefadcaabf592846b6f2aed74ce96bee3879414029507278bd"
     },
     {
       "file": "local-dot-transcription.mjs",

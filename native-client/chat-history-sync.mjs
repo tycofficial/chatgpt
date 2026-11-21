@@ -1,5 +1,5 @@
 /** Account-owned text history sync. No model transport or executable remote checkpoint. */
-import { isSiteInferenceCheckpoint } from './site-inference-transport.mjs?v=dee4682939543502';
+import { isSiteInferenceCheckpoint } from './site-inference-transport.mjs?v=b12212a94966c6ff';
 
 export const CHAT_HISTORY_SYNC_SCHEMA = 1;
 export const CHAT_HISTORY_SYNC_LIMITS = Object.freeze({ documentBytes: 1_000_000, pageSize: 100, flushMutations: 40, queuedMutations: 2000, threads: 2000, requestTimeoutMs: 15000 });
@@ -162,7 +162,7 @@ function unfinishedTurnView(turn) {
   const { adapterMetadata, completedAt, durationMs, items, ...fields } = turn;
   const { interruption, reasoningLifecycle, apiTranscript, ...metadata } = adapterMetadata;
   if (reasoningLifecycle) {
-    const { completedAtMs, workDurationMs, ...clock } = reasoningLifecycle;
+    const { completedAtMs, workDurationMs, attemptDurationMs, ...clock } = reasoningLifecycle;
     metadata.reasoningLifecycle = clock;
   }
   return { ...fields, adapterMetadata: metadata, items: items.map(item => {
@@ -175,7 +175,7 @@ function unfinishedTurnView(turn) {
 function followsLocalRecovery(head, document, original, ownerId) {
   const latest = original?.turns.at(-1), local = latest?.adapterMetadata;
   const transport = local?.checkpoint?.inFlight?.transport;
-  if (latest?.status !== 'interrupted' || local?.resumePolicy !== 'automatic' || local.resumable !== true ||
+  if (!['interrupted', 'inProgress'].includes(latest?.status) || local?.resumePolicy !== 'automatic' || local.resumable !== true ||
       !isSiteInferenceCheckpoint(transport) || transport.ownerId !== ownerId) return false;
   const { turns: earlier, updatedAt: oldUpdate, recencyAt: oldRecency, ...oldThread } = head;
   const { turns: current, updatedAt, recencyAt, ...currentThread } = document;

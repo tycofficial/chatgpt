@@ -1,18 +1,18 @@
-import { installBrowserCompatibility, installDirectAssetHost, registerOptionalAssetWorker, showStartupError } from './startup-compatibility.mjs?v=dee4682939543502';
+import { installBrowserCompatibility, installDirectAssetHost, registerOptionalAssetWorker, showStartupError } from './startup-compatibility.mjs?v=b12212a94966c6ff';
 try {
 const rootURL = new URL('../', import.meta.url);
 document.documentElement.dataset.routerBasename = rootURL.pathname.replace(/\/$/, '') || '/';
 await installBrowserCompatibility();
 const releaseFetch = globalThis.fetch.bind(globalThis);
-globalThis.__CHATGPT_REPLICA_ENV__ = Object.freeze({basePath:rootURL.pathname,localIdentity:true,useOriginalAuth:true,siteAccountService:true,preferredHostEnabled:true,directAssetHost:true,release:"dee4682939543502",sourceBuild:"b6348792a294e8e04a67660959ba41914937938f"});
-const workerURL = new URL('native-client-worker.js?v='+"dee4682939543502", rootURL);
+globalThis.__CHATGPT_REPLICA_ENV__ = Object.freeze({basePath:rootURL.pathname,localIdentity:true,useOriginalAuth:true,siteAccountService:true,preferredHostEnabled:true,directAssetHost:true,release:"b12212a94966c6ff",sourceBuild:"b6348792a294e8e04a67660959ba41914937938f"});
+const workerURL = new URL('native-client-worker.js?v='+"b12212a94966c6ff", rootURL);
 installDirectAssetHost(rootURL, { fetchImpl: releaseFetch });
 // Storage-backed hosting is optional; import maps host the original modules.
 void registerOptionalAssetWorker(workerURL, rootURL.pathname);
 const [siteAccount, signOut, {getSiteAuthEntryKind}] = await Promise.all([
- import('./site-account.mjs?v='+"dee4682939543502"),
- import('./site-signout.mjs?v='+"dee4682939543502"),
- import('./site-paths.mjs?v='+"dee4682939543502"),
+ import('./site-account.mjs?v='+"b12212a94966c6ff"),
+ import('./site-signout.mjs?v='+"b12212a94966c6ff"),
+ import('./site-paths.mjs?v='+"b12212a94966c6ff"),
 ]);
 signOut.installSiteSignOutRestore({home:()=>rootURL});
 let isBusy;
@@ -28,17 +28,17 @@ if (authEntry === 'logout') {
 }
 else {
  if (/\/(?:site-plans(?:\/index\.html)?|plans|pricing-plan|purchase\/[^/]+)$/.test(pagePath)) {
-   const pricing = await import('./native-pricing-trials.mjs?v='+"dee4682939543502");
+   const pricing = await import('./native-pricing-trials.mjs?v='+"b12212a94966c6ff");
    pricing.normalizeLegacyPricingEntry();
  }
  await siteAccount.initializeSiteAccountForDisplay();
- await import('./boot-adapter.mjs?v='+"dee4682939543502");
- const {localAppServer} = await import('./service-boundary.mjs?v='+"dee4682939543502");
+ await import('./boot-adapter.mjs?v='+"b12212a94966c6ff");
+ const {localAppServer} = await import('./service-boundary.mjs?v='+"b12212a94966c6ff");
  isBusy = () => localAppServer.running.size>0 || Boolean(document.querySelector('[aria-busy="true"]'));
 }
 if (isBusy) {
-const {createReleaseUpdater} = await import('../release-updater.js?v='+"dee4682939543502");
-const updater = createReleaseUpdater({currentRelease:"dee4682939543502",baseURL:rootURL,fetchImpl:releaseFetch,isBusy,interactionQuietMs:30000});
+const {createReleaseUpdater} = await import('../release-updater.js?v='+"b12212a94966c6ff");
+const updater = createReleaseUpdater({currentRelease:"b12212a94966c6ff",baseURL:rootURL,fetchImpl:releaseFetch,isBusy,interactionQuietMs:30000});
 updater.start();
 globalThis.addEventListener('pagehide',()=>updater.stop(),{once:true});
 }
