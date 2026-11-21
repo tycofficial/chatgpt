@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
-import { appendFile, writeFile } from 'node:fs/promises';
+import { appendFile } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 
 const site = new URL('https://tycofficial.github.io/chatgpt/');
-const appium = new URL('http://127.0.0.1:4723/');
+const webdriver = new URL('http://127.0.0.1:4723/');
 const editor = '#prompt-textarea, .ProseMirror[contenteditable=true], textarea[placeholder]';
 const elementKey = 'element-6066-11e4-a52e-4f735466cecf';
 let currentPhase = 'starting';
@@ -47,10 +47,11 @@ async function waitFor(label, check, timeout = 40_000) {
 }
 
 async function command(method, path, body, timeout = 65_000) {
-  const operation = `${method} ${path === 'session' || path.startsWith('session/') && method === 'DELETE' ? 'session' : path.split('/').at(-1)}`;
+  const parts = path.split('/');
+  const operation = `${method} ${parts.length === 2 && parts[0] === 'session' ? 'session' : parts.slice(path.endsWith('/window/new') ? -2 : -1).join('/')}`;
   let response;
   try {
-    response = await fetch(new URL(path, appium), {
+    response = await fetch(new URL(path, webdriver), {
       method,
       headers: body === undefined ? undefined : { 'content-type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -64,8 +65,12 @@ async function command(method, path, body, timeout = 65_000) {
   });
   if (!response.ok || payload.value?.error) {
     const protocolError = payload.value?.error;
+    // A classification from the session-opening response can be logged without any form inputs.
+    const sessionFailure = path === 'session' && method === 'POST' && typeof payload.value?.message === 'string'
+      && /RWIApplication/i.test(payload.value.message) ? 'remote-safari-not-attached' : undefined;
     throw Object.assign(new Error('WebDriver rejected the command'), {
       operation, http: response.status,
+      sessionFailure,
       code: typeof protocolError === 'string' && /^[a-z0-9 _-]{1,60}$/i.test(protocolError) ? protocolError : 'webdriver_error',
     });
   }
@@ -98,6 +103,17 @@ function browser(sessionId) {
     execute,
     goto: url => perform('POST', '/url', { url: url.href }),
     refresh: () => perform('POST', '/refresh', {}),
+    async closeTabAndReopen(url) {
+      const original = await perform('GET', '/window');
+      const reopened = await perform('POST', '/window/new', { type: 'tab' });
+      assert.equal(reopened.type, 'tab', 'Safari did not create a second tab.');
+      assert(reopened.handle && reopened.handle !== original, 'Safari did not issue a distinct tab handle.');
+      await perform('POST', '/window', { handle: original });
+      const remaining = await perform('DELETE', '/window');
+      assert(remaining.includes(reopened.handle) && !remaining.includes(original), 'Safari did not close the original tab.');
+      await perform('POST', '/window', { handle: reopened.handle });
+      await perform('POST', '/url', { url: url.href });
+    },
     async type(selector, text) {
       const path = await find(selector);
       await perform('POST', path + '/click', {});
@@ -154,7 +170,7 @@ function hasMessage(page, role, text) {
 
 async function sendPrompt(page, prompt) {
   await page.type(editor, prompt);
-  await page.click('button[data-testid="send-button"], button[aria-label="发送"], button[aria-label="Send message"]');
+  await page.click('button[data-testid="send-button"], button[aria-label="发送"], button[aria-label="Send"], button[aria-label="Send message"]');
 }
 
 async function liveChat(page, expectedRelease) {
@@ -193,15 +209,27 @@ async function liveChat(page, expectedRelease) {
   assert.equal(await hasMessage(page, 'assistant', firstReply), 1);
   phase('first-message-restored');
 
+  phase('conversation-closing-and-reopening-tab');
+  await page.closeTabAndReopen(new URL(conversation, site));
+  const reopened = await openEditor(page, 'the same conversation in a new Safari tab');
+  assertSite(reopened, expectedRelease);
+  assert.equal(reopened.path, conversation);
+  await waitFor('the first reply in the reopened Safari tab', () => hasMessage(page, 'assistant', firstReply));
+  assert.equal(await hasMessage(page, 'user', firstPrompt), 1);
+  assert.equal(await hasMessage(page, 'assistant', firstReply), 1);
+  phase('conversation-restored-after-tab-close');
+
   const nextReply = 'IPAD-NEXT-' + randomBytes(3).toString('hex');
+  const nextPrompt = 'Reply with exactly ' + nextReply + ' and no other text.';
   phase('follow-up-sending');
-  await sendPrompt(page, 'Reply with exactly ' + nextReply + ' and no other text.');
+  await sendPrompt(page, nextPrompt);
   await waitFor('a reply to the follow-up', () => hasMessage(page, 'assistant', nextReply), 65_000);
   assert.equal((await browserState(page)).path, conversation);
+  assert.equal(await hasMessage(page, 'user', nextPrompt), 1);
   assert.equal(await hasMessage(page, 'assistant', firstReply), 1);
   assert.equal(await hasMessage(page, 'assistant', nextReply), 1);
   phase('follow-up-verified');
-  return { sentMessages: 2, completedBeforeRefresh, oneReplyPerPromptInTranscript: true };
+  return { sentMessages: 2, completedBeforeRefresh, tabReopened: true, oneReplyPerPromptInTranscript: true };
 }
 
 async function smoke() {
@@ -219,29 +247,29 @@ async function smoke() {
   phase('public-release-verified', { release });
 
   phase('webdriver-listener-check');
-  await waitFor('the local Appium server', async () => (await command('GET', 'status', undefined, 2000)).ready, 45_000);
+  await waitFor('the local Safari WebDriver', async () => (await command('GET', 'status', undefined, 2000)).ready, 45_000);
   phase('webdriver-listener-ready');
   const started = Date.now();
   phase('safari-session-opening', { deviceName, iPadOS: platformVersion });
   const session = await command('POST', 'session', {
     capabilities: {
       alwaysMatch: {
-        platformName: 'iOS',
+        platformName: 'ios',
         browserName: 'Safari',
-        'appium:automationName': 'Safari',
         'safari:useSimulator': true,
         'safari:deviceType': 'iPad',
         'safari:deviceUDID': udid,
         'safari:platformVersion': platformVersion,
-        'appium:newCommandTimeout': 180,
       },
       firstMatch: [{}],
     },
-  }, 150_000);
-  assert(session?.sessionId, 'Appium did not create a Safari session.');
+  }, 150_000).catch(error => {
+    error.elapsedMs = Date.now() - started;
+    throw error;
+  });
+  assert(session?.sessionId, 'Safari WebDriver did not create a session.');
   phase('safari-session-created', { elapsedMs: Date.now() - started });
   try {
-    if (process.env.IPAD_SESSION_READY_MARKER) await writeFile(process.env.IPAD_SESSION_READY_MARKER, 'safari-session-created\n');
     const actual = session.capabilities ?? {};
     assert.equal(actual.browserName?.toLowerCase(), 'safari', 'Safari WebDriver did not report Safari.');
     assert.equal(actual.platformName?.toLowerCase(), 'ios', 'Safari WebDriver did not report iOS.');
@@ -300,7 +328,7 @@ if (process.argv[2] === 'select-device') {
   } catch (error) {
     const causes = [];
     for (let cause = error; cause && causes.length < 4; cause = cause.cause) {
-      causes.push({ name: cause.name, operation: cause.operation, waitFor: cause.waitFor, code: cause.code, http: cause.http, timeoutMs: cause.timeoutMs });
+      causes.push({ name: cause.name, operation: cause.operation, waitFor: cause.waitFor, code: cause.code, http: cause.http, timeoutMs: cause.timeoutMs, elapsedMs: cause.elapsedMs, sessionFailure: cause.sessionFailure });
     }
     console.error(JSON.stringify({ phase: currentPhase, failed: true, causes }));
     if (process.env.GITHUB_STEP_SUMMARY) {

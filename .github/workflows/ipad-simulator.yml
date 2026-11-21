@@ -25,42 +25,49 @@ jobs:
           xcodebuild -version
           xcrun simctl list devices available -j | node scripts/qa/ipad-simulator.mjs select-device >> "$GITHUB_ENV"
 
-      - name: Install and enable Safari WebDriver
-        timeout-minutes: 5
+      - name: Enable Apple's Safari WebDriver
         run: |
           node --version
-          npm --version
-          export APPIUM_HOME="$RUNNER_TEMP/ipad-appium-home"
-          cd "$RUNNER_TEMP"
-          npm install --prefix "$RUNNER_TEMP/ipad-appium" --no-audit --no-fund appium@4.0.0
-          "$RUNNER_TEMP/ipad-appium/node_modules/.bin/appium" driver install safari@6.0.4
-          "$RUNNER_TEMP/ipad-appium/node_modules/.bin/appium" driver list --installed
+          sw_vers
+          /usr/bin/safaridriver --version
           sudo -n /usr/bin/safaridriver --enable
 
-      - name: Boot the selected iPad Simulator
+      - name: Boot the selected iPad and launch MobileSafari
         timeout-minutes: 8
         run: |
+          developer_dir="$(xcode-select -p)"
+          device_hub="$developer_dir/../Applications/DeviceHub.app"
+          if [[ ! -d "$device_hub" ]]; then
+            open -a "$developer_dir/Applications/Simulator.app" --args -CurrentDeviceUDID "$IPAD_UDID" || echo '::warning::Simulator.app could not display the selected simulator.'
+          fi
           xcrun simctl bootstatus "$IPAD_UDID" -b
+          if [[ -d "$device_hub" ]]; then
+            open -a "$device_hub" "devices://device/open?id=$IPAD_UDID" || echo '::warning::DeviceHub could not display the selected simulator.'
+          fi
           xcrun simctl list devices booted
+          xcrun simctl launch "$IPAD_UDID" com.apple.mobilesafari
 
-      - name: Verify the public site in simulator Safari
+      - name: Capture an anonymous Safari baseline independently of WebDriver
+        timeout-minutes: 2
+        continue-on-error: true
+        run: |
+          xcrun simctl openurl "$IPAD_UDID" 'https://tycofficial.github.io/chatgpt/'
+          sleep 8
+          xcrun simctl io "$IPAD_UDID" screenshot "$RUNNER_TEMP/ipad-safari-public.png"
+          sips -g pixelWidth -g pixelHeight "$RUNNER_TEMP/ipad-safari-public.png"
+
+      - name: Attach the pre-registration Safari screenshot
+        uses: actions/upload-artifact@v6
+        with:
+          name: ipad-simulator-public-safari-before-signup
+          path: ${{ runner.temp }}/ipad-safari-public.png
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Verify the public site using Apple's native Safari WebDriver
         timeout-minutes: 10
         run: |
-          export APPIUM_HOME="$RUNNER_TEMP/ipad-appium-home"
-          export IPAD_SESSION_READY_MARKER="$RUNNER_TEMP/ipad-safari-session-ready"
-          appium_log="$RUNNER_TEMP/ipad-appium.log"
-          "$RUNNER_TEMP/ipad-appium/node_modules/.bin/appium" server --address 127.0.0.1 --port 4723 --log-no-colors --log-level info > "$appium_log" 2>&1 &
-          appium_pid=$!
-          cleanup() {
-            local status=$?
-            kill "$appium_pid" 2>/dev/null || true
-            # Startup logs precede every account/form command. Later failures use
-            # the script's structured phases because driver logs may contain inputs.
-            if [[ "$status" != 0 && ! -e "$IPAD_SESSION_READY_MARKER" ]]; then
-              echo '::group::Safari WebDriver startup log'
-              tail -n 120 "$appium_log" || true
-              echo '::endgroup::'
-            fi
-          }
-          trap cleanup EXIT
+          /usr/bin/safaridriver -p 4723 > "$RUNNER_TEMP/ipad-safaridriver.log" 2>&1 &
+          safari_driver_pid=$!
+          trap 'kill "$safari_driver_pid" 2>/dev/null || true' EXIT
           node scripts/qa/ipad-simulator.mjs
