@@ -109,7 +109,7 @@ test('a revisited Pages homepage reads the live release and keeps a shell for ou
   async function reopen() {
     let response;
     listeners.get('fetch')({
-      request: { url: home, mode: 'navigate' },
+      request: { url: home, method: 'GET', mode: 'navigate' },
       respondWith: value => { response = value; }
     });
     return (await response).text();

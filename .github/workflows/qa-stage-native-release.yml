@@ -9,7 +9,10 @@ permissions:
 
 jobs:
   package:
-    runs-on: ubuntu-24.04
+    runs-on: windows-2025
+    defaults:
+      run:
+        shell: bash
     timeout-minutes: 20
     permissions:
       contents: write
@@ -25,7 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          fetch-depth: 2
+          fetch-depth: 8
       - uses: actions/setup-node@v7
         with:
           node-version: 24
@@ -57,7 +60,7 @@ jobs:
         name: Push the checked release commit to the verification ref
         run: |
           set -euo pipefail
-          [[ "$(git rev-parse HEAD^)" == "$DEPLOY_BASE" ]]
+          git merge-base --is-ancestor "$DEPLOY_BASE" HEAD
           git rm -- .github/workflows/qa-stage-native-release.yml
           git add -u
           [[ -z "$(git ls-files --others --exclude-standard)" ]]
@@ -70,9 +73,9 @@ jobs:
           git push origin "$packed:$VERIFIED_REF"
           {
             printf 'release=%s\ncommit=%s\n' "$release" "$packed"
-            printf 'index_sha=%s\n' "$(sha256sum index.html | cut -d' ' -f1)"
-            printf 'adapter_sha=%s\n' "$(sha256sum native-client/boot-adapter.mjs | cut -d' ' -f1)"
-            printf 'worker_sha=%s\n' "$(sha256sum native-client-worker.js | cut -d' ' -f1)"
+            printf 'index_sha=%s\n' "$(git cat-file blob "$packed:index.html" | sha256sum | cut -d' ' -f1)"
+            printf 'adapter_sha=%s\n' "$(git cat-file blob "$packed:native-client/boot-adapter.mjs" | sha256sum | cut -d' ' -f1)"
+            printf 'worker_sha=%s\n' "$(git cat-file blob "$packed:native-client-worker.js" | sha256sum | cut -d' ' -f1)"
           } >> "$GITHUB_OUTPUT"
           printf 'Verified native release %s at %s\n' "$release" "$packed"
 
