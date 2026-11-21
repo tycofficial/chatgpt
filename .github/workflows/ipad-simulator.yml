@@ -37,12 +37,13 @@ jobs:
         run: |
           developer_dir="$(xcode-select -p)"
           device_hub="$developer_dir/../Applications/DeviceHub.app"
-          if [[ ! -d "$device_hub" ]]; then
-            open -a "$developer_dir/Applications/Simulator.app" --args -CurrentDeviceUDID "$IPAD_UDID" || echo '::warning::Simulator.app could not display the selected simulator.'
+          if ! xcrun simctl bootstatus "$IPAD_UDID" -b; then
+            xcrun simctl bootstatus "$IPAD_UDID"
           fi
-          xcrun simctl bootstatus "$IPAD_UDID" -b
           if [[ -d "$device_hub" ]]; then
             open -a "$device_hub" "devices://device/open?id=$IPAD_UDID" || echo '::warning::DeviceHub could not display the selected simulator.'
+          else
+            open -a "$developer_dir/Applications/Simulator.app" --args -CurrentDeviceUDID "$IPAD_UDID" || echo '::warning::Simulator.app could not display the selected simulator.'
           fi
           xcrun simctl list devices booted
           xcrun simctl launch "$IPAD_UDID" com.apple.mobilesafari
