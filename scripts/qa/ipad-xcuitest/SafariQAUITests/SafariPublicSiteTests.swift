@@ -12,14 +12,16 @@ final class SafariPublicSiteTests: XCTestCase {
         continueAfterFailure = false
         mark("runner-started")
         let safari = XCUIApplication(bundleIdentifier: "com.apple.mobilesafari")
-        guard let loginURL = URL(string: "https://tycofficial.github.io/chatgpt/auth/login/") else {
-            fail("public-login-url")
-            return
-        }
-        mark("safari-login-navigation-started")
-        safari.open(loginURL)
+        safari.activate()
         guard check(safari.wait(for: .runningForeground, timeout: 20), "safari-foreground") else { return }
         mark("safari-foreground")
+
+        let home = safari.webViews.firstMatch
+        guard check(home.waitForExistence(timeout: 40), "public-home-web-content") else { return }
+        mark("public-home-web-content")
+        if !home.secureTextFields.firstMatch.exists {
+            guard check(openLoginFromHome(home, using: safari), "public-home-login-entry") else { return }
+        }
 
         let web = safari.webViews.firstMatch
         guard check(web.waitForExistence(timeout: 40), "public-login-web-content") else { return }
@@ -86,6 +88,31 @@ final class SafariPublicSiteTests: XCTestCase {
         guard check(firstUser.count == 1 && firstReply.count == 1 && followUser.count == 1 && followReply.count == 1,
                     "follow-up-transcript-duplicated") else { return }
         mark("same-conversation-follow-up-verified")
+    }
+
+    @MainActor
+    private func openLoginFromHome(_ home: XCUIElement, using safari: XCUIApplication) -> Bool {
+        let names = ["login-button", "login-link", "Log in", "Log In", "Sign in", "登录", "登入"]
+        let controls = [named(home.buttons, names), named(home.links, names)]
+        let deadline = Date().addingTimeInterval(12)
+        repeat {
+            if let control = controls.first(where: { $0.exists && $0.isHittable }) {
+                control.tap()
+                mark("safari-home-login-tapped")
+                return true
+            }
+            settle(0.5)
+        } while Date() < deadline
+
+        // Fall back to Safari's focused address field if the home layout has no login control.
+        safari.typeKey("l", modifierFlags: .command)
+        let address = named(safari.textFields, ["URL", "Address", "Address Bar", "Search or enter website name",
+                                               "Search or enter a URL", "地址栏", "搜索或输入网站名称"])
+        guard address.waitForExistence(timeout: 6), address.hasFocus else { return false }
+        safari.typeKey("a", modifierFlags: .command)
+        safari.typeText("https://tycofficial.github.io/chatgpt/auth/login/\n")
+        mark("safari-address-bar-login")
+        return true
     }
 
     private func registerSyntheticAccount(username: String, password: String) async -> Bool {
