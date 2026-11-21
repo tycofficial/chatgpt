@@ -1,6 +1,6 @@
-import { createReplayDeltaGate, isHostCheckpoint } from './preferred-host-transport.mjs?v=d483f118d44cd86f';
-import { isSiteInferenceCheckpoint } from './site-inference-transport.mjs?v=d483f118d44cd86f';
-import { SITE_ULTRA_ORCHESTRATION } from '../model-catalog.js?v=d483f118d44cd86f';
+import { createReplayDeltaGate, isHostCheckpoint } from './preferred-host-transport.mjs?v=3627b234b2f18cbf';
+import { isSiteInferenceCheckpoint } from './site-inference-transport.mjs?v=3627b234b2f18cbf';
+import { SITE_ULTRA_ORCHESTRATION } from '../model-catalog.js?v=3627b234b2f18cbf';
 /** Site-provided Ultra orchestration. This is not an OpenAI provider effort enum. */
 export const ULTRA_MODELS = SITE_ULTRA_ORCHESTRATION.models;
 export const ULTRA_TOOL = Object.freeze({
