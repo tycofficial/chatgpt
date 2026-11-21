@@ -1,4 +1,4 @@
-name: Verify Edge recovery and its durable model receipt
+name: Verify Edge continuation after a completed or interrupted server turn
 on:
   push:
     branches: [qa/codex-public-summary-heading]
@@ -187,34 +187,33 @@ jobs:
             stage('native-accepted-conversation-address');
             const before = await message(tab, marker).count();
             await tab.reload({waitUntil: 'domcontentloaded', timeout: 43000});
-            try {
-              await message(tab, marker).waitFor({ state: 'visible', timeout: 105000 });
-            } catch (error) {
-              const receipt = await tab.evaluate(async ({ API, RELEASE, id }) => {
-                try {
-                  const account = await import('/chatgpt/native-client/site-account.mjs?v=' + RELEASE);
-                  await account.refreshSiteAccount();
-                  const token = account.getSiteSessionToken();
-                  const response = await fetch(API + '/inference/v1/responses/' + id + '?after=' + Number.MAX_SAFE_INTEGER, {
-                    headers: { Authorization: 'Bearer ' + token },
-                    signal: AbortSignal.timeout(12000),
-                  });
-                  if (!response.ok) return { http:response.status };
-                  const value = await response.json();
-                  return { http:response.status, state:value.status, error:value.error?.code,
-                    firstReceiptMs:value.startedAt, completedAt:value.finishedAt, model:value.model, replayExpired:value.replayExpired };
-                } catch (cause) { return { diagnostic:cause.name }; }
-              }, { API, RELEASE, id:requests[0]?.id });
-              console.log('Edge durable model receipt ' + JSON.stringify(receipt));
-              await state(tab, 'reply-not-visible-after-reload', requestedId, marker);
-              await cloudState(tab, 'first-reload-missing-reply', requestedId);
+            const outcome = await tab.waitForFunction(({ requestedId, marker }) => {
+              for (const key of Object.keys(localStorage).filter(key=>key.includes('cg-original-app-server:v1:account:'))) {
+                const thread = JSON.parse(localStorage.getItem(key)).threads.find(thread=>thread.id===requestedId);
+                const turn = thread?.turns.at(-1);
+                if (turn?.status==='completed' && turn.items.some(item=>item.type==='agentMessage'&&item.text?.includes(marker))) return 'restored';
+                if (turn?.status==='failed' && turn.adapterMetadata?.lastFailure?.code==='INFERENCE_INTERRUPTED' &&
+                    turn.adapterMetadata.checkpoint?.inFlight?.transport?.state==='interrupted') return 'server-interrupted';
+              }
+              return null;
+            },{requestedId,marker},{timeout:110000}).then(value=>value.jsonValue()).catch(async error=>{
+              await state(tab, 'receipt-state-did-not-settle', requestedId, marker);
+              await cloudState(tab, 'first-reload-unsettled', requestedId);
               throw error;
+            });
+            const restored = outcome==='restored';
+            const retained = restored ? marker : first;
+            if (restored) {
+              await message(tab, marker).waitFor({ state: 'visible', timeout: 20000 });
+              stage(before ? 'reloaded-and-restored-completed-reply' : 'reloaded-while-reply-pending-and-restored-it');
+            } else {
+              await tab.waitForFunction(() => /服务端流式连接已中断|本次推理.*中断|原请求已中断|已保留[^。]{0,22}(?:内容|回复|正文)|inference.*interrupt/i
+                .test(document.body?.innerText ?? ''),undefined,{timeout:18000});
+              stage('reloaded-and-showed-the-real-server-interruption');
             }
             assert.equal(await message(tab, first).count(), 1);
-            assert.equal(await message(tab, marker).count(), 1);
+            assert.equal(await message(tab, marker).count(), restored ? 1 : 0);
             assert.equal(requests.length, 1, 'Pre-reload send repeated');
-            stage(before ? 'reloaded-and-restored-completed-reply' : 'reloaded-while-reply-pending-and-restored-it');
-
             const thread = tab.url();
             const threadId = new URL(thread).pathname.split('/').filter(Boolean).at(-1);
             assert.match(new URL(thread).pathname, /^\/chatgpt\/c\/[^/]+\/?$/);
@@ -226,7 +225,7 @@ jobs:
             await tab.goto(thread, {waitUntil: 'domcontentloaded', timeout: 43000});
             let directReopen = true;
             try {
-              await message(tab, marker).waitFor({ state: 'visible', timeout: 22000 });
+              await message(tab, retained).waitFor({ state: 'visible', timeout: 22000 });
               stage('closed-and-reopened-the-same-chat');
             } catch {
               directReopen = false;
@@ -236,7 +235,7 @@ jobs:
               const title = first.slice(0, 80);
               const candidate = tab.getByText(title, { exact: true }).first();
               await candidate.click({timeout: 20000});
-              await message(tab, marker).waitFor({ state: 'visible', timeout: 45000 });
+              await message(tab, retained).waitFor({ state: 'visible', timeout: 45000 });
               stage('closed-and-reopened-the-chat-from-history');
             }
             await state(tab, 'after-reopen', threadId, marker);
@@ -245,14 +244,15 @@ jobs:
             await context.setOffline(true);
             try {
               assert.equal(await tab.evaluate(() => navigator.onLine), false);
-              await message(tab, marker).waitFor({state: 'visible', timeout: 10000});
+              await message(tab, retained).waitFor({state: 'visible', timeout: 10000});
             } finally {
               await context.setOffline(false);
             }
             await tab.waitForFunction(() => navigator.onLine, undefined, {timeout: 12000});
-            await send(tab, second);
+            const nextPrompt = restored ? second : 'The previous task was interrupted. Continue this same chat by replying with exactly ' + marker + '-NEXT and no other text.';
+            await send(tab, nextPrompt);
             await message(tab, marker + '-NEXT').waitFor({ state: 'visible', timeout: 90000 });
-            assert.equal(await message(tab, second).count(), 1);
+            assert.equal(await message(tab, nextPrompt).count(), 1);
             assert.equal(await message(tab, marker + '-NEXT').count(), 1);
             assert.equal(requests.length, 2);
             assert.equal(new Set(requests.map(request => request.id)).size, 2);
@@ -275,7 +275,8 @@ jobs:
             let crossDeviceRecovered = true;
             try {
               await message(other, marker + '-NEXT').waitFor({state: 'visible', timeout: 25000});
-              assert.equal(await message(other, marker).count(), 1);
+              assert.equal(await message(other, first).count(), 1);
+              assert.equal(await message(other, marker).count(), restored ? 1 : 0);
               assert.equal(requests.length, 2);
               stage('recovered-the-account-chat-from-a-separate-profile');
             } catch {
