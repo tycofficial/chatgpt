@@ -1,7 +1,7 @@
 /** Isolated PDF/DOCX and verified OOXML saved-text extraction. */
-import { readOfficeZipParts } from './local-ooxml-container.mjs?v=d483f118d44cd86f';
-import { extractXlsxParts } from './local-xlsx-extraction.mjs?v=d483f118d44cd86f';
-import { extractPptxParts } from './local-pptx-extraction.mjs?v=d483f118d44cd86f';
+import { readOfficeZipParts } from './local-ooxml-container.mjs?v=5065100f733d20a5';
+import { extractXlsxParts } from './local-xlsx-extraction.mjs?v=5065100f733d20a5';
+import { extractPptxParts } from './local-pptx-extraction.mjs?v=5065100f733d20a5';
 const PDF_VERSION = '5.7.284';
 const MAMMOTH_VERSION = '1.13.0';
 const DEFAULT_LIMITS = Object.freeze({ maxPages: 150, maxCharacters: 1000000, maxZipEntries: 5000, maxUncompressedBytes: 64 * 1024 * 1024 });

@@ -211,11 +211,8 @@ function followsLocalRecovery(head, document, original, ownerId) {
   return current.length > earlier.length || followsCapturedTurn(earlier.at(-1), current.at(-1));
 }
 
-function completesLocalStartupConflict(conflict, document, original) {
-  if (conflict?.reason !== 'startup-local-diverged' || conflict.resolution ||
-      conflict.remoteMetadata?.revision !== 0 || conflict.remoteMetadata?.sequence !== 0 ||
-      conflict.remoteMetadata.deleted || !object(conflict.remote)) return false;
-  const extension = historyExtension(conflict.remote, document);
+function completesLocalReattachment(head, document, original) {
+  const extension = historyExtension(head, document);
   if (!extension) return false;
   const { earlier, current } = extension;
   const lastIndex = earlier.length - 1;
@@ -224,6 +221,24 @@ function completesLocalStartupConflict(conflict, document, original) {
       local.resumePolicy !== 'automatic' || local.checkpoint?.state !== 'completed') return false;
   return earlier.slice(0, lastIndex).every((turn, index) => equal(turn, current[index])) &&
     followsCapturedTurn(earlier[lastIndex], current[lastIndex]);
+}
+
+function completesLocalStartupConflict(conflict, document, original) {
+  return conflict?.reason === 'startup-local-diverged' && !conflict.resolution &&
+    conflict.remoteMetadata?.revision === 0 && conflict.remoteMetadata?.sequence === 0 &&
+    !conflict.remoteMetadata.deleted && object(conflict.remote) &&
+    completesLocalReattachment(conflict.remote, document, original);
+}
+
+function completesSavedReattachment(state, id, head, document, original) {
+  if (!completesLocalReattachment(head, document, original)) return false;
+  const queued = state.outbox.filter(item => item.id === id);
+  if (!queued.length) return true;
+  const baseRevision = state.known[id]?.revision ?? 0;
+  // Retain even a PUT whose acknowledgement was lost. Its exact contents and
+  // mutation ID are still required to reconcile the later server receipt.
+  return equal(queued.at(-1).document, head) && queued.every((entry, index) =>
+    entry.method === 'PUT' && !entry.blocked && entry.baseRevision === baseRevision + index);
 }
 
 function freshState() { return { schemaVersion: 1, cursor: null, heads: Object.create(null), known: Object.create(null), outbox: [], conflicts: Object.create(null), localIds: [] }; }
@@ -327,7 +342,10 @@ export function createChatHistorySync({ baseURL, fetchImpl = globalThis.fetch?.b
         // A page can finish saving browser progress before its history capture
         // runs. Continue that one local journal turn through normal CAS without
         // discarding an earlier attempted mutation or adopting a remote edit.
-        const localRecovery = initial && head && !state.conflicts[id] && followsLocalRecovery(head, document, originals.get(id), identity?.ownerId);
+        const original = originals.get(id);
+        const localRecovery = initial && head && !state.conflicts[id] &&
+          (followsLocalRecovery(head, document, original, identity?.ownerId) ||
+            completesSavedReattachment(state, id, head, document, original));
         if (head && !localRecovery && ((initial && (state.known[id]?.revision || state.outbox.some(item => item.id === id))) || previousLocal?.has(id) && !equal(previousLocal.get(id), head))) {
           state.conflicts[id] = { id, reason: initial ? 'startup-local-diverged' : 'concurrent-local-context', local: clone(document), remote: clone(state.heads[id]), remoteMetadata: clone(state.known[id] ?? { id, revision: 0, deleted: false, sequence: 0 }), createdAt: now() };
           state.outbox = state.outbox.filter(item => item.id !== id);
