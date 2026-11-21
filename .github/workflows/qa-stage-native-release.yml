@@ -1,79 +1,148 @@
-name: Measure mainland access to the original Pages site and API
+name: Test the public chat and session recovery in Microsoft Edge
 on:
   push:
     branches: [qa/codex-public-summary-heading]
 permissions:
   contents: read
 jobs:
-  mainland:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 4
+  edge:
+    runs-on: windows-2025
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
     env:
+      SITE: https://tycofficial.github.io/chatgpt/
+      API: https://chatgpt-admin-bridge-tyc.hushedtarragon1.chatgpt.site
       RELEASE: dee4682939543502
-      API_HOST: chatgpt-admin-bridge-tyc.hushedtarragon1.chatgpt.site
     steps:
-      - name: Probe public HTTPS and API preflight from China
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Use real login and inference through the published website
         run: |
+          set -euo pipefail
+          npm install --prefix "$RUNNER_TEMP/pages-browser" --no-audit --no-fund --package-lock=false playwright-core@1.58.2
           node --input-type=module <<'NODE'
-          import { setTimeout as wait } from 'node:timers/promises';
-          const base = 'https://api.globalping.io';
-          const origin = 'https://tycofficial.github.io';
-          const host = new URL(origin).hostname;
-          const apiHost = process.env.API_HOST;
-          const options = {
-            Origin: origin,
-            'Access-Control-Request-Method': 'POST',
-            'Access-Control-Request-Headers': 'content-type',
-          };
-          const headers = { 'User-Agent': 'tycofficial-chatgpt-pages-availability/1.0', accept: 'application/json' };
-          const cases = [
-            ['home', host, { method: 'GET', path: '/chatgpt/' }],
-            ['login-page', host, { method: 'GET', path: '/chatgpt/auth/login/' }],
-            ['release-manifest', host, { method: 'GET', path: '/chatgpt/native-client/active.json', query: 'v=' + process.env.RELEASE }],
-            ['login-api', apiHost, { method: 'OPTIONS', path: '/auth/login', headers: options }],
-            ['inference-api', apiHost, { method: 'OPTIONS', path: '/inference/v1/responses',
-              headers: { ...options, 'Access-Control-Request-Headers': 'authorization,content-type,x-chat-request-id' } }],
-          ];
-          function classify(text) {
-            if (/reset|ECONNRESET/i.test(text)) return 'connection reset';
-            if (/timed? ?out|ETIMEDOUT/i.test(text)) return 'timeout';
-            if (/SSL|TLS|certificate/i.test(text)) return 'TLS failure';
-            if (/ENOTFOUND|EAI_AGAIN|not resolve|DNS/i.test(text)) return 'DNS failure';
-            if (/refused|ECONNREFUSED/i.test(text)) return 'connection refused';
-            return null;
+          import assert from 'node:assert/strict';
+          import { randomUUID } from 'node:crypto';
+          import { join } from 'node:path';
+          import { pathToFileURL } from 'node:url';
+          const { chromium } = await import(pathToFileURL(join(process.env.RUNNER_TEMP, 'pages-browser/node_modules/playwright-core/index.mjs')).href);
+          const { SITE, API, RELEASE } = process.env;
+          const home = new URL(SITE);
+          const id = randomUUID().replace(/-/g, '').slice(0, 10);
+          const username = 'qaedge' + id;
+          const password = 'Qa9edge' + randomUUID().replace(/-/g, '');
+          const marker = 'EDGE-QA-' + id;
+          const first = 'For a browser recovery test, reply with exactly ' + marker + ' and no other text.';
+          const second = 'Reply with only the exact token from your previous answer with -NEXT appended.';
+          const requests = [];
+          const errors = [];
+          const stage = name => console.log('Edge QA ' + name);
+          const composer = page => page.locator('#prompt-textarea[contenteditable="true"], .ProseMirror[contenteditable="true"]').first();
+          const message = (page, text) => page.locator('main').getByText(text, { exact: true });
+          const isInference = request => request.method() === 'POST' &&
+            request.url() === API + '/inference/v1/responses';
+          function attach(page) {
+            page.on('request', request => {
+              if (!isInference(request)) return;
+              const body = request.postDataJSON();
+              const number = requests.length + 1;
+              requests.push({ id: request.headers()['x-chat-request-id'] ?? null, model: body?.model ?? null, effort: body?.reasoning?.effort ?? null });
+              console.log('Edge model POST ' + JSON.stringify({ number, model: body?.model, effort: body?.reasoning?.effort ?? null }));
+            });
+            page.on('pageerror', error => { if (errors.length < 12) errors.push(error.name); });
           }
-          async function probe([name, target, request], pinned) {
+          async function account(page, entry) {
+            const target = new URL('auth/' + entry + '/', home);
+            await page.goto(target.href, { waitUntil: 'domcontentloaded', timeout: 43000 });
+            await page.locator('#site-username').fill(username);
+            await page.locator('#site-password').fill(password);
+            const accountMethod = entry === 'signup' ? 'register' : 'login';
+            const receipt = page.waitForResponse(response => response.url() === API + '/auth/' + accountMethod &&
+              response.request().method() === 'POST', { timeout: 42000 });
+            await page.getByRole('button', {name: '继续', exact: true}).click();
+            assert.equal((await receipt).status(), 200, 'Account operation failed');
+            await page.waitForURL(url => url.origin === home.origin && url.pathname === home.pathname, { timeout: 45000 });
+            await composer(page).waitFor({ state: 'visible', timeout: 45000 });
+            const release = await page.evaluate(() => window.__CHATGPT_REPLICA_ENV__?.release);
+            assert.equal(release, RELEASE);
+          }
+          async function send(page, prompt) {
+            await composer(page).click();
+            await page.keyboard.insertText(prompt);
+            const btn = page.locator('button[data-testid="send-button"], button[aria-label="发送消息"], button[aria-label="Send message"]').first();
+            const admitted = page.waitForRequest(isInference, { timeout: 45000 });
+            await btn.click({ timeout: 15000 });
+            await admitted;
+          }
+          const manifest = await fetch(new URL('native-client/active.json?edge_qa=' + RELEASE, home), { signal: AbortSignal.timeout(18000) });
+          assert.equal((await manifest.json()).release, RELEASE);
+          const browser = await chromium.launch({ channel: 'msedge', headless: true });
+          try {
+            const context = await browser.newContext({ locale: 'zh-CN' });
+            let tab = await context.newPage();
+            attach(tab);
+            await account(tab, 'signup');
+            stage('registered-and-opened-the-current-free-chat');
+            await send(tab, first);
+            stage('first-model-request-sent');
+            await tab.waitForURL(url => /^\/chatgpt\/c\/[^/]+\/?$/.test(url.pathname), { timeout: 20000 });
+            const thread = tab.url();
+            const before = await message(tab, marker).count();
+            await tab.reload({waitUntil: 'domcontentloaded', timeout: 43000});
+            await message(tab, marker).waitFor({ state: 'visible', timeout: 90000 });
+            assert.equal(await message(tab, first).count(), 1);
+            assert.equal(await message(tab, marker).count(), 1);
+            assert.equal(requests.length, 1, 'Pre-reload send repeated');
+            stage(before ? 'reloaded-and-restored-completed-reply' : 'reloaded-while-reply-pending-and-restored-it');
+
+            await tab.close();
+            tab = await context.newPage();
+            attach(tab);
+            await tab.goto(thread, {waitUntil: 'domcontentloaded', timeout: 43000});
+            await message(tab, marker).waitFor({ state: 'visible', timeout: 45000 });
+            assert.equal(requests.length, 1);
+            stage('closed-and-reopened-the-same-chat');
+
+            await context.setOffline(true);
             try {
-              const input = { type: 'http', target, locations: [{ ...(pinned ? { magic: pinned } : { country: 'CN' }), limit: 3 }],
-                measurementOptions: { protocol: 'HTTPS', request } };
-              const created = await fetch(base + '/v1/measurements', { method: 'POST', body: JSON.stringify(input),
-                headers: { ...headers, 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(12000) });
-              const token = await created.json();
-              if (created.status !== 202 || !/^[A-Za-z0-9_-]+$/.test(token.id ?? '')) {
-                console.log(JSON.stringify({ name, serviceStatus: created.status, issue: token.error?.type ?? null,
-                  message: JSON.stringify(token.error?.message ?? '').slice(0, 170) }));
-                return null;
-              }
-              let result = {};
-              for (let i = 0; i < 18; i++) {
-                const response = await fetch(base + '/v1/measurements/' + token.id, { headers, signal: AbortSignal.timeout(8000) });
-                result = await response.json();
-                if (result.status === 'finished') break;
-                await wait(1000);
-              }
-              const rows = (result.results ?? []).map(({ probe, result }) => ({
-                country: probe.country, city: probe.city, network: probe.network, asn: probe.asn,
-                http: result.statusCode ?? null, status: result.status, ms: result.timings?.total ?? null,
-                failure: classify(result.rawOutput ?? ''),
-                ...(name === 'release-manifest' ? { currentRelease: (result.rawBody ?? '').includes(process.env.RELEASE) } : {}),
-              }));
-              console.log(JSON.stringify({ name, id: token.id, status: result.status, rows }));
-              return rows.some(row => row.country === 'CN') ? token.id : null;
-            } catch (error) {
-              console.log(JSON.stringify({ name, measurementError: error.name, code: error.cause?.code ?? null }));
-              return null;
+              assert.equal(await tab.evaluate(() => navigator.onLine), false);
+              await message(tab, marker).waitFor({state: 'visible', timeout: 10000});
+            } finally {
+              await context.setOffline(false);
             }
+            await tab.waitForFunction(() => navigator.onLine, undefined, {timeout: 12000});
+            await send(tab, second);
+            await message(tab, marker + '-NEXT').waitFor({ state: 'visible', timeout: 90000 });
+            assert.equal(await message(tab, second).count(), 1);
+            assert.equal(await message(tab, marker + '-NEXT').count(), 1);
+            assert.equal(requests.length, 2);
+            assert.equal(new Set(requests.map(request => request.id)).size, 2);
+            assert.ok(requests.every(request => request.id));
+            assert.equal(new URL(tab.url()).pathname, new URL(thread).pathname);
+            stage('reconnected-and-sent-one-contextual-follow-up');
+
+            const secondContext = await browser.newContext({ locale: 'zh-CN' });
+            const other = await secondContext.newPage();
+            attach(other);
+            await account(other, 'login');
+            stage('logged-in-from-a-separate-browser-profile');
+            await other.goto(thread, { waitUntil: 'domcontentloaded', timeout: 43000 });
+            await message(other, marker + '-NEXT').waitFor({state: 'visible', timeout: 45000});
+            assert.equal(await message(other, marker).count(), 1);
+            assert.equal(requests.length, 2);
+            stage('recovered-the-account-chat-from-a-separate-profile');
+
+            const loggedOut = other.waitForResponse(response => response.url() === API + '/auth/logout' && response.request().method() === 'POST', {timeout: 22000});
+            await other.goto(new URL('auth/logout/', home).href, {waitUntil: 'domcontentloaded', timeout: 30000});
+            assert.ok((await loggedOut).ok());
+            await other.waitForURL(url => url.origin === home.origin && url.pathname === home.pathname, {timeout: 22000});
+            stage('signed-out-and-stayed-on-chatgpt-base-path');
+          } finally {
+            console.log('Edge requests ' + JSON.stringify({ inferencePosts: requests.length, distinctIds: new Set(requests.map(v => v.id)).size, pageErrorTypes: errors }));
+            await browser.close();
           }
-          const first = await probe(cases[0], null);
-          await Promise.all(cases.slice(1).map(test => probe(test, first)));
           NODE
