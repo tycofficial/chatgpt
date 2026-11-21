@@ -40,13 +40,18 @@ async function waitFor(label, check, timeout = 40_000) {
   throw new Error('Timed out waiting for ' + label, { cause });
 }
 
-async function command(method, path, body, timeout = 30_000) {
-  const response = await fetch(new URL(path, appium), {
-    method,
-    headers: body === undefined ? undefined : { 'content-type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
-    signal: AbortSignal.timeout(timeout),
-  });
+async function command(method, path, body, timeout = 65_000) {
+  let response;
+  try {
+    response = await fetch(new URL(path, appium), {
+      method,
+      headers: body === undefined ? undefined : { 'content-type': 'application/json' },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: AbortSignal.timeout(timeout),
+    });
+  } catch (cause) {
+    throw new Error(`WebDriver ${method} ${path.split('/').at(-1)} did not return a response`, { cause });
+  }
   const payload = await response.json();
   if (!response.ok || payload.value?.error) {
     const detail = path.endsWith('/value') ? payload.value?.error : payload.value?.message;
@@ -125,7 +130,7 @@ function hasMessage(page, role, text) {
     + 'node.getAttribute("data-message-author-role") === arguments[0]);'
     + 'if (native.length) return native.filter(node => node.innerText.trim() === arguments[1]).length;'
     + 'return [...document.querySelectorAll("main p, main span, main div")].filter(node => '
-    + '!node.children.length && node.getClientRects().length && !node.closest("[contenteditable] ") '
+    + '!node.children.length && node.getClientRects().length && !node.closest("[contenteditable]") '
     + '&& node.innerText.trim() === arguments[1]).length;',
     role, text,
   );
@@ -181,8 +186,10 @@ async function smoke() {
   const { release } = await manifestResponse.json();
   assert(/^[0-9a-f]{16}$/.test(release), 'The public site did not advertise an active native release.');
   if (process.env.IPAD_EXPECT_RELEASE) assert.equal(release, process.env.IPAD_EXPECT_RELEASE);
+  console.log('Public release verified', release);
 
-  await waitFor('the local Appium server', async () => (await command('GET', 'status', undefined, 2000)).ready, 30_000);
+  await waitFor('the local Appium server', async () => (await command('GET', 'status', undefined, 2000)).ready, 45_000);
+  console.log('Local Appium ready');
   const started = Date.now();
   const session = await command('POST', 'session', {
     capabilities: {
@@ -194,19 +201,23 @@ async function smoke() {
         'appium:deviceName': deviceName,
         'appium:platformVersion': platformVersion,
         'appium:initialDeeplinkUrl': site.href,
+        'appium:newCommandTimeout': 180,
       },
     },
   }, 330_000);
   assert(session?.sessionId, 'Appium did not create a Safari session.');
+  console.log('Safari session created', deviceName, platformVersion);
   try {
     const page = browser(session.sessionId);
     const portrait = await openEditor(page, 'an editable public Chat home in Safari');
     assertSite(portrait, release);
     assert(portrait.touchPoints > 0, 'Safari reports no touch input support.');
+    console.log('Public Safari editor ready');
 
     const draft = 'iPad Safari QA';
     await page.type(editor, draft);
     await waitFor('the draft entered through the Safari editor', async () => (await browserState(page)).draft?.trim() === draft);
+    console.log('Draft entered in Safari');
     await page.refresh();
     const refreshed = await openEditor(page, 'the public Chat editor after refreshing');
     assertSite(refreshed, release);
