@@ -29,10 +29,14 @@ final class SafariPublicSiteTests: XCTestCase {
         }
         mark("signup-form")
         let syntheticID = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        let syntheticName = "qa_ipad_" + String(syntheticID.prefix(12))
         username.tap()
-        username.typeText("qa_ipad_" + String(syntheticID.prefix(12)))
+        if safari.keyboards.firstMatch.waitForExistence(timeout: 4) { mark("signup-keyboard") }
+        safari.typeText(syntheticName)
+        guard check(username.value as? String == syntheticName, "signup-username-not-entered") else { return }
+        mark("signup-username-entered")
         password.tap()
-        password.typeText("Qa9!" + UUID().uuidString.replacingOccurrences(of: "-", with: ""))
+        safari.typeText("Qa9!" + UUID().uuidString.replacingOccurrences(of: "-", with: ""))
         let signup = named(safari.webViews.descendants(matching: .button), ["继续", "Continue", "Sign up", "注册"])
         guard check(signup.waitForExistence(timeout: 10) && signup.isEnabled, "signup-submit") else { return }
         signup.tap()
