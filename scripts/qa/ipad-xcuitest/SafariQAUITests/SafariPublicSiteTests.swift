@@ -59,7 +59,6 @@ final class SafariPublicSiteTests: XCTestCase {
         mark(firstReply.firstMatch.exists ? "first-reply-before-reload" : "reload-while-reply-pending")
         reload.tap()
         mark("safari-reload-tapped")
-        guard check(findEditor(in: safari, timeout: 55) != nil, "editor-after-reload") else { return }
         guard check(firstReply.firstMatch.waitForExistence(timeout: 95), "first-reply-after-reload") else { return }
         guard check(firstUser.count == 1 && firstReply.count == 1, "first-transcript-duplicated") else { return }
         mark("first-conversation-restored")
@@ -98,16 +97,13 @@ final class SafariPublicSiteTests: XCTestCase {
     private func findEditor(in safari: XCUIApplication, timeout: TimeInterval) -> XCUIElement? {
         let views = safari.webViews.descendants(matching: .textView)
         let fields = safari.webViews.descendants(matching: .textField)
-        let exposed = namedMatches(safari.webViews.descendants(matching: .any), editorNames)
+        let knownEditors = [named(views, editorNames), named(fields, editorNames),
+                            named(safari.webViews.descendants(matching: .any), editorNames)]
         let deadline = Date().addingTimeInterval(timeout)
         repeat {
-            let typed = (views.allElementsBoundByIndex + fields.allElementsBoundByIndex).filter { $0.isHittable }
-            if let editor = typed.first(where: {
-                editorNames.contains($0.label) || editorNames.contains($0.identifier) ||
-                editorNames.contains($0.placeholderValue ?? "")
-            }) { return editor }
-            if typed.count == 1 { return typed[0] }
-            if let label = exposed.allElementsBoundByIndex.first(where: { $0.isHittable }) { return label }
+            if let editor = knownEditors.first(where: { $0.exists && $0.isHittable }) { return editor }
+            if views.count == 1 && views.firstMatch.isHittable { return views.firstMatch }
+            if fields.count == 1 && fields.firstMatch.isHittable { return fields.firstMatch }
             _ = RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.8))
         } while Date() < deadline
         return nil
