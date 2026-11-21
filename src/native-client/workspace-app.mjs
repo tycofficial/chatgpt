@@ -438,6 +438,9 @@ function mountWorkspace(services, view, { storedConversationSurface }, speech, p
     void account.refreshSiteAccount().then(tryRecovery);
   });
   addEventListener('offline', () => status('离线 · 消息和附件保存在此浏览器。'));
+  addEventListener('pageshow', event => {
+    if (event.persisted) { attemptedRecovery.clear(); tryRecovery(); }
+  });
   addEventListener('codex-site-account-changed', () => {
     if (signingOut) return;
     const next = account.getSiteAccount()?.id ?? null;

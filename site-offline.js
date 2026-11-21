@@ -1,4 +1,4 @@
-const RELEASE = '2026.11.21.1';
+const RELEASE = '2026.11.21.2';
 const cacheKey = `tyc-workspace-${RELEASE}`;
 const home = new URL(self.registration.scope);
 const entry = new URL(`src/native-client/workspace-app.mjs?v=${RELEASE}`, home);

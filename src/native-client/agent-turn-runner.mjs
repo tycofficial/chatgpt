@@ -215,7 +215,7 @@ export async function runAgentTurn(server, running) {
       const applyDelta = (_delta, assembled) => {
         if (running.terminal) return;
         if (metric.firstOutputAt == null && (assembled.content || assembled.reasoning || assembled.tool_calls?.length)) metric.firstOutputAt = server.now();
-        if (!siteReplay && metric.firstTextAt == null && assembled.content) {
+        if (!siteReplay && metric.firstTextAt == null && assembled.content?.trim()) {
           metric.firstTextAt = server.now();
           meta.firstTextAtMs ??= metric.firstTextAt;
         }
@@ -260,7 +260,7 @@ export async function runAgentTurn(server, running) {
       const phase = responsePhase(result);
       updateHostedSearch(server, running, result);
       if (meta.webSearchIntent?.required && !turn.items.some(item => item.type === 'webSearch' && item.responseItem?.status === 'completed')) throw Object.assign(Error('The provider did not perform the requested hosted web search. No search success or sourced answer was reported.'), { code: 'WEB_SEARCH_NOT_PERFORMED', retryable: false });
-      if (!siteReplay && metric.firstTextAt == null && result.content) {
+      if (!siteReplay && metric.firstTextAt == null && result.content?.trim()) {
         metric.firstTextAt = server.now();
         meta.firstTextAtMs ??= metric.firstTextAt;
       }

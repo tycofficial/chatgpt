@@ -292,9 +292,13 @@ async function streamResponses({ settings, messages, tools, toolChoice, signal, 
     const key = index + ':' + summaryIndex, previous = reasoningTexts.get(key)?.text || '';
     const next = append ? previous + text : text;
     if (next === previous) return;
-    if (!next.startsWith(previous)) throw Object.assign(Error('The provider replaced an already streamed public reasoning summary.'), { code: 'INVALID_REASONING_SUMMARY', retryable: false });
+    // Some gateways revise or compact the optional terminal summary. Keep the
+    // public text already shown without treating a summary edit as turn failure.
+    if (!next.startsWith(previous)) return;
     reasoningTexts.set(key, { index, summaryIndex, text: next });
-    assembled.reasoning = [...reasoningTexts.values()].sort((a,b) => a.index-b.index || a.summaryIndex-b.summaryIndex).map(part => part.text).join('');
+    const summary = [...reasoningTexts.values()].sort((a,b) => a.index-b.index || a.summaryIndex-b.summaryIndex).map(part => part.text).join('');
+    if (!summary.startsWith(assembled.reasoning ?? '')) return;
+    assembled.reasoning = summary;
     onActivity({type:'reasoning_delta'}); onDelta('', assembled);
   };
   const ensureCall = (index, item = {}) => {

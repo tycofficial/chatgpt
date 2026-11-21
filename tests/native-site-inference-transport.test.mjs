@@ -20,6 +20,16 @@ const receipt = (id, { data = [], ...fields } = {}) => Response.json({ id, statu
   chunks: data.map((text, seq) => ({ seq, data: text })), ...fields });
 const deferred = () => { let resolve; const promise = new Promise(ready => { resolve = ready; }); return { promise, resolve }; };
 
+test('a rewritten optional public summary leaves the streamed summary and final answer intact', async () => {
+  const data = sse('response.reasoning_summary_text.delta', { output_index: 0, delta: 'Actual streamed summary.' }) + finish([
+    { id: 'r', type: 'reasoning', summary: [{ type: 'summary_text', text: 'Shorter terminal summary.' }] },
+    textItem('m', 'Confirmed final answer.'),
+  ]);
+  const result = await streamCompletion({ settings: { model, reasoningEffort: 'low', apiTransport: 'responses' }, messages: [{ role: 'user', content: 'Neutral test input' }], responsesTransport: async () => streamResponse(data) });
+  assert.equal(result.content, 'Confirmed final answer.');
+  assert.equal(result.reasoning, 'Actual streamed summary.');
+});
+
 function transport(fetchImpl, specific = {}) {
   let counter = 0;
   return createSiteInferenceTransport({ baseURL, getSessionToken: async () => 'fixture-bearer', getAccountId: () => 'test-user',

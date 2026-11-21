@@ -24,7 +24,7 @@ export function renderAnswer(container, text) {
 }
 
 const duration = ms => `${(Math.max(0, ms) / 1000).toFixed(ms < 10000 ? 1 : 0)} 秒`;
-const toolNames = { python: 'Python', list_files: '列出文件', read_file: '读取文件', write_file: '写入文件', create_file: '创建文件', publish_file: '保存成品', delegate_tasks: '分配任务' };
+const toolNames = { python: 'Python', list_files: '列出文件', read_file: '读取文件', write_file: '写入文件', create_file: '创建文件', publish_file: '保存成品', delegate_tasks: '分配任务', task_status: '更新任务状态' };
 const stepStatus = { inProgress: '运行中', running: '运行中', queued: '等待中', completed: '完成', failed: '失败', interrupted: '已中断', cancelled: '已停止' };
 
 function detail(label, open, rows) {
@@ -126,10 +126,14 @@ export function createTranscriptView({ container, onResume, onDownload, onSpeak 
           if (typeof description === 'string' && description.trim()) tasks.push(element('li', description));
         }
       }
+      if (item.type === 'mcpToolCall' && item.tool === 'task_status') {
+        const report = item.result?.structuredContent;
+        if (typeof report?.summary === 'string' && report.summary.trim()) tasks.push(element('li', report.summary));
+      }
       if (item.type === 'mcpToolCall' || item.type === 'webSearch') {
         const title = item.type === 'webSearch' ? '搜索网页' : toolNames[item.tool] ?? item.tool;
         const line = element('li', title + (stepStatus[item.status] ? ` · ${stepStatus[item.status]}` : ''));
-        if (item.type === 'mcpToolCall' && item.tool !== 'delegate_tasks') {
+        if (item.type === 'mcpToolCall' && !['delegate_tasks', 'task_status'].includes(item.tool)) {
           for (const part of item.result?.content ?? []) if (part.type === 'text' && part.text) line.append(element('pre', part.text));
         }
         steps.push(line);
