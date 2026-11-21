@@ -1,5 +1,5 @@
 /** Account-owned text history sync. No model transport or executable remote checkpoint. */
-import { isSiteInferenceCheckpoint } from './site-inference-transport.mjs?v=dee4682939543502';
+import { isSiteInferenceCheckpoint } from './site-inference-transport.mjs?v=d483f118d44cd86f';
 
 export const CHAT_HISTORY_SYNC_SCHEMA = 1;
 export const CHAT_HISTORY_SYNC_LIMITS = Object.freeze({ documentBytes: 1_000_000, pageSize: 100, flushMutations: 40, queuedMutations: 2000, threads: 2000, requestTimeoutMs: 15000 });
@@ -159,44 +159,71 @@ export function projectChatHistoryThread(thread) {
 }
 
 function unfinishedTurnView(turn) {
-  const { adapterMetadata, completedAt, durationMs, items, ...fields } = turn;
+  const { adapterMetadata, completedAt, durationMs, status, items, ...fields } = turn;
   const { interruption, reasoningLifecycle, apiTranscript, ...metadata } = adapterMetadata;
   if (reasoningLifecycle) {
-    const { completedAtMs, workDurationMs, ...clock } = reasoningLifecycle;
+    const { completedAtMs, workDurationMs, attemptDurationMs, status, ...clock } = reasoningLifecycle;
     metadata.reasoningLifecycle = clock;
   }
-  return { ...fields, adapterMetadata: metadata, items: items.map(item => {
-    if (item.type !== 'reasoning' || item.status !== 'cancelled') return item;
-    const { completedAtMs, durationMs, ...view } = item;
-    return view;
-  }) };
+  return { ...fields, adapterMetadata: metadata };
+}
+
+function extendsCapturedItem(saved, current) {
+  if (!current || current.id !== saved.id || current.type !== saved.type) return false;
+  if (saved.type === 'agentMessage') {
+    return current.text.startsWith(saved.text) && equal({ ...saved, text: current.text }, current);
+  }
+  if (saved.type === 'reasoning' && saved.status === 'cancelled') {
+    const publicPart = ({ status, startedAtMs, completedAtMs, durationMs, summary, content, ...item }) => item;
+    const extendsParts = (before, after) => Array.isArray(before) && Array.isArray(after) &&
+      before.every((text, index) => typeof after[index] === 'string' && after[index].startsWith(text));
+    return ['cancelled', 'completed'].includes(current.status) && equal(publicPart(saved), publicPart(current)) &&
+      extendsParts(saved.summary, current.summary) && extendsParts(saved.content, current.content);
+  }
+  return equal(saved, current);
+}
+
+function followsCapturedTurn(pending, recovered) {
+  return pending?.status === 'interrupted' && pending.completedAt == null &&
+    pending.adapterMetadata?.interruption === 'cloud-history-restored-without-execution-checkpoint' &&
+    Boolean(recovered) && equal(unfinishedTurnView(pending), unfinishedTurnView(recovered)) &&
+    pending.items.every((item, index) => extendsCapturedItem(item, recovered.items[index]));
+}
+
+function historyExtension(head, document) {
+  const { turns: earlier, updatedAt: oldUpdate, recencyAt: oldRecency, ...oldThread } = head;
+  const { turns: current, updatedAt, recencyAt, ...currentThread } = document;
+  if (!Array.isArray(earlier) || !equal(oldThread, currentThread) || updatedAt < oldUpdate || recencyAt < oldRecency ||
+      current.length < earlier.length) return null;
+  return { earlier, current };
 }
 
 function followsLocalRecovery(head, document, original, ownerId) {
   const latest = original?.turns.at(-1), local = latest?.adapterMetadata;
   const transport = local?.checkpoint?.inFlight?.transport;
-  if (latest?.status !== 'interrupted' || local?.resumePolicy !== 'automatic' || local.resumable !== true ||
+  if (!['interrupted', 'inProgress'].includes(latest?.status) || local?.resumePolicy !== 'automatic' || local.resumable !== true ||
       !isSiteInferenceCheckpoint(transport) || transport.ownerId !== ownerId) return false;
-  const { turns: earlier, updatedAt: oldUpdate, recencyAt: oldRecency, ...oldThread } = head;
-  const { turns: current, updatedAt, recencyAt, ...currentThread } = document;
-  if (!Array.isArray(earlier) || !equal(oldThread, currentThread) || updatedAt < oldUpdate || recencyAt < oldRecency ||
-      current.length < earlier.length || current.length > earlier.length + 1) return false;
-  if (!earlier.slice(0, current.length - 1).every((turn, index) => equal(turn, current[index]))) return false;
-  if (current.length > earlier.length) return true;
+  const extension = historyExtension(head, document);
+  if (!extension) return false;
+  const { earlier, current } = extension;
+  if (current.length > earlier.length + 1 ||
+      !earlier.slice(0, current.length - 1).every((turn, index) => equal(turn, current[index]))) return false;
+  return current.length > earlier.length || followsCapturedTurn(earlier.at(-1), current.at(-1));
+}
 
-  const pending = earlier.at(-1), recovered = current.at(-1);
-  if (pending.status !== 'interrupted' || pending.completedAt != null ||
-      pending.adapterMetadata?.interruption !== 'cloud-history-restored-without-execution-checkpoint') return false;
-  const { items: savedItems, ...saved } = unfinishedTurnView(pending);
-  const { items: recoveredItems, ...recovery } = unfinishedTurnView(recovered);
-  return equal(saved, recovery) && savedItems.every((savedItem, index) => {
-    const item = recoveredItems[index];
-    if (!item) return false;
-    if (savedItem.type === 'agentMessage' && item.type === 'agentMessage' && item.text.startsWith(savedItem.text)) {
-      return equal({ ...savedItem, text: item.text }, item);
-    }
-    return equal(savedItem, item);
-  });
+function completesLocalStartupConflict(conflict, document, original) {
+  if (conflict?.reason !== 'startup-local-diverged' || conflict.resolution ||
+      conflict.remoteMetadata?.revision !== 0 || conflict.remoteMetadata?.sequence !== 0 ||
+      conflict.remoteMetadata.deleted || !object(conflict.remote)) return false;
+  const extension = historyExtension(conflict.remote, document);
+  if (!extension) return false;
+  const { earlier, current } = extension;
+  const lastIndex = earlier.length - 1;
+  const completed = original?.turns[lastIndex], local = completed?.adapterMetadata;
+  if (completed?.status !== 'completed' || local?.interruption !== 'page-reload-checkpoint-saved' ||
+      local.resumePolicy !== 'automatic' || local.checkpoint?.state !== 'completed') return false;
+  return earlier.slice(0, lastIndex).every((turn, index) => equal(turn, current[index])) &&
+    followsCapturedTurn(earlier[lastIndex], current[lastIndex]);
 }
 
 function freshState() { return { schemaVersion: 1, cursor: null, heads: Object.create(null), known: Object.create(null), outbox: [], conflicts: Object.create(null), localIds: [] }; }
@@ -279,10 +306,20 @@ export function createChatHistorySync({ baseURL, fetchImpl = globalThis.fetch?.b
     if (!Array.isArray(threads) || threads.length > CHAT_HISTORY_SYNC_LIMITS.threads) fail('SYNC_INVALID_DOCUMENT', 'A bounded complete local thread snapshot is required.');
     const documents = threads.map(projectChatHistoryThread).filter(Boolean), ids = documents.map(doc => doc.id);
     if (new Set(ids).size !== ids.length) fail('SYNC_INVALID_DOCUMENT', 'Duplicate local conversation IDs.');
-    const previousLocal = localBaseline, originals = initial ? new Map(threads.map(thread => [thread.id, thread])) : null;
+    const previousLocal = localBaseline, originals = new Map(threads.map(thread => [thread.id, thread]));
     const result = await update(state => {
       for (const document of documents) {
         const id = document.id;
+        // A projected running turn can be ahead of its first upload after the
+        // owning browser reattaches. The normal revision-zero check still
+        // prevents this local continuation from replacing another device's copy.
+        if (!state.known[id] && !state.outbox.some(item => item.id === id) &&
+            completesLocalStartupConflict(state.conflicts[id], document, originals.get(id))) {
+          delete state.conflicts[id];
+          state.heads[id] = clone(document);
+          queue(state, id, 'PUT', document, 0);
+          continue;
+        }
         if (previousLocal?.has(id) && equal(previousLocal.get(id), document)) continue;
         if (state.known[id]?.deleted) { state.conflicts[id] = { id, reason: 'remote-deleted', local: document, remote: null, remoteMetadata: clone(state.known[id]), createdAt: now() }; delete state.heads[id]; continue; }
         if (state.heads[id] && equal(state.heads[id], document)) continue;

@@ -194,6 +194,92 @@ test('an actual stale-tab edit branches durably instead of borrowing another tab
   await b.sync.flush(); assert.equal(f.DB.raw.prepare('SELECT revision FROM chat_sync_conversations').get().revision, 2);
 });
 
+test('a verified reattaching turn advances an unsent browser history capture without branching', async t => {
+  const f = await fixture(t), a = device(f);
+  const previous = thread('restored-browser-capture', 'Saved public prefix.');
+  const first = previous.turns[0];
+  first.status = 'inProgress';
+  first.completedAt = first.durationMs = null;
+  first.items[1] = { ...first.items[1], status: 'inProgress', startedAtMs: 1001000, completedAtMs: null, durationMs: null };
+  first.adapterMetadata.reasoningLifecycle = {
+    status: 'inProgress', startedAtMs: 1001000, workStartedAtMs: 1000000, attemptDurationMs: 0,
+  };
+
+  a.state.online = false;
+  await a.sync.initialize([previous]);
+  const queued = copy([...a.store.values.values()][0].outbox[0]);
+  assert.equal(queued.attempted, false);
+  assert.equal(queued.baseRevision, 0);
+
+  const restored = copy(previous), resumed = restored.turns[0];
+  restored.updatedAt = restored.recencyAt = 1011;
+  resumed.adapterMetadata.resumePolicy = 'automatic';
+  resumed.adapterMetadata.resumable = true;
+  resumed.adapterMetadata.checkpoint = {
+    inFlight: { transport: { route: 'site-inference', siteRequestId: '90000000-0000-4000-8000-000000000001', ownerId: a.getIdentity().ownerId } },
+  };
+  resumed.adapterMetadata.reasoningLifecycle.attemptDurationMs = 1200;
+  resumed.items[2].text += ' The existing request continued.';
+  a.state.online = true;
+  const newProcess = a.create();
+  const initialized = await newProcess.initialize([restored]);
+  assert.equal(initialized.conflicts.length, 0);
+  assert.equal(initialized.queuedCount, 0);
+  const writes = a.calls.filter(call => call.method === 'PUT');
+  assert.equal(writes.length, 2);
+  assert.deepEqual(writes[0].body, { baseRevision: 0, mutationId: queued.mutationId, document: queued.document });
+  assert.equal(writes[1].body.baseRevision, 1);
+
+  const other = device(f);
+  const recovered = await other.sync.initialize([]);
+  assert.deepEqual(recovered.threads, [projectChatHistoryThread(restored)]);
+});
+
+test('a completed browser reattachment recovers the first upload while a changed prompt stays conflicted', async t => {
+  const f = await fixture(t), a = device(f);
+  const make = (id, changed) => {
+    const previous = thread(id, 'Unchanged visible beginning.');
+    const pending = previous.turns[0];
+    pending.status = 'inProgress';
+    pending.completedAt = pending.durationMs = null;
+    pending.items[1] = { ...pending.items[1], status: 'inProgress', startedAtMs: 1000000, durationMs: null };
+    pending.adapterMetadata.reasoningLifecycle = { status: 'inProgress', startedAtMs: 1000000, workStartedAtMs: 1000000, attemptDurationMs: 0 };
+    pending.items.pop();
+    const completed = thread(id, 'The actual confirmed answer.');
+    completed.updatedAt = completed.recencyAt = 1012;
+    const turn = completed.turns[0];
+    turn.items[1] = { ...turn.items[1], status: 'completed', startedAtMs: 1000050, completedAtMs: 1012000, durationMs: 11950 };
+    turn.adapterMetadata.interruption = 'page-reload-checkpoint-saved';
+    turn.adapterMetadata.resumePolicy = 'automatic';
+    turn.adapterMetadata.checkpoint = { state: 'completed' };
+    turn.adapterMetadata.reasoningLifecycle = { status: 'completed', startedAtMs: 1000000, workStartedAtMs: 1000000, completedAtMs: 1012000, attemptDurationMs: 11950, workDurationMs: 12000 };
+    if (changed) turn.items[0].content[0].text = 'A different prompt in a competing branch.';
+    return { previous, completed };
+  };
+  const recovered = make('initial-local-recovery', false), divergent = make('initial-local-divergence', true);
+  a.state.online = false;
+  await a.sync.initialize([recovered.previous, divergent.previous]);
+  const key = [...a.store.values.keys()][0];
+  await a.store.transact(key, state => {
+    for (const { previous, completed } of [recovered, divergent]) {
+      const id = previous.id;
+      state.conflicts[id] = { id, reason: 'startup-local-diverged', local: projectChatHistoryThread(completed),
+        remote: copy(state.heads[id]), remoteMetadata: { id, revision: 0, sequence: 0, deleted: false } };
+      state.heads[id] = projectChatHistoryThread(completed);
+    }
+    state.outbox = [];
+  });
+
+  a.state.online = true;
+  const before = await a.create().initialize([recovered.completed, divergent.completed]);
+  assert.deepEqual(before.conflicts.map(conflict => conflict.id), [divergent.completed.id]);
+  const writes = a.calls.filter(call => call.method === 'PUT');
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].body.baseRevision, 0);
+  const anotherDevice = device(f);
+  assert.deepEqual((await anotherDevice.sync.initialize([])).threads, [projectChatHistoryThread(recovered.completed)]);
+});
+
 test('startup with divergent older native storage preserves both branches and requires an explicit decision', async t => {
   const f = await fixture(t), a = device(f), original = thread(); await a.sync.initialize([original]); await a.sync.synchronize([addTurn(original, 'Previously synced newer branch')]);
   const reloaded = await a.create().initialize([original]); assert.equal(reloaded.conflicts.length, 1); assert.equal(reloaded.conflicts[0].local.turns.length, 1); assert.equal(reloaded.conflicts[0].remote.turns.length, 2); assert.equal(reloaded.queuedCount, 0); assert.equal(f.DB.raw.prepare('SELECT revision FROM chat_sync_conversations').get().revision, 2);
