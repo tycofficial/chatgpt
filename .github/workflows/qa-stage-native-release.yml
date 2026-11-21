@@ -1,4 +1,4 @@
-name: Inspect the native account history conflict after one send
+name: Verify the staged account recovery against the live service
 on:
   push:
     branches: [qa/codex-public-summary-heading]
@@ -16,21 +16,26 @@ jobs:
       API: https://chatgpt-admin-bridge-tyc.hushedtarragon1.chatgpt.site
       RELEASE: dee4682939543502
     steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: 6acc41f30f02c6ef9e9c6fed826365834ac3ade6
       - uses: actions/setup-node@v7
         with:
           node-version: 24
           package-manager-cache: false
-      - name: Capture the actual history queue before and after the first reply resumes
+      - name: Use real login and inference through the published website
         run: |
           set -euo pipefail
           npm install --prefix "$RUNNER_TEMP/pages-browser" --no-audit --no-fund --package-lock=false playwright-core@1.58.2
           node --input-type=module <<'NODE'
           import assert from 'node:assert/strict';
           import { randomUUID } from 'node:crypto';
+          import { readFileSync } from 'node:fs';
           import { join } from 'node:path';
           import { pathToFileURL } from 'node:url';
           const { chromium } = await import(pathToFileURL(join(process.env.RUNNER_TEMP, 'pages-browser/node_modules/playwright-core/index.mjs')).href);
           const { SITE, API, RELEASE } = process.env;
+          const syncAdapter = readFileSync('native-client/chat-history-sync.mjs', 'utf8');
           const home = new URL(SITE);
           const id = randomUUID().replace(/-/g, '').slice(0, 10);
           const username = 'qaedge' + id;
@@ -50,7 +55,8 @@ jobs:
             page.on('response', response => {
               const url = new URL(response.url()), method = response.request().method();
               if (url.origin === API && url.pathname.startsWith('/sync/') && method !== 'OPTIONS') {
-                syncTraffic.push({ method, status: response.status(), path: url.pathname.replace(/conversations\/[^/]+$/, 'conversations/<thread>') });
+                const followedUp = method === 'PUT' && (response.request().postData() ?? '').includes(marker + '-NEXT');
+                syncTraffic.push({ method, status: response.status(), followedUp, path: url.pathname.replace(/conversations\/[^/]+$/, 'conversations/<thread>') });
               }
               if (!response.request().isNavigationRequest() || url.origin !== home.origin) return;
               console.log('Edge navigation ' + JSON.stringify({ path: url.pathname.replace(new RegExp('/c/[^/]+'), '/c/<thread>'),
@@ -129,15 +135,6 @@ jobs:
                 .map(v => ({ type: v.type, code: typeof v.code === 'string' ? v.code : undefined }));
               const database = 'chatgpt-site-history-sync-v1';
               if (!(await indexedDB.databases()).some(db => db.name === database)) return { diagnostics, dbPresent: false };
-              function differences(a, b, path = 'document', out = []) {
-                if (out.length >= 45 || Object.is(a, b)) return out;
-                if (a === null || b === null || typeof a !== 'object' || typeof b !== 'object') {
-                  out.push(path);
-                  return out;
-                }
-                for (const key of new Set([...Object.keys(a), ...Object.keys(b)])) differences(a[key], b[key], path + '.' + key, out);
-                return out;
-              }
               const states = await new Promise((resolve, reject) => {
                 const op = indexedDB.open(database);
                 op.onerror = () => reject(op.error);
@@ -146,22 +143,11 @@ jobs:
                   const tx = db.transaction('owners', 'readonly');
                   const get = tx.objectStore('owners').getAll();
                   get.onerror = () => reject(get.error);
-                  get.onsuccess = () => resolve(get.result.map(own => {
-                    const ids = new Set([...Object.keys(own.heads ?? {}), ...Object.keys(own.conflicts ?? {})]);
-                    const matched = ids.has(threadId) ? threadId : ids.size === 1 ? [...ids][0] : threadId;
-                    const head = own.heads?.[matched], conflict = own.conflicts?.[matched];
-                    const compact = record => record && ({
-                      turns: record.turns.map(t => ({ status: t.status, interruption: t.adapterMetadata?.interruption,
-                        lifecycle: t.adapterMetadata?.reasoningLifecycle, items: t.items.map(i => [i.type, i.status ?? null]) })),
-                      updatedAt: record.updatedAt,
-                    });
-                    return { head: Boolean(head), revision: own.known?.[matched]?.revision ?? 0, headState: compact(head),
-                      pending: (own.outbox ?? []).filter(m => m.id === matched).map(m => ({ method: m.method, base: m.baseRevision, attempted: m.attempted, blocked: m.blocked })),
-                      conflict: conflict?.reason ?? null,
-                      conflictRemote: compact(conflict?.remote), conflictLocal: compact(conflict?.local),
-                      deltaFields: conflict ? differences(conflict.remote, conflict.local) : [],
-                    };
-                  }));
+                  get.onsuccess = () => resolve(get.result.map(own => ({
+                    head: Boolean(own.heads?.[threadId]), revision: own.known?.[threadId]?.revision ?? 0,
+                    pending: (own.outbox ?? []).filter(m => m.id === threadId).map(m => ({ method: m.method, attempted: m.attempted, blocked: m.blocked })),
+                    conflict: own.conflicts?.[threadId]?.reason ?? null,
+                  })));
                   tx.oncomplete = () => db.close();
                 };
               });
@@ -171,9 +157,15 @@ jobs:
           }
           const manifest = await fetch(new URL('native-client/active.json?edge_qa=' + RELEASE, home), { signal: AbortSignal.timeout(18000) });
           assert.equal((await manifest.json()).release, RELEASE);
+          async function candidateContext(browser) {
+            const context = await browser.newContext({ locale: 'zh-CN', serviceWorkers: 'block' });
+            await context.route(url => url.origin === home.origin && url.pathname === '/chatgpt/native-client/chat-history-sync.mjs',
+              route => route.fulfill({ status: 200, body: syncAdapter, contentType: 'application/javascript; charset=utf-8' }));
+            return context;
+          }
           const browser = await chromium.launch({ channel: 'msedge', headless: true });
           try {
-            const context = await browser.newContext({ locale: 'zh-CN' });
+            const context = await candidateContext(browser);
             let tab = await context.newPage();
             attach(tab);
             await account(tab, 'signup');
@@ -181,13 +173,110 @@ jobs:
             await send(tab, first);
             stage('first-model-request-sent');
             await tab.waitForURL(url => /^\/chatgpt\/c\/[^/]+\/?$/.test(url.pathname), { timeout: 20000 });
-            const requestedThread = tab.url(), initialThreadId = new URL(requestedThread).pathname.split('/').filter(Boolean).at(-1);
+            await message(tab, first).waitFor({state: 'visible', timeout: 15000});
+            await tab.waitForFunction(() => {
+              const id = location.pathname.split('/').filter(Boolean).at(-1);
+              return Object.keys(localStorage).filter(key => key.includes('cg-original-app-server:v1:account:')).some(key => {
+                try { return JSON.parse(localStorage.getItem(key)).threads.some(thread => thread.id === id); }
+                catch { return false; }
+              });
+            }, undefined, { timeout: 19000 });
+            const requestedThread = tab.url(), requestedId = new URL(requestedThread).pathname.split('/').filter(Boolean).at(-1);
+            stage('native-accepted-conversation-address');
             const before = await message(tab, marker).count();
             await tab.reload({waitUntil: 'domcontentloaded', timeout: 43000});
-            const restored = await message(tab, marker).waitFor({ state: 'visible', timeout: 25000 }).then(() => true, () => false);
-            stage(restored ? 'exact-reply-restored' : 'exact-reply-was-not-visible');
-            await cloudState(tab, 'after-first-reload', initialThreadId);
-            await state(tab, 'after-first-reload', initialThreadId, marker);
+            try {
+              await message(tab, marker).waitFor({ state: 'visible', timeout: 38000 });
+            } catch (error) {
+              await state(tab, 'reply-not-visible-after-reload', requestedId, marker);
+              await cloudState(tab, 'first-reload-missing-reply', requestedId);
+              throw error;
+            }
+            assert.equal(await message(tab, first).count(), 1);
+            assert.equal(await message(tab, marker).count(), 1);
+            assert.equal(requests.length, 1, 'Pre-reload send repeated');
+            stage(before ? 'reloaded-and-restored-completed-reply' : 'reloaded-while-reply-pending-and-restored-it');
+
+            const thread = tab.url();
+            const threadId = new URL(thread).pathname.split('/').filter(Boolean).at(-1);
+            assert.match(new URL(thread).pathname, /^\/chatgpt\/c\/[^/]+\/?$/);
+            console.log('Edge changed thread address after recovery ' + String(thread !== requestedThread));
+            await state(tab, 'before-close', threadId, marker);
+            await tab.close();
+            tab = await context.newPage();
+            attach(tab);
+            await tab.goto(thread, {waitUntil: 'domcontentloaded', timeout: 43000});
+            let directReopen = true;
+            try {
+              await message(tab, marker).waitFor({ state: 'visible', timeout: 22000 });
+              stage('closed-and-reopened-the-same-chat');
+            } catch {
+              directReopen = false;
+              await state(tab, 'direct-reopen-failed', threadId, marker);
+              await tab.goto(SITE, {waitUntil: 'domcontentloaded', timeout: 43000});
+              await composer(tab).waitFor({state:'visible', timeout: 30000});
+              const title = first.slice(0, 80);
+              const candidate = tab.getByText(title, { exact: true }).first();
+              await candidate.click({timeout: 20000});
+              await message(tab, marker).waitFor({ state: 'visible', timeout: 45000 });
+              stage('closed-and-reopened-the-chat-from-history');
+            }
+            await state(tab, 'after-reopen', threadId, marker);
+            assert.equal(requests.length, 1);
+
+            await context.setOffline(true);
+            try {
+              assert.equal(await tab.evaluate(() => navigator.onLine), false);
+              await message(tab, marker).waitFor({state: 'visible', timeout: 10000});
+            } finally {
+              await context.setOffline(false);
+            }
+            await tab.waitForFunction(() => navigator.onLine, undefined, {timeout: 12000});
+            await send(tab, second);
+            await message(tab, marker + '-NEXT').waitFor({ state: 'visible', timeout: 90000 });
+            assert.equal(await message(tab, second).count(), 1);
+            assert.equal(await message(tab, marker + '-NEXT').count(), 1);
+            assert.equal(requests.length, 2);
+            assert.equal(new Set(requests.map(request => request.id)).size, 2);
+            assert.ok(requests.every(request => request.id));
+            assert.equal(new URL(tab.url()).pathname, new URL(thread).pathname);
+            stage('reconnected-and-sent-one-contextual-follow-up');
+            await state(tab, 'before-cross-device', threadId, marker + '-NEXT');
+            await cloudState(tab, 'after-follow-up', threadId);
+            for (let i = 0; i < 25 && !syncTraffic.some(entry => entry.method === 'PUT' && entry.status >= 200 && entry.status < 300 && entry.followedUp); i++) {
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+            await cloudState(tab, 'before-second-profile', threadId);
+
+            const secondContext = await candidateContext(browser);
+            const other = await secondContext.newPage();
+            attach(other);
+            await account(other, 'login');
+            stage('logged-in-from-a-separate-browser-profile');
+            await other.goto(thread, { waitUntil: 'domcontentloaded', timeout: 43000 });
+            let crossDeviceRecovered = true;
+            try {
+              await message(other, marker + '-NEXT').waitFor({state: 'visible', timeout: 25000});
+              assert.equal(await message(other, marker).count(), 1);
+              assert.equal(requests.length, 2);
+              stage('recovered-the-account-chat-from-a-separate-profile');
+            } catch {
+              crossDeviceRecovered = false;
+              stage('the-separate-profile-did-not-display-the-synced-chat');
+              await state(other, 'cross-device-missing', threadId, marker + '-NEXT');
+              await cloudState(other, 'second-profile', threadId);
+            }
+
+            const loggedOut = other.waitForResponse(response => response.url() === API + '/auth/logout' && response.request().method() === 'POST', {timeout: 22000});
+            const [logoutResponse] = await Promise.all([
+              loggedOut,
+              other.goto(new URL('auth/logout/', home).href, {waitUntil: 'domcontentloaded', timeout: 30000})
+            ]);
+            assert.ok(logoutResponse.ok());
+            await other.waitForURL(url => url.origin === home.origin && url.pathname === home.pathname, {timeout: 22000});
+            stage('signed-out-and-stayed-on-chatgpt-base-path');
+            assert.equal(directReopen, true, 'The conversation could only be reopened from the home history');
+            assert.equal(crossDeviceRecovered, true, 'The separate profile did not load the expected conversation');
           } finally {
             console.log('Edge sync traffic ' + JSON.stringify(syncTraffic.slice(-40)));
             console.log('Edge requests ' + JSON.stringify({ inferencePosts: requests.length, distinctIds: new Set(requests.map(v => v.id)).size, pageErrorTypes: errors }));
