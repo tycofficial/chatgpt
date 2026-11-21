@@ -66,7 +66,7 @@ jobs:
         uses: actions/upload-artifact@v6
         continue-on-error: true
         with:
-          name: ipad-xcuitest-public-safari-before-signup
+          name: ipad-xcuitest-public-safari-before-login
           path: ${{ runner.temp }}/ipad-safari-xcuitest-public.png
           if-no-files-found: warn
           retention-days: 7
@@ -74,7 +74,7 @@ jobs:
       - name: Exercise Safari using Apple XCTest UI automation
         timeout-minutes: 11
         run: |
-          xcrun simctl openurl "$IPAD_UDID" 'https://tycofficial.github.io/chatgpt/auth/signup/'
+          xcrun simctl openurl "$IPAD_UDID" 'https://tycofficial.github.io/chatgpt/auth/login/'
           # XCTest may include form values in raw diagnostics or attachments.
           # Only fixed phase tags and numeric counts leave the runner.
           umask 077
@@ -85,10 +85,10 @@ jobs:
           xcodebuild test-without-building -project "$IPAD_QA_PROJECT" -scheme SafariQA \
             -destination "platform=iOS Simulator,id=$IPAD_UDID" \
             -derivedDataPath "$RUNNER_TEMP/ipad-xcuitest-build" -resultBundlePath "$results" \
-            -only-testing:SafariQAUITests/SafariPublicSiteTests/testPublicSignupRefreshAndFollowUpInSafari \
+            -only-testing:SafariQAUITests/SafariPublicSiteTests/testPublicLoginRefreshAndFollowUpInSafari \
             -parallel-testing-enabled NO -disable-concurrent-destination-testing \
             -test-timeouts-enabled YES -default-test-execution-time-allowance 480 2>&1 | tee "$raw" | \
-            awk 'match($0, /IPAD_UI_QA (runner-started|safari-foreground|public-signup-web-content|signup-form|signup-keyboard|signup-username-entered|signup-submitted|signup-returned-to-chat|first-send-visible|first-reply-before-reload|reload-while-reply-pending|safari-reload-tapped|first-conversation-restored|follow-up-sent|same-conversation-follow-up-verified|failed-[a-z-]+)\r?$/) { print substr($0, RSTART, RLENGTH); fflush() }' | tee "$phases"
+            awk 'match($0, /IPAD_UI_QA (runner-started|seeded-public-account|safari-foreground|public-login-web-content|login-form|login-keyboard|login-username-entered|login-password-entered|login-submitted|login-returned-to-chat|first-send-visible|first-reply-before-reload|reload-while-reply-pending|safari-reload-tapped|first-conversation-restored|follow-up-sent|same-conversation-follow-up-verified|failed-[a-z-]+)\r?$/) { print substr($0, RSTART, RLENGTH); fflush() }' | tee "$phases"
           build_exit="${PIPESTATUS[0]}"
           set -e
           printf 'XCTest exit status %s\n' "$build_exit"

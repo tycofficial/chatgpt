@@ -8,40 +8,49 @@ final class SafariPublicSiteTests: XCTestCase {
     private let reloadNames = ["Reload", "Reload Page", "Reload This Page", "reloadButton", "重新载入", "重新載入", "重新加载", "重新整理", "刷新"]
 
     @MainActor
-    func testPublicSignupRefreshAndFollowUpInSafari() {
+    func testPublicLoginRefreshAndFollowUpInSafari() async {
         continueAfterFailure = false
-        let safari = XCUIApplication(bundleIdentifier: "com.apple.mobilesafari")
         mark("runner-started")
+        let syntheticID = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        let syntheticName = "qaipad" + String(syntheticID.prefix(9))
+        let syntheticPassword = "Qa9ipad" + UUID().uuidString.replacingOccurrences(of: "-", with: "")
+        let registered = await registerSyntheticAccount(username: syntheticName, password: syntheticPassword)
+        guard check(registered, "seed-public-account") else { return }
+        mark("seeded-public-account")
+        let safari = XCUIApplication(bundleIdentifier: "com.apple.mobilesafari")
         safari.activate()
         guard check(safari.wait(for: .runningForeground, timeout: 20), "safari-foreground") else { return }
         mark("safari-foreground")
 
-        // The runner has already opened the public registration URL in this Safari instance.
+        // The simulator opened the normal public login page. Safari receives no session from account setup.
         let web = safari.webViews.firstMatch
-        guard check(web.waitForExistence(timeout: 40), "public-signup-web-content") else { return }
-        mark("public-signup-web-content")
+        guard check(web.waitForExistence(timeout: 40), "public-login-web-content") else { return }
+        mark("public-login-web-content")
         guard let username = formField(web.textFields, names: ["site-username", "用户名", "Username"]), username.isHittable else {
-            fail("signup-username")
+            fail("login-username")
             return
         }
         guard let password = formField(web.secureTextFields, names: ["site-password", "密码", "Password"]), password.isHittable else {
-            fail("signup-password")
+            fail("login-password")
             return
         }
-        mark("signup-form")
+        mark("login-form")
         let emptyPasswordValue = password.value as? String
-        let syntheticID = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
-        let syntheticName = "qaipad" + String(syntheticID.prefix(9))
-        guard check(enterUsername(syntheticName, in: username, using: safari), "signup-username-not-entered") else { return }
-        mark("signup-username-entered")
-        guard enterPassword(in: password, emptyValue: emptyPasswordValue, using: safari) else { return }
-        let signup = named(safari.webViews.descendants(matching: .button), ["继续", "Continue", "Sign up", "注册"])
-        guard check(signup.waitForExistence(timeout: 10) && signup.isEnabled, "signup-submit") else { return }
-        signup.tap()
-        mark("signup-submitted")
-        guard check(username.waitForNonExistence(timeout: 60) && password.waitForNonExistence(timeout: 10), "signup-form-still-present") else { return }
-        guard check(findEditor(in: safari, timeout: 55) != nil, "signup-did-not-reach-chat") else { return }
-        mark("signup-returned-to-chat")
+        guard check(enterUsername(syntheticName, in: username, using: safari), "login-username-not-entered") else { return }
+        mark("login-username-entered")
+        safari.typeKey(.tab, modifierFlags: [])
+        let movedToPassword = password.wait(for: \.hasFocus, toEqual: true, timeout: 4)
+        guard check(movedToPassword || focusWithKeyboard(password, using: safari), "login-password-focus") else { return }
+        password.typeText(syntheticPassword)
+        guard check(waitForSecureValue(in: password, differentFrom: emptyPasswordValue), "login-password-typed-value") else { return }
+        mark("login-password-entered")
+        let submit = named(safari.webViews.descendants(matching: .button), ["继续", "Continue", "Log in", "登录"])
+        guard check(submit.waitForExistence(timeout: 10) && submit.isEnabled, "login-submit") else { return }
+        submit.tap()
+        mark("login-submitted")
+        guard check(username.waitForNonExistence(timeout: 60) && password.waitForNonExistence(timeout: 10), "login-form-still-present") else { return }
+        guard check(findEditor(in: safari, timeout: 55) != nil, "login-did-not-reach-chat") else { return }
+        mark("login-returned-to-chat")
 
         let token = "IPAD-QA-" + String(syntheticID.prefix(10))
         let firstPrompt = "Reply with exactly \(token) and no other text."
@@ -73,10 +82,30 @@ final class SafariPublicSiteTests: XCTestCase {
         mark("same-conversation-follow-up-verified")
     }
 
+    private func registerSyntheticAccount(username: String, password: String) async -> Bool {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 20
+        let client = URLSession(configuration: configuration)
+        defer { client.finishTasksAndInvalidate() }
+        guard let endpoint = URL(string: "https://chatgpt-admin-bridge-tyc.hushedtarragon1.chatgpt.site/auth/register") else { return false }
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue("https://tycofficial.github.io", forHTTPHeaderField: "Origin")
+        do {
+            request.httpBody = try JSONEncoder().encode(["username": username, "password": password])
+            let (_, response) = try await client.data(for: request)
+            guard let status = (response as? HTTPURLResponse)?.statusCode else { return false }
+            return (200..<300).contains(status)
+        } catch {
+            return false
+        }
+    }
+
     @MainActor
     private func enterUsername(_ username: String, in field: XCUIElement, using safari: XCUIApplication) -> Bool {
-        guard focusWithKeyboard(field, using: safari) else { return check(false, "signup-username-focus") }
-        mark("signup-keyboard")
+        guard focusWithKeyboard(field, using: safari) else { return check(false, "login-username-focus") }
+        mark("login-keyboard")
         safari.typeText(username)
         let deadline = Date().addingTimeInterval(5)
         repeat {
@@ -84,34 +113,6 @@ final class SafariPublicSiteTests: XCTestCase {
             settle(0.4)
         } while Date() < deadline
         return false
-    }
-
-    @MainActor
-    private func enterPassword(in field: XCUIElement, emptyValue: String?, using safari: XCUIApplication) -> Bool {
-        let useSuggestion = named(safari.buttons, ["Use Strong Password", "使用高强度密码", "使用强密码", "使用高強度密碼"])
-        let typedPassword = "Qa9ipad" + UUID().uuidString.replacingOccurrences(of: "-", with: "")
-
-        for attempt in 0..<3 {
-            if !useSuggestion.exists && field.exists && field.isHittable {
-                if attempt == 0 { field.tap() }
-                else { field.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap() }
-            }
-            let deadline = Date().addingTimeInterval(5)
-            repeat {
-                // Safari can present Password AutoFill instead of a software keyboard for new-password.
-                if useSuggestion.exists && useSuggestion.isHittable {
-                    useSuggestion.tap()
-                    return check(waitForSecureValue(in: field, differentFrom: emptyValue), "signup-password-autofill-value")
-                }
-                if hasSecureValue(in: field, differentFrom: emptyValue) { return true }
-                if safari.keyboards.firstMatch.exists {
-                    field.typeText(typedPassword)
-                    return check(waitForSecureValue(in: field, differentFrom: emptyValue), "signup-password-typed-value")
-                }
-                settle(0.4)
-            } while Date() < deadline
-        }
-        return check(false, "signup-password-focus")
     }
 
     @MainActor
