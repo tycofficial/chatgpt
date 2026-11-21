@@ -1,0 +1,44 @@
+name: iPadOS Safari simulator QA
+
+on:
+  push:
+    branches: [qa/ipad-simulator]
+
+permissions:
+  contents: read
+
+jobs:
+  safari:
+    runs-on: macos-26
+    timeout-minutes: 25
+    env:
+      IPAD_LIVE_CHAT: '1'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/qa/ipad-simulator.mjs
+          sparse-checkout-cone-mode: false
+
+      - name: Select an installed iPad simulator
+        run: |
+          xcodebuild -version
+          xcrun simctl list devices available -j | node scripts/qa/ipad-simulator.mjs select-device >> "$GITHUB_ENV"
+
+      - name: Install Appium and its XCUITest driver
+        run: |
+          node --version
+          npm --version
+          export APPIUM_HOME="$RUNNER_TEMP/ipad-appium-home"
+          cd "$RUNNER_TEMP"
+          npm install --prefix "$RUNNER_TEMP/ipad-appium" --no-audit --no-fund appium@4.0.0
+          "$RUNNER_TEMP/ipad-appium/node_modules/.bin/appium" driver install xcuitest@13.5.0
+
+      - name: Verify the public site in simulator Safari
+        run: |
+          export APPIUM_HOME="$RUNNER_TEMP/ipad-appium-home"
+          xcrun simctl bootstatus "$IPAD_UDID" -b
+          "$RUNNER_TEMP/ipad-appium/node_modules/.bin/appium" server --address 127.0.0.1 --port 4723 --log-level warn > "$RUNNER_TEMP/ipad-appium.log" 2>&1 &
+          appium_pid=$!
+          trap 'kill "$appium_pid" 2>/dev/null || true' EXIT
+          node scripts/qa/ipad-simulator.mjs
