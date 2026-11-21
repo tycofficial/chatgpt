@@ -71,12 +71,22 @@ jobs:
             assert.equal(release, RELEASE);
           }
           async function send(page, prompt) {
-            await composer(page).click();
-            await page.keyboard.insertText(prompt);
-            const btn = page.locator('button[data-testid="send-button"], button[aria-label="发送消息"], button[aria-label="Send message"]').first();
-            const admitted = page.waitForRequest(isInference, { timeout: 45000 });
-            await btn.click({ timeout: 15000 });
-            await admitted;
+            const editor = composer(page);
+            await editor.click();
+            await editor.pressSequentially(prompt);
+            assert.ok((await editor.innerText()).includes(prompt), 'The composer did not receive the typed test message');
+            const controls = await editor.evaluate(element => {
+              const parent = element.closest('form') ?? element.closest('[data-type="unified-composer"]');
+              return [...(parent?.querySelectorAll('button') ?? [])].slice(0, 20).map(btn =>
+                ({ id: btn.id, label: btn.getAttribute('aria-label'), test: btn.getAttribute('data-testid'), disabled: btn.disabled }));
+            });
+            console.log('Edge composer controls ' + JSON.stringify(controls));
+            const btn = page.locator('#composer-submit-button, button[data-testid="send-button"], button[data-testid="composer-submit-button"], button[aria-label="发送"], button[aria-label="发送消息"], button[aria-label="发送提示"], button[aria-label="Send message"], button[aria-label="Send prompt"]').filter({ visible: true }).first();
+            const click = await btn.isVisible() && await btn.isEnabled();
+            await Promise.all([
+              page.waitForRequest(isInference, { timeout: 45000 }),
+              click ? btn.click({ timeout: 15000 }) : editor.press('Enter', { timeout: 15000 }),
+            ]);
           }
           const manifest = await fetch(new URL('native-client/active.json?edge_qa=' + RELEASE, home), { signal: AbortSignal.timeout(18000) });
           assert.equal((await manifest.json()).release, RELEASE);
