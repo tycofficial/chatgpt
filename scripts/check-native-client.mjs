@@ -82,7 +82,14 @@ for(const url of urls){if(!url.startsWith('/cdn/assets/'))throw Error('Unexpecte
 const html=await fs.readFile(path.join(root,'index.html'),'utf8');
 if(!html.includes('/chatgpt/native-client/bootstrap.mjs')||html.includes('src="./app.js'))throw Error('Native client is not the main entry');
 if(!html.includes('data-native-client-release="'+release+'"')||!html.includes('bootstrap.mjs?v='+release))throw Error('Main HTML serves an obsolete release');
-for(const file of ['404.html','native-client-shell.html','site-plans/index.html'])if(await fs.readFile(path.join(root,file),'utf8')!==html)throw Error('Stale entry shell: '+file);
+const authAliases = ['login', 'signup', 'auth/login', 'auth/signup', 'auth/logout', 'logout'];
+const planAliases = ['site-plans', 'plans', 'pricing-plan', ...['plus', 'pro5x', 'prolite', 'pro', 'promax'].flatMap(tier => [
+  'purchase/' + tier, 'codex/purchase/' + tier,
+])];
+const entryShells = ['404.html', 'native-client-shell.html', ...[...authAliases, ...planAliases].map(alias => alias + '/index.html')];
+for (const file of entryShells) {
+  if (await fs.readFile(path.join(root, file), 'utf8') !== html) throw Error('Stale entry shell: ' + file);
+}
 const bootstrap=await fs.readFile(path.join(directory,'bootstrap.mjs'),'utf8');
 if(!bootstrap.includes('release:'+JSON.stringify(release))||!bootstrap.includes('release-updater.js?v='))throw Error('Bootstrap does not install this release');
 execFileSync(process.execPath,['--check',path.join(root,'native-client-worker.js')],{stdio:'pipe'});
