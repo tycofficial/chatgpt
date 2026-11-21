@@ -39,6 +39,7 @@ jobs:
           const first = 'For a browser recovery test, reply with exactly ' + marker + ' and no other text.';
           const second = 'Reply with only the exact token from your previous answer with -NEXT appended.';
           const requests = [];
+          const syncTraffic = [];
           const errors = [];
           const stage = name => console.log('Edge QA ' + name);
           const composer = page => page.locator('#prompt-textarea[contenteditable="true"], .ProseMirror[contenteditable="true"]').first();
@@ -47,8 +48,11 @@ jobs:
             request.url() === API + '/inference/v1/responses';
           function attach(page) {
             page.on('response', response => {
-              if (!response.request().isNavigationRequest() || new URL(response.url()).origin !== home.origin) return;
-              const url = new URL(response.url());
+              const url = new URL(response.url()), method = response.request().method();
+              if (url.origin === API && url.pathname.startsWith('/sync/') && method !== 'OPTIONS') {
+                syncTraffic.push({ method, status: response.status(), path: url.pathname.replace(/conversations\/[^/]+$/, 'conversations/<thread>') });
+              }
+              if (!response.request().isNavigationRequest() || url.origin !== home.origin) return;
               console.log('Edge navigation ' + JSON.stringify({ path: url.pathname.replace(new RegExp('/c/[^/]+'), '/c/<thread>'),
                 status: response.status(), worker: response.fromServiceWorker() }));
             });
@@ -118,6 +122,33 @@ jobs:
             }, { expectedThread, token });
             console.log('Edge page state ' + JSON.stringify({stage, ...snapshot}));
           }
+          async function cloudState(page, stage, threadId) {
+            const result = await page.evaluate(async threadId => {
+              const diagnostics = (window.__originalClientProbe ?? []).filter(v =>
+                typeof v?.type === 'string' && /(?:history|sync|storage)/i.test(v.type)).slice(-24)
+                .map(v => ({ type: v.type, code: typeof v.code === 'string' ? v.code : undefined }));
+              const database = 'chatgpt-site-history-sync-v1';
+              if (!(await indexedDB.databases()).some(db => db.name === database)) return { diagnostics, dbPresent: false };
+              const states = await new Promise((resolve, reject) => {
+                const op = indexedDB.open(database);
+                op.onerror = () => reject(op.error);
+                op.onsuccess = () => {
+                  const db = op.result;
+                  const tx = db.transaction('owners', 'readonly');
+                  const get = tx.objectStore('owners').getAll();
+                  get.onerror = () => reject(get.error);
+                  get.onsuccess = () => resolve(get.result.map(own => ({
+                    head: Boolean(own.heads?.[threadId]), revision: own.known?.[threadId]?.revision ?? 0,
+                    pending: (own.outbox ?? []).filter(m => m.id === threadId).map(m => ({ method: m.method, attempted: m.attempted, blocked: m.blocked })),
+                    conflict: own.conflicts?.[threadId]?.reason ?? null,
+                  })));
+                  tx.oncomplete = () => db.close();
+                };
+              });
+              return { diagnostics, dbPresent: true, states };
+            }, threadId);
+            console.log('Edge cloud history ' + JSON.stringify({ stage, ...result }));
+          }
           const manifest = await fetch(new URL('native-client/active.json?edge_qa=' + RELEASE, home), { signal: AbortSignal.timeout(18000) });
           assert.equal((await manifest.json()).release, RELEASE);
           const browser = await chromium.launch({ channel: 'msedge', headless: true });
@@ -183,6 +214,12 @@ jobs:
             assert.ok(requests.every(request => request.id));
             assert.equal(new URL(tab.url()).pathname, new URL(thread).pathname);
             stage('reconnected-and-sent-one-contextual-follow-up');
+            await state(tab, 'before-cross-device', threadId, marker + '-NEXT');
+            await cloudState(tab, 'after-follow-up', threadId);
+            for (let i = 0; i < 12 && !syncTraffic.some(entry => entry.method === 'PUT'); i++) {
+              await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+            await cloudState(tab, 'before-second-profile', threadId);
 
             const secondContext = await browser.newContext({ locale: 'zh-CN' });
             const other = await secondContext.newPage();
@@ -190,18 +227,31 @@ jobs:
             await account(other, 'login');
             stage('logged-in-from-a-separate-browser-profile');
             await other.goto(thread, { waitUntil: 'domcontentloaded', timeout: 43000 });
-            await message(other, marker + '-NEXT').waitFor({state: 'visible', timeout: 45000});
-            assert.equal(await message(other, marker).count(), 1);
-            assert.equal(requests.length, 2);
-            stage('recovered-the-account-chat-from-a-separate-profile');
+            let crossDeviceRecovered = true;
+            try {
+              await message(other, marker + '-NEXT').waitFor({state: 'visible', timeout: 25000});
+              assert.equal(await message(other, marker).count(), 1);
+              assert.equal(requests.length, 2);
+              stage('recovered-the-account-chat-from-a-separate-profile');
+            } catch {
+              crossDeviceRecovered = false;
+              stage('the-separate-profile-did-not-display-the-synced-chat');
+              await state(other, 'cross-device-missing', threadId, marker + '-NEXT');
+              await cloudState(other, 'second-profile', threadId);
+            }
 
             const loggedOut = other.waitForResponse(response => response.url() === API + '/auth/logout' && response.request().method() === 'POST', {timeout: 22000});
-            await other.goto(new URL('auth/logout/', home).href, {waitUntil: 'domcontentloaded', timeout: 30000});
-            assert.ok((await loggedOut).ok());
+            const [logoutResponse] = await Promise.all([
+              loggedOut,
+              other.goto(new URL('auth/logout/', home).href, {waitUntil: 'domcontentloaded', timeout: 30000})
+            ]);
+            assert.ok(logoutResponse.ok());
             await other.waitForURL(url => url.origin === home.origin && url.pathname === home.pathname, {timeout: 22000});
             stage('signed-out-and-stayed-on-chatgpt-base-path');
             assert.equal(directReopen, true, 'The conversation could only be reopened from the home history');
+            assert.equal(crossDeviceRecovered, true, 'The separate profile did not load the expected conversation');
           } finally {
+            console.log('Edge sync traffic ' + JSON.stringify(syncTraffic.slice(-40)));
             console.log('Edge requests ' + JSON.stringify({ inferencePosts: requests.length, distinctIds: new Set(requests.map(v => v.id)).size, pageErrorTypes: errors }));
             await browser.close();
           }
