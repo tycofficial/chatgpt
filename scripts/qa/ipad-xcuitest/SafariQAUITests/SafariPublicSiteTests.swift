@@ -29,12 +29,12 @@ final class SafariPublicSiteTests: XCTestCase {
             return
         }
         mark("signup-form")
+        let emptyPasswordValue = password.value as? String
         let syntheticID = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
         let syntheticName = "qaipad" + String(syntheticID.prefix(9))
         guard check(enterUsername(syntheticName, in: username, using: safari), "signup-username-not-entered") else { return }
         mark("signup-username-entered")
-        guard check(focusWithKeyboard(password, using: safari), "signup-password-focus") else { return }
-        safari.typeText("Qa9ipad" + UUID().uuidString.replacingOccurrences(of: "-", with: ""))
+        guard enterPassword(in: password, emptyValue: emptyPasswordValue, using: safari) else { return }
         let signup = named(safari.webViews.descendants(matching: .button), ["继续", "Continue", "Sign up", "注册"])
         guard check(signup.waitForExistence(timeout: 10) && signup.isEnabled, "signup-submit") else { return }
         signup.tap()
@@ -81,6 +81,50 @@ final class SafariPublicSiteTests: XCTestCase {
         let deadline = Date().addingTimeInterval(5)
         repeat {
             if (field.value as? String)?.lowercased() == username { return true }
+            settle(0.4)
+        } while Date() < deadline
+        return false
+    }
+
+    @MainActor
+    private func enterPassword(in field: XCUIElement, emptyValue: String?, using safari: XCUIApplication) -> Bool {
+        let useSuggestion = named(safari.buttons, ["Use Strong Password", "使用高强度密码", "使用强密码", "使用高強度密碼"])
+        let typedPassword = "Qa9ipad" + UUID().uuidString.replacingOccurrences(of: "-", with: "")
+
+        for attempt in 0..<3 {
+            if !useSuggestion.exists && field.exists && field.isHittable {
+                if attempt == 0 { field.tap() }
+                else { field.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap() }
+            }
+            let deadline = Date().addingTimeInterval(5)
+            repeat {
+                // Safari can present Password AutoFill instead of a software keyboard for new-password.
+                if useSuggestion.exists && useSuggestion.isHittable {
+                    useSuggestion.tap()
+                    return check(waitForSecureValue(in: field, differentFrom: emptyValue), "signup-password-autofill-value")
+                }
+                if hasSecureValue(in: field, differentFrom: emptyValue) { return true }
+                if safari.keyboards.firstMatch.exists {
+                    field.typeText(typedPassword)
+                    return check(waitForSecureValue(in: field, differentFrom: emptyValue), "signup-password-typed-value")
+                }
+                settle(0.4)
+            } while Date() < deadline
+        }
+        return check(false, "signup-password-focus")
+    }
+
+    @MainActor
+    private func hasSecureValue(in field: XCUIElement, differentFrom initialValue: String?) -> Bool {
+        guard field.exists, let value = field.value as? String else { return false }
+        return value != initialValue && value.count >= 8
+    }
+
+    @MainActor
+    private func waitForSecureValue(in field: XCUIElement, differentFrom initialValue: String?) -> Bool {
+        let deadline = Date().addingTimeInterval(8)
+        repeat {
+            if hasSecureValue(in: field, differentFrom: initialValue) { return true }
             settle(0.4)
         } while Date() < deadline
         return false
@@ -151,12 +195,11 @@ final class SafariPublicSiteTests: XCTestCase {
     @MainActor
     private func send(_ prompt: String, in safari: XCUIApplication, failure: String) -> Bool {
         let button = named(safari.webViews.descendants(matching: .button), sendNames)
-        guard check(button.waitForExistence(timeout: 15), failure + "-control") else { return false }
         var focused = false
         if let editor = findEditor(in: safari, timeout: 10) {
             focused = focusWithKeyboard(editor, using: safari)
         }
-        if !focused && button.isHittable {
+        if !focused && button.exists && button.isHittable {
             // The original mobile composer keeps its editable area immediately left of Send.
             let frame = button.frame
             let distance = max(105, frame.width * 3)
