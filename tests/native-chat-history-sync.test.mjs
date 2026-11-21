@@ -280,44 +280,56 @@ test('a completed browser reattachment recovers the first upload while a changed
   assert.deepEqual((await anotherDevice.sync.initialize([])).threads, [projectChatHistoryThread(recovered.completed)]);
 });
 
-test('closing after a resumed reply preserves the queued upload at an acknowledged cloud revision', async t => {
-  const f = await fixture(t), a = device(f);
-  const pending = thread('acknowledged-browser-reattachment', 'Recorded partial reply.');
-  const early = pending.turns[0];
-  early.status = 'inProgress';
-  early.completedAt = early.durationMs = null;
-  early.items[1] = { ...early.items[1], status: 'inProgress', startedAtMs: 1000000 };
-  early.adapterMetadata.reasoningLifecycle = { status: 'inProgress', startedAtMs: 1000000, workStartedAtMs: 1000000, attemptDurationMs: 0 };
-  early.items.pop();
-  await a.sync.initialize([pending]);
-  const ahead = copy(pending);
-  ahead.updatedAt = ahead.recencyAt = 1011;
-  ahead.turns[0].items.push({ type: 'agentMessage', id: pending.id + '-answer-1', text: 'Recorded partial reply.', phase: 'final_answer' });
-  await a.sync.capture([ahead]);
-  const previous = copy([...a.store.values.values()][0].outbox[0]);
-  assert.equal(previous.baseRevision, 1);
-  assert.equal(previous.attempted, false);
+test('closing after a resumed reply retains queued uploads and reconciles a lost acknowledgement', async t => {
+  for (const lostAcknowledgement of [false, true]) {
+    await t.test(lostAcknowledgement ? 'actual Worker write with a lost response' : 'unattempted local upload', async t => {
+      const f = await fixture(t), a = device(f);
+      const pending = thread('acknowledged-browser-reattachment', 'Recorded partial reply.');
+      const early = pending.turns[0];
+      early.status = 'inProgress';
+      early.completedAt = early.durationMs = null;
+      early.items[1] = { ...early.items[1], status: 'inProgress', startedAtMs: 1000000 };
+      early.adapterMetadata.reasoningLifecycle = { status: 'inProgress', startedAtMs: 1000000, workStartedAtMs: 1000000, attemptDurationMs: 0 };
+      early.items.pop();
+      await a.sync.initialize([pending]);
+      const ahead = copy(pending);
+      ahead.updatedAt = ahead.recencyAt = 1011;
+      ahead.turns[0].items.push({ type: 'agentMessage', id: pending.id + '-answer-1', text: 'Recorded partial reply.', phase: 'final_answer' });
+      await a.sync.capture([ahead]);
+      const previous = copy([...a.store.values.values()][0].outbox[0]);
+      assert.equal(previous.baseRevision, 1);
+      assert.equal(previous.attempted, false);
+      if (lostAcknowledgement) {
+        a.state.loseAckOnce = true;
+        await assert.rejects(a.sync.flush(), { code: 'SYNC_NETWORK_UNAVAILABLE' });
+        const attempted = [...a.store.values.values()][0].outbox[0];
+        assert.equal(attempted.attempted, true);
+        assert.equal(attempted.mutationId, previous.mutationId);
+        assert.deepEqual(attempted.document, previous.document);
+      }
 
-  const completed = copy(ahead), turn = completed.turns[0];
-  completed.updatedAt = completed.recencyAt = 1012;
-  turn.status = 'completed';
-  turn.completedAt = 1012;
-  turn.durationMs = 12000;
-  turn.items[1] = { ...turn.items[1], status: 'completed', startedAtMs: 1000050, completedAtMs: 1012000, durationMs: 11950 };
-  turn.items[2].text = 'Recorded partial reply. The confirmed answer followed.';
-  turn.adapterMetadata.interruption = 'page-reload-checkpoint-saved';
-  turn.adapterMetadata.resumePolicy = 'automatic';
-  turn.adapterMetadata.checkpoint = { state: 'completed' };
-  turn.adapterMetadata.reasoningLifecycle = { ...turn.adapterMetadata.reasoningLifecycle,
-    status: 'completed', completedAtMs: 1012000, attemptDurationMs: 11950, workDurationMs: 12000 };
-  const reopened = a.create();
-  const initialized = await reopened.initialize([completed]);
-  assert.deepEqual(initialized.conflicts, []);
-  assert.equal(initialized.queuedCount, 0);
-  const writes = a.calls.filter(call => call.method === 'PUT');
-  assert.deepEqual(writes.map(call => call.body.baseRevision), [0, 1, 2]);
-  assert.deepEqual(writes[1].body, { baseRevision: 1, mutationId: previous.mutationId, document: previous.document });
-  assert.deepEqual((await device(f).sync.initialize([])).threads, [projectChatHistoryThread(completed)]);
+      const completed = copy(ahead), turn = completed.turns[0];
+      completed.updatedAt = completed.recencyAt = 1012;
+      turn.status = 'completed';
+      turn.completedAt = 1012;
+      turn.durationMs = 12000;
+      turn.items[1] = { ...turn.items[1], status: 'completed', startedAtMs: 1000050, completedAtMs: 1012000, durationMs: 11950 };
+      turn.items[2].text = 'Recorded partial reply. The confirmed answer followed.';
+      turn.adapterMetadata.interruption = 'page-reload-checkpoint-saved';
+      turn.adapterMetadata.resumePolicy = 'automatic';
+      turn.adapterMetadata.checkpoint = { state: 'completed' };
+      turn.adapterMetadata.reasoningLifecycle = { ...turn.adapterMetadata.reasoningLifecycle,
+        status: 'completed', completedAtMs: 1012000, attemptDurationMs: 11950, workDurationMs: 12000 };
+      const reopened = a.create();
+      const initialized = await reopened.initialize([completed]);
+      assert.deepEqual(initialized.conflicts, []);
+      assert.equal(initialized.queuedCount, 0);
+      const writes = a.calls.filter(call => call.method === 'PUT');
+      assert.deepEqual(writes.map(call => call.body.baseRevision), [0, 1, 2]);
+      assert.deepEqual(writes[1].body, { baseRevision: 1, mutationId: previous.mutationId, document: previous.document });
+      assert.deepEqual((await device(f).sync.initialize([])).threads, [projectChatHistoryThread(completed)]);
+    });
+  }
 });
 
 test('startup with divergent older native storage preserves both branches and requires an explicit decision', async t => {

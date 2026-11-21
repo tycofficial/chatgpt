@@ -18,7 +18,7 @@ jobs:
       contents: write
     env:
       DEPLOY_BASE: 6acc41f30f02c6ef9e9c6fed826365834ac3ade6
-      VERIFIED_REF: refs/heads/qa/verified-account-history-pending
+      VERIFIED_REF: refs/heads/qa/verified-account-history-ack
     outputs:
       release: ${{ steps.export.outputs.release }}
       commit: ${{ steps.export.outputs.commit }}
@@ -70,7 +70,7 @@ jobs:
           [[ "$release" =~ ^[a-f0-9]{16}$ ]]
           [[ "$release" != d483f118d44cd86f ]]
           tree="$(git write-tree)"
-          packed="$(git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit-tree "$tree" -p "$DEPLOY_BASE" -m 'Preserve the queued account history after tab reopening')"
+          packed="$(git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit-tree "$tree" -p "$DEPLOY_BASE" -m 'Preserve account history across a lost upload acknowledgement')"
           git push origin "$packed:$VERIFIED_REF"
           {
             printf 'release=%s\ncommit=%s\n' "$release" "$packed"
