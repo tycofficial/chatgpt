@@ -86,7 +86,7 @@ jobs:
             -only-testing:SafariQAUITests/SafariPublicSiteTests/testPublicSignupRefreshAndFollowUpInSafari \
             -parallel-testing-enabled NO -disable-concurrent-destination-testing \
             -test-timeouts-enabled YES -default-test-execution-time-allowance 480 2>&1 | tee "$raw" | \
-            awk 'match($0, /IPAD_UI_QA (runner-started|safari-foreground|public-editor|signup-form|signup-returned-to-chat|first-send-visible|first-reply-before-reload|reload-while-reply-pending|safari-reload-tapped|first-conversation-restored|follow-up-sent|same-conversation-follow-up-verified|failed-[a-z-]+)\r?$/) { print substr($0, RSTART, RLENGTH); fflush() }' | tee "$phases"
+            awk 'match($0, /IPAD_UI_QA (runner-started|safari-foreground|public-home-rendered|public-editor|signup-form|signup-returned-to-chat|first-send-visible|first-reply-before-reload|reload-while-reply-pending|safari-reload-tapped|first-conversation-restored|follow-up-sent|same-conversation-follow-up-verified|failed-[a-z-]+)\r?$/) { print substr($0, RSTART, RLENGTH); fflush() }' | tee "$phases"
           build_exit="${PIPESTATUS[0]}"
           set -e
           printf 'XCTest exit status %s\n' "$build_exit"
