@@ -288,11 +288,13 @@ async function streamResponses({ settings, messages, tools, toolChoice, signal, 
   const textPart = (index, contentIndex, text, append = false) => {
     const key = `${index}:${contentIndex}`, previous = texts.get(key)?.text || '';
     const next = append ? previous + text : text;
-    if (next === previous) return;
+    // A terminal snapshot can revise the provider's text. Keep the text
+    // already streamed to the UI while retaining the raw item for follow-up.
+    if (next === previous || !next.startsWith(previous)) return;
     texts.set(key, { index, contentIndex, text: next });
     refreshText();
     onActivity({type:'text_delta'});
-    onDelta(next.startsWith(previous) ? next.slice(previous.length) : '', assembled);
+    onDelta(next.slice(previous.length), assembled);
   };
   const reasoningPart = (index, summaryIndex, text, append = false) => {
     if (!isPublicReasoningPart({ index, summaryIndex, text })) return;

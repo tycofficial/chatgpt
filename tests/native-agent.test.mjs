@@ -249,27 +249,45 @@ test('unenabled Ultra fails explicitly without silently sending max or an unsupp
 });
 
 
-test('actual Responses commentary continues through a real file tool to final without changing the selected model or effort', async () => {
+test('streamed commentary survives a revised provider snapshot and keeps the real file tool and final answer', async () => {
   const { streamCompletion } = await import('../runtime.js'); const previous = globalThis.fetch, store = workspace(); let requests = 0;
   globalThis.fetch = async (url, options) => {
     assert.equal(String(url), 'https://fixture.invalid/v1/responses'); const payload = JSON.parse(options.body); requests++;
     assert.equal(payload.model, 'gpt-6.1-sol'); assert.equal(payload.reasoning.effort, 'high');
     let output;
-    if (requests === 1) output = [{ id: 'real-commentary', type: 'message', role: 'assistant', phase: 'commentary', content: [{ type: 'output_text', text: 'I will create the actual neutral file.' }] }];
-    else if (requests === 2) {
-      assert(payload.input.some(item => item.type === 'message' && item.phase === 'commentary'));
+    const events = [];
+    if (requests === 1) {
+      const text = 'I will create the actual neutral file.';
+      const revision = 'I will create the file now.';
+      const item = { id: 'real-commentary', type: 'message', role: 'assistant', phase: 'commentary',
+        content: [{ type: 'output_text', text: revision }] };
+      events.push(
+        { type: 'response.output_item.added', output_index: 0, item: { ...item, content: [] } },
+        { type: 'response.output_text.delta', output_index: 0, content_index: 0, item_id: item.id, delta: text },
+        { type: 'response.output_text.done', output_index: 0, content_index: 0, item_id: item.id, text: revision },
+        { type: 'response.output_item.done', output_index: 0, item },
+      );
+      output = [item];
+    } else if (requests === 2) {
+      const commentary = payload.input.find(item => item.type === 'message' && item.phase === 'commentary');
+      assert.equal(commentary?.content[0]?.text, 'I will create the file now.');
       output = [{ id: 'file-call-item', type: 'function_call', call_id: 'real-phase-file', name: 'create_file', arguments: JSON.stringify({ name: 'phase-proof.txt', content: 'Actual file created after intermediate commentary.' }) }];
     } else {
       assert.equal(requests, 3); const result = payload.input.find(item => item.type === 'function_call_output' && item.call_id === 'real-phase-file'); assert(result); assert.match(result.output, /phase-proof.txt/);
       output = [{ id: 'real-final', type: 'message', role: 'assistant', phase: 'final_answer', content: [{ type: 'output_text', text: 'The actual file is ready.' }] }];
     }
-    return new Response('data: ' + JSON.stringify({ type: 'response.completed', response: { id: 'phase-response-' + requests, model: payload.model, reasoning: payload.reasoning, status: 'completed', output } }) + '\n\n', { headers: { 'Content-Type': 'text/event-stream' } });
+    events.push({ type: 'response.completed', response: { id: 'phase-response-' + requests, model: payload.model, reasoning: payload.reasoning, status: 'completed', output } });
+    const wire = events.map(event => 'data: ' + JSON.stringify(event) + '\n\n').join('');
+    return new Response(wire, { headers: { 'Content-Type': 'text/event-stream' } });
   };
   try {
     const server = setup(streamCompletion, { toolExecutor: createBrowserToolExecutor({ storage: store }) }), id = start(server), result = await turn(server, id);
     assert.equal(result.status, 'completed'); assert.equal(requests, 3); assert.equal(result.adapterMetadata.checkpoint.metrics.length, 3);
     assert.equal(new TextDecoder().decode(await store.read(encodeURIComponent(id) + '/phase-proof.txt')), 'Actual file created after intermediate commentary.');
     assert.deepEqual(result.items.filter(item => item.type === 'agentMessage').map(item => item.phase), ['commentary', 'final_answer']);
+    assert.deepEqual(result.items.filter(item => item.type === 'agentMessage').map(item => item.text), [
+      'I will create the actual neutral file.', 'The actual file is ready.',
+    ]);
     assert.equal(result.items.find(item => item.type === 'mcpToolCall').status, 'completed');
     const adapter = new ClassicChatAdapter({ appServer: server, models }), messages = Object.values(adapter.detail(server.getThread(id)).mapping).map(row => row.message).filter(Boolean);
     assert.equal(messages.find(message => message.content?.parts?.[0] === 'I will create the actual neutral file.').channel, 'commentary');
