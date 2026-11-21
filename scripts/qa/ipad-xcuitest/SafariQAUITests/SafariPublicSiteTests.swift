@@ -2,7 +2,6 @@ import Foundation
 import XCTest
 
 final class SafariPublicSiteTests: XCTestCase {
-    private let home = URL(string: "https://tycofficial.github.io/chatgpt/")!
     private let editorNames = ["prompt-textarea", "询问 ChatGPT", "问问 ChatGPT", "Ask ChatGPT", "Ask anything", "Message ChatGPT"]
     private let sendNames = ["send-button", "发送", "发送消息", "Send", "Send message"]
     private let reloadNames = ["Reload", "Reload Page", "Reload This Page", "reloadButton", "重新载入", "重新載入", "重新加载", "重新整理", "刷新"]
@@ -16,20 +15,15 @@ final class SafariPublicSiteTests: XCTestCase {
         guard check(safari.wait(for: .runningForeground, timeout: 20), "safari-foreground") else { return }
         mark("safari-foreground")
 
-        // The workflow opened this URL in the same simulator before starting XCTest.
-        // Activate Safari to inspect that tab without launching a second copy of the page.
-        guard check(safari.webViews.firstMatch.waitForExistence(timeout: 40), "public-web-content") else { return }
-        let newChat = named(safari.webViews.descendants(matching: .any), ["新聊天", "New chat"])
-        guard check(newChat.waitForExistence(timeout: 55), "public-home-content") else { return }
-        mark("public-home-rendered")
-        if findEditor(in: safari, timeout: 6) != nil { mark("public-editor") }
-
-        safari.open(home.appendingPathComponent("auth").appendingPathComponent("signup", isDirectory: true))
-        guard let username = formField(safari.webViews.descendants(matching: .textField), names: ["site-username", "用户名", "Username"]), username.isHittable else {
+        // The runner has already opened the public registration URL in this Safari instance.
+        let web = safari.webViews.firstMatch
+        guard check(web.waitForExistence(timeout: 40), "public-signup-web-content") else { return }
+        mark("public-signup-web-content")
+        guard let username = formField(web.textFields, names: ["site-username", "用户名", "Username"]), username.isHittable else {
             fail("signup-username")
             return
         }
-        guard let password = formField(safari.webViews.descendants(matching: .secureTextField), names: ["site-password", "密码", "Password"]), password.isHittable else {
+        guard let password = formField(web.secureTextFields, names: ["site-password", "密码", "Password"]), password.isHittable else {
             fail("signup-password")
             return
         }
@@ -89,7 +83,8 @@ final class SafariPublicSiteTests: XCTestCase {
 
     @MainActor
     private func formField(_ query: XCUIElementQuery, names: [String]) -> XCUIElement? {
-        let preferred = named(query, names)
+        let preferred = query.matching(NSPredicate(format: "identifier IN %@ OR label IN %@ OR placeholderValue IN %@",
+                                                   names, names, names)).firstMatch
         if preferred.waitForExistence(timeout: 18) { return preferred }
         return query.count == 1 ? query.firstMatch : nil
     }

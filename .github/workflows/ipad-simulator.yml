@@ -73,6 +73,7 @@ jobs:
       - name: Exercise Safari using Apple XCTest UI automation
         timeout-minutes: 11
         run: |
+          xcrun simctl openurl "$IPAD_UDID" 'https://tycofficial.github.io/chatgpt/auth/signup/'
           # XCTest may include form values in raw diagnostics or attachments.
           # Only fixed phase tags and numeric counts leave the runner.
           umask 077
@@ -86,10 +87,13 @@ jobs:
             -only-testing:SafariQAUITests/SafariPublicSiteTests/testPublicSignupRefreshAndFollowUpInSafari \
             -parallel-testing-enabled NO -disable-concurrent-destination-testing \
             -test-timeouts-enabled YES -default-test-execution-time-allowance 480 2>&1 | tee "$raw" | \
-            awk 'match($0, /IPAD_UI_QA (runner-started|safari-foreground|public-home-rendered|public-editor|signup-form|signup-returned-to-chat|first-send-visible|first-reply-before-reload|reload-while-reply-pending|safari-reload-tapped|first-conversation-restored|follow-up-sent|same-conversation-follow-up-verified|failed-[a-z-]+)\r?$/) { print substr($0, RSTART, RLENGTH); fflush() }' | tee "$phases"
+            awk 'match($0, /IPAD_UI_QA (runner-started|safari-foreground|public-signup-web-content|signup-form|signup-returned-to-chat|first-send-visible|first-reply-before-reload|reload-while-reply-pending|safari-reload-tapped|first-conversation-restored|follow-up-sent|same-conversation-follow-up-verified|failed-[a-z-]+)\r?$/) { print substr($0, RSTART, RLENGTH); fflush() }' | tee "$phases"
           build_exit="${PIPESTATUS[0]}"
           set -e
           printf 'XCTest exit status %s\n' "$build_exit"
+          if [[ "$build_exit" != 0 ]]; then
+            sed -nE 's#^.*SafariPublicSiteTests\.swift:([0-9]+): error:.*#XCTest reported an error at Swift line \1#p' "$raw" | sort -u
+          fi
           counts="$RUNNER_TEMP/ipad-xcuitest-counts.json"
           if [[ -d "$results" ]]; then
             if xcrun xcresulttool get test-results summary --path "$results" 2>/dev/null | \
