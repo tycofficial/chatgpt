@@ -60,11 +60,13 @@ final class SafariPublicSiteTests: XCTestCase {
         guard check(findEditor(in: safari, timeout: 55) != nil, "login-did-not-reach-chat") else { return }
         mark("login-returned-to-chat")
 
+        let browserPage = safari.webViews.firstMatch
         let token = "IPAD-QA-" + String(syntheticID.prefix(10))
-        let firstPrompt = "Reply with exactly \(token) and no other text."
+        // Keep the transcript text distinct from the 80-character conversation title.
+        let firstPrompt = "For this browser conversation recovery test, reply with exactly \(token) and no other text."
         guard send(firstPrompt, in: safari, failure: "first-send") else { return }
-        let firstUser = exactText(in: safari, firstPrompt)
-        let firstReply = exactText(in: safari, String(token))
+        let firstUser = exactText(in: browserPage, firstPrompt)
+        let firstReply = exactText(in: browserPage, String(token))
         guard check(firstUser.firstMatch.waitForExistence(timeout: 20), "first-prompt-missing") else { return }
         mark("first-send-visible")
 
@@ -75,19 +77,20 @@ final class SafariPublicSiteTests: XCTestCase {
         reload.tap()
         mark("safari-reload-tapped")
         guard check(firstReply.firstMatch.waitForExistence(timeout: 95), "first-reply-after-reload") else { return }
-        guard check(firstUser.count == 1 && firstReply.count == 1, "first-transcript-duplicated") else { return }
-        mark("first-conversation-restored")
+        mark("first-reply-restored")
+        let restoredCounts = transcriptCounts(firstUser, firstReply, stage: "restored")
+        if restoredCounts == (1, 1) { mark("first-conversation-restored") }
 
         // The follow-up omits the earlier random token. Its answer proves preserved context.
         let followPrompt = "Reply with only the exact token from your previous answer with -NEXT appended."
         guard send(followPrompt, in: safari, failure: "follow-up-send") else { return }
         mark("follow-up-sent")
-        let followUser = exactText(in: safari, followPrompt)
-        let followReply = exactText(in: safari, "\(token)-NEXT")
+        let followUser = exactText(in: browserPage, followPrompt)
+        let followReply = exactText(in: browserPage, "\(token)-NEXT")
         guard check(followReply.firstMatch.waitForExistence(timeout: 95), "follow-up-context-missing") else { return }
-        guard check(firstUser.count == 1 && firstReply.count == 1 && followUser.count == 1 && followReply.count == 1,
-                    "follow-up-transcript-duplicated") else { return }
         mark("same-conversation-follow-up-verified")
+        let followCounts = transcriptCounts(followUser, followReply, stage: "follow-up")
+        _ = check(restoredCounts == (1, 1) && followCounts == (1, 1), "transcript-count-mismatch")
     }
 
 
@@ -198,8 +201,17 @@ final class SafariPublicSiteTests: XCTestCase {
     }
 
     @MainActor
-    private func exactText(in safari: XCUIApplication, _ text: String) -> XCUIElementQuery {
-        safari.webViews.descendants(matching: .staticText).matching(NSPredicate(format: "label == %@ OR value == %@", text, text))
+    private func exactText(in page: XCUIElement, _ text: String) -> XCUIElementQuery {
+        page.staticTexts.matching(NSPredicate(format: "label == %@ OR value == %@", text, text))
+    }
+
+    @MainActor
+    private func transcriptCounts(_ user: XCUIElementQuery, _ reply: XCUIElementQuery, stage: String) -> (Int, Int) {
+        _ = user.firstMatch.waitForExistence(timeout: 10)
+        let userCount = user.count
+        let replyCount = reply.count
+        mark("\(stage)-transcript-user-\(userCount)-reply-\(replyCount)")
+        return (userCount, replyCount)
     }
 
     @MainActor
