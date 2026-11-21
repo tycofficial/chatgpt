@@ -11,18 +11,16 @@ final class SafariPublicSiteTests: XCTestCase {
     func testPublicLoginRefreshAndFollowUpInSafari() async {
         continueAfterFailure = false
         mark("runner-started")
-        let syntheticID = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
-        let syntheticName = "qaipad" + String(syntheticID.prefix(9))
-        let syntheticPassword = "Qa9ipad" + UUID().uuidString.replacingOccurrences(of: "-", with: "")
-        let registered = await registerSyntheticAccount(username: syntheticName, password: syntheticPassword)
-        guard check(registered, "seed-public-account") else { return }
-        mark("seeded-public-account")
         let safari = XCUIApplication(bundleIdentifier: "com.apple.mobilesafari")
-        safari.activate()
+        guard let loginURL = URL(string: "https://tycofficial.github.io/chatgpt/auth/login/") else {
+            fail("public-login-url")
+            return
+        }
+        mark("safari-login-navigation-started")
+        safari.open(loginURL)
         guard check(safari.wait(for: .runningForeground, timeout: 20), "safari-foreground") else { return }
         mark("safari-foreground")
 
-        // The simulator opened the normal public login page. Safari receives no session from account setup.
         let web = safari.webViews.firstMatch
         guard check(web.waitForExistence(timeout: 40), "public-login-web-content") else { return }
         mark("public-login-web-content")
@@ -35,6 +33,14 @@ final class SafariPublicSiteTests: XCTestCase {
             return
         }
         mark("login-form")
+
+        // Create a test account only after Safari exposes the normal login form.
+        let syntheticID = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
+        let syntheticName = "qaipad" + String(syntheticID.prefix(9))
+        let syntheticPassword = "Qa9ipad" + UUID().uuidString.replacingOccurrences(of: "-", with: "")
+        let registered = await registerSyntheticAccount(username: syntheticName, password: syntheticPassword)
+        guard check(registered, "seed-public-account") else { return }
+        mark("seeded-public-account")
         let emptyPasswordValue = password.value as? String
         guard check(enterUsername(syntheticName, in: username, using: safari), "login-username-not-entered") else { return }
         mark("login-username-entered")

@@ -74,17 +74,6 @@ jobs:
       - name: Exercise Safari using Apple XCTest UI automation
         timeout-minutes: 11
         run: |
-          login_url='https://tycofficial.github.io/chatgpt/auth/login/'
-          for attempt in 1 2 3; do
-            if xcrun simctl openurl "$IPAD_UDID" "$login_url"; then
-              break
-            fi
-            if [[ "$attempt" == 3 ]]; then
-              echo '::error::The booted iPad simulator could not open the public login URL.'
-              exit 1
-            fi
-            sleep 4
-          done
           # XCTest may include form values in raw diagnostics or attachments.
           # Only fixed phase tags and numeric counts leave the runner.
           umask 077
@@ -98,7 +87,7 @@ jobs:
             -only-testing:SafariQAUITests/SafariPublicSiteTests/testPublicLoginRefreshAndFollowUpInSafari \
             -parallel-testing-enabled NO -disable-concurrent-destination-testing \
             -test-timeouts-enabled YES -default-test-execution-time-allowance 480 2>&1 | tee "$raw" | \
-            awk 'match($0, /IPAD_UI_QA (runner-started|seeded-public-account|safari-foreground|public-login-web-content|login-form|login-keyboard|login-username-entered|login-password-entered|login-submitted|login-returned-to-chat|first-send-visible|first-reply-before-reload|reload-while-reply-pending|safari-reload-tapped|first-conversation-restored|follow-up-sent|same-conversation-follow-up-verified|failed-[a-z-]+)\r?$/) { print substr($0, RSTART, RLENGTH); fflush() }' | tee "$phases"
+            awk 'match($0, /IPAD_UI_QA (runner-started|safari-login-navigation-started|seeded-public-account|safari-foreground|public-login-web-content|login-form|login-keyboard|login-username-entered|login-password-entered|login-submitted|login-returned-to-chat|first-send-visible|first-reply-before-reload|reload-while-reply-pending|safari-reload-tapped|first-conversation-restored|follow-up-sent|same-conversation-follow-up-verified|failed-[a-z-]+)\r?$/) { print substr($0, RSTART, RLENGTH); fflush() }' | tee "$phases"
           build_exit="${PIPESTATUS[0]}"
           set -e
           printf 'XCTest exit status %s\n' "$build_exit"
