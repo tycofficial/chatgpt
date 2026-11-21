@@ -29,14 +29,11 @@ final class SafariPublicSiteTests: XCTestCase {
         }
         mark("signup-form")
         let syntheticID = UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased()
-        let syntheticName = "qa_ipad_" + String(syntheticID.prefix(12))
-        username.tap()
-        if safari.keyboards.firstMatch.waitForExistence(timeout: 4) { mark("signup-keyboard") }
-        safari.typeText(syntheticName)
-        guard check(username.value as? String == syntheticName, "signup-username-not-entered") else { return }
+        let syntheticName = "qaipad" + String(syntheticID.prefix(9))
+        guard check(enterUsername(syntheticName, in: username, using: safari), "signup-username-not-entered") else { return }
         mark("signup-username-entered")
         password.tap()
-        safari.typeText("Qa9!" + UUID().uuidString.replacingOccurrences(of: "-", with: ""))
+        safari.typeText("Qa9ipad" + UUID().uuidString.replacingOccurrences(of: "-", with: ""))
         let signup = named(safari.webViews.descendants(matching: .button), ["继续", "Continue", "Sign up", "注册"])
         guard check(signup.waitForExistence(timeout: 10) && signup.isEnabled, "signup-submit") else { return }
         signup.tap()
@@ -73,6 +70,24 @@ final class SafariPublicSiteTests: XCTestCase {
         guard check(firstUser.count == 1 && firstReply.count == 1 && followUser.count == 1 && followReply.count == 1,
                     "follow-up-transcript-duplicated") else { return }
         mark("same-conversation-follow-up-verified")
+    }
+
+    @MainActor
+    private func enterUsername(_ username: String, in field: XCUIElement, using safari: XCUIApplication) -> Bool {
+        for attempt in 0..<2 {
+            field.tap()
+            if safari.keyboards.firstMatch.waitForExistence(timeout: 5) && attempt == 0 { mark("signup-keyboard") }
+            if attempt > 0, let previous = field.value as? String, !previous.isEmpty {
+                safari.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: previous.count))
+            }
+            safari.typeText(username)
+            let deadline = Date().addingTimeInterval(5)
+            repeat {
+                if (field.value as? String)?.lowercased() == username { return true }
+                _ = RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.4))
+            } while Date() < deadline
+        }
+        return false
     }
 
     @MainActor
