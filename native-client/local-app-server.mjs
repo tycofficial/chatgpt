@@ -1,11 +1,11 @@
 /** Original app-server protocol over real, resumable local execution. */
-import { hasUncertainPlainResponse, plainInterruptionMessage, runAgentTurn } from './agent-turn-runner.mjs?v=5c7eb02b441bce39';
-import { readWebSearchIntent, interruptHostedSearch } from './local-web-search.mjs?v=5c7eb02b441bce39';
-import { terminalSiteInferenceReason } from './site-inference-transport.mjs?v=5c7eb02b441bce39';
-import { readClassicBranchRequest, getClassicExecutionThread } from './classic-response-branches.mjs?v=5c7eb02b441bce39';
-import { parseClassicInputMessages } from './classic-input-messages.mjs?v=5c7eb02b441bce39';
-import { compactPreparedUserContent, isProviderContent, needsPreparedInputStorage } from './prepared-input-store.mjs?v=5c7eb02b441bce39';
-import { allowedReasoningEfforts } from '../runtime.js?v=5c7eb02b441bce39';
+import { hasUncertainPlainResponse, plainInterruptionMessage, runAgentTurn } from './agent-turn-runner.mjs?v=dea77d65adc42752';
+import { readWebSearchIntent, interruptHostedSearch } from './local-web-search.mjs?v=dea77d65adc42752';
+import { terminalSiteInferenceReason } from './site-inference-transport.mjs?v=dea77d65adc42752';
+import { readClassicBranchRequest, getClassicExecutionThread } from './classic-response-branches.mjs?v=dea77d65adc42752';
+import { parseClassicInputMessages } from './classic-input-messages.mjs?v=dea77d65adc42752';
+import { compactPreparedUserContent, isProviderContent, needsPreparedInputStorage } from './prepared-input-store.mjs?v=dea77d65adc42752';
+import { allowedReasoningEfforts, isPublicReasoningPart } from '../runtime.js?v=dea77d65adc42752';
 export class RpcError extends Error {
   constructor(code, message, data) { super(message); this.name = 'RpcError'; this.code = code; if (data !== undefined) this.data = data; }
 }
@@ -34,18 +34,51 @@ export function storedConversationOrigin(thread) {
 }
 
 
+const siteCodexActivity = Symbol('siteCodexActivity');
+
+export function wrapNativeCodexActivityItem(classify) {
+  return function (item, ...args) {
+    if (item?.[siteCodexActivity]) return { item, grouping: 'standalone' };
+    return classify.call(this, item, ...args);
+  };
+}
+
+export function projectNativeCodexPublicSummary(item) {
+  const summary = item?.type === 'reasoning' && item[siteCodexActivity];
+  return typeof summary === 'string' && summary !== item.content ? { ...item, content: summary } : item;
+}
+
 export function wrapNativeCodexWorkTiming(projectTurn, server) {
   return function (turn, ...args) {
+    const legacyTaskStatus = item => item?.type === 'mcpToolCall' && item.tool === 'task_status';
     const thread = server.threads.get(turn?.params?.threadId);
+    const ownCodex = storedConversationSurface(thread) === 'codex';
     const local = thread?.turns.find(value => value.id === turn.turnId);
     const timing = local?.adapterMetadata?.reasoningLifecycle;
-    if (!Number.isFinite(timing?.workStartedAtMs)) return projectTurn.call(this, turn, ...args);
-    return projectTurn.call(this, {
-      ...turn,
+    let visibleTurn = turn?.items?.some(legacyTaskStatus)
+      ? { ...turn, items: turn.items.filter(item => !legacyTaskStatus(item)) } : turn;
+    if (Number.isFinite(timing?.workStartedAtMs)) visibleTurn = {
+      ...visibleTurn,
       turnStartedAtMs: timing.workStartedAtMs,
       firstTurnWorkItemStartedAtMs: timing.startedAtMs ?? timing.workStartedAtMs,
       finalAssistantStartedAtMs: local.status === 'inProgress' ? null : timing.completedAtMs ?? null,
-    }, ...args);
+    };
+    const projected = projectTurn.call(this, visibleTurn, ...args);
+    if (!ownCodex || !projected?.items || !local) return projected;
+    const publicSummaries = new Map(local.items.filter(item => item.type === 'reasoning' && Array.isArray(item.summary))
+      .map(item => [item.id, item.summary.filter(text => typeof text === 'string' && text.trim()).join('\n\n')]));
+    return { ...projected, items: projected.items.map(item => {
+      const summary = item.type === 'reasoning' && item.completed && publicSummaries.get(item.sourceItemId);
+      if (summary) {
+        // The native local runner assumes the first entry is a title. The
+        // Responses API instead supplies each public entry as a body part.
+        return { ...item, content: summary, [siteCodexActivity]: summary };
+      }
+      if (item.type === 'mcp-tool-call' && item.invocation?.server === 'browser_workspace' && item.invocation.tool === 'python') {
+        return { ...item, [siteCodexActivity]: true, toolDisplay: { ...item.toolDisplay, title: 'Python' } };
+      }
+      return item;
+    }) };
   };
 }
 
@@ -693,19 +726,44 @@ export class LocalAppServer {
     }
     return item;
   }
-  append(running, text, reasoning, phase = null, outputMessages = null) {
-    if (running.terminal) return;
+  appendReasoning(running, reasoning, outputReasoningParts) {
+    const parts = Array.isArray(outputReasoningParts) ? outputReasoningParts.filter(isPublicReasoningPart) : null;
+    if (parts ? !parts.length : !reasoning) return;
     const { thread, turn } = running;
-    if (reasoning) {
-      if (!running.reasoning) this.beginReasoning(running, { force: true });
-      const old = running.reasoning.summary[0] ?? '';
-      if (!reasoning.startsWith(old)) throw Error('Gateway replaced an already streamed reasoning summary');
-      const delta = reasoning.slice(old.length);
-      if (delta) {
-        running.reasoning.summary[0] = reasoning;
-        this.notify('item/reasoning/summaryTextDelta', { threadId: thread.id, turnId: turn.id, itemId: running.reasoning.id, summaryIndex: 0, delta });
+    const item = running.reasoning ?? this.beginReasoning(running, { force: true });
+    const frame = turn.adapterMetadata.checkpoint?.inFlight;
+    const layout = frame ?? (running.reasoningPartLayout?.itemId === item.id ? running.reasoningPartLayout : null);
+    const keys = layout?.reasoningPartKeys;
+    const appendAt = (summaryIndex, text) => {
+      const old = item.summary[summaryIndex] ?? '';
+      if (!text.startsWith(old) || text.length === old.length) return;
+      item.summary[summaryIndex] = text;
+      this.notify('item/reasoning/summaryTextDelta', { threadId: thread.id, turnId: turn.id, itemId: item.id, summaryIndex, delta: text.slice(old.length) });
+    };
+    if (parts && (keys || !item.summary.length)) {
+      // Bind each public part to a native slot once. Provider indices can have
+      // gaps, and replay can initially contain less text than the saved slot.
+      const slots = keys ?? [];
+      if (frame) frame.reasoningPartKeys = slots;
+      else running.reasoningPartLayout = { itemId: item.id, reasoningPartKeys: slots };
+      for (const part of parts) {
+        const key = `${part.index}:${part.summaryIndex}`;
+        let slot = slots.indexOf(key);
+        if (slot < 0) { slot = slots.length; slots.push(key); }
+        appendAt(slot, part.text);
       }
+      return;
     }
+    // A resumable item created by the old build already published a single
+    // flat slot. Keep that layout for the rest of the same API attempt.
+    if (keys || !reasoning) return;
+    const old = item.summary[0] ?? '';
+    if (!reasoning.startsWith(old) && !old.startsWith(reasoning)) throw Error('Gateway replaced an already streamed reasoning summary');
+    appendAt(0, reasoning);
+  }
+  append(running, text, reasoning, phase = null, outputMessages = null, outputReasoningParts = null) {
+    if (running.terminal) return;
+    this.appendReasoning(running, reasoning, outputReasoningParts);
     if (outputMessages?.length && !running.legacyAssistantLayout) {
       for (const message of outputMessages) {
         if (!message.text) continue;

@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { createSiteInferenceTransport, isSiteInferenceCheckpoint } from '../src/native-client/site-inference-transport.mjs';
 import { LocalAppServer } from '../src/native-client/local-app-server.mjs';
 import { createModelCatalogAdapter } from '../src/native-client/model-catalog-adapter.mjs';
@@ -134,6 +135,32 @@ test('reopening before admission retries the identical UUID and payload after a 
   await assert.rejects(reopened.request({ ...payload, input: 'Modified payload' }, { checkpoint }), { status: 404 });
   assert.equal(await (await reopened.request(payload, { checkpoint })).text(), output);
   assert.deepEqual(events, [uuid(1), 'receipt', 'receipt', uuid(1)]);
+});
+
+test('reopening a reasoning request retains the body saved before admission across the summary change', async () => {
+  const request = { ...payload, reasoning: { effort: 'low' } };
+  const summaryRequest = { ...request, reasoning: { effort: 'low', summary: 'auto' } };
+  const currentCheckpoint = {}, closing = new AbortController();
+  const first = transport(async (_url, options) => {
+    assert.equal(options.headers['X-Chat-Request-Id'], uuid(1));
+    assert.deepEqual(JSON.parse(options.body), summaryRequest);
+    assert.equal(currentCheckpoint.requestPublicSummary, true);
+    closing.abort();
+    throw closing.signal.reason;
+  });
+  await assert.rejects(first.request(request, { checkpoint: currentCheckpoint, signal: closing.signal, getAbortMode: () => 'pagehide' }), { name: 'AbortError' });
+
+  const previousCheckpoint = { route: 'site-inference', siteRequestId: uuid(2), ownerId: 'test-user', state: 'submitted',
+    submittedAt: Date.now(), bodyHash: createHash('sha256').update(JSON.stringify(request)).digest('hex') };
+  const replies = finish([textItem('m', 'Recovered once')]), submitted = [];
+  const reopened = transport(async (_url, options) => {
+    if (options.method !== 'POST') return Response.json({}, { status: 404 });
+    submitted.push([options.headers['X-Chat-Request-Id'], JSON.parse(options.body)]);
+    return new Response(replies);
+  });
+  assert.equal(await (await reopened.request(request, { checkpoint: currentCheckpoint })).text(), replies);
+  assert.equal(await (await reopened.request(request, { checkpoint: previousCheckpoint })).text(), replies);
+  assert.deepEqual(submitted, [[uuid(1), summaryRequest], [uuid(2), request]]);
 });
 
 test('explicit Stop cancels a claimed ID once, while pagehide only detaches', { timeout: 3000 }, async () => {

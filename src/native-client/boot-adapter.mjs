@@ -19,7 +19,8 @@ import { createNativeSiteLoginRoute } from './native-site-login.mjs';
 import { localizeRouterAssets } from './startup-compatibility.mjs';
 import { siteSignOut, localAppServer as timingServer } from './service-boundary.mjs';
 import { wrapNativeChatPreamble, wrapNativeClassicChatTiming, wrapNativeClassicStatus, wrapNativeClassicTiming, wrapNativeReasoningGroups } from './classic-chat-adapter.mjs';
-import { storedConversationSurface, wrapNativeCodexWorkTiming, wrapNativeWorkedDuration } from './local-app-server.mjs';
+import { projectNativeCodexPublicSummary, storedConversationSurface, wrapNativeCodexActivityItem, wrapNativeCodexWorkTiming, wrapNativeWorkedDuration } from './local-app-server.mjs';
+import { projectNativeCodexPythonResult } from './native-python-activity.mjs';
 import { terminalSiteInferenceReason } from './site-inference-transport.mjs';
 import { createNativeModelSelectionPolicy, createNativeThinkingEntryPolicy } from './local-model-selection-policy.mjs';
 import { createLocalHostClaimsReader } from './local-token-identity.mjs';
@@ -403,6 +404,55 @@ const siteLoginRoute = () => createNativeSiteLoginRoute({
 });
 overrideExports('jEbc', {}, { deferred: true }, { Mb: siteLoginRoute, S: siteLoginRoute });
 overrideExports('cOHk', {}, { deferred: true }, { e: original => wrapNativeCodexWorkTiming(original, timingServer) });
+overrideExports('NQNw', {}, { deferred: true }, { a: wrapNativeCodexActivityItem });
+overrideExports('qGHI', {}, { deferred: true }, {
+  a: NativeItem => function SiteCodexActivityRow(props) {
+    return requireOriginal('ABep').jsx(NativeItem, { ...props, item: projectNativeCodexPublicSummary(props.item) });
+  },
+});
+overrideExports('oUAt', {}, { deferred: true }, {
+  a: NativeTurn => function SiteCodexTurn(props) {
+    const { jsx, jsxs, Fragment } = requireOriginal('ABep');
+    const component = jsx(NativeTurn, props);
+    const thread = timingServer.threads.get(props.conversationId);
+    if (storedConversationSurface(thread) !== 'codex') return component;
+    const turn = thread.turns.findLast(turn => turn.id === props.turn?.turnId);
+    const running = turn?.status === 'inProgress' && turn.items.some(item =>
+      item.type === 'agentMessage' && typeof item.text === 'string' && item.text.trim());
+    const startedAtMs = running && turn.adapterMetadata?.reasoningLifecycle?.workStartedAtMs;
+    return jsxs(Fragment, { children: [component,
+      Number.isFinite(startedAtMs) ? jsx(requireOriginal('XSEO').a, { status: 'working', startedAtMs, completedAtMs: null }) : null,
+    ] });
+  },
+});
+overrideExports('BGqp', {}, { deferred: true }, {
+  a: NativeTool => function SiteCodexTool(props) {
+    const { jsx } = requireOriginal('ABep');
+    const thread = timingServer.threads.get(props.conversationId);
+    if (storedConversationSurface(thread) !== 'codex') return jsx(NativeTool, props);
+    const { item } = props;
+    const observed = item.result?.type === 'error' && item.invocation.server === 'browser_workspace' && item.invocation.tool === 'python'
+      ? thread.turns.findLast(turn => turn.items.some(entry => entry.id === item.callId))?.items.find(entry => entry.id === item.callId)?.livePythonOutput
+      : undefined;
+    return jsx(NativeTool, { ...props, item: projectNativeCodexPythonResult(item, observed) });
+  },
+});
+overrideExports('lAsD', {}, { deferred: true }, {
+  b: NativeActivity => function SiteCodexActivity(props) {
+    const { jsx, jsxs, Fragment } = requireOriginal('ABep');
+    const thread = timingServer.threads.get(props.agentActivityProps?.conversationId);
+    if (storedConversationSurface(thread) !== 'codex') return jsx(NativeActivity, props);
+    const body = [], activities = [];
+    for (const unit of props.units) {
+      const item = unit.kind === 'standalone' ? unit.item.item : null;
+      (item?.type === 'assistant-message' && item.phase === 'commentary' ? body : activities).push(unit);
+    }
+    return jsxs(Fragment, { children: [
+      body.length ? jsx(requireOriginal('toTV').a, { ...props.agentActivityProps, ...props.visibleAgentActivityProps, units: body }) : null,
+      jsx(NativeActivity, { ...props, units: body.length ? activities : props.units }),
+    ] });
+  },
+});
 overrideExports('OrBF', {}, { deferred: true }, {
   a: frameURL => (...args) => {
     const path = frameURL(...args);

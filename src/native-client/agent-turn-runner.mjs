@@ -9,6 +9,7 @@ const CONTINUE = 'Continue the unfinished response from the saved text, without 
 const inputStorageError = (message, cause) => Object.assign(Error(message), { code: 'LOCAL_INPUT_CHECKPOINT_STORAGE', status: 507, retryable: false, cause });
 const compactUsage = usage => Object.fromEntries(['input_tokens', 'output_tokens', 'total_tokens', 'prompt_tokens', 'completion_tokens', 'input_tokens_details', 'output_tokens_details', 'prompt_tokens_details', 'completion_tokens_details'].filter(key => usage[key] !== undefined).map(key => [key, clone(usage[key])]));
 const toolError = message => ({ isError: true, content: [{ type: 'text', text: message }], structuredContent: { error: message } });
+const retiredTaskStatus = () => toolError('The task_status tool has been retired. This call performed no work. Continue the user task with the available tools.');
 const durableResponse = transport => isHostCheckpoint(transport) || isSiteInferenceCheckpoint(transport);
 export const hasUncertainPlainResponse = frame => Boolean(frame && !frame.result && !durableResponse(frame.transport) && (frame.transport?.apiProviderId || frame.transport?.apiAttempted));
 export const plainInterruptionMessage = '连接中断，无法确认上一次请求的结果。已保存收到的回复，可在此对话中发送新消息继续。';
@@ -46,6 +47,50 @@ export async function checkpoint(server, running) {
 function completeItems(server, running, reasoningStatus = 'completed', completedAtMs = server.now()) {
   server.completeReasoning(running, reasoningStatus, completedAtMs);
   for (const item of server.assistantMessages(running)) server.completeAssistant(running, item);
+}
+function saveCallResult(checkpoint, record, output) {
+  const { call } = record;
+  record.output = clone(output);
+  record.state = 'completed';
+  checkpoint.completedCalls[call.id] = { name: call.function.name, arguments: call.function.arguments, output: clone(output) };
+}
+function observeToolEnd(item, at) {
+  if (!Number.isFinite(item.startedAtMs) || Number.isFinite(item.completedAtMs)) return;
+  item.completedAtMs = Math.max(item.startedAtMs, at);
+  item.durationMs = item.completedAtMs - item.startedAtMs;
+}
+function pythonProgress(server, running, item, notify) {
+  const { signal } = running.controller;
+  const bounded = new Set();
+  let timer, pending, reported = false, stopped = false;
+  const publish = () => {
+    timer = null;
+    if (stopped || running.terminal || signal.aborted || !pending) return;
+    const streamName = pending;
+    pending = null;
+    const at = server.now();
+    if (!reported || at - running.lastSavedAt >= (server.agentOptions.persistIntervalMs ?? 1000)) {
+      try { server.persist(); running.lastSavedAt = at; }
+      catch { server.diagnostics.push({ type: 'python-live-output-storage-error' }); }
+    }
+    reported = true;
+    notify('item/mcpToolCall/progress', { itemId: item.id, message: `Python ${streamName}` });
+  };
+  return {
+    receive(streamName, text) {
+      if (stopped || running.terminal || signal.aborted || !['stdout', 'stderr'].includes(streamName) || typeof text !== 'string' || !text || bounded.has(streamName)) return;
+      const output = item.livePythonOutput ??= { stdout: '', stderr: '' };
+      const remaining = 32_000 - output[streamName].length;
+      const visible = text.slice(0, remaining).replace(/[\uD800-\uDBFF]$/, '');
+      if (visible.length < text.length) bounded.add(streamName);
+      if (!visible) return;
+      output[streamName] += visible;
+      pending = streamName;
+      if (!reported) publish();
+      else timer ??= setTimeout(publish, 125);
+    },
+    stop() { stopped = true; clearTimeout(timer); },
+  };
 }
 export async function runAgentTurn(server, running) {
   const { thread, turn, controller } = running, signal = controller.signal;
@@ -160,27 +205,54 @@ export async function runAgentTurn(server, running) {
         signal.throwIfAborted();
         if (cp.completedCalls[record.call.id]) { record.state = 'completed'; record.output = cp.completedCalls[record.call.id].output; continue; }
         let item = turn.items.find(item => item.id === record.itemId);
+        if (record.call.function.name === 'task_status') {
+          // Outstanding historical function IDs still need a Responses result.
+          // Retiring the call does not imply that any work actually ran.
+          const output = retiredTaskStatus();
+          saveCallResult(cp, record, output);
+          if (item?.status === 'inProgress') { item.status = 'failed'; item.result = clone(output); }
+          continue;
+        }
         if (!item) {
           item = { type: 'mcpToolCall', id: record.itemId ?? server.uuid(), server: 'browser_workspace', tool: record.call.function.name, arguments: {}, status: 'inProgress', result: null, error: null, durationMs: null };
           record.itemId = item.id; try { item.arguments = JSON.parse(record.call.function.arguments || '{}'); } catch { item.arguments = { raw: record.call.function.arguments }; }
-          turn.items.push(item); notify('item/started', { item });
+          turn.items.push(item);
         }
         let output, fatalToolError;
         if (record.state === 'uncertain' || record.state === 'running') {
           output = await executor?.recoverCall?.(record.call, { threadId: thread.id, turnId: turn.id, signal }) ?? toolError('The previous page closed while this tool was running. Completion is unknown; it has not been executed again. Inspect saved files before deciding whether a new call is necessary.');
+          signal.throwIfAborted();
         } else {
-          record.state = 'running'; cp.state = 'tool'; await save(); const started = server.now();
+          record.state = 'running'; cp.state = 'tool'; await save(); signal.throwIfAborted();
+          const available = executor?.execute && executor.tools?.some(tool => tool.function?.name === item.tool);
+          const progress = available && item.tool === 'python' ? pythonProgress(server, running, item, notify) : null;
+          const abort = () => {
+            progress?.stop();
+            if (progress) item.pythonCancelled = true;
+            observeToolEnd(item, server.now());
+          };
+          if (available) {
+            item.startedAtMs = server.now();
+            signal.addEventListener('abort', abort, { once: true });
+          }
           try {
-            if (!executor?.execute || !executor.tools?.some(tool => tool.function?.name === record.call.function.name)) throw Error('Tool is not available: ' + record.call.function.name);
-            output = await executor.execute(record.call, { threadId: thread.id, turnId: turn.id, signal, onStatus: status => { record.lastStatus = String(status); }, onTaskStatus: async state => { cp.taskState = state; await save(); } });
+            notify('item/started', { item, ...(available ? { startedAtMs: item.startedAtMs } : {}) });
+            signal.throwIfAborted();
+            if (!available) throw Error('Tool is not available: ' + record.call.function.name);
+            output = await executor.execute(record.call, {
+              threadId: thread.id, turnId: turn.id, signal,
+              onStatus: status => { record.lastStatus = String(status); }, onOutput: progress?.receive,
+            });
+            signal.throwIfAborted();
             if (!output || !Array.isArray(output.content)) throw Error('Tool executor returned an invalid MCP result');
           } catch (error) { if (signal.aborted) { record.state = 'uncertain'; throw error; } output = error.mcpResult ?? toolError(errorText(error)); if (error.providerFailure) fatalToolError = error; }
-          item.durationMs = Math.max(0, server.now() - started);
+          finally { progress?.stop(); signal.removeEventListener('abort', abort); observeToolEnd(item, server.now()); }
         }
-        record.output = clone(output); record.state = 'completed';
+        saveCallResult(cp, record, output);
         item.status = output.isError ? 'failed' : 'completed'; item.result = clone(output); item.error = null;
-        cp.completedCalls[record.call.id] = { name: record.call.function.name, arguments: record.call.function.arguments, output: clone(output) };
-        await save(); notify('item/completed', { item });
+        await save();
+        if (running.terminal) return;
+        notify('item/completed', { item, ...(Number.isFinite(item.completedAtMs) ? { completedAtMs: item.completedAtMs } : {}) });
         if (fatalToolError) throw fatalToolError;
       }
       if (cp.pendingCalls.length) {
@@ -190,7 +262,7 @@ export async function runAgentTurn(server, running) {
       if (++roundsThisRun > maxRounds) { cp.state = 'yielded'; meta.resumable = true; meta.resumePolicy = 'automatic'; await save(); server.finish(running, 'interrupted', { message: 'Execution checkpoint saved; continue this task to run the next batch.', codexErrorInfo: null, additionalDetails: null, misalignment: null }); return; }
       const settings = executionSettings();
       const searchRequest = webSearchRequest(meta.webSearchIntent, turn.items, executor?.tools || []);
-      const tools = searchRequest.tools, instruction = (executor?.tools?.length || 0) ? [{ role: 'system', content: 'Execute requested work using the available real tools instead of only announcing a plan. For a multi-step job, persist running progress with task_status and mark complete only after the deliverables exist. Continue correcting actual tool errors. Python runs in a browser Pyodide environment, not a hosted shell; only workspace files persist after reload. Never claim unexecuted shell, network or file operations. Return real artifact download URLs supplied by tools.' }] : [];
+      const tools = searchRequest.tools, instruction = (executor?.tools?.length || 0) ? [{ role: 'system', content: 'Execute requested work using the available real tools instead of only announcing a plan. Continue correcting actual tool errors and give a final answer after the work is complete or an actual limitation has been identified. Python runs in a browser Pyodide environment, not a hosted shell; only workspace files persist after reload. Never claim unexecuted shell, network or file operations. Return real artifact download URLs supplied by tools.' }] : [];
       if (turn.reasoningEffort === 'ultra') instruction.push({ role: 'system', content: 'This is the site-provided Ultra execution mode. Use delegate_tasks for independent analysis when it benefits the task; it runs1–3 real parallel workers from the same selected family at API max effort. Inspect their actual results and reconcile differences. You own the real file/Python tools and final synthesis. This is application orchestration, not OpenAI private Ultra infrastructure. Never claim a worker or tool succeeded when its result reports failure.' });
       const messages = [...instruction, ...providerContext()];
       let frame = cp.inFlight, metric;
@@ -221,7 +293,7 @@ export async function runAgentTurn(server, running) {
         }
         updateHostedSearch(server, running, assembled);
         cp.partialResponse = { content: assembled.content || '', reasoning: assembled.reasoning || '', ...(assembled.phase ? { phase: assembled.phase } : {}) };
-        server.append(running, assembled.content || '', assembled.reasoning || '', assembled.phase, assembled.output_messages);
+        server.append(running, assembled.content || '', assembled.reasoning || '', assembled.phase, assembled.output_messages, assembled.reasoning_parts);
         frame.assistantItemId = running.assistant?.id ?? frame.assistantItemId; frame.reasoningItemId = running.reasoning?.id ?? frame.reasoningItemId; frame.reasoningComplete = running.reasoningComplete === true;
       };
       const onDelta = siteReplay ? createReplayDeltaGate(cp.partialResponse, applyDelta) : applyDelta;
@@ -264,7 +336,7 @@ export async function runAgentTurn(server, running) {
         metric.firstTextAt = server.now();
         meta.firstTextAtMs ??= metric.firstTextAt;
       }
-      server.append(running, result.content || '', result.reasoning || '', phase ?? (result.tool_calls?.length ? 'commentary' : 'final_answer'), result.output_messages);
+      server.append(running, result.content || '', result.reasoning || '', phase ?? (result.tool_calls?.length ? 'commentary' : 'final_answer'), result.output_messages, result.reasoning_parts);
       const responseItems = result.response_items ?? [];
       for (const item of server.assistantMessages(running)) {
         const message = result.output_messages?.find(value => frame.assistantItemIds?.[value.index] === item.id);
@@ -292,7 +364,7 @@ export async function runAgentTurn(server, running) {
       if (result.response_items) meta.gatewayResponseItems = clone(result.response_items);
       if (result.tool_calls?.length) {
         cp.commentaryOnlyRounds = 0; cp.searchOnlyRounds = 0;
-        if (!tools.length) throw Error('Gateway requested a tool that was not available');
+        if (!tools.length && result.tool_calls.some(call => call.function?.name !== 'task_status')) throw Error('Gateway requested a tool that was not available');
         const seen = new Set();
         cp.pendingCalls = result.tool_calls.map(call => {
           if (!call.id || !call.function?.name || seen.has(call.id)) throw Error('Gateway returned an invalid or duplicate tool-call ID'); seen.add(call.id);
@@ -317,8 +389,8 @@ export async function runAgentTurn(server, running) {
         await save(); continue;
       }
       cp.commentaryOnlyRounds = 0;
-      if (result.finish_reason === 'length' || cp.taskState?.status === 'running') {
-        cp.transcript.push({ role: 'user', content: result.finish_reason === 'length' ? CONTINUE : 'The recorded task is still running. Continue the remaining work using tools, then mark task_status complete when finished.' });
+      if (result.finish_reason === 'length') {
+        cp.transcript.push({ role: 'user', content: CONTINUE });
         cp.state = 'continuing'; await save(); continue;
       }
       if (result.finish_reason !== 'stop') throw Error('Gateway did not confirm completion: ' + (result.finish_reason || 'missing finish signal'));

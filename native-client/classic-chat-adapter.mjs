@@ -1,12 +1,13 @@
 /** Original classic Chat REST/SSE shapes over the same real local thread engine. */
-import { FRONTEND_TO_RAW_EFFORT } from './model-catalog-adapter.mjs?v=5c7eb02b441bce39';
-import { hostedSearchMessage, mergeWebSearchReferences } from './local-web-search.mjs?v=5c7eb02b441bce39';
-import { terminalSiteInferenceReason } from './site-inference-transport.mjs?v=5c7eb02b441bce39';
-import { turnHostCheckpoints } from './preferred-host-transport.mjs?v=5c7eb02b441bce39';
-import { storedConversationOrigin, storedConversationSurface } from './local-app-server.mjs?v=5c7eb02b441bce39';
+import { FRONTEND_TO_RAW_EFFORT } from './model-catalog-adapter.mjs?v=dea77d65adc42752';
+import { hostedSearchMessage, mergeWebSearchReferences } from './local-web-search.mjs?v=dea77d65adc42752';
+import { terminalSiteInferenceReason } from './site-inference-transport.mjs?v=dea77d65adc42752';
+import { turnHostCheckpoints } from './preferred-host-transport.mjs?v=dea77d65adc42752';
+import { storedConversationOrigin, storedConversationSurface } from './local-app-server.mjs?v=dea77d65adc42752';
+import { projectNativePythonActivity } from './native-python-activity.mjs?v=dea77d65adc42752';
 
-import { parseClassicInputMessages } from './classic-input-messages.mjs?v=5c7eb02b441bce39';
-export { parseClassicInputMessages, CLASSIC_CONTEXT_LIMITS } from './classic-input-messages.mjs?v=5c7eb02b441bce39';
+import { parseClassicInputMessages } from './classic-input-messages.mjs?v=dea77d65adc42752';
+export { parseClassicInputMessages, CLASSIC_CONTEXT_LIMITS } from './classic-input-messages.mjs?v=dea77d65adc42752';
 
 function isLocalAssistantText(message) {
   return message?.metadata?.adapter_source === 'local-original-client-adapter' &&
@@ -80,13 +81,22 @@ export function wrapNativeClassicChatTiming(projectTurn) {
     const suffix = projected.items.findLastIndex((item, position) =>
       position > index && item.type === 'chatgpt-reasoning-group' && !item.completed);
     const existing = projected.items[suffix];
-    if (existing?.activeReasoning || existing?.items.length) return result;
+    if (existing?.activeReasoning || existing?.items.length || projected.items.slice(index + 1).some(item =>
+      item.type === 'reasoning' && !item.completed || item.type === 'chatgpt-python-execution' && item.status === 'running')) return result;
     const activeReasoning = { type: 'reasoning', presentation: 'thought', content: '', completed: false };
     const items = [...projected.items];
     if (existing) items[suffix] = { ...existing, activeReasoning };
     else items.push({ type: 'chatgpt-reasoning-group', completed: false, items: [], activeReasoning });
     return { ...result, turn: { ...result.turn, turn: { ...projected, items } } };
   };
+}
+
+function hasNativeReasoningActivity(group) {
+  if (group.type !== 'chatgpt-reasoning-group' || group.reasoningRecap?.type === 'hide_all') return false;
+  const prefix = group.streamingParentRegion?.prefixActivity;
+  if (group.activeReasoning?.content.trim() || group.reasoningRecap?.content.trim() ||
+      prefix?.visibility === 'visible' && prefix.title.trim()) return true;
+  return group.items.some(item => item.type !== 'reasoning' || Boolean(item.content.trim() || item.webSearchQuery));
 }
 
 export function wrapNativeClassicStatus(NativeTurn, { renderTurn, renderStatus, renderChatElapsed, renderRecovery, useTerminalReceipt, getThread }) {
@@ -107,14 +117,20 @@ export function wrapNativeClassicStatus(NativeTurn, { renderTurn, renderStatus, 
     if (body === -1 || !Number.isFinite(native.workStartedAtMs)) return ordinary();
 
     const running = native.status === 'in_progress';
+    if (surface === 'chat' && running) return ordinary();
     const activity = running ? native.items.slice(body + 1) : native.items;
-    if (activity.some(item => item.type === 'chatgpt-reasoning-group' && (!running || !item.completed))) return ordinary();
+    if (activity.some(item => (!running || !item.completed) && hasNativeReasoningActivity(item))) return ordinary();
     if (!running && (!Number.isFinite(native.workCompletedAtMs) || native.workCompletedAtMs < native.workStartedAtMs)) return ordinary();
     if (surface === 'chat') {
       return native.status === 'complete' ? renderChatElapsed(ordinary(), native.workCompletedAtMs - native.workStartedAtMs) : ordinary();
     }
 
-    return renderStatus(ordinary(), {
+    // R2pa can append a silent suffix after the first final body. Let the
+    // original status row take that slot while keeping genuine activity.
+    const items = native.items.filter((item, position) => running && position <= body ||
+      item.type !== 'chatgpt-reasoning-group' || item.reasoningRecap || hasNativeReasoningActivity(item));
+    const transcript = items.length === native.items.length ? ordinary() : renderTurn(NativeTurn, { ...props, turn: { ...native, items } });
+    return renderStatus(transcript, {
       status: running ? 'working' : native.status === 'cancelled' ? 'stopped' : 'worked',
       startedAtMs: native.workStartedAtMs, completedAtMs: running ? null : native.workCompletedAtMs,
     });
@@ -143,20 +159,27 @@ export class ClassicChatAdapter {
       ...(item ? { adapter_api_attempt_started_at_ms: item.startedAtMs ?? null, adapter_api_attempt_completed_at_ms: item.completedAtMs ?? null, adapter_api_attempt_duration_ms: item.durationMs ?? null } : {}),
     };
   }
-  reasoningMessage(thread, turn, item) {
+  reasoningMessage(thread, turn, item, summaryIndex = 0) {
     // Keep the last real reasoning phase pending across commentary/tools. Each
     // API item still has its own genuine observed start/end times in RPC.
-    const pending = turn.status === 'inProgress' && turn.items.findLast(value => value.type === 'reasoning')?.id === item.id;
     const summary = item.summary ?? [];
+    const pending = turn.status === 'inProgress' && summaryIndex === Math.max(0, summary.length - 1) &&
+      turn.items.findLast(value => value.type === 'reasoning')?.id === item.id;
     return {
-      id: item.id, author: { role: 'assistant', name: null, metadata: {} },
+      id: summaryIndex ? `${item.id}-summary-${summaryIndex}` : item.id, author: { role: 'assistant', name: null, metadata: {} },
       create_time: Number.isFinite(item.startedAtMs) ? item.startedAtMs / 1000 : turn.startedAt,
       update_time: Number.isFinite(item.completedAtMs) ? item.completedAtMs / 1000 : null,
-      content: { content_type: 'thoughts', thoughts: summary.map(text => ({ summary: text, content: '', finished: !pending })) },
+      content: { content_type: 'thoughts', thoughts: summary.length ? [{ summary: summary[summaryIndex], content: '', finished: !pending }] : [] },
       status: pending ? 'in_progress' : turn.status === 'failed' || turn.status === 'interrupted' ? 'finished_partial_completion' : 'finished_successfully',
       end_turn: false, weight: 1, recipient: 'all', channel: 'analysis',
       metadata: { model_slug: turn.adapterMetadata?.frontendModelSlug ?? thread.adapterMetadata?.classicModelSlugs?.[turn.id] ?? thread.adapterMetadata?.frontendModelSlug ?? turn.model, thinking_effort: FRONTEND_TO_RAW_EFFORT[turn.reasoningEffort], reasoning_mode: turn.reasoningMode ?? 'standard', ...(turn.reasoningMode === 'pro' ? { reasoning_type: 'pro' } : {}), adapter_api_model: turn.model, ...this.reasoningMetadata(turn, item), adapter_source: 'local-original-client-adapter' },
     };
+  }
+  reasoningMessages(thread, turn, item) {
+    // The original classifier consumes the last thought per message. A stable
+    // message for each public part preserves the provider's boundaries.
+    return Array.from({ length: Math.max(1, item.summary?.length ?? 0) },
+      (_, index) => this.reasoningMessage(thread, turn, item, index));
   }
   message(thread, turn, item, role) {
     const original = role === 'user' ? turn.adapterMetadata?.classicUserMessage : null;
@@ -197,10 +220,12 @@ export class ClassicChatAdapter {
   projectItem(thread, turn, item) {
     if (item.type === 'userMessage') return this.originalInputMessages(thread, turn, item);
     if (item.type === 'agentMessage') return [this.message(thread, turn, item, 'assistant')];
-    if (item.type === 'reasoning') return [this.reasoningMessage(thread, turn, item)];
+    if (item.type === 'reasoning') return this.reasoningMessages(thread, turn, item);
     if (item.type === 'webSearch') return [hostedSearchMessage(thread, turn, item, turn.adapterMetadata?.frontendModelSlug ?? thread.adapterMetadata?.classicModelSlugs?.[turn.id] ?? turn.model)];
-    if (item.type !== 'mcpToolCall') return [];
-    const finished = item.status !== 'inProgress', base = { create_time: turn.startedAt, update_time: this.now() / 1000, weight: 1, metadata: { model_slug: turn.adapterMetadata?.frontendModelSlug ?? thread.adapterMetadata?.classicModelSlugs?.[turn.id] ?? thread.adapterMetadata.frontendModelSlug ?? turn.model, thinking_effort: FRONTEND_TO_RAW_EFFORT[turn.reasoningEffort], adapter_source: 'browser-workspace-mcp', mcp_tool_call: { server: item.server, tool: item.tool, status: item.status } } };
+    if (item.type !== 'mcpToolCall' || item.tool === 'task_status') return [];
+    const finished = item.status !== 'inProgress', base = { create_time: Number.isFinite(item.startedAtMs) ? item.startedAtMs / 1000 : turn.startedAt, update_time: Number.isFinite(item.completedAtMs) ? item.completedAtMs / 1000 : this.now() / 1000, weight: 1, metadata: { model_slug: turn.adapterMetadata?.frontendModelSlug ?? thread.adapterMetadata?.classicModelSlugs?.[turn.id] ?? thread.adapterMetadata.frontendModelSlug ?? turn.model, thinking_effort: FRONTEND_TO_RAW_EFFORT[turn.reasoningEffort], adapter_source: 'browser-workspace-mcp', mcp_tool_call: { server: item.server, tool: item.tool, status: item.status } } };
+    const python = projectNativePythonActivity(base, item, turn.id);
+    if (python) return python;
     const call = { ...base, id: item.id + '-call', author: { role: 'assistant', name: null, metadata: {} }, recipient: item.tool, channel: 'commentary', content: { content_type: 'code', language: item.tool === 'python' ? 'python' : 'json', text: item.tool === 'python' ? item.arguments.code || '' : JSON.stringify(item.arguments, null, 2) }, status: finished ? 'finished_successfully' : 'in_progress', end_turn: false };
     if (!finished) return [call];
     const output = item.result || { content: [{ type: 'text', text: item.error?.message || 'Tool execution was interrupted' }], isError: true };
@@ -479,9 +504,14 @@ export class ClassicChatAdapter {
             if (item) emit({ conversation_id: thread.id, message: this.message(thread, turn, item, 'assistant') });
           }
           if (event.method === 'item/reasoning/summaryTextDelta' || ['item/started', 'item/completed'].includes(event.method) && params.item?.type === 'reasoning') {
-            for (const item of turn.items.filter(value => value.type === 'reasoning')) emit({ conversation_id: thread.id, message: this.reasoningMessage(thread, turn, item) });
+            for (const item of turn.items.filter(value => value.type === 'reasoning')) {
+              for (const message of this.reasoningMessages(thread, turn, item)) emit({ conversation_id: thread.id, message });
+            }
           }
-          if (['item/started', 'item/completed'].includes(event.method) && params.item?.type === 'mcpToolCall') for (const message of this.projectItem(thread, turn, params.item)) emit({ conversation_id: thread.id, message });
+          if (['item/started', 'item/completed', 'item/mcpToolCall/progress'].includes(event.method)) {
+            const tool = params.item ?? turn.items.find(value => value.id === params.itemId);
+            if (tool?.type === 'mcpToolCall') for (const message of this.projectItem(thread, turn, tool)) emit({ conversation_id: thread.id, message });
+          }
           if ((event.method === 'item/started' || event.method === 'item/webSearch/updated') && params.item?.type === 'webSearch') for (const message of this.projectItem(thread, turn, params.item)) emit({ conversation_id: thread.id, message });
           if (event.method === 'turn/completed') finishStream(params.turn);
         });

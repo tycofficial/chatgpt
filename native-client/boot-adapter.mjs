@@ -1,31 +1,32 @@
-import { createBrowserReadAloudController, createNativeReadAloudBindings } from './local-native-read-aloud.mjs?v=5c7eb02b441bce39';
-import { normalizeWorkUIStoredPreference, WORK_DEFAULT_OPTION } from '../model-catalog.js?v=5c7eb02b441bce39';
-import { consolidateWorkDefaults } from './model-catalog-adapter.mjs?v=5c7eb02b441bce39';
+import { createBrowserReadAloudController, createNativeReadAloudBindings } from './local-native-read-aloud.mjs?v=dea77d65adc42752';
+import { normalizeWorkUIStoredPreference, WORK_DEFAULT_OPTION } from '../model-catalog.js?v=dea77d65adc42752';
+import { consolidateWorkDefaults } from './model-catalog-adapter.mjs?v=dea77d65adc42752';
 /**
  * Loads the public original component graph with explicit local host services.
  * Private original backend credentials are never used by this entry point.
  */
-import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter, localFilesService, localOwnedDownloadTransport, localLibraryByteTransport, initializeLocalAccountHistory, setNativeAccountHistoryToaster, initializeLocalPublishedResources, registerNativeLibrarySource, notifyNativeLibrarySourceReady, registerNativeFileReferenceSources, localReadAloudHost } from './service-boundary.mjs?v=5c7eb02b441bce39';
-import { installDeferredMapProvider } from './local-map-provider.mjs?v=5c7eb02b441bce39';
-import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs?v=5c7eb02b441bce39';
-import { getPrototypeLocalSession, getPrototypeLocalAuth, isPrototypeLocalSession, getPrototypeLocalAuthGeneration, clearPrototypeLocalSession } from './local-identity.mjs?v=5c7eb02b441bce39';
-import { createLocalHostSettingsClass } from './local-host-settings.mjs?v=5c7eb02b441bce39';
-import { createLocalWorkPolicy } from './local-work-policy.mjs?v=5c7eb02b441bce39';
-import { hasModelSelectionAccess, getSiteAccount, getSiteLoginUrl, getSiteHomeUrl } from './site-account.mjs?v=5c7eb02b441bce39';
-import { createNativeSiteTrialCard } from './native-pricing-trials.mjs?v=5c7eb02b441bce39';
-import { createNativeSiteUsageLayout } from './local-pricing.mjs?v=5c7eb02b441bce39';
-import { createNativeSiteSignOut, isSiteSignOutPage } from './site-signout.mjs?v=5c7eb02b441bce39';
-import { createNativeSiteLoginRoute } from './native-site-login.mjs?v=5c7eb02b441bce39';
-import { localizeRouterAssets } from './startup-compatibility.mjs?v=5c7eb02b441bce39';
-import { siteSignOut, localAppServer as timingServer } from './service-boundary.mjs?v=5c7eb02b441bce39';
-import { wrapNativeChatPreamble, wrapNativeClassicChatTiming, wrapNativeClassicStatus, wrapNativeClassicTiming, wrapNativeReasoningGroups } from './classic-chat-adapter.mjs?v=5c7eb02b441bce39';
-import { storedConversationSurface, wrapNativeCodexWorkTiming, wrapNativeWorkedDuration } from './local-app-server.mjs?v=5c7eb02b441bce39';
-import { terminalSiteInferenceReason } from './site-inference-transport.mjs?v=5c7eb02b441bce39';
-import { createNativeModelSelectionPolicy, createNativeThinkingEntryPolicy } from './local-model-selection-policy.mjs?v=5c7eb02b441bce39';
-import { createLocalHostClaimsReader } from './local-token-identity.mjs?v=5c7eb02b441bce39';
-import { wrapNativeFileUploadClass } from './local-native-upload.mjs?v=5c7eb02b441bce39';
-import { wrapNativeDownloadServices } from './local-native-download.mjs?v=5c7eb02b441bce39';
-import { createLocalDotVoiceTargetWrapper, createLocalDotVoiceWrappers } from './local-dot-browser-voice.mjs?v=5c7eb02b441bce39';
+import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter, localFilesService, localOwnedDownloadTransport, localLibraryByteTransport, initializeLocalAccountHistory, setNativeAccountHistoryToaster, initializeLocalPublishedResources, registerNativeLibrarySource, notifyNativeLibrarySourceReady, registerNativeFileReferenceSources, localReadAloudHost } from './service-boundary.mjs?v=dea77d65adc42752';
+import { installDeferredMapProvider } from './local-map-provider.mjs?v=dea77d65adc42752';
+import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs?v=dea77d65adc42752';
+import { getPrototypeLocalSession, getPrototypeLocalAuth, isPrototypeLocalSession, getPrototypeLocalAuthGeneration, clearPrototypeLocalSession } from './local-identity.mjs?v=dea77d65adc42752';
+import { createLocalHostSettingsClass } from './local-host-settings.mjs?v=dea77d65adc42752';
+import { createLocalWorkPolicy } from './local-work-policy.mjs?v=dea77d65adc42752';
+import { hasModelSelectionAccess, getSiteAccount, getSiteLoginUrl, getSiteHomeUrl } from './site-account.mjs?v=dea77d65adc42752';
+import { createNativeSiteTrialCard } from './native-pricing-trials.mjs?v=dea77d65adc42752';
+import { createNativeSiteUsageLayout } from './local-pricing.mjs?v=dea77d65adc42752';
+import { createNativeSiteSignOut, isSiteSignOutPage } from './site-signout.mjs?v=dea77d65adc42752';
+import { createNativeSiteLoginRoute } from './native-site-login.mjs?v=dea77d65adc42752';
+import { localizeRouterAssets } from './startup-compatibility.mjs?v=dea77d65adc42752';
+import { siteSignOut, localAppServer as timingServer } from './service-boundary.mjs?v=dea77d65adc42752';
+import { wrapNativeChatPreamble, wrapNativeClassicChatTiming, wrapNativeClassicStatus, wrapNativeClassicTiming, wrapNativeReasoningGroups } from './classic-chat-adapter.mjs?v=dea77d65adc42752';
+import { projectNativeCodexPublicSummary, storedConversationSurface, wrapNativeCodexActivityItem, wrapNativeCodexWorkTiming, wrapNativeWorkedDuration } from './local-app-server.mjs?v=dea77d65adc42752';
+import { projectNativeCodexPythonResult } from './native-python-activity.mjs?v=dea77d65adc42752';
+import { terminalSiteInferenceReason } from './site-inference-transport.mjs?v=dea77d65adc42752';
+import { createNativeModelSelectionPolicy, createNativeThinkingEntryPolicy } from './local-model-selection-policy.mjs?v=dea77d65adc42752';
+import { createLocalHostClaimsReader } from './local-token-identity.mjs?v=dea77d65adc42752';
+import { wrapNativeFileUploadClass } from './local-native-upload.mjs?v=dea77d65adc42752';
+import { wrapNativeDownloadServices } from './local-native-download.mjs?v=dea77d65adc42752';
+import { createLocalDotVoiceTargetWrapper, createLocalDotVoiceWrappers } from './local-dot-browser-voice.mjs?v=dea77d65adc42752';
 
 const boundary = installNetworkBoundary();
 globalThis.__originalClientProbe = boundary.diagnostics;
@@ -404,6 +405,55 @@ const siteLoginRoute = () => createNativeSiteLoginRoute({
 });
 overrideExports('jEbc', {}, { deferred: true }, { Mb: siteLoginRoute, S: siteLoginRoute });
 overrideExports('cOHk', {}, { deferred: true }, { e: original => wrapNativeCodexWorkTiming(original, timingServer) });
+overrideExports('NQNw', {}, { deferred: true }, { a: wrapNativeCodexActivityItem });
+overrideExports('qGHI', {}, { deferred: true }, {
+  a: NativeItem => function SiteCodexActivityRow(props) {
+    return requireOriginal('ABep').jsx(NativeItem, { ...props, item: projectNativeCodexPublicSummary(props.item) });
+  },
+});
+overrideExports('oUAt', {}, { deferred: true }, {
+  a: NativeTurn => function SiteCodexTurn(props) {
+    const { jsx, jsxs, Fragment } = requireOriginal('ABep');
+    const component = jsx(NativeTurn, props);
+    const thread = timingServer.threads.get(props.conversationId);
+    if (storedConversationSurface(thread) !== 'codex') return component;
+    const turn = thread.turns.findLast(turn => turn.id === props.turn?.turnId);
+    const running = turn?.status === 'inProgress' && turn.items.some(item =>
+      item.type === 'agentMessage' && typeof item.text === 'string' && item.text.trim());
+    const startedAtMs = running && turn.adapterMetadata?.reasoningLifecycle?.workStartedAtMs;
+    return jsxs(Fragment, { children: [component,
+      Number.isFinite(startedAtMs) ? jsx(requireOriginal('XSEO').a, { status: 'working', startedAtMs, completedAtMs: null }) : null,
+    ] });
+  },
+});
+overrideExports('BGqp', {}, { deferred: true }, {
+  a: NativeTool => function SiteCodexTool(props) {
+    const { jsx } = requireOriginal('ABep');
+    const thread = timingServer.threads.get(props.conversationId);
+    if (storedConversationSurface(thread) !== 'codex') return jsx(NativeTool, props);
+    const { item } = props;
+    const observed = item.result?.type === 'error' && item.invocation.server === 'browser_workspace' && item.invocation.tool === 'python'
+      ? thread.turns.findLast(turn => turn.items.some(entry => entry.id === item.callId))?.items.find(entry => entry.id === item.callId)?.livePythonOutput
+      : undefined;
+    return jsx(NativeTool, { ...props, item: projectNativeCodexPythonResult(item, observed) });
+  },
+});
+overrideExports('lAsD', {}, { deferred: true }, {
+  b: NativeActivity => function SiteCodexActivity(props) {
+    const { jsx, jsxs, Fragment } = requireOriginal('ABep');
+    const thread = timingServer.threads.get(props.agentActivityProps?.conversationId);
+    if (storedConversationSurface(thread) !== 'codex') return jsx(NativeActivity, props);
+    const body = [], activities = [];
+    for (const unit of props.units) {
+      const item = unit.kind === 'standalone' ? unit.item.item : null;
+      (item?.type === 'assistant-message' && item.phase === 'commentary' ? body : activities).push(unit);
+    }
+    return jsxs(Fragment, { children: [
+      body.length ? jsx(requireOriginal('toTV').a, { ...props.agentActivityProps, ...props.visibleAgentActivityProps, units: body }) : null,
+      jsx(NativeActivity, { ...props, units: body.length ? activities : props.units }),
+    ] });
+  },
+});
 overrideExports('OrBF', {}, { deferred: true }, {
   a: frameURL => (...args) => {
     const path = frameURL(...args);

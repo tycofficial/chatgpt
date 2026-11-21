@@ -7,8 +7,9 @@ import { parse } from 'acorn';
 import { parseHTML } from 'linkedom';
 import {
   ClassicChatAdapter, wrapNativeChatPreamble, wrapNativeClassicChatTiming,
-  wrapNativeClassicTiming, wrapNativeReasoningGroups,
+  wrapNativeClassicStatus, wrapNativeClassicTiming, wrapNativeReasoningGroups,
 } from '../src/native-client/classic-chat-adapter.mjs';
+import { projectNativePythonActivity } from '../src/native-client/native-python-activity.mjs';
 
 const read = file => readFileSync(new URL('../' + file, import.meta.url));
 const plan = JSON.parse(read('src/native-client/entry-plan.json'));
@@ -16,9 +17,9 @@ const manifest = JSON.parse(read('original-client/resource-manifest.json'));
 assert.equal(manifest.sourceBuild, plan.sourceBuild);
 const captures = new Map(manifest.assets.map(asset => [asset.url, asset]));
 // JrPc is in a lazy progress chunk. Read all factory tables without running their entries.
-const progressChunk = '/cdn/assets/533131.b24809b2cb.js';
+const progressChunks = ['/cdn/assets/533131.b24809b2cb.js', '/cdn/assets/923609.c9f1e3da56.js'];
 const factorySources = new Map();
-for (const chunk of [...plan.registrationChunks, progressChunk]) {
+for (const chunk of [...plan.registrationChunks, ...progressChunks]) {
   const captured = captures.get('https://chatgpt.com' + chunk);
   assert.ok(captured, 'Chunk was not in the published asset capture ' + chunk);
   const bytes = read('original-client/' + captured.path);
@@ -63,6 +64,18 @@ function originalFixture() {
 }
 
 const raw = originalFixture();
+
+function classicProjection() {
+  const original = originalFixture();
+  const wrap = (id, key, fn) => {
+    const module = original(id);
+    Object.defineProperty(module, key, { value: fn(module[key]) });
+  };
+  wrap('AuIy', 'o', wrapNativeChatPreamble);
+  wrap('hUUF', 'b', wrapNativeReasoningGroups);
+  wrap('R2pa', 'a', project => wrapNativeClassicTiming(wrapNativeClassicChatTiming(project)));
+  return { original, project: (detail, isStreaming, isWorkConversation = false) => original('G6Ip').a(detail, { isWorkConversation, isStreaming })[0].turn };
+}
 
 function setup(status = 'inProgress') {
   const thread = { id: 'thread', createdAt: 1700, updatedAt: 1701, model: 'gpt-6-sol', adapterMetadata: {} };
@@ -110,15 +123,7 @@ test('native Chat projection preserves intermediate and final body, keeps progre
     activeReasoning,
   );
   turn.adapterMetadata.completedItemIds = [commentary.id];
-  const original = originalFixture();
-  const wrap = (id, key, fn) => {
-    const module = original(id);
-    Object.defineProperty(module, key, { value: fn(module[key]) });
-  };
-  wrap('AuIy', 'o', wrapNativeChatPreamble);
-  wrap('hUUF', 'b', wrapNativeReasoningGroups);
-  wrap('R2pa', 'a', project => wrapNativeClassicTiming(wrapNativeClassicChatTiming(project)));
-  const project = (detail, isStreaming) => original('G6Ip').a(detail, { isWorkConversation: false, isStreaming })[0].turn;
+  const { original, project } = classicProjection();
   const pendingPayload = adapter.detail(thread);
   const pendingThoughts = pendingPayload.mapping['reason-after'].message;
   assert.equal(pendingThoughts.metadata.reasoning_status, 'is_reasoning');
@@ -140,6 +145,13 @@ test('native Chat projection preserves intermediate and final body, keeps progre
   checkPending(pendingPayload, [commentary.text]);
   turn.items.push(answer);
   checkPending(adapter.detail(thread), [commentary.text, answer.text]);
+  const follows = { type: 'reasoning', id: 'reasoning-actual', summary: ['Observed check after the body.'], status: 'inProgress', startedAtMs: 1700750 };
+  turn.items.push(follows);
+  const naturallyActive = project(adapter.detail(thread), true);
+  const afterAnswer = naturallyActive.items.slice(naturallyActive.items.findLastIndex(item => item.type === 'assistant-message') + 1);
+  assert.equal(afterAnswer.filter(item => item.type === 'chatgpt-reasoning-group' && !item.completed).length, 1);
+  assert.match(JSON.stringify(afterAnswer), /Observed check after the body/);
+  turn.items.pop();
 
   turn.status = 'completed'; turn.adapterMetadata.reasoningLifecycle.completedAtMs = 1702500;
   activeReasoning.status = 'completed'; activeReasoning.durationMs = 2000;
@@ -150,4 +162,102 @@ test('native Chat projection preserves intermediate and final body, keeps progre
   assert.doesNotMatch(JSON.stringify(thinking), /The first file|Both files passed/);
   assert(thinking.every(item => item.completed));
   assert.equal(ended.workCompletedAtMs - ended.workStartedAtMs, 2500);
+});
+
+test('native Work uses its elapsed row after body and retains three independent Python disclosures and all public summaries', () => {
+  const { adapter, thread, turn } = setup();
+  thread.executionSurface = 'work';
+  thread.adapterMetadata.conversationOrigin = 'tpp';
+  const tasks = [
+    { label: 'Add the fixture values', code: 'print(3 + 2)', stdout: '5\n', expression: '5' },
+    { label: 'Check the fixture units', code: 'print(12 * 4)', stdout: '48\n', expression: '48' },
+    { label: 'Verify the combined fixture', code: 'print(48 + 5)', stdout: '53\n', expression: '53' },
+  ];
+  const progress = { type: 'agentMessage', id: 'note', text: 'I will check the two inputs first.', phase: 'commentary' };
+  const answer = { type: 'agentMessage', id: 'result', text: 'The combined result is 53.', phase: 'final_answer' };
+  turn.items.push(
+    { type: 'userMessage', id: 'prompt', content: [{ type: 'text', text: 'Verify the sample.' }] },
+    { type: 'reasoning', id: 'public-steps', summary: tasks.map(task => task.label), status: 'inProgress', startedAtMs: 1700000 },
+    progress,
+    ...tasks.map((task, index) => ({ type: 'mcpToolCall', id: `python-${index}`, server: 'browser_workspace', tool: 'python',
+      status: 'completed', arguments: { code: task.code }, startedAtMs: 1703000 + index * 1000, completedAtMs: 1703500 + index * 1000,
+      result: { isError: false, content: [], structuredContent: { executionEnvironment: 'browser-pyodide', stdout: task.stdout, result: task.expression } } })),
+    answer,
+  );
+  turn.adapterMetadata.completedItemIds = [progress.id];
+  const { original, project } = classicProjection();
+  const { jsx, jsxs, Fragment } = original('ABep');
+  const NativeWorkStatus = original('XSEO').a;
+  const NativeTranscript = () => null;
+  const render = wrapNativeClassicStatus(NativeTranscript, {
+    getThread: id => id === thread.id ? thread : null,
+    renderTurn: jsx,
+    renderStatus: (transcript, status) => jsxs(Fragment, { children: [transcript, jsx(NativeWorkStatus, status)] }),
+    renderChatElapsed: () => assert.fail('Work rendered the Chat elapsed row'),
+  });
+  const props = { conversationId: thread.id, isWorkConversation: true };
+  const liveDetail = adapter.detail(thread);
+  const liveTurn = project(liveDetail, true, true);
+  assert.equal(liveTurn.status, 'in_progress');
+  assert.equal(liveTurn.items.at(-1).type, 'chatgpt-reasoning-group');
+  assert.equal(liveTurn.items.at(-1).completed, false);
+  assert.equal(liveTurn.items.at(-1).items.length, 0);
+  const [transcript, status] = render({ ...props, turn: liveTurn }).props.children;
+  assert.equal(transcript.type, NativeTranscript);
+  assert.equal(transcript.props.turn.items.at(-1).type, 'assistant-message');
+  assert.equal(status.type, NativeWorkStatus);
+  assert.equal(status.props.status, 'working');
+  assert.equal(status.props.startedAtMs, 1700000);
+  assert.equal(status.props.completedAtMs, null);
+  assert.equal(liveDetail.mapping['python-0-result'].message.update_time, 1703.5);
+
+  turn.status = 'completed'; turn.completedAt = 1717; turn.adapterMetadata.reasoningLifecycle.completedAtMs = 1717000;
+  turn.items[1].status = 'completed';
+  const saved = adapter.detail(structuredClone(thread));
+  for (const [index, task] of tasks.entries()) {
+    const id = index ? `public-steps-summary-${index}` : 'public-steps';
+    assert.equal(saved.mapping[id].message.content.thoughts[0].summary, task.label);
+    assert.equal(saved.mapping[id].message.metadata.reasoning_group_id, turn.id);
+  }
+  const ended = project(saved, false, true);
+  assert.equal(ended.workCompletedAtMs - ended.workStartedAtMs, 17000);
+  assert.equal(render({ ...props, turn: ended }).type, NativeTranscript, 'Real terminal activity should use the native transcript disclosure');
+  const groups = ended.items.filter(item => item.type === 'chatgpt-reasoning-group');
+  const entries = groups.flatMap(group => group.items);
+  assert.deepEqual(Array.from(entries.filter(item => item.type === 'reasoning'), item => item.content), tasks.map(task => task.label));
+  const python = entries.filter(item => item.type === 'chatgpt-python-execution');
+  assert.deepEqual(Array.from(python, row => row.id), ['python-0-call', 'python-1-call', 'python-2-call']);
+  assert.deepEqual(Array.from(python, row => row.code), tasks.map(task => task.code));
+  assert.deepEqual(Array.from(python, row => row.output[0].text), tasks.map(task => task.stdout));
+  assert.deepEqual(Array.from(python, row => row.output[1].text), tasks.map(task => task.expression));
+  assert(python.every(row => row.status === 'completed'));
+  assert(!entries.some(item => item.type === 'exec'));
+  assert.deepEqual(Array.from(ended.items.filter(item => item.type === 'assistant-message')).flatMap(item => item.content.split('\n\n')), [progress.text, answer.text]);
+  assert.doesNotMatch(JSON.stringify(entries), /I will check the two inputs|The combined result is/);
+});
+
+test('native Python distinguishes traceback, system error, cancellation, and real partial stdio', () => {
+  const project = (result, extra = {}) => projectNativePythonActivity({ metadata: {} }, {
+    type: 'mcpToolCall', id: 'python-result', server: 'browser_workspace', tool: 'python', status: 'failed',
+    arguments: { code: 'print(7)' }, result, ...extra,
+  }, 'turn');
+  const partial = { stdout: 'Part while running.\n', stderr: 'Before stopping.\n' };
+  const system = 'Execution was interrupted; tool completion is unknown.';
+  const failed = project({ isError: true, structuredContent: { error: system } }, { livePythonOutput: partial });
+  const aggregate = failed[1].metadata.aggregate_result;
+  assert.deepEqual(aggregate.messages.map(entry => entry.text), [partial.stdout, partial.stderr]);
+  assert.deepEqual(aggregate.system_exception.traceback, [system]);
+  assert.equal(aggregate.in_kernel_exception, undefined);
+  const cancelled = project({ isError: true, structuredContent: { error: system } }, { livePythonOutput: partial, pythonCancelled: true });
+  const interrupted = raw('jddg').a(cancelled, { isStreaming: false }).get(cancelled[0]).item;
+  assert.equal(interrupted.status, 'paused');
+  assert.deepEqual(Array.from(interrupted.output, row => row.text), [partial.stdout, partial.stderr]);
+
+  const trace = 'Traceback (most recent call last):\n  File "fixture.py", line 1\nValueError: neutral value';
+  const kernel = project({ isError: true, structuredContent: { executionEnvironment: 'browser-pyodide', error: trace, stdout: '', stderr: `Actual warning\n${trace}\n` } }, { livePythonOutput: partial });
+  const actual = raw('jddg').a(kernel, { isStreaming: false }).get(kernel[0]).item;
+  assert.equal(actual.status, 'error');
+  assert.deepEqual(Array.from(actual.output, row => [row.kind, row.text]), [['stderr', 'Actual warning\n'], ['error', trace]]);
+  assert.equal(kernel[1].metadata.aggregate_result.in_kernel_exception.name, 'ValueError');
+  assert.equal(kernel[1].metadata.aggregate_result.system_exception, undefined);
 });

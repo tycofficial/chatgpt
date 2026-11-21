@@ -207,6 +207,12 @@ function publicReasoningItem(item) {
   };
 }
 
+export function isPublicReasoningPart(part) {
+  return Number.isSafeInteger(part?.index) && part.index >= 0 &&
+    Number.isSafeInteger(part.summaryIndex) && part.summaryIndex >= 0 &&
+    typeof part.text === 'string' && part.text.length > 0;
+}
+
 /** Convert the app's existing Chat history, including function results and images. */
 export function toResponsesInput(messages) {
   const input = [];
@@ -289,16 +295,19 @@ async function streamResponses({ settings, messages, tools, toolChoice, signal, 
     onDelta(next.startsWith(previous) ? next.slice(previous.length) : '', assembled);
   };
   const reasoningPart = (index, summaryIndex, text, append = false) => {
-    const key = index + ':' + summaryIndex, previous = reasoningTexts.get(key)?.text || '';
+    if (!isPublicReasoningPart({ index, summaryIndex, text })) return;
+    const key = `${index}:${summaryIndex}`, previous = reasoningTexts.get(key)?.text || '';
     const next = append ? previous + text : text;
     if (next === previous) return;
     // Some gateways revise or compact the optional terminal summary. Keep the
     // public text already shown without treating a summary edit as turn failure.
     if (!next.startsWith(previous)) return;
     reasoningTexts.set(key, { index, summaryIndex, text: next });
-    const summary = [...reasoningTexts.values()].sort((a,b) => a.index-b.index || a.summaryIndex-b.summaryIndex).map(part => part.text).join('');
-    if (!summary.startsWith(assembled.reasoning ?? '')) return;
-    assembled.reasoning = summary;
+    const parts = [...reasoningTexts.values()].sort((a, b) => a.index - b.index || a.summaryIndex - b.summaryIndex);
+    assembled.reasoning_parts = parts;
+    // Preserve the monotonic legacy string used by older clients and durable replay.
+    const summary = parts.map(part => part.text).join('');
+    if (summary.startsWith(assembled.reasoning ?? '')) assembled.reasoning = summary;
     onActivity({type:'reasoning_delta'}); onDelta('', assembled);
   };
   const ensureCall = (index, item = {}) => {
@@ -372,6 +381,10 @@ async function streamResponses({ settings, messages, tools, toolChoice, signal, 
         call.arguments += body.delta || ''; refreshCalls(); break;
       }
       case 'response.function_call_arguments.done': ensureCall(index,{ id: body.item_id, arguments: body.arguments || '', ...(body.name ? {name:body.name} : {}) }); break;
+      case 'response.reasoning_summary_part.added':
+      case 'response.reasoning_summary_part.done':
+        if (body.part?.type === 'summary_text') reasoningPart(index, body.summary_index ?? 0, body.part.text);
+        break;
       case 'response.reasoning_summary_text.delta': reasoningPart(index, body.summary_index ?? 0, body.delta || '', true); break;
       case 'response.reasoning_summary_text.done': reasoningPart(index, body.summary_index ?? 0, body.text || ''); break;
       case 'response.completed':
@@ -440,6 +453,10 @@ export class PythonRuntime {
       const job = this.pending.get(data.id);
       if (!job) return;
       if (data.type === 'status') { job.onStatus?.(data.message); return; }
+      if (data.type === 'output') {
+        if (['stdout', 'stderr'].includes(data.streamName) && typeof data.text === 'string' && data.text) job.onOutput?.(data.streamName, data.text);
+        return;
+      }
       clearTimeout(job.timer); this.pending.delete(data.id);
       if (data.type === 'error') job.reject(new Error(data.error)); else job.resolve(data.result);
     };
@@ -448,7 +465,7 @@ export class PythonRuntime {
       this.terminate(new Error(message));
     };
   }
-  run(code, files = [], onStatus) {
+  run(code, files = [], onStatus, onOutput) {
     const generation = this.generation;
     const run = async () => {
       if (generation !== this.generation) throw new DOMException('Python 运行已停止。', 'AbortError');
@@ -463,7 +480,7 @@ export class PythonRuntime {
       return new Promise((resolve, reject) => {
         const id = this.nextId++;
         const timer = setTimeout(() => this.terminate(new Error('Python 执行超时，运行环境已重置。')), this.timeout);
-        this.pending.set(id, { resolve, reject, timer, onStatus });
+        this.pending.set(id, { resolve, reject, timer, onStatus, onOutput });
         this.worker.postMessage({ id, code: String(code), files: uploads.filter(Boolean) });
       });
     };

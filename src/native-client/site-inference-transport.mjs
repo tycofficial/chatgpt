@@ -6,6 +6,8 @@ const statuses = new Set(['running', 'completed', 'failed', 'interrupted', 'canc
 const metadataCursor = Number.MAX_SAFE_INTEGER;
 const encoder = new TextEncoder();
 const admissionRetryMs = 60 * 60 * 1000;
+// These models accepted the public summary option through the site's gateway.
+const summaryModels = new Set(['gpt-6-sol', 'gpt-6.2-sol', 'gpt-6.2-astra']);
 async function bodyDigest(text) {
   const digest = await crypto.subtle.digest('SHA-256', encoder.encode(text));
   return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
@@ -262,7 +264,12 @@ export function createSiteInferenceTransport({
       await cancel(checkpoint, options);
       throw abortError('该请求已停止。');
     }
-    const body = JSON.stringify(payload);
+    const effort = payload.reasoning?.effort;
+    const requestSummary = reattach ? checkpoint.requestPublicSummary === true
+      : Boolean(effort && effort !== 'none' && payload.reasoning.summary === undefined && summaryModels.has(payload.model));
+    const body = JSON.stringify(requestSummary
+      ? { ...payload, reasoning: { ...payload.reasoning, summary: 'auto' } }
+      : payload);
     if (!reattach && options.ephemeral && !options.isFreeChat) {
       return fetchSite(route, token, {
         method: 'POST', signal, headers: { 'Content-Type': 'application/json' }, body,
@@ -271,7 +278,7 @@ export function createSiteInferenceTransport({
     if (!reattach) {
       const id = uuid().toLowerCase();
       if (checkpoint.route === checkpointRoute || !uuidPattern.test(id)) throw error('SITE_INFERENCE_INVALID_CHECKPOINT', '推理请求记录不可用。');
-      await saveFields(checkpoint, onCheckpoint, { route: checkpointRoute, siteRequestId: id, ownerId: accountId, state: 'submitted', submittedAt: Date.now(), bodyHash: await bodyDigest(body) });
+      await saveFields(checkpoint, onCheckpoint, { route: checkpointRoute, siteRequestId: id, ownerId: accountId, state: 'submitted', submittedAt: Date.now(), bodyHash: await bodyDigest(body), ...(requestSummary ? { requestPublicSummary: true } : {}) });
       signal?.throwIfAborted();
       if (getAccountId() !== accountId) throw error('SITE_INFERENCE_SIGN_IN', '推理开始前账号发生了变化。', { status: 401 });
     }

@@ -1,5 +1,5 @@
 /** Account-owned text history sync. No model transport or executable remote checkpoint. */
-import { isSiteInferenceCheckpoint } from './site-inference-transport.mjs?v=5c7eb02b441bce39';
+import { isSiteInferenceCheckpoint } from './site-inference-transport.mjs?v=dea77d65adc42752';
 
 export const CHAT_HISTORY_SYNC_SCHEMA = 1;
 export const CHAT_HISTORY_SYNC_LIMITS = Object.freeze({ documentBytes: 1_000_000, pageSize: 100, flushMutations: 40, queuedMutations: 2000, threads: 2000, requestTimeoutMs: 15000 });

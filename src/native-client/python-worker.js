@@ -92,20 +92,34 @@ async function execute({ id, code, files = [] }) {
   }
   const before = await snapshot(runtime.FS);
   let stdout = '', stderr = '', result = '', executionError = null;
+  const liveLimit = 32000;
+  const emitted = { stdout: 0, stderr: 0 };
+  let updates = 0;
+  function output(streamName, text) {
+    if (!text) return;
+    if (streamName === 'stdout') stdout += text;
+    else stderr += text;
+    const visible = text.slice(0, liveLimit - emitted[streamName]);
+    if (visible && updates < 128) {
+      emitted[streamName] += visible.length;
+      updates += 1;
+      self.postMessage({ id, type: 'output', streamName, text: visible });
+    }
+  }
   const outDecoder = new TextDecoder(), errDecoder = new TextDecoder();
   runtime.setStdin({ stdin: () => undefined });
-  runtime.setStdout({ write: bytes => { stdout += outDecoder.decode(bytes, { stream: true }); return bytes.length; } });
-  runtime.setStderr({ write: bytes => { stderr += errDecoder.decode(bytes, { stream: true }); return bytes.length; } });
+  runtime.setStdout({ write: bytes => { output('stdout', outDecoder.decode(bytes, { stream: true })); return bytes.length; } });
+  runtime.setStderr({ write: bytes => { output('stderr', errDecoder.decode(bytes, { stream: true })); return bytes.length; } });
   status('正在加载所需的 Python 包…');
   try {
-    await runtime.loadPackagesFromImports(code, { messageCallback: status, errorCallback: message => { stderr += `${message}\n`; } });
+    await runtime.loadPackagesFromImports(code, { messageCallback: status, errorCallback: message => output('stderr', `${message}\n`) });
     status('正在运行 Python…');
     const value = await runtime.runPythonAsync(code);
     if (value !== undefined && value !== null) {
       result = String(value);
       value?.destroy?.();
     }
-  } catch (error) { executionError = String(error.message || error); stderr += `${executionError}\n`; }
+  } catch (error) { executionError = String(error.message || error); output('stderr', `${executionError}\n`); }
   try { runtime.runPython('import sys as _runtime_sys; _runtime_sys.stdout.flush(); _runtime_sys.stderr.flush()'); } catch { /* Closed streams do not prevent artifact recovery. */ }
   // Capture every open figure even if model code omitted savefig()/show().
   try {
@@ -129,8 +143,8 @@ if 'matplotlib.pyplot' in _runtime_sys.modules:
     generated.push({ name, path, mime, dataUrl: dataURL(runtime.FS.readFile(path), mime) });
   }
   try { runtime.runPython('_runtime_sys.stdout.flush(); _runtime_sys.stderr.flush()'); } catch { /* Preserve any remaining output. */ }
-  stdout += outDecoder.decode();
-  stderr += errDecoder.decode();
+  output('stdout', outDecoder.decode());
+  output('stderr', errDecoder.decode());
   return { ok: executionError === null, error: executionError, stdout, stderr, result, files: generated, images: generated.filter(file => file.mime.startsWith('image/') && file.mime !== 'image/svg+xml').map(file => file.dataUrl) };
 }
 
