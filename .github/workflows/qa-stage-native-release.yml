@@ -1,42 +1,61 @@
-name: Diagnose Codex's published Responses stream
+name: Inspect the actual browser Codex inference receipt
 on:
   push:
     branches: [qa/codex-public-summary-heading]
 permissions:
   contents: read
 jobs:
-  responses:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
+  codex:
+    runs-on: windows-2025
+    timeout-minutes: 8
+    defaults:
+      run:
+        shell: bash
     env:
-      SITE: https://tycofficial.github.io
+      SITE: https://tycofficial.github.io/chatgpt/
       API: https://chatgpt-admin-bridge-tyc.hushedtarragon1.chatgpt.site
-      MAIN: b020a4a479cad1bc93614537e8881831ffca71ba
+      RELEASE: bfb322d68717147e
     steps:
-      - name: Inspect one synthetic account's output transitions
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Use the site's real Pro trial and stock Codex interface
         run: |
+          set -euo pipefail
+          npm install --prefix "$RUNNER_TEMP/pages-browser" --no-audit --no-fund --package-lock=false playwright-core@1.58.2
           node --input-type=module <<'NODE'
-          import { createHash, randomUUID } from 'node:crypto';
           import assert from 'node:assert/strict';
-          const { SITE, API, MAIN } = process.env;
-          const loaded = await fetch('https://raw.githubusercontent.com/tycofficial/chatgpt/' + MAIN + '/runtime.js');
-          assert.equal(loaded.status, 200);
-          const runtime = await import('data:text/javascript;base64,' + Buffer.from(await loaded.text()).toString('base64'));
-          async function post(path, body, token, requestId) {
-            return fetch(API + path, { method: 'POST',
-              signal: AbortSignal.timeout(72000),
-              headers: { 'Content-Type': 'application/json', Origin: SITE,
-                ...(token ? { Authorization: 'Bearer ' + token } : {}),
-                ...(requestId ? { 'X-Chat-Request-Id': requestId } : {}) },
-              body: JSON.stringify(body) });
+          import { createHash, randomUUID } from 'node:crypto';
+          import { join } from 'node:path';
+          import { pathToFileURL } from 'node:url';
+          const { chromium } = await import(pathToFileURL(join(process.env.RUNNER_TEMP, 'pages-browser/node_modules/playwright-core/index.mjs')).href);
+          const { SITE, API, RELEASE } = process.env;
+          const home = new URL(SITE), nonce = randomUUID().replace(/-/g, '').slice(0, 10);
+          const username = 'qacodex' + nonce, password = 'Qa9codex' + randomUUID().replace(/-/g, '');
+          const sample = 'CODEXQA-' + nonce, expected = sample + '-323';
+          const query = '请用 Python 工具实际执行 print("' + sample + '-" + str(17 * 19))。执行完后回复实际输出。';
+          const continuation = '请回复上一次实际 Python 输出的完整第一行，并追加 -NEXT。只输出这一行。';
+          const stage = (name, detail) => console.log('Codex QA ' + name + (detail === undefined ? '' : ' ' + JSON.stringify(detail)));
+          async function post(path, data, token) {
+            const result = await fetch(API + path, { method:'POST',
+              headers: { Origin: home.origin, 'Content-Type': 'application/json', ...(token ? { Authorization: 'Bearer ' + token } : {}) },
+              body: JSON.stringify(data), signal: AbortSignal.timeout(22000) });
+            assert.equal(result.status, 200, path + ' refused the QA account operation');
+            return result.json();
           }
-          const nonce = randomUUID().replace(/-/g, '').slice(0, 10);
-          const account = await post('/auth/register', { username:'qastream' + nonce, password:'Qa9stream' + randomUUID() });
-          assert.equal(account.status, 200);
-          const { token } = await account.json();
-          const trial = await post('/auth/site-trial', { tier:'pro' }, token);
-          assert.equal(trial.status, 200);
-          assert.equal((await trial.json()).user?.planType, 'pro');
+          const active = await fetch(new URL('native-client/active.json?codex_qa=' + RELEASE, home), { signal: AbortSignal.timeout(18000) });
+          assert.equal((await active.json()).release, RELEASE);
+          const assigned = await post('/auth/register', { username, password });
+          assert.equal(assigned.user?.planType, 'free');
+          const trial = await post('/auth/site-trial', { tier:'pro' }, assigned.token);
+          assert.equal(trial.user?.planType, 'pro');
+          assert.equal(trial.user?.siteTrial?.tier, 'pro');
+          stage('activated-a-normal-site-pro-trial');
+
+          const browser = await chromium.launch({ channel: 'msedge', headless: true });
+          const inference = [], errors = [];
+          let observedId;
           const itemHash = id => id ? createHash('sha256').update(id).digest('hex').slice(0, 7) : null;
           const texts = new Map();
           const patches = [];
@@ -52,46 +71,150 @@ jobs:
             }
             texts.set(key, next);
           };
-          for (const variant of [0,1,2]) {
-            texts.clear(); patches.length = 0;
-            const sample = 'CODEXQA-' + nonce + variant;
-            const payload = {
-              model:'gpt-6.2-sol', stream:true, store:false, include:['reasoning.encrypted_content'],
-              reasoning:{ effort:'low', summary:'auto' },
-              input:[{ role:'system', content:'Execute requested work using the available real tools instead of only announcing a plan. Continue correcting actual tool errors and give a final answer after the work is complete or an actual limitation has been identified. Python runs in a browser Pyodide environment, not a hosted shell; only workspace files persist after reload. Never claim unexecuted shell, network or file operations. Return real artifact download URLs supplied by tools.' },
-                { role:'user', content:(variant === 0 ? '' : '先告诉我你要运行什么，再实际执行。') + '请用 Python 工具实际执行 print("' + sample + '-" + str(17 * 19))。执行完后回复实际输出。' }],
-              tools:runtime.toResponsesTools([runtime.PYTHON_TOOL]), tool_choice:'auto',
-            };
-            const response = await post('/inference/v1/responses', payload, token, randomUUID());
-            console.log('Probe status ' + JSON.stringify({variant,status:response.status,contentType:response.headers.get('content-type')}));
-            if (!response.ok) { await response.body?.cancel(); continue; }
-            const raw = await response.text();
-            const events = [];
-            for (const batch of raw.split(/\r?\n\r?\n/)) {
-              const value = batch.split(/\r?\n/).filter(v=>v.startsWith('data:')).map(v=>v.slice(5).trimStart()).join('\n');
-              if (!value || value==='[DONE]') continue;
-              const e = JSON.parse(value), index = e.output_index;
+          async function traceReceipt(token, id) {
+            if (!id) return console.log('Codex receipt unavailable');
+            let after = -1, status = null, incoming = '', state;
+            const all = [];
+            for (let round = 0; round < 48; round++) {
+              const reply = await fetch(API + '/inference/v1/responses/' + id + '?after=' + after, {
+                signal:AbortSignal.timeout(10000), headers:{Origin:home.origin, Authorization:'Bearer ' + token},
+              });
+              if (!reply.ok) {
+                if (reply.status === 404) { await new Promise(r=>setTimeout(r,500)); continue; }
+                console.log('Codex receipt HTTP ' + reply.status); break;
+              }
+              const receipt = await reply.json();
+              status = receipt.status; state = receipt.error?.code;
+              for (const chunk of receipt.chunks) { after = chunk.seq; incoming += chunk.data; }
+              let end;
+              while ((end = /\r?\n\r?\n/.exec(incoming))) {
+                const value = incoming.slice(0,end.index).split(/\r?\n/).filter(v=>v.startsWith('data:')).map(v=>v.slice(5).trimStart()).join('\n');
+                incoming = incoming.slice(end.index+end[0].length);
+                if (!value) continue;
+                if (value==='[DONE]') { all.push({type:'[DONE]'}); continue; }
+                try { all.push(JSON.parse(value)); } catch {}
+              }
+              if (!receipt.hasMore && status !== 'running') break;
+              if (!receipt.hasMore || !receipt.chunks.length) await new Promise(r=>setTimeout(r,550));
+            }
+            const events = [], indexes = new Map(), statusCounts = {};
+            const describe = item => ({ type:item?.type, phase:item?.phase, id:itemHash(item?.id), status:item?.status,
+              content:item?.content?.map(p=>({ type:p.type, size:p.text?.length ?? null, keys:Object.keys(p) })) });
+            for (const e of all) {
+              if (!e.type) continue;
+              statusCounts[e.type]=(statusCounts[e.type] ?? 0)+1;
+              const index = e.output_index ?? indexes.get(e.item_id) ?? 0;
               if (e.type === 'response.output_text.delta' || e.type === 'response.output_text.done') {
-                inspect(e.type, index ?? 0, e.content_index ?? 0, e.delta ?? e.text, e.type.endsWith('.delta'));
+                inspect(e.type, index, e.content_index ?? 0, e.delta ?? e.text, e.type.endsWith('.delta'));
                 if (e.type.endsWith('.done')) events.push({ type:e.type,index,id:itemHash(e.item_id),size:e.text?.length ?? null, keys:Object.keys(e) });
               }
-              const items = e.response?.output;
-              const describe = (item) => ({ type:item?.type, phase:item?.phase, id:itemHash(item?.id), status:item?.status,
-                content:item?.content?.map(p=>({ type:p.type, size:p.text?.length ?? null, keys:Object.keys(p) })) });
               if (e.type.startsWith('response.output_item')) {
+                if (e.item?.id) indexes.set(e.item.id,index);
                 events.push({type:e.type,index,item:describe(e.item)});
                 for (const [i,p] of (e.item?.content ?? []).entries()) {
-                  if (p.type==='output_text') inspect(e.type,index ?? 0,i,p.text,false);
+                  if (p.type==='output_text') inspect(e.type,index,i,p.text,false);
                 }
-              } else if ((e.type==='response.completed' || e.type==='response.incomplete') && Array.isArray(items)) {
-                events.push({type:e.type,items:items.map(describe)});
-                for (const [at,item] of items.entries()) {
+              } else if ((e.type==='response.completed' || e.type==='response.incomplete') && Array.isArray(e.response?.output)) {
+                events.push({type:e.type,items:e.response.output.map(describe)});
+                for (const [at,item] of e.response.output.entries()) {
                   for (const [i,p] of (item.content ?? []).entries()) {
                     if (p.type==='output_text') inspect(e.type,at,i,p.text,false);
                   }
                 }
               }
             }
-            console.log('Probe transitions ' + JSON.stringify({ variant, events, patches }));
+            console.log('Codex receipt transitions ' + JSON.stringify({ status,state,output:statusCounts,events,patches }));
           }
+
+          const isModel = request => request.method() === 'POST' && request.url() === API + '/inference/v1/responses';
+          try {
+            const context = await browser.newContext({ locale:'zh-CN' });
+            const page = await context.newPage();
+            page.on('request', request => {
+              if (!isModel(request)) return;
+              observedId = request.headers()['x-chat-request-id'];
+              const body = request.postDataJSON();
+              inference.push({ model: body?.model, effort:body?.reasoning?.effort, tier:body?.service_tier,
+                python:body?.tools?.some(tool => (tool.name ?? tool.function?.name) === 'python') });
+            });
+            page.on('pageerror', error => { if (errors.length < 10) errors.push(error.name); });
+            try {
+              await page.goto(new URL('auth/login/',home).href,{waitUntil:'domcontentloaded',timeout:40000});
+              await page.locator('#site-username').fill(username);
+              await page.locator('#site-password').fill(password);
+              const [reply] = await Promise.all([
+                page.waitForResponse(r=>r.url()===API+'/auth/login'&&r.request().method()==='POST',{timeout:35000}),
+                page.getByRole('button',{name:'继续',exact:true}).click(),
+              ]);
+              assert.equal(reply.status(),200);
+              await page.waitForURL(url=>url.origin===home.origin&&url.pathname===home.pathname,{timeout:40000});
+              const plan = await page.evaluate(async release => {
+                const a = await import('./native-client/site-account.mjs?v=' + release);
+                return (a.getSiteAccount() ?? await a.refreshSiteAccount())?.planType;
+              }, RELEASE);
+              assert.equal(plan,'pro');
+              await page.waitForFunction(release=>window.__CHATGPT_REPLICA_ENV__?.release===release, RELEASE,{timeout:30000});
+              await page.waitForFunction(()=>Array.isArray(window.__originalClientProbe),undefined,{timeout:30000});
+              const relevantControls = () => page.evaluate(() => [...document.querySelectorAll('button, a, [role="menuitem"], [role="tab"]')]
+                .filter(node => node.getClientRects().length)
+                .map(node => ({tag:node.tagName, role:node.getAttribute('role'), name:node.innerText?.trim().slice(0,70),
+                  label:node.getAttribute('aria-label'), title:node.getAttribute('title'), testId:node.getAttribute('data-testid')}))
+                .filter(x => x.name || x.label || x.title || x.testId).slice(0,90));
+              await page.getByRole('button',{name:/探索|Explore/i}).first().waitFor({state:'visible',timeout:25000});
+              const codexName = /^(?:(?:进入|切换至|切换到|打开|前往)\s*)?Codex(?:\s*模式)?$/i;
+              const choice = page.getByRole('button',{name:codexName})
+                .or(page.getByRole('link',{name:codexName}))
+                .or(page.getByRole('menuitem',{name:codexName}))
+                .or(page.getByRole('tab',{name:codexName})).filter({visible:true});
+              let selected = choice.first();
+              if (!(await selected.isVisible())) {
+                stage('home-visible-controls', await relevantControls());
+                const trigger = page.getByRole('button',{name:/^(?:探索|Explore)$/i}).filter({visible:true}).first();
+                if (await trigger.isVisible()) await trigger.click();
+                selected = choice.first();
+                await selected.waitFor({state:'visible',timeout:10000}).catch(async error => {
+                  stage('available-mode-controls', await relevantControls());
+                  throw error;
+                });
+              }
+              await selected.click();
+              await page.waitForFunction(() =>
+                (history.state?.usr?.sidebarProductMode ?? history.state?.sidebarProductMode) === 'codex',
+                undefined,{timeout:17000});
+              stage('selected-codex-in-the-original-home-interface');
+              const composer = page.locator('main #prompt-textarea[contenteditable="true"], main .ProseMirror[contenteditable="true"], main textarea:not([disabled]), [data-testid="codex-composer"] [contenteditable="true"], textarea:not([disabled]), [role="textbox"][contenteditable="true"]').filter({visible:true}).first();
+              await composer.waitFor({state:'visible',timeout:28000});
+              stage('opened-the-codex-composer-without-selecting-a-project');
+              async function send(prompt) {
+                await composer.click();
+                await page.keyboard.insertText(prompt);
+                const sendButton = page.locator('#composer-submit-button, button[data-testid="send-button"], button[data-testid="composer-submit-button"], button[aria-label="发送"], button[aria-label="发送消息"], button[aria-label="发送提示"], button[aria-label="Send message"], button[aria-label="Send prompt"]')
+                  .filter({visible:true}).first();
+                const click = await sendButton.isVisible() && await sendButton.isEnabled();
+                await Promise.all([
+                  page.waitForRequest(isModel,{timeout:58000}),
+                  click ? sendButton.click({timeout:15000}) : composer.press('Enter',{timeout:15000}),
+                ]);
+              }
+              await send(query);
+              stage('first-model-request');
+              await traceReceipt(assigned.token, observedId);
+              const [logout] = await Promise.all([
+                page.waitForResponse(r=>r.url()===API+'/auth/logout'&&r.request().method()==='POST',{timeout:22000}),
+                page.goto(new URL('auth/logout/',home).href,{waitUntil:'domcontentloaded',timeout:30000}),
+              ]);
+              assert.ok(logout.ok());
+              await page.waitForURL(u=>u.origin===home.origin&&u.pathname===home.pathname,{timeout:22000});
+              stage('signed-out-on-original-base-path');
+            } finally {
+              const details = await page.evaluate(({sample})=>({
+                mode:history.state?.usr?.sidebarProductMode ?? history.state?.sidebarProductMode ?? null,
+                path:location.pathname.replace(/(\/(?:c|t)\/)[^/]+/,'$1<thread>'),
+                release:window.__CHATGPT_REPLICA_ENV__?.release,
+                text:document.body?.innerText.replaceAll(sample,'<qa-token>').slice(0,360),
+                editors:[...document.querySelectorAll('textarea,[contenteditable="true"]')].slice(0,10).map(el=>[el.id,el.getAttribute('placeholder'),el.getAttribute('data-testid')]),
+              }),{sample}).catch(()=>null);
+              stage('details',{details,inference,errors});
+            }
+          } finally { await browser.close(); }
           NODE
