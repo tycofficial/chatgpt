@@ -22,6 +22,15 @@ const isTerminal = status => statuses.has(status) && status !== 'running';
 
 export const isSiteInferenceCheckpoint = checkpoint => checkpoint?.route === checkpointRoute && uuidPattern.test(checkpoint.siteRequestId ?? '');
 
+export function terminalSiteInferenceReason(turn) {
+  if (turn?.status !== 'failed' && turn?.status !== 'interrupted') return null;
+  const transport = turn.adapterMetadata?.checkpoint?.inFlight?.transport;
+  if (!isSiteInferenceCheckpoint(transport)) return null;
+  const code = turn.adapterMetadata?.lastFailure?.code;
+  if (code === 'SITE_INFERENCE_REPLAY_EXPIRED' && isTerminal(transport.state)) return 'expired';
+  return code === 'INFERENCE_INTERRUPTED' && transport.state === 'interrupted' ? 'interrupted' : null;
+}
+
 export function turnSiteInferenceCheckpoints(turn) {
   const checkpoint = turn?.adapterMetadata?.checkpoint;
   const candidates = [checkpoint?.inFlight?.transport];
@@ -164,6 +173,7 @@ export function createSiteInferenceTransport({
     let after = -1, receipt = initial;
     for (;;) {
       receipt ??= await pollReceipt(checkpoint, after, options);
+      if (receipt.replayExpired) throw receiptError(receipt);
       for (const chunk of receipt.chunks) {
         if (chunk?.seq !== after + 1 || typeof chunk.data !== 'string') throw error('SITE_INFERENCE_REPLAY_GAP', '站内推理记录缺少连续的输出。已保留本机收到的内容。');
         after = chunk.seq;

@@ -1,30 +1,31 @@
-import { createBrowserReadAloudController, createNativeReadAloudBindings } from './local-native-read-aloud.mjs?v=91ed19db286dc9e0';
-import { normalizeWorkUIStoredPreference, WORK_DEFAULT_OPTION } from '../model-catalog.js?v=91ed19db286dc9e0';
-import { consolidateWorkDefaults } from './model-catalog-adapter.mjs?v=91ed19db286dc9e0';
+import { createBrowserReadAloudController, createNativeReadAloudBindings } from './local-native-read-aloud.mjs?v=5c7eb02b441bce39';
+import { normalizeWorkUIStoredPreference, WORK_DEFAULT_OPTION } from '../model-catalog.js?v=5c7eb02b441bce39';
+import { consolidateWorkDefaults } from './model-catalog-adapter.mjs?v=5c7eb02b441bce39';
 /**
  * Loads the public original component graph with explicit local host services.
  * Private original backend credentials are never used by this entry point.
  */
-import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter, localFilesService, localOwnedDownloadTransport, localLibraryByteTransport, initializeLocalAccountHistory, setNativeAccountHistoryToaster, initializeLocalPublishedResources, registerNativeLibrarySource, notifyNativeLibrarySourceReady, registerNativeFileReferenceSources, localReadAloudHost } from './service-boundary.mjs?v=91ed19db286dc9e0';
-import { installDeferredMapProvider } from './local-map-provider.mjs?v=91ed19db286dc9e0';
-import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs?v=91ed19db286dc9e0';
-import { getPrototypeLocalSession, getPrototypeLocalAuth, isPrototypeLocalSession, getPrototypeLocalAuthGeneration, clearPrototypeLocalSession } from './local-identity.mjs?v=91ed19db286dc9e0';
-import { createLocalHostSettingsClass } from './local-host-settings.mjs?v=91ed19db286dc9e0';
-import { createLocalWorkPolicy } from './local-work-policy.mjs?v=91ed19db286dc9e0';
-import { hasModelSelectionAccess, getSiteAccount, getSiteLoginUrl, getSiteHomeUrl } from './site-account.mjs?v=91ed19db286dc9e0';
-import { createNativeSiteTrialCard } from './native-pricing-trials.mjs?v=91ed19db286dc9e0';
-import { createNativeSiteUsageLayout } from './local-pricing.mjs?v=91ed19db286dc9e0';
-import { createNativeSiteSignOut, isSiteSignOutPage } from './site-signout.mjs?v=91ed19db286dc9e0';
-import { createNativeSiteLoginRoute } from './native-site-login.mjs?v=91ed19db286dc9e0';
-import { localizeRouterAssets } from './startup-compatibility.mjs?v=91ed19db286dc9e0';
-import { siteSignOut, localAppServer as timingServer } from './service-boundary.mjs?v=91ed19db286dc9e0';
-import { wrapNativeChatPreamble, wrapNativeClassicChatTiming, wrapNativeClassicStatus, wrapNativeClassicTiming, wrapNativeReasoningGroups } from './classic-chat-adapter.mjs?v=91ed19db286dc9e0';
-import { wrapNativeCodexWorkTiming, wrapNativeWorkedDuration } from './local-app-server.mjs?v=91ed19db286dc9e0';
-import { createNativeModelSelectionPolicy, createNativeThinkingEntryPolicy } from './local-model-selection-policy.mjs?v=91ed19db286dc9e0';
-import { createLocalHostClaimsReader } from './local-token-identity.mjs?v=91ed19db286dc9e0';
-import { wrapNativeFileUploadClass } from './local-native-upload.mjs?v=91ed19db286dc9e0';
-import { wrapNativeDownloadServices } from './local-native-download.mjs?v=91ed19db286dc9e0';
-import { createLocalDotVoiceTargetWrapper, createLocalDotVoiceWrappers } from './local-dot-browser-voice.mjs?v=91ed19db286dc9e0';
+import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter, localFilesService, localOwnedDownloadTransport, localLibraryByteTransport, initializeLocalAccountHistory, setNativeAccountHistoryToaster, initializeLocalPublishedResources, registerNativeLibrarySource, notifyNativeLibrarySourceReady, registerNativeFileReferenceSources, localReadAloudHost } from './service-boundary.mjs?v=5c7eb02b441bce39';
+import { installDeferredMapProvider } from './local-map-provider.mjs?v=5c7eb02b441bce39';
+import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs?v=5c7eb02b441bce39';
+import { getPrototypeLocalSession, getPrototypeLocalAuth, isPrototypeLocalSession, getPrototypeLocalAuthGeneration, clearPrototypeLocalSession } from './local-identity.mjs?v=5c7eb02b441bce39';
+import { createLocalHostSettingsClass } from './local-host-settings.mjs?v=5c7eb02b441bce39';
+import { createLocalWorkPolicy } from './local-work-policy.mjs?v=5c7eb02b441bce39';
+import { hasModelSelectionAccess, getSiteAccount, getSiteLoginUrl, getSiteHomeUrl } from './site-account.mjs?v=5c7eb02b441bce39';
+import { createNativeSiteTrialCard } from './native-pricing-trials.mjs?v=5c7eb02b441bce39';
+import { createNativeSiteUsageLayout } from './local-pricing.mjs?v=5c7eb02b441bce39';
+import { createNativeSiteSignOut, isSiteSignOutPage } from './site-signout.mjs?v=5c7eb02b441bce39';
+import { createNativeSiteLoginRoute } from './native-site-login.mjs?v=5c7eb02b441bce39';
+import { localizeRouterAssets } from './startup-compatibility.mjs?v=5c7eb02b441bce39';
+import { siteSignOut, localAppServer as timingServer } from './service-boundary.mjs?v=5c7eb02b441bce39';
+import { wrapNativeChatPreamble, wrapNativeClassicChatTiming, wrapNativeClassicStatus, wrapNativeClassicTiming, wrapNativeReasoningGroups } from './classic-chat-adapter.mjs?v=5c7eb02b441bce39';
+import { storedConversationSurface, wrapNativeCodexWorkTiming, wrapNativeWorkedDuration } from './local-app-server.mjs?v=5c7eb02b441bce39';
+import { terminalSiteInferenceReason } from './site-inference-transport.mjs?v=5c7eb02b441bce39';
+import { createNativeModelSelectionPolicy, createNativeThinkingEntryPolicy } from './local-model-selection-policy.mjs?v=5c7eb02b441bce39';
+import { createLocalHostClaimsReader } from './local-token-identity.mjs?v=5c7eb02b441bce39';
+import { wrapNativeFileUploadClass } from './local-native-upload.mjs?v=5c7eb02b441bce39';
+import { wrapNativeDownloadServices } from './local-native-download.mjs?v=5c7eb02b441bce39';
+import { createLocalDotVoiceTargetWrapper, createLocalDotVoiceWrappers } from './local-dot-browser-voice.mjs?v=5c7eb02b441bce39';
 
 const boundary = installNetworkBoundary();
 globalThis.__originalClientProbe = boundary.diagnostics;
@@ -37,7 +38,7 @@ void initialHistory.then(() => initializeLocalPublishedResources()).catch(() => 
 installSyntheticDocumentState(localCodexAdapter.mergeConfiguration);
 if (globalThis.__CHATGPT_REPLICA_ENV__) window.__reactRouterContext.basename = globalThis.__CHATGPT_REPLICA_ENV__.basePath.replace(/\/$/, '') || '/';
 
-const plan = {"mountMode":"client","runtime":"/chatgpt/original-client/public/chatgpt.com/cdn/assets/633146.511711c8b9.js","manifest":"/chatgpt/original-client/public/chatgpt.com/cdn/assets/manifest-cc4b2666.js","initialRoutes":{"root":"/chatgpt/original-client/public/chatgpt.com/cdn/assets/736644.5dc2aa3e01.js","app.route":"/chatgpt/original-client/public/chatgpt.com/cdn/assets/538990.0b9bfd953f.js","flow-layout.route":"/chatgpt/original-client/public/chatgpt.com/cdn/assets/687836.2297ae7176.js","authenticated-layout.route":"/chatgpt/original-client/public/chatgpt.com/cdn/assets/42763.651fb3c98a.js","home.route":"/chatgpt/original-client/public/chatgpt.com/cdn/assets/906348.52ddffd68a.js"},"registrationEntry":"./entry-library.mjs?v=91ed19db286dc9e0"};
+const plan = {"mountMode":"client","runtime":"/chatgpt/original-client/public/chatgpt.com/cdn/assets/633146.511711c8b9.js","manifest":"/chatgpt/original-client/public/chatgpt.com/cdn/assets/manifest-cc4b2666.js","initialRoutes":{"root":"/chatgpt/original-client/public/chatgpt.com/cdn/assets/736644.5dc2aa3e01.js","app.route":"/chatgpt/original-client/public/chatgpt.com/cdn/assets/538990.0b9bfd953f.js","flow-layout.route":"/chatgpt/original-client/public/chatgpt.com/cdn/assets/687836.2297ae7176.js","authenticated-layout.route":"/chatgpt/original-client/public/chatgpt.com/cdn/assets/42763.651fb3c98a.js","home.route":"/chatgpt/original-client/public/chatgpt.com/cdn/assets/906348.52ddffd68a.js"},"registrationEntry":"./entry-library.mjs?v=5c7eb02b441bce39"};
 const { __webpack_require__: requireOriginal } = await import(plan.runtime);
 if (globalThis.__CHATGPT_REPLICA_ENV__?.directAssetHost) requireOriginal.p = new URL('original-client/public/chatgpt.com/cdn/', new URL(globalThis.__CHATGPT_REPLICA_ENV__.basePath, location.origin)).href;
 // One mechanical entry transform defers its terminal hxQI invocation and
@@ -201,9 +202,32 @@ overrideExports('uvgn', { a: nativePdfWorker.toString() }, { deferred: true });
 
 // Keep native map factories synchronous after their own chunk has loaded.
 const mapRendererURL = new URL('./map-vendor/maplibre-gl.mjs', import.meta.url);
+const mapStylesURL = new URL('./map-vendor/maplibre-gl.css', import.meta.url);
 if (nativeAssetVersion) mapRendererURL.searchParams.set('v', nativeAssetVersion);
+if (nativeAssetVersion) mapStylesURL.searchParams.set('v', nativeAssetVersion);
+let mapStylesReady;
+function loadMapStyles() {
+  return mapStylesReady ??= new Promise((resolve, reject) => {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = mapStylesURL.href;
+    link.onload = resolve;
+    link.onerror = () => {
+      link.remove();
+      reject(Error('Could not load the map renderer stylesheet.'));
+    };
+    document.head.append(link);
+  }).catch(error => {
+    mapStylesReady = undefined;
+    throw error;
+  });
+}
 const localMapProvider = installDeferredMapProvider(requireOriginal, {
-  loadRenderer: () => requireOriginal.ir(mapRendererURL.href), diagnostics: boundary.diagnostics,
+  async loadRenderer() {
+    const [renderer] = await Promise.all([requireOriginal.ir(mapRendererURL.href), loadMapStyles()]);
+    return renderer;
+  },
+  diagnostics: boundary.diagnostics,
 });
 adaptFactory('FxuF', () => function(module) { module.exports = localMapProvider.renderer; }, { deferred: true });
 overrideExports('eS9I', { a: localMapProvider.createStyle(), b: localMapProvider.createStyle(), c: localMapProvider.configureRenderer }, { deferred: true });
@@ -311,6 +335,26 @@ overrideExports('hUUF', {}, { deferred: true }, { b: wrapNativeReasoningGroups }
 overrideExports('R2pa', {}, { deferred: true }, {
   a: original => wrapNativeClassicTiming(wrapNativeClassicChatTiming(original)),
 });
+function useTerminalSiteReceipt(conversationId) {
+  const { useCallback, useSyncExternalStore } = requireOriginal('zd8w');
+  const subscribe = useCallback(onChange => {
+    if (!conversationId) return () => {};
+    return timingServer.subscribe(({ method, params }) => {
+      if (params.threadId === conversationId && (method === 'turn/started' || method === 'turn/completed')) onChange();
+    });
+  }, [conversationId]);
+  const read = useCallback(() => terminalSiteInferenceReason(timingServer.threads.get(conversationId)?.turns.at(-1)), [conversationId]);
+  return useSyncExternalStore(subscribe, read, read);
+}
+// The original recovery row can still be awaiting a stream after the
+// Worker confirms a terminal receipt. The turn owns the final notice.
+overrideExports('ESlL', {}, { deferred: true }, {
+  a: NativeStatus => function SiteClassicResponseStatus(props) {
+    const reason = useTerminalSiteReceipt(props.conversationId);
+    if (reason && storedConversationSurface(timingServer.threads.get(props.conversationId)) === 'work') return null;
+    return requireOriginal('ABep').jsx(NativeStatus, props);
+  },
+});
 function ChatElapsedStatus({ durationMs }) {
   const { jsx } = requireOriginal('ABep');
   const { locale } = requireOriginal('Wf1j').a();
@@ -326,10 +370,24 @@ function ChatElapsedStatus({ durationMs }) {
 overrideExports('dDrQ', {}, { deferred: true }, {
   a: original => wrapNativeClassicStatus(original, {
     getThread: id => timingServer.threads.get(id),
+    useTerminalReceipt: useTerminalSiteReceipt,
     renderTurn: (Component, props) => requireOriginal('ABep').jsx(Component, props),
     renderStatus: (turn, status) => {
       const { jsx, jsxs, Fragment } = requireOriginal('ABep');
       return jsxs(Fragment, { children: [turn, jsx(requireOriginal('XSEO').a, status)] });
+    },
+    renderRecovery: (turn, reason) => {
+      const { jsx, jsxs, Fragment } = requireOriginal('ABep');
+      const state = reason === 'expired' ? '服务端回放已到期。' : '这次回复已中断。';
+      return jsxs(Fragment, { children: [turn, jsx(requireOriginal('MM0V').a, {
+        role: 'alert', type: 'error', variant: 'callout',
+        content: state + '已保留此对话中的现有内容。请在输入框发送新消息继续。',
+        primaryCtaText: '继续输入',
+        onPrimaryCtaClick: () => {
+          const editors = document.querySelectorAll('#prompt-textarea, .ProseMirror[contenteditable=true]');
+          Array.from(editors).find(node => node.getClientRects().length > 0)?.focus();
+        },
+      })] });
     },
     renderChatElapsed: (turn, durationMs) => {
       const { jsx, jsxs, Fragment } = requireOriginal('ABep');

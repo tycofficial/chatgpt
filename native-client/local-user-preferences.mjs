@@ -1,6 +1,6 @@
 /** Source g2p6 GET/PATCH shapes backed by real browser-local preferences. */
-import { getLocalAccountStorageKey, isPrototypeLocalSession } from './local-identity.mjs?v=91ed19db286dc9e0';
-import { getSiteAccount, hasModelSelectionAccess } from './site-account.mjs?v=91ed19db286dc9e0';
+import { getLocalAccountStorageKey, isPrototypeLocalSession } from './local-identity.mjs?v=5c7eb02b441bce39';
+import { getSiteAccount, hasModelSelectionAccess } from './site-account.mjs?v=5c7eb02b441bce39';
 
 const key = 'original-client-prototype-user-preferences:v1';
 const effortVisibilityKey = 'model_picker_reasoning_effort_visibility';

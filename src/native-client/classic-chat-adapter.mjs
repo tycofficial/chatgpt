@@ -1,6 +1,7 @@
 /** Original classic Chat REST/SSE shapes over the same real local thread engine. */
 import { FRONTEND_TO_RAW_EFFORT } from './model-catalog-adapter.mjs';
 import { hostedSearchMessage, mergeWebSearchReferences } from './local-web-search.mjs';
+import { terminalSiteInferenceReason } from './site-inference-transport.mjs';
 import { turnHostCheckpoints } from './preferred-host-transport.mjs';
 import { storedConversationOrigin, storedConversationSurface } from './local-app-server.mjs';
 
@@ -88,13 +89,19 @@ export function wrapNativeClassicChatTiming(projectTurn) {
   };
 }
 
-export function wrapNativeClassicStatus(NativeTurn, { renderTurn, renderStatus, renderChatElapsed, getThread }) {
+export function wrapNativeClassicStatus(NativeTurn, { renderTurn, renderStatus, renderChatElapsed, renderRecovery, useTerminalReceipt, getThread }) {
   return function SiteClassicTurn(props) {
     const native = props.turn;
+    const thread = getThread(props.conversationId);
+    const reason = useTerminalReceipt?.(props.isMostRecentTurn ? props.conversationId : null) ??
+      (props.isMostRecentTurn ? terminalSiteInferenceReason(thread?.turns.at(-1)) : null);
     const ordinary = () => renderTurn(NativeTurn, props);
     if (!native || !Array.isArray(native.items)) return ordinary();
-    const surface = storedConversationSurface(getThread(props.conversationId));
+    const surface = storedConversationSurface(thread);
     if (surface !== (props.isWorkConversation ? 'work' : 'chat')) return ordinary();
+    if (reason && !props.isReadOnly && (surface === 'work' || !props.responseError) && renderRecovery) {
+      return renderRecovery(ordinary(), reason);
+    }
     const body = native.items.findLastIndex(item => item.type === 'assistant-message' &&
       typeof item.content === 'string' && item.content.trim());
     if (body === -1 || !Number.isFinite(native.workStartedAtMs)) return ordinary();

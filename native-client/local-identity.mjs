@@ -1,5 +1,5 @@
 /** Synthetic identity for this site's accounts and its separate browser guest. */
-import { getSiteAccount, getSiteHomeUrl } from './site-account.mjs?v=91ed19db286dc9e0';
+import { getSiteAccount, getSiteHomeUrl } from './site-account.mjs?v=5c7eb02b441bce39';
 
 const siteAccount = getSiteAccount();
 const registeredSiteUser = siteAccount?.role === 'user' ? siteAccount : null;

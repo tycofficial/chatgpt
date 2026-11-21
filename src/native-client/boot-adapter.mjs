@@ -19,7 +19,8 @@ import { createNativeSiteLoginRoute } from './native-site-login.mjs';
 import { localizeRouterAssets } from './startup-compatibility.mjs';
 import { siteSignOut, localAppServer as timingServer } from './service-boundary.mjs';
 import { wrapNativeChatPreamble, wrapNativeClassicChatTiming, wrapNativeClassicStatus, wrapNativeClassicTiming, wrapNativeReasoningGroups } from './classic-chat-adapter.mjs';
-import { wrapNativeCodexWorkTiming, wrapNativeWorkedDuration } from './local-app-server.mjs';
+import { storedConversationSurface, wrapNativeCodexWorkTiming, wrapNativeWorkedDuration } from './local-app-server.mjs';
+import { terminalSiteInferenceReason } from './site-inference-transport.mjs';
 import { createNativeModelSelectionPolicy, createNativeThinkingEntryPolicy } from './local-model-selection-policy.mjs';
 import { createLocalHostClaimsReader } from './local-token-identity.mjs';
 import { wrapNativeFileUploadClass } from './local-native-upload.mjs';
@@ -200,9 +201,32 @@ overrideExports('uvgn', { a: nativePdfWorker.toString() }, { deferred: true });
 
 // Keep native map factories synchronous after their own chunk has loaded.
 const mapRendererURL = new URL('./map-vendor/maplibre-gl.mjs', import.meta.url);
+const mapStylesURL = new URL('./map-vendor/maplibre-gl.css', import.meta.url);
 if (nativeAssetVersion) mapRendererURL.searchParams.set('v', nativeAssetVersion);
+if (nativeAssetVersion) mapStylesURL.searchParams.set('v', nativeAssetVersion);
+let mapStylesReady;
+function loadMapStyles() {
+  return mapStylesReady ??= new Promise((resolve, reject) => {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = mapStylesURL.href;
+    link.onload = resolve;
+    link.onerror = () => {
+      link.remove();
+      reject(Error('Could not load the map renderer stylesheet.'));
+    };
+    document.head.append(link);
+  }).catch(error => {
+    mapStylesReady = undefined;
+    throw error;
+  });
+}
 const localMapProvider = installDeferredMapProvider(requireOriginal, {
-  loadRenderer: () => requireOriginal.ir(mapRendererURL.href), diagnostics: boundary.diagnostics,
+  async loadRenderer() {
+    const [renderer] = await Promise.all([requireOriginal.ir(mapRendererURL.href), loadMapStyles()]);
+    return renderer;
+  },
+  diagnostics: boundary.diagnostics,
 });
 adaptFactory('FxuF', () => function(module) { module.exports = localMapProvider.renderer; }, { deferred: true });
 overrideExports('eS9I', { a: localMapProvider.createStyle(), b: localMapProvider.createStyle(), c: localMapProvider.configureRenderer }, { deferred: true });
@@ -310,6 +334,26 @@ overrideExports('hUUF', {}, { deferred: true }, { b: wrapNativeReasoningGroups }
 overrideExports('R2pa', {}, { deferred: true }, {
   a: original => wrapNativeClassicTiming(wrapNativeClassicChatTiming(original)),
 });
+function useTerminalSiteReceipt(conversationId) {
+  const { useCallback, useSyncExternalStore } = requireOriginal('zd8w');
+  const subscribe = useCallback(onChange => {
+    if (!conversationId) return () => {};
+    return timingServer.subscribe(({ method, params }) => {
+      if (params.threadId === conversationId && (method === 'turn/started' || method === 'turn/completed')) onChange();
+    });
+  }, [conversationId]);
+  const read = useCallback(() => terminalSiteInferenceReason(timingServer.threads.get(conversationId)?.turns.at(-1)), [conversationId]);
+  return useSyncExternalStore(subscribe, read, read);
+}
+// The original recovery row can still be awaiting a stream after the
+// Worker confirms a terminal receipt. The turn owns the final notice.
+overrideExports('ESlL', {}, { deferred: true }, {
+  a: NativeStatus => function SiteClassicResponseStatus(props) {
+    const reason = useTerminalSiteReceipt(props.conversationId);
+    if (reason && storedConversationSurface(timingServer.threads.get(props.conversationId)) === 'work') return null;
+    return requireOriginal('ABep').jsx(NativeStatus, props);
+  },
+});
 function ChatElapsedStatus({ durationMs }) {
   const { jsx } = requireOriginal('ABep');
   const { locale } = requireOriginal('Wf1j').a();
@@ -325,10 +369,24 @@ function ChatElapsedStatus({ durationMs }) {
 overrideExports('dDrQ', {}, { deferred: true }, {
   a: original => wrapNativeClassicStatus(original, {
     getThread: id => timingServer.threads.get(id),
+    useTerminalReceipt: useTerminalSiteReceipt,
     renderTurn: (Component, props) => requireOriginal('ABep').jsx(Component, props),
     renderStatus: (turn, status) => {
       const { jsx, jsxs, Fragment } = requireOriginal('ABep');
       return jsxs(Fragment, { children: [turn, jsx(requireOriginal('XSEO').a, status)] });
+    },
+    renderRecovery: (turn, reason) => {
+      const { jsx, jsxs, Fragment } = requireOriginal('ABep');
+      const state = reason === 'expired' ? '服务端回放已到期。' : '这次回复已中断。';
+      return jsxs(Fragment, { children: [turn, jsx(requireOriginal('MM0V').a, {
+        role: 'alert', type: 'error', variant: 'callout',
+        content: state + '已保留此对话中的现有内容。请在输入框发送新消息继续。',
+        primaryCtaText: '继续输入',
+        onPrimaryCtaClick: () => {
+          const editors = document.querySelectorAll('#prompt-textarea, .ProseMirror[contenteditable=true]');
+          Array.from(editors).find(node => node.getClientRects().length > 0)?.focus();
+        },
+      })] });
     },
     renderChatElapsed: (turn, durationMs) => {
       const { jsx, jsxs, Fragment } = requireOriginal('ABep');

@@ -292,6 +292,7 @@ async function deferredNativeMapFixture(name, beforeRendererImport = async () =>
   const { __webpack_require__: requireOriginal } = await import(runtimeURL);
   const originalImporter = requireOriginal.ir;
   const requests = [];
+  const styleRequests = [];
   let rendererModule;
   requireOriginal.ir = async specifier => {
     if (!String(specifier).includes('/map-vendor/maplibre-gl.mjs')) return originalImporter(specifier);
@@ -311,12 +312,23 @@ async function deferredNativeMapFixture(name, beforeRendererImport = async () =>
   const context = vm.createContext({
     URL, requireOriginal, installDeferredMapProvider, nativeAssetVersion: '1234567890abcdef',
     boundary: { diagnostics: [] }, notifyNativeLibrarySourceReady() {},
+    document: {
+      createElement(tag) {
+        assert.equal(tag, 'link');
+        return {};
+      },
+      head: { append(link) {
+        assert.equal(link.rel, 'stylesheet');
+        styleRequests.push(new URL(link.href));
+        queueMicrotask(() => link.onload());
+      } },
+    },
   });
   const mapAdapter = boot.slice(mapStart, mapEnd).replaceAll('import.meta.url', JSON.stringify(bootURL.href));
   new vm.Script(boot.slice(transformStart, transformEnd) + mapAdapter +
     '\nglobalThis.fixtureMapProvider = localMapProvider;', { filename: 'native map boot fixture' }).runInContext(context);
   return {
-    assets, requireOriginal, requests, mapProvider: context.fixtureMapProvider,
+    assets, requireOriginal, requests, styleRequests, mapProvider: context.fixtureMapProvider,
     getRendererModule: () => rendererModule,
   };
 }
@@ -329,6 +341,7 @@ test('native map chunks share one deferred import and retain synchronous rendere
   assert.equal(f.requests.length, 0);
   await native.e(685193);
   assert.equal(f.requests.length, 0);
+  assert.equal(f.styleRequests.length, 0);
 
   let settled = false;
   const ready = Promise.all([native.e(118734), native.e(962984), native.e(962984)]).then(() => { settled = true; });
@@ -336,6 +349,9 @@ test('native map chunks share one deferred import and retain synchronous rendere
     await Promise.resolve();
     assert.equal(f.requests.length, 1);
     assert.equal(f.requests[0].searchParams.get('v'), '1234567890abcdef');
+    assert.equal(f.styleRequests.length, 1);
+    assert.match(f.styleRequests[0].pathname, /\/map-vendor\/maplibre-gl\.css$/);
+    assert.equal(f.styleRequests[0].searchParams.get('v'), '1234567890abcdef');
     assert.equal(settled, false);
     assert.throws(() => f.mapProvider.renderer, /must load the renderer/);
   } finally {
@@ -354,6 +370,7 @@ test('native map chunks share one deferred import and retain synchronous rendere
 
   await Promise.all([native.e(118734), native.e(962984)]);
   assert.equal(f.requests.length, 1);
+  assert.equal(f.styleRequests.length, 1);
   assert.equal(native('FxuF'), renderer);
   assert.equal(typeof native.m.kiov, 'function');
 });

@@ -1,6 +1,7 @@
 /** Original app-server protocol over real, resumable local execution. */
 import { hasUncertainPlainResponse, plainInterruptionMessage, runAgentTurn } from './agent-turn-runner.mjs';
 import { readWebSearchIntent, interruptHostedSearch } from './local-web-search.mjs';
+import { terminalSiteInferenceReason } from './site-inference-transport.mjs';
 import { readClassicBranchRequest, getClassicExecutionThread } from './classic-response-branches.mjs';
 import { parseClassicInputMessages } from './classic-input-messages.mjs';
 import { compactPreparedUserContent, isProviderContent, needsPreparedInputStorage } from './prepared-input-store.mjs';
@@ -735,6 +736,9 @@ export class LocalAppServer {
     if (!turn) throw new RpcError(-32001, 'turn_not_found');
     if (this.running.has(thread.id)) return { result: { turn: copy(this.running.get(thread.id).turn) } };
     if (turn.status === 'completed' || turn.adapterMetadata?.checkpoint?.state === 'completed') return { result: { turn: copy(turn) } };
+    if (terminalSiteInferenceReason(turn)) {
+      throw new RpcError(-32000, turn.error?.message ?? '已保留现有回复。请发送新消息继续。', { adapterCode: turn.adapterMetadata.lastFailure.code });
+    }
     this.assertExecutionAllowed(turn);
     if (!turn.adapterMetadata?.checkpoint) throw new RpcError(-32602, 'No resumable execution checkpoint exists');
     if (hasUncertainPlainResponse(turn.adapterMetadata.checkpoint.inFlight)) throw new RpcError(-32000, plainInterruptionMessage, { adapterCode: 'PLAIN_INFERENCE_INTERRUPTED' });
@@ -753,7 +757,7 @@ export class LocalAppServer {
     if (status !== 'completed') interruptHostedSearch(this, running);
     const { thread, turn } = running;
     turn.status = status;
-    if (turn.adapterMetadata?.checkpoint && status !== 'completed') { turn.adapterMetadata.resumable = !hasUncertainPlainResponse(turn.adapterMetadata.checkpoint.inFlight); turn.adapterMetadata.resumePolicy ??= status === 'interrupted' && running.interruptReason === 'pagehide' ? 'automatic' : 'manual'; turn.adapterMetadata.checkpoint.state = status; for (const call of turn.adapterMetadata.checkpoint.pendingCalls || []) if (call.state === 'running') call.state = 'uncertain'; }
+    if (turn.adapterMetadata?.checkpoint && status !== 'completed') { turn.adapterMetadata.resumable = !terminalSiteInferenceReason(turn) && !hasUncertainPlainResponse(turn.adapterMetadata.checkpoint.inFlight); turn.adapterMetadata.resumePolicy ??= status === 'interrupted' && running.interruptReason === 'pagehide' ? 'automatic' : 'manual'; turn.adapterMetadata.checkpoint.state = status; for (const call of turn.adapterMetadata.checkpoint.pendingCalls || []) if (call.state === 'running') call.state = 'uncertain'; }
     for (const item of turn.items) if (item.type === 'mcpToolCall' && item.status === 'inProgress') { item.status = 'failed'; item.result = { content: [{ type: 'text', text: 'Execution was interrupted; tool completion is unknown. It has not been reported as successful.' }], isError: true }; item.error = null; this.notify('item/completed', { threadId: thread.id, turnId: turn.id, item }); }
     const finishedAtMs = Math.max(turn.adapterMetadata.startedAtMs, completedAtMs);
     const lifecycle = turn.adapterMetadata.reasoningLifecycle;

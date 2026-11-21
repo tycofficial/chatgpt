@@ -4,6 +4,38 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import * as catalog from '../model-catalog.js';
 import {createModelCatalogAdapter} from '../src/native-client/model-catalog-adapter.mjs';
+import { BrowserWorkspaceStore } from '../src/native-client/browser-tool-executor.mjs';
+
+test('an unusable WebKit origin directory selects the existing IndexedDB store once', async () => {
+  let attempts = 0;
+  let databaseOpens = 0;
+  const workspace = new BrowserWorkspaceStore({
+    navigator: { storage: { async getDirectory() {
+      attempts++;
+      throw new DOMException('OPFS initialization failed', 'UnknownError');
+    } } },
+  });
+  workspace.db = async () => { databaseOpens++; };
+  assert.deepEqual(await Promise.all([workspace.root(), workspace.root()]), [null, null]);
+  assert.equal(await workspace.root(), null);
+  assert.equal(attempts, 2);
+  assert.equal(databaseOpens, 1);
+});
+
+test('a transient OPFS opening error recovers the original directory before using IndexedDB', async () => {
+  let attempts = 0;
+  const originalDirectory = { kind: 'directory' };
+  const workspace = new BrowserWorkspaceStore({
+    navigator: { storage: { async getDirectory() {
+      if (++attempts === 1) throw new DOMException('OPFS temporarily unavailable', 'UnknownError');
+      return originalDirectory;
+    } } },
+  });
+  assert.equal(await workspace.root(), originalDirectory);
+  assert.equal(await workspace.root(), originalDirectory);
+  assert.equal(attempts, 2);
+});
+
 const source=fs.readFileSync(new URL('../src/native-client/local-codex-adapter.mjs',import.meta.url),'utf8').replace(/^import .*;$/gm,'').replace(/^export\s+/gm,'');
 const context=vm.createContext({WORK_MODEL_IDS:catalog.WORK_MODEL_IDS,Object,Set,Map,TypeError,RangeError,structuredClone,DOMException});
 new vm.Script(source+'\nglobalThis.createAdapter=createLocalCodexAdapter;').runInContext(context);

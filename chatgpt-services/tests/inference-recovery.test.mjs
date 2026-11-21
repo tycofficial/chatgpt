@@ -75,6 +75,40 @@ test('one account admits one paid inference, records its exact UTF-8 prefix and 
   assert.equal(usage.plan.planType, 'plus');
 });
 
+test('the first public text is saved and sent without waiting for the normal chunk timer', async t => {
+  const f = await prepare(t);
+  assert.equal((await f.claim(f.alice)).status, 200);
+  let writer;
+  t.mock.method(globalThis, 'fetch', async () => new Response(
+    new ReadableStream({ start(controller) { writer = controller; } }), { headers: type },
+  ));
+  const id = crypto.randomUUID();
+  const response = await f.submit(f.alice, id);
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  const lifecycleEvent = 'data: {"type":"response.in_progress"}\n\n';
+  writer.enqueue(encoder.encode(lifecycleEvent));
+  assert.equal(decoder.decode((await reader.read()).value), lifecycleEvent);
+
+  const originalTimer = globalThis.setTimeout;
+  let batchTimers = 0;
+  t.mock.method(globalThis, 'setTimeout', (callback, delay, ...args) => {
+    if (delay > 0 && delay <= 200) batchTimers++;
+    return originalTimer(callback, delay, ...args);
+  });
+  try {
+    writer.enqueue(encoder.encode(started));
+    assert.equal(decoder.decode((await reader.read()).value), started);
+    const persisted = await (await f.receipt(f.alice, id)).json();
+    assert.equal(persisted.chunks.map(chunk => chunk.data).join(''), lifecycleEvent + started);
+    assert.equal(batchTimers, 0);
+  } finally {
+    writer.enqueue(encoder.encode(completed));
+    writer.close();
+    await f.settle();
+  }
+});
+
 test('Free accepts only Standard Chat with atomic daily cap; Dot passes exact Pro model choices', async t => {
   const f = await prepare(t);
   f.env.FREE_DAILY_REQUESTS = '1';

@@ -247,6 +247,42 @@ test('close after a real tool and saved public text, then restore the same leg w
   assert.equal(after.items.filter(item => item.type === 'reasoning').at(-1).durationMs, 85);
 });
 
+test('a confirmed interrupted receipt keeps its saved text and rejects stale resume', { timeout: 4000 }, async () => {
+  const storage = memory();
+  const savedText = 'Saved text before the interruption.';
+  const partial = sse('response.output_text.delta', { output_index: 0, delta: savedText });
+  const requests = [];
+  const client = transport(async (url, request) => {
+    if (request.method === 'POST') {
+      const id = request.headers['X-Chat-Request-Id'];
+      requests.push(['POST', id]);
+      if (id === uuid(1)) return streamResponse(partial);
+      assert.ok(JSON.stringify(JSON.parse(request.body).input).includes(savedText));
+      return streamResponse(finish([textItem('follow', 'Continued from the saved text.')]));
+    }
+    const id = url.pathname.split('/').at(-1);
+    requests.push([request.method, id]);
+    if (id !== uuid(1)) return receipt(id);
+    return receipt(id, { status: 'interrupted', data: [partial],
+      error: { code: 'INFERENCE_INTERRUPTED', message: 'The server stopped this request.' } });
+  });
+  const complete = options => streamCompletion({
+    ...options, responsesTransport: (data, wire) => client.request(data, { ...options.transportContext, signal: wire.signal }),
+  });
+  const first = launch(createServer(storage, complete));
+  const stopped = await first.done;
+  assert.equal(stopped.adapterMetadata.resumable, false);
+  assert.equal(stopped.adapterMetadata.lastFailure.code, 'INFERENCE_INTERRUPTED');
+  const restored = createServer(storage, complete);
+  const saved = restored.getThread(first.threadId).turns.at(-1);
+  assert.equal(saved.items.find(item => item.type === 'agentMessage').text, savedText);
+  assert.throws(() => restored.dispatch('turn/resume', { threadId: first.threadId }), {
+    data: { adapterCode: 'INFERENCE_INTERRUPTED' },
+  });
+  assert.equal((await launch(restored, first.threadId, 'new-fixture-message').done).status, 'completed');
+  assert.deepEqual(requests.filter(([method]) => method === 'POST'), [['POST', uuid(1)], ['POST', uuid(2)]]);
+});
+
 test('a plain stream lost after provider pinning retains text and never resubmits on reopen', { timeout: 3000 }, async () => {
   const storage = memory();
   let calls = 0;

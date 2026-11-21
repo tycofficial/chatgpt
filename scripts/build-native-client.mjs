@@ -299,7 +299,7 @@ const primaryModules = [
  ...['native-client/boot-adapter.mjs', 'native-client/entry-library.mjs', 'native-client/service-boundary.mjs', 'runtime.js', 'model-catalog.js'].map(ownModule),
  ...Array.from(originalPreloads, originalOnSite),
 ];
-const primaryStyles = [deploymentBase + cssAsset, deploymentBase + 'native-client/map-vendor/maplibre-gl.css?v=' + release];
+const primaryStyles = [deploymentBase + cssAsset];
 const preload = `<script>(function(){
  function load(rel,url){var link=document.createElement('link');link.rel=rel;link.href=url;if(rel==='modulepreload')link.crossOrigin='anonymous';document.head.appendChild(link)}
  ${JSON.stringify(earlyModules)}.forEach(function(url){load('modulepreload',url)});

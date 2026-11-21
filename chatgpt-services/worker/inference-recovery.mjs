@@ -90,11 +90,15 @@ function rememberOutcome(receipt, response) {
 function responseOutcome(contentType) {
   const receipt = { status: 'interrupted', error: unknownExecution, model: null, tier: null, input: null, output: null };
   let fragment = '';
+  let hasPublicText = false;
   const sse = contentType?.includes('text/event-stream');
   const event = line => {
     if (!line.startsWith('data:')) return;
     try {
       const value = JSON.parse(line.slice(5).trim());
+      if (!hasPublicText && value.type === 'response.output_text.delta' && typeof value.delta === 'string' && value.delta.trim()) {
+        hasPublicText = true;
+      }
       if (value.type === 'response.completed') rememberOutcome(receipt, { ...value.response, status: 'completed' });
       else if (['response.failed', 'response.incomplete', 'error'].includes(value.type)) {
         rememberOutcome(receipt, { ...value.response, status: 'failed', error: value.error ?? value.response?.error ?? value });
@@ -104,12 +108,14 @@ function responseOutcome(contentType) {
   return {
     add(text) {
       fragment += text;
-      if (!sse) return;
+      if (!sse) return false;
+      const hadPublicText = hasPublicText;
       let end;
       while ((end = fragment.indexOf('\n')) !== -1) {
         event(fragment.slice(0, end));
         fragment = fragment.slice(end + 1);
       }
+      return !hadPublicText && hasPublicText;
     },
     finish(ok) {
       if (sse) event(fragment);
@@ -183,10 +189,10 @@ async function recordBody(env, owner, id, response, liveChunk, abortSignal) {
       if (read.done) break;
       bytes += encoder.encode(read.value).byteLength;
       if (bytes > maxResponseBytes) throw new Error('Inference response exceeded the recovery storage limit');
-      outcome.add(read.value);
+      const firstPublicText = outcome.add(read.value);
       if (!pending) flushAt = Date.now() + 200;
       pending += read.value;
-      if (pending.length >= chunkSize || seq === 0) await flush();
+      if (pending.length >= chunkSize || seq === 0 || firstPublicText) await flush();
       next = reader.read();
     }
     await flush();

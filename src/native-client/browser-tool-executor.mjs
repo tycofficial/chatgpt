@@ -20,8 +20,35 @@ export function workspacePath(value) {
   const path = raw.split('/').filter(part => part !== '.').join('/'); if (!path) throw Error('File name must not be empty'); return path;
 }
 export class BrowserWorkspaceStore {
-  constructor({ indexedDB = globalThis.indexedDB, navigator = globalThis.navigator } = {}) { this.indexedDB = indexedDB; this.navigator = navigator; this.database = null; }
-  async root() { try { return this.navigator?.storage?.getDirectory ? await this.navigator.storage.getDirectory() : null; } catch (error) { if (['SecurityError', 'NotAllowedError', 'NotSupportedError'].includes(error.name)) return null; throw error; } }
+  constructor({ indexedDB = globalThis.indexedDB, navigator = globalThis.navigator } = {}) {
+    this.indexedDB = indexedDB;
+    this.navigator = navigator;
+    this.database = null;
+    this.rootPromise = null;
+  }
+  root() {
+    this.rootPromise ??= this.openRoot().catch(error => {
+      this.rootPromise = null;
+      throw error;
+    });
+    return this.rootPromise;
+  }
+  async openRoot() {
+    const storage = this.navigator?.storage;
+    if (!storage?.getDirectory) return null;
+    try {
+      return await storage.getDirectory().catch(error => {
+        if (error.name !== 'UnknownError') throw error;
+        return storage.getDirectory();
+      });
+    } catch (error) {
+      // WebKit can expose OPFS while failing to open the origin directory.
+      // Probe the existing IndexedDB store before reporting workspace readiness.
+      if (!['SecurityError', 'NotAllowedError', 'NotSupportedError', 'UnknownError'].includes(error.name)) throw error;
+      await this.db();
+      return null;
+    }
+  }
   async db() {
     if (!this.indexedDB) throw Error('Persistent browser file storage is unavailable');
     return this.database ??= new Promise((resolve, reject) => { const r = this.indexedDB.open('chatgpt-native-workspace', 1); r.onupgradeneeded = () => r.result.createObjectStore('files', { keyPath: 'key' }); r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error); });

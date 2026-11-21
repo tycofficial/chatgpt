@@ -15,7 +15,7 @@
     "authenticated-layout.route": "/cdn/assets/42763.651fb3c98a.js",
     "home.route": "/cdn/assets/906348.52ddffd68a.js"
   },
-  "registrationEntry": "./entry-library.mjs?v=91ed19db286dc9e0",
+  "registrationEntry": "./entry-library.mjs?v=5c7eb02b441bce39",
   "registrationChunks": [
     "/cdn/assets/680612.8d24b5fbe1.js",
     "/cdn/assets/418851.d52a1ffc2f.js",
