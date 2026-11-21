@@ -1,5 +1,6 @@
 import {handleChatSync} from './chat-sync.mjs';
 import {proxyDocodeResponses} from './site-inference.mjs';
+import {readJournaledInference, readSiteInferenceUsage, startJournaledInference} from './inference-recovery.mjs';
 /** Username/password auth is local to this site; no original account token is used. */
 const encoder=new TextEncoder();
 const hex=bytes=>Array.from(new Uint8Array(bytes),b=>b.toString(16).padStart(2,'0')).join('');
@@ -73,10 +74,13 @@ async function claimSiteTrial(request,env,actor){
   expiresAt:actor.sessionExpiresAt,
  });
 }
-async function siteInference(request,env,actor){
+async function siteInference(request,env,ctx,actor){
  if(request.method!=='POST')return postRequired('请使用 POST 发送模型请求。');
  if(!actor)return fail(401,'SITE_AUTH_REQUIRED','请先登录本站账户。');
- if(actor.role!=='administrator'&&!hasActiveSiteTrial(actor))return fail(403,'SITE_INFERENCE_PLAN_REQUIRED','此模型需要有效的站内试用。');
+ const free=actor.role!=='administrator'&&!hasActiveSiteTrial(actor);
+ const requestId=request.headers.get('x-chat-request-id');
+ if(requestId)return startJournaledInference(request,env,ctx,actor,requestId,free);
+ if(free)return fail(403,'SITE_INFERENCE_PLAN_REQUIRED','请更新至支持标准聊天的本站版本，或开通站内试用。');
  return proxyDocodeResponses(request,env.DOCODE_API_KEY);
 }
 async function largeBody(request,limit=2000000){if(Number(request.headers.get('Content-Length'))>limit)throw Error('Request too large');const text=await request.text();if(text.length>limit)throw Error('Request too large');return JSON.parse(text||'{}');}
@@ -140,7 +144,7 @@ async function bridgeRoute(request,env,path){
  return fail(404,'BRIDGE_ROUTE_NOT_FOUND','本机连接接口不存在。');
 }
 
-async function route(request,env){const path=new URL(request.url).pathname;
+async function route(request,env,ctx){const path=new URL(request.url).pathname;
  if(path==='/health'){const admin=await configured(env);return json({ready:true,adminConfigured:Boolean(admin),storage:'D1',version:'admin-auth-1'});}
  if(path==='/auth/register'&&request.method==='POST'){
   const administrator=await configured(env),data=await readBody(request),username=normalize(data.username);
@@ -172,10 +176,16 @@ async function route(request,env){const path=new URL(request.url).pathname;
  if(path.startsWith('/sync/'))return handleChatSync(request,env,await session(request,env));
  const actor=await session(request,env);
  if(path==='/auth/site-trial')return claimSiteTrial(request,env,actor);
- if(path==='/inference/v1/responses')return siteInference(request,env,actor);
+ if(path==='/inference/v1/responses')return siteInference(request,env,ctx,actor);
+ const recoveryPath=/^\/inference\/v1\/responses\/([^/]+)$/.exec(path);
+ if(recoveryPath)return actor?readJournaledInference(request,env,actor,recoveryPath[1]):fail(401,'SITE_AUTH_REQUIRED','请先登录本站账户。');
  if(!actor)return fail(401,'ADMIN_AUTH_REQUIRED','请先登录管理员账户。');
  if(path==='/auth/session')return json({user:account(actor),expiresAt:actor.sessionExpiresAt});
  if(path==='/auth/logout'&&request.method==='POST'){const tokenHash=await digest(request.headers.get('authorization').replace(/^Bearer\s+/i,''));await env.DB.batch([query(env,'DELETE FROM sessions WHERE token_hash=?',tokenHash),query(env,'DELETE FROM user_sessions WHERE token_hash=?',tokenHash)]);return json({signedOut:true});}
+ if(path==='/inference/v1/usage'&&request.method==='GET'){
+  const usage=await readSiteInferenceUsage(env,actor);
+  return json({sources:[usage],plan:account(actor),subscription:{remaining:null,source:'not-reported-by-official-service'}});
+ }
  if(actor.role!=='administrator')return fail(403,'ADMIN_MEMBERSHIP_REQUIRED','此功能需要管理员 Pro 账户。');
  if(path==='/bridge/status')return json(await bridgeStatus(env));
  if(path==='/bridge/pair'&&request.method==='POST'){const id=crypto.randomUUID(),token=hex(crypto.getRandomValues(new Uint8Array(32)));await query(env,'INSERT INTO bridges(id,token_hash,last_seen,profile) VALUES(?,?,?,?)',id,await digest(token),0,'{}').run();return json({bridgeId:id,bridgeToken:token});}
@@ -212,4 +222,4 @@ async function route(request,env){const path=new URL(request.url).pathname;
  if(path==='/usage'){const sums=await query(env,'SELECT source,COUNT(*) AS requests,SUM(input_tokens) AS input_tokens,SUM(output_tokens) AS output_tokens FROM usage_events GROUP BY source').all();return json({sources:sums.results,subscription:{remaining:null,source:'not-reported-by-official-service'},officialUsageUrl:'https://chatgpt.com/settings/usage'});}
  return fail(404,'ROUTE_NOT_FOUND','接口不存在。');
 }
-export default {async fetch(request,env){const origin=request.headers.get('origin'),own=new URL(request.url).origin,allowed=new Set(['https://tycofficial.github.io','http://127.0.0.1:4400','http://127.0.0.1:1455']);if(origin&&!allowed.has(origin)&&origin!==own)return fail(403,'ORIGIN_NOT_ALLOWED','此来源没有访问权限。');let response;try{response=request.method==='OPTIONS'?new Response(null,{status:204}):await route(request,env);}catch{response=fail(503,'SERVICE_UNAVAILABLE','账户服务暂时不可用，请稍后重试。');}const headers=new Headers(response.headers);if(origin){headers.set('Access-Control-Allow-Origin',origin);headers.set('Vary','Origin');headers.set('Access-Control-Allow-Headers','Content-Type,Authorization');headers.set('Access-Control-Allow-Methods','GET,POST,PUT,DELETE,OPTIONS');}headers.set('X-Content-Type-Options','nosniff');return new Response(response.body,{status:response.status,headers});}};
+export default {async fetch(request,env,ctx){const origin=request.headers.get('origin'),own=new URL(request.url).origin,allowed=new Set(['https://tycofficial.github.io','http://127.0.0.1:4400','http://127.0.0.1:1455']);if(origin&&!allowed.has(origin)&&origin!==own)return fail(403,'ORIGIN_NOT_ALLOWED','此来源没有访问权限。');let response;try{response=request.method==='OPTIONS'?new Response(null,{status:204}):await route(request,env,ctx);}catch{response=fail(503,'SERVICE_UNAVAILABLE','账户服务暂时不可用，请稍后重试。');}const headers=new Headers(response.headers);if(origin){headers.set('Access-Control-Allow-Origin',origin);headers.set('Vary','Origin');headers.set('Access-Control-Allow-Headers','Content-Type,Authorization,X-Chat-Request-Id');headers.set('Access-Control-Allow-Methods','GET,POST,PUT,DELETE,OPTIONS');}headers.set('X-Content-Type-Options','nosniff');return new Response(response.body,{status:response.status,headers});}};

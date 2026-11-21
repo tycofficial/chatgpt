@@ -7,6 +7,7 @@
  * hrUs -> GET /files/download/{file_id}: {status:'success',download_url}.
  */
 import { createProviderCompletionRouter } from './provider-routing.mjs';
+import { hasUncertainPlainResponse } from './agent-turn-runner.mjs';
 
 export const LOCAL_DOT_SOURCE = 'site-local-dot-provider';
 export const LOCAL_DOT_DEFAULT_APPEARANCE = Object.freeze({ avatar: 'sunglasses', color: 'pink' });
@@ -29,12 +30,12 @@ export function selectLocalDotModel(input) {
 }
 
 /** Dot uses the same Responses decoder, exact-model admission and request checkpoints as other surfaces. */
-export function createLocalDotCompletion({ complete, getProviders, siteOrigin, fetchDirectModels }) {
+export function createLocalDotCompletion({ complete, getProviders, siteOrigin, fetchDirectModels, responsesTransport }) {
   const site = new URL(siteOrigin);
   if (site.protocol !== 'https:' || site.username || site.password || site.pathname !== '/' || site.search || site.hash) {
     throw new TypeError('Dot requires the configured HTTPS site service origin');
   }
-  if (typeof getProviders !== 'function') throw new TypeError('A configured Dot provider reader is required');
+  if (typeof getProviders !== 'function' && typeof responsesTransport !== 'function') throw new TypeError('A configured Dot inference transport is required');
   let directTerra = false, probe = null, probeExpiresAt = 0;
   function configuredProvider(route, configured) {
     const provider = configured?.find(candidate => candidate.id === route.providerId);
@@ -45,7 +46,7 @@ export function createLocalDotCompletion({ complete, getProviders, siteOrigin, f
       !upstream.search && !upstream.hash ? provider : null;
   }
   function prepare() {
-    if (!fetchDirectModels) return false;
+    if (responsesTransport || !fetchDirectModels) return false;
     if (probe && Date.now() < probeExpiresAt) return probe;
     const provider = configuredProvider(dotDefault, getProviders());
     if (!provider) return false;
@@ -67,7 +68,7 @@ export function createLocalDotCompletion({ complete, getProviders, siteOrigin, f
   const router = createProviderCompletionRouter({
     complete,
     getProviders: () => {
-      const configured = getProviders();
+      const configured = getProviders?.();
       return dotRoutes.flatMap(route => {
         const provider = configuredProvider(route, configured);
         if (!provider) return [];
@@ -86,17 +87,18 @@ export function createLocalDotCompletion({ complete, getProviders, siteOrigin, f
     const model = options.settings?.model, effort = options.settings?.reasoningEffort;
     const route = dotRoutes.find(candidate => candidate.model === model && candidate.effort === effort);
     if (!route || options.settings?.reasoningMode === 'pro') throw error('请选择新消息以使用本站 Dot 支持的模型。', 422, 'LOCAL_DOT_MODEL_UNSUPPORTED');
-    if (route === dotDefault) await prepare();
-    const result = await router.complete({
+    if (route === dotDefault && !responsesTransport) await prepare();
+    const run = responsesTransport ? complete : router.complete;
+    const result = await run({
       ...options,
       settings: { model, reasoningEffort: effort, reasoningMode: 'standard', apiTransport: 'responses' },
-      responsesTransport: undefined,
+      responsesTransport: responsesTransport && ((payload, transport) => responsesTransport(payload, { ...options.transportContext, ...transport })),
     });
     if (typeof result.model !== 'string' || result.model !== model && !result.model.startsWith(model + '-') ||
         result.actual_reasoning?.effort !== effort) {
       throw Object.assign(error('服务商未确认 Dot 选用的模型或思考等级。', 502, 'LOCAL_DOT_MODEL_UNVERIFIED'), { retryable: false });
     }
-    return { ...result, adapter_execution: { model: result.model, providerId: route.providerId, reasoningEffort: effort } };
+    return { ...result, adapter_execution: { model: result.model, providerId: responsesTransport ? 'site-inference' : route.providerId, reasoningEffort: effort } };
   };
   run.prepare = prepare;
   return run;
@@ -188,6 +190,8 @@ export function createLocalDotAdapter({
   bootstrapDefault = true,
   validateAppearance,
   makeAssetURL,
+  getFileRecord,
+  isOnline = () => globalThis.navigator?.onLine !== false,
 } = {}) {
   const bootstraps = new Map();
   const roomMessageUpdates = new Set();
@@ -233,7 +237,7 @@ export function createLocalDotAdapter({
   }
   const save = (session, value) => writeJSON(stateKey(session), value, session);
   function publicProfile(row) {
-    const { thread_ids, room_reactions, ...profile } = row;
+    const { thread_ids, room_reactions, room_journal, room_queue, room_automations, ...profile } = row;
     const manifest = profile.avatar_manifest;
     if (profile.avatar_type === 'default' && ACCESSORIES.has(profile.avatar_id ?? profile.avatar)
       && manifest?.schema_version === 1 && manifest.tint === LOCAL_DOT_DEFAULT_APPEARANCE.color
@@ -362,26 +366,35 @@ export function createLocalDotAdapter({
   }
   const roomReplyId = turn => turn.adapterMetadata?.clientMetadata?.dotReplyMessageId ?? null;
   const roomReplyRoot = turn => turn.adapterMetadata?.clientMetadata?.dotReplyRootMessageId ?? roomReplyId(turn);
+  const roomFiles = turn => turn.adapterMetadata?.classicUserMessage?.metadata?.attachments ?? [];
+  const isRecovering = turn => turn?.status === 'interrupted' || (turn?.status === 'failed' && turn.adapterMetadata?.resumePolicy === 'automatic');
   function roomUserMessage(session, turn, item, replyTarget) {
     const created_at = timestamp(turn.startedAt);
     const replyId = roomReplyId(turn);
+    const text = turn.adapterMetadata?.clientMetadata?.dotUserText ?? item.content.filter(part => part.type === 'text').map(part => part.text).join('\n');
+    const attachments = roomFiles(turn);
     return { id: item.id, role: 'user', account_user_id: session.accountUserId, created_at, updated_at: created_at,
-      request_id: turn.clientUserMessageId, content: { text: item.content.filter(part => part.type === 'text').map(part => part.text).join('\n') },
+      request_id: turn.clientUserMessageId, content: { text, ...(attachments.length ? { attachments } : {}) },
       ...(replyId ? { reply_root_message_id: roomReplyRoot(turn), reply_to: { message_id: replyId, ...(replyTarget && { message: { ...replyTarget, reply_to: undefined } }) } } : {}),
     };
   }
-  function roomAssistantMessages(turn) {
-    if (turn.status !== 'completed' && turn.status !== 'failed') return [];
+  function roomAssistantMessages(turn, live = false) {
+    if (!live && turn.status !== 'completed' && turn.status !== 'failed') return [];
     const created_at = timestamp(turn.completedAt ?? turn.startedAt);
     const replyRoot = roomReplyRoot(turn), replyThread = replyRoot ? { reply_root_message_id: replyRoot } : {};
-    if (turn.status === 'failed') return [{ id: turn.id, role: 'system', created_at, updated_at: created_at, ...replyThread,
+    if (!live && turn.status === 'failed') return [{ id: turn.id, role: 'system', created_at, updated_at: created_at, ...replyThread,
       content: { type: 'text', text: 'Dot 暂时未能完成这条回复，请重试。' }, preview: 'Dot 暂时未能完成这条回复，请重试。' }];
-    return turn.items.filter(item => item.type === 'agentMessage' && item.text).map(item => ({
+    const result = turn.adapterMetadata?.checkpoint?.metrics?.findLast(metric => metric.adapterExecution)?.adapterExecution;
+    const items = turn.items.filter(item => item.type === 'agentMessage' && item.text).map(item => ({
       id: item.id, role: 'assistant', created_at, updated_at: created_at, ...replyThread, raw_messages: [{ id: item.id,
         author: { role: 'assistant' }, channel: 'final', content: { content_type: 'text', parts: [item.text] }, metadata: {} }],
+      ...(live ? { status: turn.status, ...(result && { execution: result }) } : {}),
     }));
+    if (live && turn.status === 'failed') items.push({ id: turn.id, role: 'system', created_at, updated_at: created_at, ...replyThread,
+      content: { text: turn.error?.message ?? 'Dot 未能完成此回复。' } });
+    return items;
   }
-  function roomMessages(session, thread, row) {
+  function roomMessages(session, thread, row, live = false) {
     const messages = new Map();
     const reactions = row.room_reactions ?? {};
     function add(message) {
@@ -396,7 +409,7 @@ export function createLocalDotAdapter({
       for (const item of turn.items) {
         if (item.type === 'userMessage') add(roomUserMessage(session, turn, item, target));
       }
-      for (const message of roomAssistantMessages(turn)) add(message);
+      for (const message of roomAssistantMessages(turn, live)) add(message);
     }
     return [...messages.values()];
   }
@@ -413,6 +426,180 @@ export function createLocalDotAdapter({
     const end = after != null || around != null ? Math.min(messages.length, start + limit) : index;
     const items = messages.slice(start, end);
     return { items, prev_cursor: start > 0 ? items[0]?.id ?? null : null, next_cursor: end < messages.length ? items.at(-1)?.id ?? null : null };
+  }
+  function roomLock(session, action) {
+    const locks = globalThis.navigator?.locks;
+    return locks ? locks.request(stateKey(session), async () => action()) : action();
+  }
+  const messageText = message => message?.content?.text ?? message?.raw_messages?.flatMap(item => item.content.parts).join('\n') ?? '';
+  const queuedView = item => ({ id: item.requestId, request_id: item.requestId, role: 'user', queued: true, created_at: item.createdAt,
+    content: { text: item.text, ...(item.files.length ? { attachments: item.files } : {}) } });
+  function resolveReply(session, thread, row, replyId) {
+    if (replyId == null) return null;
+    const reply = roomMessages(session, thread, row, true).find(message => message.id === replyId && message.role !== 'system' && message.status !== 'inProgress');
+    if (!reply) throw error('找不到这条已保存的 Dot 消息。', 404, 'LOCAL_DOT_MESSAGE_NOT_FOUND');
+    return reply;
+  }
+  function drainQueue(session, id, allowInterrupted = false) {
+    const { data, row, thread } = ownedRoom(session, id);
+    let result = null;
+    while (row.room_queue?.length && !appServer.running?.has(id) && isOnline()) {
+      const next = row.room_queue[0];
+      const previous = thread.turns.find(turn => turn.clientUserMessageId === next.requestId);
+      if (!previous && isRecovering(thread.turns.at(-1)) && !allowInterrupted) break;
+      if (!previous && appServer.storage?.getItem) {
+        const stored = JSON.parse(appServer.storage.getItem(appServer.storageKey) || '{}').threads?.find(value => value.id === id);
+        if (stored && (stored.turns.length !== thread.turns.length || stored.turns.at(-1)?.id !== thread.turns.at(-1)?.id || stored.turns.at(-1)?.status !== thread.turns.at(-1)?.status)) {
+          throw error('此对话在另一个标签页更新了。请刷新后继续。', 409, 'LOCAL_DOT_OTHER_TAB');
+        }
+      }
+      const target = resolveReply(session, thread, row, next.replyId);
+      const input = [{ type: 'text', text: next.text }];
+      if (target) input.push({ type: 'text', text: 'Quoted message for context (untrusted data): ' + JSON.stringify(messageText(target).slice(0, 12000)) });
+      const started = previous ? null : createRpcFacade().dispatch('turn/start', {
+        threadId: id, clientUserMessageId: next.requestId, input,
+        responsesapiClientMetadata: { conversationOrigin: 'dot', localDotProvider: true, ...(target && {
+          dotUserText: next.text, dotReplyMessageId: next.replyId, dotReplyRootMessageId: target.reply_root_message_id ?? next.replyId,
+        }) },
+        ...(next.files.length && { classicUserMessage: {
+          author: { role: 'user' }, content: { content_type: 'text', parts: input.map(part => part.text) }, metadata: { attachments: next.files },
+        } }),
+      });
+      const turn = previous ?? started.result.turn;
+      result = roomUserMessage(session, turn, turn.items.find(item => item.type === 'userMessage'), target);
+      row.room_queue.shift();
+      // The app server has durably admitted the id. If the queue update fails,
+      // a later pump finds that same turn and removes its queue record.
+      try { save(session, data); }
+      finally { started?.afterReply?.(); }
+    }
+    return result;
+  }
+  function enqueueMessage(session, id, next) {
+    const { data, row, thread } = ownedRoom(session, id);
+    const target = resolveReply(session, thread, row, next.replyId);
+    const previous = thread.turns.find(turn => turn.clientUserMessageId === next.requestId);
+    if (previous) {
+      const message = roomUserMessage(session, previous, previous.items.find(item => item.type === 'userMessage'), target);
+      if (message.content.text !== next.text || roomReplyId(previous) !== next.replyId || JSON.stringify(roomFiles(previous).map(file => file.id)) !== JSON.stringify(next.files.map(file => file.id))) {
+        throw error('此 Dot 消息请求已使用。', 409, 'LOCAL_DOT_REQUEST_CONFLICT');
+      }
+      return json(message);
+    }
+    const queue = row.room_queue ??= [];
+    const pending = queue.find(item => item.requestId === next.requestId);
+    if (pending && (pending.text !== next.text || pending.replyId !== next.replyId || JSON.stringify(pending.files.map(file => file.id)) !== JSON.stringify(next.files.map(file => file.id)))) {
+      throw error('此 Dot 消息请求已使用。', 409, 'LOCAL_DOT_REQUEST_CONFLICT');
+    }
+    if (!pending) {
+      if (queue.length >= 16) throw error('Dot 的待发送队列已满。', 429, 'LOCAL_DOT_QUEUE_FULL');
+      queue.push(next);
+      save(session, data);
+    }
+    const admitted = drainQueue(session, id);
+    return admitted?.request_id === next.requestId ? json(admitted) : json(queuedView(pending ?? next), 202);
+  }
+  async function messageAttachments(value, signal) {
+    if (value == null) return [];
+    if (!Array.isArray(value) || value.length > 10) throw error('每条 Dot 消息最多可附加 10 个文件。');
+    if (value.length && typeof getFileRecord !== 'function') throw error('本站的 Dot 文件服务尚未接入。', 503, 'LOCAL_DOT_FILES_UNAVAILABLE');
+    const ids = value.map(file => file?.id);
+    if (ids.some(id => !/^file_local_[0-9a-f]{32}$/.test(id ?? '')) || new Set(ids).size !== ids.length) throw error('Dot 附件引用无效。');
+    return Promise.all(ids.map(async id => {
+      const file = await getFileRecord(id, { signal });
+      if (file?.fileId !== id || file.status !== 'ready') throw error('Dot 附件还没有上传完成。', 422, 'LOCAL_DOT_FILE_NOT_READY');
+      return { id, name: file.fileName, mime_type: file.mimeType, size: file.size };
+    }));
+  }
+  function journal(session, roomId, entryId, method, supplied) {
+    const { data, row } = ownedRoom(session, roomId);
+    const entries = row.room_journal ??= [];
+    if (method === 'GET' && !entryId) return json({ items: entries });
+    const index = entries.findIndex(entry => entry.id === entryId);
+    if (entryId && index === -1) throw error('这条日记已不存在。', 404, 'LOCAL_DOT_JOURNAL_NOT_FOUND');
+    if (method === 'GET') return json(entries[index]);
+    if (entryId && supplied?.revision !== entries[index].revision) throw error('这条日记已更新，请刷新后再编辑。', 409, 'LOCAL_DOT_JOURNAL_CONFLICT');
+    if (method === 'DELETE' && entryId) {
+      entries.splice(index, 1);
+      save(session, data);
+      return new Response(null, { status: 204 });
+    }
+    if (method !== (entryId ? 'PATCH' : 'POST')) throw error('此日记操作不可用。', 405);
+    if (!entryId && entries.length >= 200) throw error('这个浏览器中的 Dot 日记已达 200 条。', 413);
+    const content = safeText(supplied.content, 'journal text', 12000);
+    if (!content.trim()) throw error('请先填写日记。');
+    const updatedAt = new Date(now()).toISOString();
+    const entry = {
+      id: entryId ?? uuid(), content, created_at: entries[index]?.created_at ?? updatedAt, updated_at: updatedAt,
+      revision: (entries[index]?.revision ?? 0) + 1,
+    };
+    if (entryId) entries[index] = entry;
+    else entries.unshift(entry);
+    save(session, data);
+    return json(entry, entryId ? 200 : 201);
+  }
+  function automationView(schedule, thread) {
+    const turn = thread?.turns.find(value => value.clientUserMessageId === schedule.last_request_id);
+    const items = turn?.items.filter(item => item.type === 'agentMessage' && item.text) ?? [];
+    const output = items.filter(item => item.phase !== 'commentary').at(-1)?.text ?? '';
+    const lastRun = !schedule.last_request_id ? null : {
+      status: turn?.status ?? 'queued', output, error: turn?.error?.message ?? null,
+      started_at: turn ? timestamp(turn.startedAt) : null, duration_ms: turn?.durationMs ?? null,
+      model: turn?.adapterMetadata?.checkpoint?.metrics?.findLast(metric => metric.adapterExecution)?.adapterExecution?.model ?? null,
+    };
+    return { ...schedule, last_run: lastRun };
+  }
+  function automations(session, profileId, scheduleId, run, method, supplied, url) {
+    const data = state(session), row = findProfile(data, profileId);
+    const thread = appServer.threads.get(row.active_root_thread_id);
+    const rows = row.room_automations ??= [];
+    if (method === 'GET' && !scheduleId) return json(pagination(rows.map(row => automationView(row, thread)), url));
+    if (method === 'POST' && !scheduleId) {
+      const name = safeText(supplied.name, 'automation name', 120).trim();
+      const prompt = safeText(supplied.prompt, 'automation prompt', 12000);
+      const minutes = supplied.interval_minutes ?? 0;
+      if (!name || !prompt.trim() || !Number.isSafeInteger(minutes) || minutes < 0 || minutes > 10080) throw error('请输入任务名称、提示词和有效间隔。');
+      if (rows.length >= 30) throw error('一个 Dot 最多保存 30 条自动化。', 413);
+      const row = { id: uuid(), name, prompt, interval_minutes: minutes, enabled: true, next_at: minutes ? now() + minutes * 60000 : null, last_request_id: null };
+      rows.push(row);
+      save(session, data);
+      return json(automationView(row, thread), 201);
+    }
+    const schedule = rows.find(row => row.id === scheduleId);
+    if (!schedule) throw error('找不到这条自动化。', 404, 'LOCAL_DOT_AUTOMATION_NOT_FOUND');
+    if (method === 'PATCH' && !run) {
+      if (typeof supplied.enabled !== 'boolean') throw error('请选择启动或停用。');
+      if (schedule.enabled !== supplied.enabled) {
+        schedule.enabled = supplied.enabled;
+        schedule.next_at = schedule.enabled && schedule.interval_minutes ? now() + schedule.interval_minutes * 60000 : null;
+        if (!schedule.enabled && row.room_queue?.some(item => item.requestId === schedule.last_request_id)) {
+          row.room_queue = row.room_queue.filter(item => item.requestId !== schedule.last_request_id);
+          schedule.last_request_id = null;
+        }
+        save(session, data);
+      }
+      return json(automationView(schedule, thread));
+    }
+    if (!run || method !== 'POST') throw error('此自动化操作不可用。', 405);
+    if (!isOnline()) throw error('联网后可以执行自动化。', 503, 'LOCAL_DOT_OFFLINE');
+    if (!schedule.enabled) throw error('此自动化已停用。', 409, 'LOCAL_DOT_AUTOMATION_DISABLED');
+    if (!row.messaging_room_id || !thread) throw error('请先打开 Dot 对话。', 409);
+    const due = supplied.scheduled_for;
+    if (due != null && (schedule.next_at !== due || due > now())) return json(automationView(schedule, thread));
+    const latest = automationView(schedule, thread).last_run;
+    if (latest?.status === 'queued' || latest?.status === 'inProgress') return json(automationView(schedule, thread));
+    const requestId = safeText(supplied.request_id, 'automation request ID', 120);
+    if (!requestId) throw error('自动化请求 ID 缺失。');
+    const runId = `dot-automation-${schedule.id}-${due ?? requestId}`;
+    if (thread.turns.some(turn => turn.clientUserMessageId === runId)) return json(automationView(schedule, thread));
+    const queue = row.room_queue ??= [];
+    if (queue.length >= 16) throw error('Dot 的待发送队列已满。', 429, 'LOCAL_DOT_QUEUE_FULL');
+    queue.push({ requestId: runId, text: schedule.prompt, replyId: null, files: [], createdAt: new Date(now()).toISOString() });
+    schedule.last_request_id = runId;
+    if (schedule.interval_minutes) schedule.next_at = now() + schedule.interval_minutes * 60000;
+    save(session, data);
+    drainQueue(session, row.messaging_room_id);
+    return json(automationView(schedule, appServer.threads.get(thread.id)), 202);
   }
   function subscribeRoomMessages(listener) {
     const session = identity(false);
@@ -458,14 +645,36 @@ export function createLocalDotAdapter({
         }
         if (parts.length === 5 && action === 'messages' && method === 'GET') {
           const { row, thread } = ownedRoom(session, id);
-          const messages = roomMessages(session, thread, row), replyRoot = url.searchParams.get('reply_root_message_id');
+          const live = url.searchParams.get('live') === '1';
+          const messages = roomMessages(session, thread, row, live), replyRoot = url.searchParams.get('reply_root_message_id');
           if (replyRoot != null && !messages.some(message => message.id === replyRoot)) throw error('找不到要回复的 Dot 消息。', 404, 'LOCAL_DOT_MESSAGE_NOT_FOUND');
           const scope = replyRoot == null ? messages : messages.filter(message => message.reply_root_message_id === replyRoot);
-          return json(roomPage(scope, url.searchParams));
+          const page = roomPage(scope, url.searchParams);
+          if (live) {
+            const last = thread.turns.at(-1);
+            page.active_turn = last && (last.status === 'inProgress' || isRecovering(last)) ? {
+              id: last.id, status: last.status, started_at: timestamp(last.startedAt),
+              resumable: last.adapterMetadata?.resumable === true && !hasUncertainPlainResponse(last.adapterMetadata.checkpoint?.inFlight),
+              resume_policy: last.adapterMetadata?.resumePolicy ?? null, resume_at: last.adapterMetadata?.checkpoint?.nextResumeAt ?? null,
+            } : null;
+            page.queued = (row.room_queue ?? []).filter(item => !thread.turns.some(turn => turn.clientUserMessageId === item.requestId)).map(queuedView);
+          }
+          return json(page);
         }
         if (parts.length === 6 && action === 'journal' && parts[5] === 'eligibility' && method === 'GET') {
           ownedRoom(session, id);
-          return json({ enabled: false });
+          return json({ enabled: true });
+        }
+        if (action === 'journal' && [5, 6].includes(parts.length) && ['GET','POST','PATCH','DELETE'].includes(method)) {
+          const supplied = method === 'GET' ? null : await body(request);
+          request.signal?.throwIfAborted();
+          return await roomLock(session, () => journal(session, id, parts[5], method, supplied));
+        }
+        if (parts.length === 5 && action === 'queue' && method === 'POST') {
+          const supplied = await body(request);
+          request.signal?.throwIfAborted();
+          await roomLock(session, () => drainQueue(session, id, supplied.continueAfterInterruption === true));
+          return new Response(null, { status: 204 });
         }
         if (parts.length === 7 && action === 'messages' && parts[6] === 'reactions' && ['POST', 'DELETE'].includes(method)) {
           ownedRoom(session, id);
@@ -495,7 +704,7 @@ export function createLocalDotAdapter({
             const supplied = await body(request);
             request.signal?.throwIfAborted();
             assertIdentity(session);
-            const { row, data, thread } = ownedRoom(session, id);
+            const { row, data } = ownedRoom(session, id);
             if (action === 'read') {
               const readAt = Date.parse(safeText(supplied.last_read_at, 'Dot read time', 50));
               if (!Number.isFinite(readAt)) throw error('Invalid Dot read time');
@@ -505,30 +714,13 @@ export function createLocalDotAdapter({
               }
               return new Response(null, { status: 204 });
             }
-            const text = safeText(supplied.content?.text, 'Dot message', 100000);
+            const text = safeText(supplied.content?.text ?? '', 'Dot message', 100000);
             const requestId = safeText(supplied.request_id, 'Dot request ID');
-            if (!text.trim() || !requestId || (supplied.idempotency_token != null && supplied.idempotency_token !== requestId)) throw error('Invalid Dot message or request ID');
-            if (supplied.content?.attachments?.length) throw error('当前 Dot 会话仅支持文字消息。', 422, 'LOCAL_DOT_FILES_UNAVAILABLE');
+            const files = await messageAttachments(supplied.content?.attachments, request.signal);
+            if ((!text.trim() && !files.length) || !requestId || (supplied.idempotency_token != null && supplied.idempotency_token !== requestId)) throw error('Invalid Dot message or request ID');
             const replyId = supplied.reply_to == null ? null : safeText(supplied.reply_to.message_id, 'Dot reply message ID');
-            const replyTarget = replyId == null ? null : roomMessages(session, thread, row).find(message => message.id === replyId && message.role !== 'system');
-            if (replyId != null && !replyTarget) throw error('找不到要回复的 Dot 消息。', 404, 'LOCAL_DOT_MESSAGE_NOT_FOUND');
-            const prior = thread.turns.find(turn => turn.clientUserMessageId === requestId);
-            if (prior) {
-              const message = roomUserMessage(session, prior, prior.items.find(item => item.type === 'userMessage'), replyTarget);
-              if (message.content.text !== text || roomReplyId(prior) !== replyId) throw error('此 Dot 消息请求已使用。', 409, 'LOCAL_DOT_REQUEST_CONFLICT');
-              return json(message);
-            }
-            if (appServer.running?.has(id)) throw error('Dot 正在处理上一条消息。', 409, 'LOCAL_DOT_TURN_RUNNING');
-            const started = createRpcFacade().dispatch('turn/start', {
-              threadId: id, clientUserMessageId: requestId, input: [{ type: 'text', text }],
-              ...(replyTarget && { responsesapiClientMetadata: { conversationOrigin: 'dot', localDotProvider: true, dotReplyMessageId: replyId,
-                dotReplyRootMessageId: replyTarget.reply_root_message_id ?? replyId } }),
-            });
-            const { turn } = started.result;
-            const accepted = roomUserMessage(session, turn, turn.items.find(item => item.type === 'userMessage'), replyTarget);
-            const response = json(accepted);
-            started.afterReply?.();
-            return response;
+            request.signal?.throwIfAborted();
+            return await roomLock(session, () => enqueueMessage(session, id, { requestId, text, replyId, files, createdAt: new Date(now()).toISOString() }));
           }
         }
       }
@@ -630,6 +822,11 @@ export function createLocalDotAdapter({
         return json(publicProfile(row));
       }
       if (parts[1] === 'tbo' && parts.length >= 3) {
+        if (parts[3] === 'automations' && parts.length <= 6) {
+          const supplied = method === 'GET' ? null : await body(request);
+          request.signal?.throwIfAborted();
+          return await roomLock(session, () => automations(session, parts[2], parts[4], parts[5] === 'run', method, supplied, url));
+        }
         const data = state(session), row = findProfile(data, parts[2]);
         if (parts.length === 3) {
           if (method === 'GET') return json(publicProfile(row));
@@ -708,8 +905,6 @@ export function createLocalDotAdapter({
           }
           return json({ environmentId: null, status: 'unknown', capabilities: [] });
         }
-        if (parts.length === 4 && method === 'GET' && parts[3] === 'automations') return json(pagination([], url));
-
       }
       throw error('This Dot operation needs a service that is not provided locally', 501, 'LOCAL_DOT_SERVICE_UNAVAILABLE');
     } catch (cause) {
@@ -735,7 +930,8 @@ export function createLocalDotAdapter({
         const existing = typeof params.clientUserMessageId === 'string'
           ? thread.turns.find(turn => turn.clientUserMessageId === params.clientUserMessageId) : null;
         const sendsMessage = method === 'turn/start' || method === 'turn/addUserMessage';
-        const route = sendsMessage ? selectLocalDotModel(params.input) : dotRoutes.find(choice => choice.model === thread.model) ?? dotDefault;
+        const prompt = params.responsesapiClientMetadata?.dotUserText;
+        const route = sendsMessage ? selectLocalDotModel(typeof prompt === 'string' ? [{ type: 'text', text: prompt }] : params.input) : dotRoutes.find(choice => choice.model === thread.model) ?? dotDefault;
         const model = existing?.model ?? route.model, effort = existing?.reasoningEffort ?? route.effort;
         if (sendsMessage) diagnostic('turn-model-selected', { model, effort });
         return base.dispatch(method, { ...params, model, effort, executionSurface: 'work', reasoningMode: 'standard', serviceTier: 'standard' });
@@ -755,7 +951,7 @@ export function createLocalDotAdapter({
       options.signal?.throwIfAborted();
       // The gateways do not guarantee idempotent inference after a lost response.
       const failure = new Error(cause?.message || 'Dot inference failed', { cause });
-      for (const key of ['code', 'status', 'transportStatus', 'requestId']) if (cause?.[key] != null) failure[key] = cause[key];
+      for (const key of ['code', 'status', 'transportStatus', 'requestId', 'providerCode', 'param', 'requiresTransportResume', 'hostFailureCounted']) if (cause?.[key] != null) failure[key] = cause[key];
       failure.retryable = false;
       throw failure;
     }

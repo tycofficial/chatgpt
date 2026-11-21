@@ -4,6 +4,9 @@ import { randomUUID } from 'node:crypto';
 import * as catalog from '../model-catalog.js';
 import { createModelCatalogAdapter } from '../src/native-client/model-catalog-adapter.mjs';
 import { LocalAppServer, LocalProtocolSocket } from '../src/native-client/local-app-server.mjs';
+import { createLocalFilesService } from '../src/native-client/local-files-service.mjs';
+import { createLocalInputPreparer } from '../src/native-client/local-input-preparation.mjs';
+import { storeDotFile } from '../src/native-client/dot-panel.mjs';
 import { streamCompletion } from '../runtime.js';
 import {
   createLocalDotAdapter, createLocalDotCompletion, LOCAL_DOT_DEFAULT_IMAGE_URL, LOCAL_DOT_RESOURCE_BUNDLE,
@@ -22,6 +25,7 @@ function fixture(options = {}) {
   const appServer = new LocalAppServer({
     storage, models, catalog, readSettings,
     streamCompletion: options.streamCompletion ?? (() => { throw Error('The Dot protocol fixtures have no inference transport'); }),
+    prepareUserInput: options.prepareUserInput,
     getExecutionPolicy: () => ({ modelSelection: true }),
     uuid: randomUUID,
   });
@@ -184,7 +188,7 @@ test('native Dot preserves reply references and message reactions across reload,
   const profile = (await request(env.adapter, '/tbo')).data.items[0];
   const threadId = profile.root_thread_id, path = '/messaging/rooms/' + threadId;
   await request(env.adapter, '/tbo/' + profile.id + '/messaging-room', 'POST');
-  assert.deepEqual((await request(env.adapter, path + '/journal/eligibility')).data, { enabled: false });
+  assert.deepEqual((await request(env.adapter, path + '/journal/eligibility')).data, { enabled: true });
   const firstTerminated = waitDotTurn(env.appServer, threadId);
   await request(env.adapter, path + '/messages', 'POST', { request_id: 'root-neutral', content: { text: 'Please greet me.' } });
   await firstTerminated;
@@ -664,7 +668,7 @@ test('site-owned readiness never reads native cloud entitlement during loading o
   assert.doesNotThrow(() => adapted.i({}));
 });
 
-test('Dot overview reads the native disconnected computer and empty schedule contracts for the owner', async () => {
+test('Dot overview exposes disconnected computer and an empty schedule list for a new profile', async () => {
   const env = fixture();
   const profile = (await request(env.adapter, '/tbo')).data.items[0];
   const base = '/tbo/' + profile.id;
@@ -680,10 +684,120 @@ test('Dot overview reads the native disconnected computer and empty schedule con
   assert.deepEqual(schedulePage.data, { items: [], cursor: null });
   assert.equal((await request(env.adapter, base + '/environment/status?thread_id=another-thread')).response.status, 404);
   assert.equal((await request(env.adapter, base + '/environment/wake', 'POST')).response.status, 501);
-  assert.equal((await request(env.adapter, schedules, 'POST')).response.status, 501);
+  assert.equal((await request(env.adapter, schedules, 'POST')).response.status, 400);
 
   env.setIdentity({ accountId: 'another-account', userId: 'another-user' });
   assert.equal((await request(env.adapter, computer)).response.status, 404);
   assert.equal((await request(env.adapter, schedules)).response.status, 404);
   assert.deepEqual(env.storage.values, stored);
+});
+
+test('journal create, edit and delete persist with revisions and account isolation', async () => {
+  const env = fixture();
+  const profile = (await request(env.adapter, '/tbo')).data.items[0];
+  await request(env.adapter, `/tbo/${profile.id}/messaging-room`, 'POST');
+  const journal = `/messaging/rooms/${profile.root_thread_id}/journal`;
+  const { data: created, response } = await request(env.adapter, journal, 'POST', { content: 'Test journal.' });
+  assert.equal(response.status, 201);
+  const reopened = fixture({ storage: env.storage });
+  assert.deepEqual((await request(reopened.adapter, journal)).data.items, [created]);
+  const entryPath = `${journal}/${created.id}`;
+  const { data: edited } = await request(reopened.adapter, entryPath, 'PATCH', { content: 'Edited test journal.', revision: 1 });
+  assert.equal(edited.revision, 2);
+  assert.equal((await request(reopened.adapter, entryPath, 'DELETE', { revision: 1 })).response.status, 409);
+  assert.equal((await request(fixture({ storage: env.storage }).adapter, journal)).data.items[0].content, edited.content);
+  assert.equal((await request(reopened.adapter, entryPath, 'DELETE', { revision: 2 })).response.status, 204);
+  assert.deepEqual((await request(fixture({ storage: env.storage }).adapter, journal)).data.items, []);
+  reopened.setIdentity({ accountId: 'another-account', userId: 'another-user' });
+  assert.equal((await request(reopened.adapter, journal)).response.status, 404);
+});
+
+test('queued Dot messages recover after reload and admit a repeated request ID once', async () => {
+  const first = Promise.withResolvers();
+  const env = fixture({ streamCompletion: async () => first.promise });
+  const profile = (await request(env.adapter, '/tbo')).data.items[0];
+  const room = `/messaging/rooms/${profile.root_thread_id}`;
+  await request(env.adapter, `/tbo/${profile.id}/messaging-room`, 'POST');
+  const firstDone = waitDotTurn(env.appServer, profile.root_thread_id);
+  await request(env.adapter, `${room}/messages`, 'POST', { request_id: 'queued-first', content: { text: 'First message' } });
+  const second = { request_id: 'queued-second', content: { text: 'Give a rigorous proof for this test.' } };
+  assert.equal((await request(env.adapter, `${room}/messages`, 'POST', second)).response.status, 202);
+  assert.equal((await request(env.adapter, `${room}/messages`, 'POST', second)).response.status, 202);
+  assert.equal((await request(env.adapter, `${room}/messages`, 'POST', { ...second, content: { text: 'Modified duplicate' } })).response.status, 409);
+  first.resolve({ content: 'First reply.', finish_reason: 'stop' });
+  await firstDone;
+  const requests = [];
+  const reopened = fixture({ storage: env.storage, streamCompletion: async ({ settings }) => {
+    requests.push([settings.model, settings.reasoningEffort]);
+    return { content: 'Second reply.', finish_reason: 'stop' };
+  } });
+  assert.equal((await request(reopened.adapter, `${room}/messages?live=1`)).data.queued.length, 1);
+  const secondDone = waitDotTurn(reopened.appServer, profile.root_thread_id);
+  assert.equal((await request(reopened.adapter, `${room}/queue`, 'POST', {})).response.status, 204);
+  await secondDone;
+  assert.equal((await request(reopened.adapter, `${room}/messages`, 'POST', second)).response.status, 200);
+  assert.deepEqual(requests, [['gpt-6-astra', 'high']]);
+  assert.equal((await request(reopened.adapter, `${room}/messages?live=1`)).data.queued.length, 0);
+});
+
+test('Dot uses actual uploaded bytes for a message and its follow-up after reload', async () => {
+  const bytes = new Map();
+  const storage = memory();
+  const files = createLocalFilesService({
+    metadataStorage: storage, getAccountId: () => 'neutral-site-account', getWorkspacePrefix: id => `test-${id}`,
+    storage: { read: async name => { if (!bytes.has(name)) throw Error('File not found'); return bytes.get(name); }, write: async (name, data) => bytes.set(name, new Uint8Array(data)), remove: async name => bytes.delete(name) },
+  });
+  const requests = [];
+  const options = {
+    storage, prepareUserInput: createLocalInputPreparer({ files }),
+    getFileRecord: async (id, opts) => (await files.readFile(id, opts)).record,
+    streamCompletion: async ({ messages }) => { requests.push(messages); return { content: 'Read actual attached text.', finish_reason: 'stop' }; },
+  };
+  const env = fixture(options);
+  const profile = (await request(env.adapter, '/tbo')).data.items[0];
+  const id = profile.root_thread_id;
+  const room = `/messaging/rooms/${id}`;
+  await request(env.adapter, `/tbo/${profile.id}/messaging-room`, 'POST');
+  const file = new File(['Dot fixture token A682.'], 'dot-fixture.txt', { type: 'text/plain' });
+  const attachment = await storeDotFile(files, file, { baseURL: 'https://site.invalid' });
+  const done = waitDotTurn(env.appServer, id);
+  const sent = await request(env.adapter, `${room}/messages`, 'POST', { request_id: 'dot-upload', content: { text: '', attachments: [attachment] } });
+  assert.equal(sent.response.status, 200);
+  assert.equal((await done).status, 'completed');
+  assert.match(JSON.stringify(requests[0]), /Dot fixture token A682/);
+  assert.equal((await files.readFile(attachment.id)).bytes.byteLength, file.size);
+  const reopened = fixture(options);
+  assert.equal((await request(reopened.adapter, `${room}/messages`)).data.items[0].content.attachments[0].id, attachment.id);
+  const next = waitDotTurn(reopened.appServer, id);
+  await request(reopened.adapter, `${room}/messages`, 'POST', { request_id: 'dot-upload-follow-up', content: { text: 'What was the fixture token?' } });
+  assert.equal((await next).status, 'completed');
+  assert.match(JSON.stringify(requests[1]), /Dot fixture token A682/);
+});
+
+test('Dot automation uses one actual model turn per scheduled interval, stores its output, and stops when disabled', async () => {
+  let clock = 1700000000000, runs = 0;
+  const options = { now: () => clock, streamCompletion: async ({ messages }) => {
+    runs++;
+    assert.match(JSON.stringify(messages), /Fixture task prompt/);
+    return { content: 'Fixture task result', finish_reason: 'stop' };
+  } };
+  const env = fixture(options);
+  const profile = (await request(env.adapter, '/tbo')).data.items[0];
+  await request(env.adapter, `/tbo/${profile.id}/messaging-room`, 'POST');
+  const path = `/tbo/${profile.id}/automations`;
+  const { data: schedule } = await request(env.adapter, path, 'POST', { name: 'Fixture task', prompt: 'Fixture task prompt', interval_minutes: 1 });
+  clock = schedule.next_at;
+  const payload = { scheduled_for: clock, request_id: 'fixture-schedule' };
+  const done = waitDotTurn(env.appServer, profile.root_thread_id);
+  assert.equal((await request(env.adapter, `${path}/${schedule.id}/run`, 'POST', payload)).response.status, 202);
+  assert.equal((await done).status, 'completed');
+  const reopened = fixture({ ...options, storage: env.storage });
+  const { items: [view] } = (await request(reopened.adapter, path)).data;
+  assert.equal(view.last_run.status, 'completed');
+  assert.equal(view.last_run.output, 'Fixture task result');
+  await request(reopened.adapter, `${path}/${schedule.id}/run`, 'POST', payload);
+  assert.equal(runs, 1);
+  await request(reopened.adapter, `${path}/${schedule.id}`, 'PATCH', { enabled: false });
+  assert.equal((await request(reopened.adapter, `${path}/${schedule.id}/run`, 'POST', { request_id: 'disabled-fixture' })).response.status, 409);
+  assert.equal((await request(reopened.adapter, path)).data.items[0].last_run.output, 'Fixture task result');
 });

@@ -1,0 +1,97 @@
+.dot-panel {
+  --dot-border: color-mix(in srgb, currentColor 18%, transparent);
+  --dot-subtle: color-mix(in srgb, currentColor 6%, transparent);
+  --dot-selected: color-mix(in srgb, #aa82d9 25%, transparent);
+  box-sizing: border-box;
+  width: min(100%, 52rem);
+  margin: 0 auto;
+  padding: clamp(1rem, 4vw, 2rem);
+  display: grid;
+  gap: 1rem;
+}
+
+.dot-panel [hidden], .dot-panel-feedback:empty, .dot-panel-turn:empty, .dot-panel-voice:empty {
+  display: none !important;
+}
+
+.dot-panel h1, .dot-panel h2, .dot-panel h3, .dot-panel p {
+  margin: 0;
+}
+
+.dot-panel h1 { font-size: clamp(1.8rem, 6vw, 2.7rem); }
+.dot-panel h2 { margin-bottom: .5rem; font-size: 1.45rem; }
+.dot-panel h3 { font-size: 1rem; }
+.dot-panel p { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.55; }
+.dot-panel-header { display: flex; align-items: center; gap: .85rem; }
+.dot-panel-avatar {
+  width: 3.55rem;
+  height: 3.55rem;
+  border-radius: 40% 58% 48% 44%;
+  display: grid;
+  place-items: center;
+  color: #211937;
+  background: var(--dot-tint, #df7290);
+  box-shadow: inset 0 0 0 .25rem #ffffff32;
+  font-size: 1.6rem;
+}
+
+.dot-panel button, .dot-panel-upload {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: .4rem;
+  min-height: 2.5rem;
+  padding: .45rem .75rem;
+  border: 1px solid var(--dot-border);
+  border-radius: .55rem;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: .9rem;
+  cursor: pointer;
+}
+
+.dot-panel button:hover:not(:disabled), .dot-panel-upload:hover { background-color: var(--dot-subtle); }
+.dot-panel button[aria-pressed=true] { background: var(--dot-selected); border-color: #aa82d9; }
+.dot-panel button:disabled { opacity: .55; cursor: default; }
+.dot-panel button.dot-panel-primary { background: #683dc8; color: #fff; border-color: #683dc8; }
+.dot-panel button.dot-panel-primary:hover:not(:disabled) { background: #5529ad; }
+.dot-panel button:focus-visible, .dot-panel textarea:focus-visible, .dot-panel input:focus-visible, .dot-panel select:focus-visible, .dot-panel-upload:focus-within { outline: 2px solid #8b5bdc; outline-offset: 2px; }
+.dot-panel-tabs, .dot-panel-actions, .dot-panel-attachments { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem; }
+.dot-panel-feedback { border-radius: .5rem; padding: .65rem .85rem; background: var(--dot-subtle); }
+.dot-panel-feedback[data-danger=true] { border-inline-start: .2rem solid #dd6868; }
+.dot-panel-terse, .dot-panel time, .dot-panel-voice { font-size: .9rem; opacity: .82; }
+.dot-panel form, .dot-panel-journal, .dot-panel-automations, .dot-panel-messages { display: grid; gap: .7rem; }
+.dot-panel form { grid-template-columns: minmax(0, 1fr); margin-block: .85rem; }
+.dot-panel form > button { justify-self: start; }
+.dot-panel form label:not(.dot-panel-upload) { display: grid; gap: .35rem; }
+.dot-panel textarea, .dot-panel input:not([type=file]), .dot-panel select {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 2.5rem;
+  padding: .55rem .65rem;
+  border: 1px solid var(--dot-border);
+  border-radius: .5rem;
+  color: inherit;
+  background: var(--dot-subtle);
+  font: inherit;
+}
+.dot-panel option { color: CanvasText; background: Canvas; }
+.dot-panel textarea { resize: vertical; }
+.dot-panel-upload { position: relative; }
+.dot-panel-upload input { position: absolute; inset: 0; width: 100%; opacity: 0; cursor: pointer; }
+.dot-panel-attachments:empty { display: none; }
+.dot-panel-message, .dot-panel-journal article, .dot-panel-automations article {
+  display: grid;
+  min-width: 0;
+  gap: .55rem;
+  padding: .8rem;
+  border: 1px solid var(--dot-border);
+  border-radius: .7rem;
+}
+.dot-panel-message[data-role=user] { margin-inline-start: clamp(0rem, 3vw, 2rem); background: var(--dot-subtle); }
+.dot-panel-message[data-role=assistant] { border-inline-start: .2rem solid #8b5bdc; }
+.dot-panel-message[data-role=system] { border-inline-start: .2rem solid #dd6868; }
+.dot-panel-message blockquote, .dot-panel-quote { margin: 0; padding-inline-start: .65rem; border-inline-start: 2px solid var(--dot-border); overflow-wrap: anywhere; }
+.dot-panel-quote, .dot-panel-turn { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+.dot-panel-turn { margin-block: 1rem .5rem; }

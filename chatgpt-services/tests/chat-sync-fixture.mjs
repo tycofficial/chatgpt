@@ -43,11 +43,11 @@ export function createSqliteD1({ includeSyncMigration = true } = {}) {
 export async function syncFixture(options) {
   const salt = '0123456789abcdef0123456789abcdef', DB = createSqliteD1(options);
   const env = { DB, ADMIN_USERNAME: 'TYC', ADMIN_PASSWORD_SALT: salt, ADMIN_PASSWORD_HASH: await passwordHash('Neutral-Admin-Only', salt) };
-  const call = (path, { method = 'GET', token, body, origin = 'https://tycofficial.github.io', headers = {}, rawBody } = {}) => worker.fetch(new Request('https://neutral-sync.test' + path, {
+  const call = (path, { method = 'GET', token, body, origin = 'https://tycofficial.github.io', headers = {}, rawBody, context } = {}) => worker.fetch(new Request('https://neutral-sync.test' + path, {
     method,
     headers: { ...(origin ? { Origin: origin } : {}), ...(token ? { Authorization: 'Bearer ' + token } : {}), ...(body === undefined ? {} : { 'Content-Type': 'application/json' }), ...headers },
     body: rawBody ?? (body === undefined ? undefined : JSON.stringify(body)),
-  }), env);
+  }), env, context);
   const admin = await (await call('/auth/login', { method: 'POST', body: { username: 'TYC', password: 'Neutral-Admin-Only' } })).json();
   const alice = await (await call('/auth/register', { method: 'POST', body: { username: 'NeutralAlice', password: 'Neutral-Free-Only' } })).json();
   const bob = await (await call('/auth/register', { method: 'POST', body: { username: 'NeutralBob', password: 'Neutral-Free-Only' } })).json();

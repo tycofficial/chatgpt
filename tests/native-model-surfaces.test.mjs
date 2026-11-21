@@ -8,7 +8,7 @@ import {createUltraToolExecutor,ULTRA_MODELS} from '../src/native-client/site-ul
 import {projectChatHistoryThread} from '../src/native-client/chat-history-sync.mjs';
 import {allowedReasoningEfforts,streamCompletion} from '../runtime.js';
 const models=createModelCatalogAdapter(catalog);
-const expected=['gpt-6-luna','gpt-6.1-sol','gpt-6-astra','gpt-6.1-terra','gpt-6-sol','gpt-5.6-sol','gpt-5.6-terra','gpt-5.6-luna','gpt-6.2-sol','gpt-6.2-astra'];
+const expected=['gpt-6.2-sol','gpt-6.2-astra','gpt-6.1-terra','gpt-6.1-sol','gpt-6-astra','gpt-6-sol','gpt-6-luna','gpt-5.6-sol','gpt-5.6-terra','gpt-5.6-luna'];
 const sleep=()=>new Promise(resolve=>setImmediate(resolve));
 function fixture({privileged=true,storage=new Map(),transport}={}){
  const requests=[];const server=new LocalAppServer({storage:{getItem:key=>storage.get(key)??null,setItem:(key,value)=>storage.set(key,value)},models,catalog,getExecutionPolicy:()=>({modelSelection:privileged}),readSettings:()=>({apiBase:'https://neutral-model.fixture',apiKey:'neutral-only',model:'gpt-6.1-sol'}),streamCompletion:transport??(async options=>{requests.push({model:options.settings.model,effort:options.settings.reasoningEffort,mode:options.settings.reasoningMode});return{content:'Neutral actual fixture reply',finish_reason:'stop',actual_reasoning:{mode:options.settings.reasoningMode}};}),agentOptions:{toolTransport:'responses',ultraOrchestration:true}});

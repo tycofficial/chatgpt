@@ -2,6 +2,31 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createLocalDotCompletion } from '../src/native-client/local-dot-adapter.mjs';
 
+test('Dot keeps recovery metadata on the authenticated site transport and checks the actual model', async () => {
+  const signal = new AbortController().signal;
+  const checkpoint = { route: 'site-inference', siteRequestId: 'fixture' };
+  const model = 'gpt-6-astra';
+  let calls = 0;
+  const run = createLocalDotCompletion({
+    siteOrigin: 'https://site.fixture',
+    complete: async ({ settings, responsesTransport }) => {
+      assert.equal(settings.apiKey, undefined);
+      await responsesTransport({ model: settings.model }, { signal });
+      return { model, actual_reasoning: { effort: 'high' } };
+    },
+    responsesTransport: async (payload, context) => {
+      assert.deepEqual(payload, { model });
+      assert.equal(context.checkpoint, checkpoint);
+      assert.equal(context.reattach, true);
+      assert.equal(context.signal, signal);
+      calls++;
+    },
+  });
+  const result = await run({ settings: { model, reasoningEffort: 'high' }, transportContext: { checkpoint, reattach: true } });
+  assert.deepEqual(result.adapter_execution, { model, providerId: 'site-inference', reasoningEffort: 'high' });
+  assert.equal(calls, 1);
+});
+
 for (const direct of [true, false]) {
   test('Dot chooses ' + (direct ? 'the reachable Terra provider' : 'its site relay') + ' before sending a prompt', async () => {
     const root = 'https://api.openclawplan.com';

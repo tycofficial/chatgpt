@@ -344,6 +344,7 @@ async function streamResponses({ settings, messages, tools, toolChoice, signal, 
     if (!body.output?.length && typeof body.output_text === 'string') textPart(0,0,body.output_text);
     if (body.reasoning) assembled.actual_reasoning = body.reasoning;
     if (body.model) assembled.model = body.model;
+    if (typeof body.service_tier === 'string') assembled.service_tier = body.service_tier;
     assembled.finish_reason = body.status === 'incomplete' ? 'length' : calls.size ? 'tool_calls' : 'stop';
   };
   const consume = body => {

@@ -1,5 +1,9 @@
 const docodeResponses = 'https://docode.cc/v1/responses';
-const models = new Set(['gpt-6.2-sol', 'gpt-6.2-astra']);
+export const freeInferenceModel = 'gpt-6-sol';
+const models = new Set([
+  freeInferenceModel, 'gpt-6.2-sol', 'gpt-6.2-astra', 'gpt-6.1-terra', 'gpt-6-luna',
+  'gpt-6.1-sol', 'gpt-6-astra', 'gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna',
+]);
 const requestBytes = 8 * 1024 * 1024;
 const errorBytes = 64 * 1024;
 const acceptedFields = new Set([
@@ -109,22 +113,30 @@ async function upstreamError(response, redact, headers) {
   return jsonResponse(response.status, error, headers);
 }
 
-export async function proxyDocodeResponses(request, configuredKey) {
+export async function prepareDocodeRequest(request, configuredKey, { free = false } = {}) {
   const key = typeof configuredKey === 'string' ? configuredKey.trim() : '';
   if (!key) return failure(503, 'DOCODE_NOT_CONFIGURED', '站内推理服务尚未配置。');
   if (!/^application\/json(?:\s*;|$)/i.test(request.headers.get('content-type') ?? '')) {
     return failure(415, 'INFERENCE_JSON_REQUIRED', '请发送 JSON 推理请求。');
   }
-  let body;
   try {
     const payload = JSON.parse(await boundedText(request, requestBytes));
+    if (free && payload?.model !== freeInferenceModel) {
+      return failure(403, 'SITE_INFERENCE_PLAN_REQUIRED', '此模型需要有效的站内试用。');
+    }
     if (!validRequest(payload)) return failure(400, 'INVALID_INFERENCE_REQUEST', '此推理接口只接受支持的模型及其输入。');
-    body = JSON.stringify({ ...payload, store: false });
+    if (free && payload.service_tier != null && payload.service_tier !== 'default') {
+      return failure(403, 'SITE_INFERENCE_PLAN_REQUIRED', '加速需要有效的站内试用。');
+    }
+    return { key, model: payload.model, body: JSON.stringify({ ...payload, store: false }) };
   } catch (error) {
     if (error instanceof BodyTooLarge) return failure(413, 'INFERENCE_REQUEST_TOO_LARGE', '推理请求过大。');
     return failure(400, 'INVALID_INFERENCE_REQUEST', '推理请求必须是有效的 JSON。');
   }
 
+}
+
+export async function sendDocodeRequest({ key, body }, signal) {
   let upstream;
   try {
     upstream = await fetch(docodeResponses, {
@@ -136,7 +148,7 @@ export async function proxyDocodeResponses(request, configuredKey) {
       },
       body,
       redirect: 'manual',
-      signal: request.signal,
+      signal,
     });
   } catch {
     return failure(502, 'DOCODE_UNAVAILABLE', '站内推理服务暂时无法连接。');
@@ -164,4 +176,9 @@ export async function proxyDocodeResponses(request, configuredKey) {
   }
   headers.set('Content-Type', contentType === 'text/event-stream' ? 'text/event-stream; charset=utf-8' : jsonType);
   return new Response(stream(upstream.body), { status: upstream.status, headers });
+}
+
+export async function proxyDocodeResponses(request, configuredKey, options) {
+  const prepared = await prepareDocodeRequest(request, configuredKey, options);
+  return prepared instanceof Response ? prepared : sendDocodeRequest(prepared, request.signal);
 }

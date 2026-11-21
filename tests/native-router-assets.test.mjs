@@ -27,8 +27,8 @@ test('browser preloads and dynamic navigation resolve inside the Pages project f
   assert.equal(new URL(manifest.url).pathname, '/chatgpt/original-client/public/chatgpt.com/cdn/assets/manifest-98f8ff8a.js');
 });
 
-test('the HTML discovers every mandatory original entry chunk before boot and keeps them off the sign-in route', () => {
-  const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+test('the archived shell preloads its entry chunks without preloading them for sign-in', () => {
+  const html = fs.readFileSync(new URL('../native-client-shell.html', import.meta.url), 'utf8');
   const plan = JSON.parse(fs.readFileSync(new URL('../native-client/entry-plan.json', import.meta.url), 'utf8'));
   const loader = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(match => match[1]).find(code => code.includes('modulepreload'));
   assert.ok(loader);

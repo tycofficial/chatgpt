@@ -1,10 +1,10 @@
 import { originalAssetURL } from './startup-compatibility.mjs';
 import { nativeWebSearchHint } from './local-web-search.mjs';
 import { createLocalReadAloudSource } from './local-native-read-aloud.mjs';
-import * as modelCatalog from './model-catalog.js';
+import * as modelCatalog from '../../model-catalog.js';
 import { createModelCatalogAdapter } from './model-catalog-adapter.mjs';
-import { DEFAULT_SETTINGS } from './config.js';
-import { streamCompletion, PythonRuntime, PYTHON_TOOL } from './runtime.js';
+import { DEFAULT_SETTINGS } from '../../config.js';
+import { streamCompletion, PythonRuntime, PYTHON_TOOL } from '../../runtime.js';
 import { createProviderCompletionRouter } from './provider-routing.mjs';
 import { LocalAppServer, LocalProtocolSocket } from './local-app-server.mjs';
 import { getPrototypeLocalSession, getPrototypeLocalAuth, getLocalAccountCheck, getLocalOptimizedAccount, getLocalWhamAccounts, getPrototypeCurrentUser, isPrototypeLocalSession, clearPrototypeLocalSession, getLocalAccountStorageKey } from './local-identity.mjs';
@@ -43,6 +43,7 @@ import { createPreferredHostTransport, createPreferredCompletion, turnHostCheckp
 import { createChatHistorySync, projectChatHistoryThread } from './chat-history-sync.mjs';
 import { createAccountHistoryCoordinator } from './account-history-coordinator.mjs';
 import { createNativeCloudSyncFeedback } from './native-cloud-sync-feedback.mjs';
+import { createSiteInferenceTransport, isSiteInferenceCheckpoint, turnSiteInferenceCheckpoints } from './site-inference-transport.mjs';
 
 let nativeFileReferenceCodecs = null;
 export function registerNativeFileReferenceSources({ parseMarkdown, sha256Bytes } = {}) {
@@ -70,7 +71,21 @@ export const localPersonalizationService = createLocalPersonalizationService({
   getIdentity: getPersonalizationIdentity, getStorageKey: getLocalAccountStorageKey,
   onDiagnostic: event => localProtocolDiagnostics.push(event),
 });
-const readPersonalizedSettings = createPersonalizedSettingsReader({ readSettings: () => ({ ...DEFAULT_SETTINGS }), personalization: localPersonalizationService, getIdentity: getPersonalizationIdentity });
+export function readWorkspacePreferences() {
+  try {
+    const value = JSON.parse(localStorage.getItem(getLocalAccountStorageKey('workspace-preferences:v1')));
+    return value && typeof value === 'object' ? value : {};
+  } catch { return {}; }
+}
+export function saveWorkspacePreferences(value) {
+  const next = { ...readWorkspacePreferences(), ...value };
+  localStorage.setItem(getLocalAccountStorageKey('workspace-preferences:v1'), JSON.stringify(next));
+  return next;
+}
+const readPersonalizedSettings = createPersonalizedSettingsReader({
+  readSettings: () => ({ ...DEFAULT_SETTINGS, customInstructions: readWorkspacePreferences().instructions ?? '' }),
+  personalization: localPersonalizationService, getIdentity: getPersonalizationIdentity,
+});
 // A local preview/session flag is not a verified site account. File ownership
 // must use the same boot-bound identity guard as account-owned preferences.
 const getOwnedFileAccountId = () => getPersonalizationIdentity()?.accountId ?? null;
@@ -78,26 +93,27 @@ export const localPreferredHostTransport = createPreferredHostTransport({ baseUR
   fetchImpl: (...args) => globalThis.fetch(...args), getSiteAccount, getSiteSessionToken,
   onDiagnostic: event => localProtocolDiagnostics.push(event),
 });
-const siteInferenceModels = new Set(['gpt-6.2-sol', 'gpt-6.2-astra']);
+async function verifiedSiteToken() {
+  if (!getSiteSessionToken() && getSiteAccount() && navigator.onLine !== false) await refreshSiteAccount();
+  return getSiteSessionToken();
+}
+const siteInferenceTransport = createSiteInferenceTransport({
+  baseURL: SITE_ACCOUNT_SERVICE,
+  getSessionToken: verifiedSiteToken,
+  getAccountId: () => getSiteAccount()?.id ?? null,
+});
 function completeWithSiteInference(options) {
-  if (!siteInferenceModels.has(options.settings.model)) return streamCompletion(options);
+  if (!globalThis.__CHATGPT_REPLICA_ENV__?.siteWorkspace && !['gpt-6.2-sol', 'gpt-6.2-astra'].includes(options.settings.model)) return streamCompletion(options);
+  // Chat's Pro presentation is backed by the highest conventional effort for Astra.
+  const settings = options.settings.reasoningMode === 'pro' && options.settings.model === 'gpt-6-astra'
+    ? { ...options.settings, reasoningMode: 'standard', reasoningEffort: 'max' }
+    : options.settings;
   const directSiteResponse = async (payload, { signal }) => {
-    if (!getSiteSessionToken() && getSiteAccount()?.authenticationMode === 'site-offline-cache' && navigator.onLine !== false) {
-      await refreshSiteAccount();
-    }
-    const token = getSiteSessionToken();
-    const localAdmin = getSiteAccount()?.authenticationMode === 'offline-administrator';
-    const provider = !token && localAdmin ? DEFAULT_SETTINGS.apiProviders.find(entry => entry.id === 'docode' && entry.supportedModels.includes(payload.model)) : null;
-    if (!token && !provider?.apiKey) throw Object.assign(new Error('请在线验证本站账号后使用 GPT-6.2。'), { code: 'SITE_INFERENCE_SIGN_IN', retryable: false });
-    return fetch(SITE_ACCOUNT_SERVICE + (token ? '/inference/v1/responses' : '/api-proxy/docode/v1/responses'), {
-      method: 'POST', credentials: 'omit', redirect: 'error', signal,
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + (token || provider.apiKey) },
-      body: JSON.stringify(payload),
-    });
+    return siteInferenceTransport.request(payload, { ...options.transportContext, signal, isFreeChat: options.providerRoutingContext?.isFreeChat });
   };
   return streamCompletion({
     ...options,
-    settings: { ...options.settings, apiTransport: 'responses' },
+    settings: { ...settings, apiTransport: 'responses' },
     responsesTransport: (payload, transport) => options.responsesTransport
       ? options.responsesTransport(payload, { ...transport, fallbackResponses: () => directSiteResponse(payload, transport) })
       : directSiteResponse(payload, transport),
@@ -111,9 +127,17 @@ export const localAPIRouter = createProviderCompletionRouter({
 const localHostCompletion = createPreferredCompletion({ runtimeCompletion: localAPIRouter.complete, preferredTransport: localPreferredHostTransport,
   enabled: () => globalThis.__CHATGPT_REPLICA_ENV__?.preferredHostEnabled === true,
 });
+const workspaceHostCompletion = createPreferredCompletion({
+  runtimeCompletion: completeWithSiteInference, preferredTransport: localPreferredHostTransport,
+  enabled: () => getSiteAccount()?.role === 'administrator',
+});
 export function localPreferredCompletion(options) {
   if (options.providerRoutingContext?.conversationOrigin === 'dot') return localDotAdapter.complete(options);
-  if (siteInferenceModels.has(options.settings.model)) return localAPIRouter.complete(options);
+  if (globalThis.__CHATGPT_REPLICA_ENV__?.siteWorkspace) {
+    if (isSiteInferenceCheckpoint(options.transportContext?.checkpoint)) return completeWithSiteInference(options);
+    return workspaceHostCompletion(options);
+  }
+  if (['gpt-6.2-sol', 'gpt-6.2-astra'].includes(options.settings.model)) return localAPIRouter.complete(options);
   return localHostCompletion(options);
 }
 const localWorkspaceExecutor = createBrowserToolExecutor({ PythonRuntime, PYTHON_TOOL,
@@ -187,7 +211,13 @@ export const localAppServer = new LocalAppServer({
     setItem: (key, value) => globalThis.localStorage.setItem(getLocalAccountStorageKey(key), value),
   },
   streamCompletion: localPreferredCompletion,
-  onIdleTurnInterrupt: ({ turn, reason }) => Promise.all(turnHostCheckpoints(turn).map(checkpoint => (reason === 'pagehide' ? localPreferredHostTransport.detach : localPreferredHostTransport.cancel)(checkpoint, { onCheckpoint: () => localAppServer.persist() }))),
+  onIdleTurnInterrupt: ({ turn, reason }) => {
+    const options = { onCheckpoint: () => localAppServer.persist() };
+    return Promise.allSettled([
+      ...turnHostCheckpoints(turn).map(checkpoint => (reason === 'pagehide' ? localPreferredHostTransport.detach : localPreferredHostTransport.cancel)(checkpoint, options)),
+      ...(reason === 'pagehide' ? [] : turnSiteInferenceCheckpoints(turn).map(checkpoint => siteInferenceTransport.cancel(checkpoint, options))),
+    ]);
+  },
   readSettings: readPersonalizedSettings,
   models: localModelAdapter,
   catalog: modelCatalog,
@@ -195,8 +225,8 @@ export const localAppServer = new LocalAppServer({
   toolExecutor: localToolExecutor,
   prepareUserInput: createLocalInputPreparer({ files: localFilesService }),
   preparedInputStore: createPreparedInputStore({ namespace: getLocalAccountStorageKey('cg-original-app-server:v1') }),
-  agentOptions: { toolTransport: 'responses', verifiedPriority: false, ultraOrchestration: true },
-  getExecutionPolicy: () => ({ modelSelection: hasModelSelectionAccess(), freeChatModel: DEFAULT_SETTINGS.freeChatModel }),
+  agentOptions: { toolTransport: 'responses', requestPriority: globalThis.__CHATGPT_REPLICA_ENV__?.siteWorkspace === true, ultraOrchestration: true },
+  getExecutionPolicy: () => ({ modelSelection: hasModelSelectionAccess(), freeChatModel: DEFAULT_SETTINGS.freeChatModel, freeChatEffort: 'medium' }),
   onPersist: threads => localAccountHistory?.capture(threads),
 });
 await localAppServer.migratePreparedInputs();
@@ -351,10 +381,12 @@ export const localDotAdapter = createLocalDotAdapter({
   complete: createLocalDotCompletion({
     complete: streamCompletion, getProviders: () => DEFAULT_SETTINGS.apiProviders, siteOrigin: SITE_ACCOUNT_SERVICE,
     fetchDirectModels: (url, options) => globalThis.fetch(url, options),
+    responsesTransport: globalThis.__CHATGPT_REPLICA_ENV__?.siteWorkspace ? siteInferenceTransport.request : undefined,
   }),
   storage: { getItem: key => globalThis.localStorage.getItem(key), setItem: (key, value) => globalThis.localStorage.setItem(key, value) },
   appServer: localAppServer, getIdentity: getPrototypeLocalAuth, isLocalSession: isPrototypeLocalSession,
   hasDotAccess: () => getSitePlanCapabilities().dot, siteAccountsOnly: true,
+  getFileRecord: async (id, options) => (await localFilesService.readFile(id, options)).record,
   readSettings: () => ({ ...DEFAULT_SETTINGS }), getCapabilities: getLocalExecutionCapabilities, diagnostics: localProtocolDiagnostics,
 });
 const localNativePublicationReferences = createNativePublicationReferences({
@@ -404,12 +436,18 @@ localClassicChatAdapter.projectItem = localResponseActions.projectItem;
 export const localConversationShare = createPortableConversationShare({
   getIdentity: getResponseIdentity,
   getConversation: id => localClassicChatAdapter.detail(localAppServer.getThread(id)),
-  baseURL: new URL('../', import.meta.url).href,
+  baseURL: getSiteHomeUrl().href,
+  getLocation: () => {
+    const location = new URL(globalThis.location.href);
+    const id = location.searchParams.get('share');
+    if (/^[a-f0-9-]{36}$/.test(id ?? '')) location.pathname = new URL(`share/${id}`, getSiteHomeUrl()).pathname;
+    return location.href;
+  },
 });
 export const localCodexAdapter = createLocalCodexAdapter({ appServer: localAppServer, models: localModelAdapter, readSettings: () => ({ ...DEFAULT_SETTINGS }), getIdentity: getPrototypeLocalAuth, isLocalSession: isPrototypeLocalSession, getCapabilities: getLocalExecutionCapabilities, diagnostics: localProtocolDiagnostics });
 export function getLocalExecutionCapabilities() {
   return { executionSource: 'local-app-server',
-    textConversations: Boolean(DEFAULT_SETTINGS.apiBase && DEFAULT_SETTINGS.apiKey && typeof streamCompletion === 'function' && typeof localAppServer.dispatch === 'function' && modelCatalog.WORK_MODEL_IDS.length),
+    textConversations: Boolean((getSiteAccount() || DEFAULT_SETTINGS.apiBase && DEFAULT_SETTINGS.apiKey) && typeof streamCompletion === 'function' && typeof localAppServer.dispatch === 'function' && modelCatalog.WORK_MODEL_IDS.length),
     openaiCloudEntitlement: false, modelSelection: hasModelSelectionAccess(), filesystem: true, tools: localToolExecutor.tools.map(tool => tool.function.name), filesystemScope: 'browser-origin-workspace', pythonEnvironment: 'pyodide-webassembly' };
 }
 

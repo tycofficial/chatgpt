@@ -179,7 +179,7 @@ export function getSiteHomeUrl(fallback) {
   const origin = globalThis.location.origin;
   const moduleURL = new URL(import.meta.url);
   const deployedBase = moduleURL.origin === origin && moduleURL.pathname.endsWith('/native-client/site-account.mjs')
-    ? new URL('../', moduleURL).pathname : null;
+    ? new URL(moduleURL.pathname.endsWith('/src/native-client/site-account.mjs') ? '../../' : '../', moduleURL).pathname : null;
   return resolveSiteHomeUrl(origin, deployedBase, globalThis.document?.documentElement?.dataset?.routerBasename,
     globalThis.__CHATGPT_REPLICA_ENV__?.basePath, fallback);
 }
@@ -372,7 +372,7 @@ export function startSiteGuestSession() {
   return guestSession;
 }
 
-async function authenticateSiteAccount(endpoint, username, password) {
+async function authenticateSiteAccount(endpoint, username, password, { legacyGuestFallback = true } = {}) {
   const generation = ++requestGeneration;
   forgetAccount(null, { removeStored: !guestActive });
   setTabGuest(false);
@@ -388,7 +388,7 @@ async function authenticateSiteAccount(endpoint, username, password) {
     return verified;
   } catch (error) {
     if (generation === requestGeneration) {
-      if (endpoint === '/auth/login' && error instanceof AccountConnectionError) return startSiteGuestSession();
+      if (legacyGuestFallback && endpoint === '/auth/login' && error instanceof AccountConnectionError) return startSiteGuestSession();
       forgetAccount(error.message || '登录失败，请重试。');
     }
     throw error;
@@ -431,7 +431,16 @@ async function loginOfflineAdministrator(password) {
 }
 
 export function loginSiteAccount(username, password) {
-  if (String(username).normalize('NFKC').trim().toLowerCase() === 'tyc') return loginOfflineAdministrator(password);
+  const administrator = String(username).normalize('NFKC').trim().toLowerCase() === 'tyc';
+  if (globalThis.__CHATGPT_REPLICA_ENV__?.siteWorkspace) {
+    if (administrator && isOffline()) return loginOfflineAdministrator(password);
+    if (isOffline()) return Promise.reject(Error('请联网登录本站账户。'));
+    return authenticateSiteAccount('/auth/login', username, password, { legacyGuestFallback: false }).catch(error => {
+      if (administrator && error instanceof AccountConnectionError && error.message !== cancelled) return loginOfflineAdministrator(password);
+      throw error;
+    });
+  }
+  if (administrator) return loginOfflineAdministrator(password);
   if (isOffline()) return Promise.resolve(startSiteGuestSession());
   return authenticateSiteAccount('/auth/login', username, password);
 }
@@ -448,7 +457,7 @@ export function logoutSiteAccount() {
   forgetAccount(null, { removeStored: !tabIsGuest, receiptToken: session?.token });
   setTabGuest(false);
   setNativeSessionFlag('0');
-  if (isToken(token)) void api('/auth/logout', { body: {}, token, keepalive: true, timeoutMs: 2000 }).catch(() => {});
+  if (isToken(token)) return api('/auth/logout', { body: {}, token, keepalive: true, timeoutMs: 2000 }).catch(() => {});
 }
 
 export async function claimSiteTrial(tier) {

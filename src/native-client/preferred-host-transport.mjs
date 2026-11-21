@@ -229,7 +229,7 @@ export function createPreferredCompletion({ runtimeCompletion, preferredTranspor
         const requestOptions = { ...hostOptions, signal, fallbackResponses };
         return replay ? preferredTransport.resume(cp, requestOptions) : preferredTransport.request(payload, requestOptions);
       } });
-      if (['stop','tool_calls','length'].includes(result.finish_reason)) { cp.consumerFinished = true; cp.consumerStatus = result.finish_reason === 'length' ? 'incomplete' : 'complete'; if (!cp.cancelRequested && cp.state !== 'cancelled') cp.state = result.finish_reason === 'length' ? 'failed' : 'complete'; } await save(); return result;
+      if (isHostCheckpoint(cp) && ['stop','tool_calls','length'].includes(result.finish_reason)) { cp.consumerFinished = true; cp.consumerStatus = result.finish_reason === 'length' ? 'incomplete' : 'complete'; if (!cp.cancelRequested && cp.state !== 'cancelled') cp.state = result.finish_reason === 'length' ? 'failed' : 'complete'; } await save(); return result;
     } catch (error) {
       const providerTerminal = error?.code && !String(error.code).startsWith('HOST_') && error.code !== 'SITE_ADMIN_AUTH_REQUIRED' && (error.retryable === false || [400,401,402,403,404,422,429].includes(error.status));
       if (isHostCheckpoint(cp) && providerTerminal && !options.signal?.aborted) { cp.consumerFinished = true; cp.consumerStatus = 'failed'; cp.consumerError = { code: error.code, providerCode: error.providerCode ?? null, requestId: error.requestId ?? null, param: error.param ?? null, status: error.status ?? null, message: String(error.message) }; cp.state = 'failed'; error.requiresTransportResume = false; }
