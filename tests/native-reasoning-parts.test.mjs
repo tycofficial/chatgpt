@@ -166,6 +166,15 @@ test('only the site Codex projection supplies native details from saved public s
   assert.equal(classify(visible).grouping, 'standalone');
   assert.equal(visible.content, 'Public check.\n\nPublic result.');
   assert.equal(projectNativeCodexPublicSummary({ ...visible, content: '**Public check.**\n\nPublic result.' }).content, visible.content);
+  for (const [summary, expected] of [
+    ['**Public headline.**', 'Public headline.'],
+    ['## Public headline.', 'Public headline.'],
+    ['### **Public headline.** ###\n\nPublic result.', 'Public headline.\n\nPublic result.'],
+  ]) {
+    local.items[0].summary = [summary];
+    assert.equal(projectNativeCodexPublicSummary(project(state).items[0]).content, expected);
+    assert.deepEqual(local.items[0].summary, [summary]);
+  }
   assert.equal(classify(unknown), null);
   assert.equal(classify(tool).grouping, 'standalone');
   assert.equal(tool.invocation.arguments.code, python.arguments.code);

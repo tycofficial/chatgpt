@@ -45,7 +45,16 @@ export function wrapNativeCodexActivityItem(classify) {
 
 export function projectNativeCodexPublicSummary(item) {
   const summary = item?.type === 'reasoning' && item[siteCodexActivity];
-  return typeof summary === 'string' && summary !== item.content ? { ...item, content: summary } : item;
+  if (typeof summary !== 'string') return item;
+
+  // The original completed activity consumes its opening Markdown title.
+  // Keep the provider's opening text as a paragraph in the details.
+  const paragraph = summary.replace(
+    /^((?:[ \t]*\r?\n)* {0,3})#{1,6}[ \t]+([^\r\n]+?)(?:[ \t]+#+)?[ \t]*(?=\r?\n|$)/,
+    '$1$2',
+  );
+  const content = paragraph.replace(/^(\s*)\*\*([^\r\n]+?)\*\*/, '$1$2');
+  return content === item.content ? item : { ...item, content };
 }
 
 export function wrapNativeCodexWorkTiming(projectTurn, server) {
