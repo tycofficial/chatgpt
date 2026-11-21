@@ -1,4 +1,4 @@
-name: Enter Codex from the published native product selector
+name: Diagnose the original product selector on the deployed site
 on:
   push:
     branches: [qa/codex-public-summary-heading]
@@ -53,11 +53,37 @@ jobs:
           assert.equal(trial.user?.siteTrial?.tier, 'pro');
           stage('activated-a-normal-site-pro-trial');
 
+          const localPath = new URL('native-client/local-codex-adapter.mjs?v='+RELEASE, home);
+          const adapterResponse = await fetch(localPath, {signal:AbortSignal.timeout(17000)});
+          assert.equal(adapterResponse.status,200);
+          let adapter = await adapterResponse.text();
+          function recordAt(functionName, probe) {
+            const start = adapter.indexOf('function '+functionName+'(');
+            const insertion = 'const current = state();';
+            const end = adapter.indexOf(insertion,start) + insertion.length;
+            if(start<0 || end<start) throw Error('Missing '+functionName);
+            adapter = adapter.slice(0,end) + '\n  (globalThis.__codexModeProbe ??= []).push('+probe+');\n' + adapter.slice(end);
+          }
+          recordAt('resolveBrowserCapability', '{ name:"capability", local:current.local, configured:current.configuredTextProvider, selection:current.modelSelectionVerified, supportedBrowser, loading:originalDecision?.isLoading, error:originalDecision?.isError, auth:inputs?.authLoading, account:inputs?.accountLoading, accountMatch:inputs?.accountId===current.identity?.accountId, verifiedAccountMatch:inputs?.authenticatedAccountId===current.identity?.accountId, userMatch:inputs?.userId===current.identity?.userId }');
+          recordAt('featureGateEntries', '{name:"gates", local:current.local, configured:current.configuredTextProvider, selection:current.modelSelectionVerified}');
+          const stockURL = new URL('original-client/public/chatgpt.com/cdn/assets/76629.a6013c50b6.js', home);
+          const stockResponse = await fetch(stockURL, {signal:AbortSignal.timeout(17000)});
+          if (stockResponse.ok) {
+            const stock = await stockResponse.text();
+            const i = stock.indexOf('dZk8:');
+            if (i >= 0) {
+              const module = stock.slice(i, i + 11000);
+              stage('original-sidebar-metadata',{productMode:module.includes('sidebarProductMode'), stringLabels:[...module.matchAll(/defaultMessage:"([^"]+)"/g)].map(m=>m[1]).filter(v=>v.length<100).slice(0,24),
+                gateIds:[...new Set([...module.matchAll(/"([0-9]{9,10})"/g)].map(m=>m[1]))].slice(0,18)});
+            }
+          }
           const browser = await chromium.launch({ channel: 'msedge', headless: true });
           const inference = [], errors = [];
           const isModel = request => request.method() === 'POST' && request.url() === API + '/inference/v1/responses';
           try {
-            const context = await browser.newContext({ locale:'zh-CN' });
+            const context = await browser.newContext({ locale:'zh-CN', serviceWorkers:'block' });
+            await context.route(url => url.origin===home.origin && url.pathname===localPath.pathname,
+              route => route.fulfill({status:200,body:adapter,contentType:'application/javascript; charset=utf-8'}));
             const page = await context.newPage();
             page.on('request', request => {
               if (!isModel(request)) return;
@@ -78,80 +104,26 @@ jobs:
               await page.waitForURL(url=>url.origin===home.origin&&url.pathname===home.pathname,{timeout:40000});
               await page.waitForFunction(release=>window.__CHATGPT_REPLICA_ENV__?.release===release, RELEASE,{timeout:30000});
               await page.waitForFunction(()=>Array.isArray(window.__originalClientProbe),undefined,{timeout:30000});
-              const relevantControls = () => page.evaluate(() => [...document.querySelectorAll('button, a, [role="menuitem"], [role="tab"]')]
-                .filter(node => node.getClientRects().length)
-                .map(node => ({tag:node.tagName, role:node.getAttribute('role'), name:node.innerText?.trim().slice(0,70),
-                  label:node.getAttribute('aria-label'), title:node.getAttribute('title'), testId:node.getAttribute('data-testid')}))
-                .filter(x => x.name || x.label || x.title || x.testId).slice(0,90));
-              const codexName = /^(?:(?:进入|切换至|切换到|打开|前往)\s*)?Codex(?:\s*模式)?$/i;
-              const choice = page.getByRole('button',{name:codexName})
-                .or(page.getByRole('link',{name:codexName}))
-                .or(page.getByRole('menuitem',{name:codexName}))
-                .or(page.getByRole('tab',{name:codexName})).filter({visible:true});
-              let selected = choice.first();
-              if (!(await selected.isVisible())) {
-                stage('home-visible-controls', await relevantControls());
-                const trigger = page.locator('[data-testid*="product-switcher" i], [data-testid*="product-mode" i]')
-                  .or(page.getByRole('button',{name:/^(?:ChatGPT|切换产品模式|产品模式)$/i})).filter({visible:true}).first();
-                if (await trigger.isVisible()) await trigger.click();
-                selected = choice.first();
-                await selected.waitFor({state:'visible',timeout:10000}).catch(async error => {
-                  stage('available-mode-controls', await relevantControls());
-                  throw error;
-                });
+              await page.getByRole('button',{name:'聊天',exact:true}).first().waitFor({state:'visible',timeout:25000});
+              async function capture(phase) {
+                stage(phase,await page.evaluate(() => ({
+                  path:location.pathname,
+                  historyMode:history.state?.usr?.sidebarProductMode ?? history.state?.sidebarProductMode ?? null,
+                  probes:[...new Map((window.__codexModeProbe ?? []).map(row=>[JSON.stringify(row),row])).values()].slice(0,30),
+                  buttons:[...document.querySelectorAll('button')].filter(el=>el.getClientRects().length)
+                    .map(el=>[el.innerText?.trim(), el.getAttribute('aria-label'),el.getAttribute('data-testid')])
+                    .filter(el=>el.some(Boolean)).slice(0,42),
+                })));
               }
-              await selected.click();
-              await page.waitForFunction(() =>
-                (history.state?.usr?.sidebarProductMode ?? history.state?.sidebarProductMode) === 'codex',
-                undefined,{timeout:17000});
-              stage('selected-codex-in-the-original-home-interface');
-              const composer = page.locator('main #prompt-textarea[contenteditable="true"], main .ProseMirror[contenteditable="true"], main textarea:not([disabled]), [data-testid="codex-composer"] [contenteditable="true"], textarea:not([disabled]), [role="textbox"][contenteditable="true"]').filter({visible:true}).first();
-              await composer.waitFor({state:'visible',timeout:28000});
-              stage('opened-the-codex-composer-without-selecting-a-project');
-              async function send(prompt) {
-                await composer.click();
-                await page.keyboard.insertText(prompt);
-                const sendButton = page.locator('#composer-submit-button, button[data-testid="send-button"], button[data-testid="composer-submit-button"], button[aria-label="发送"], button[aria-label="发送消息"], button[aria-label="发送提示"], button[aria-label="Send message"], button[aria-label="Send prompt"]')
-                  .filter({visible:true}).first();
-                const click = await sendButton.isVisible() && await sendButton.isEnabled();
-                await Promise.all([
-                  page.waitForRequest(isModel,{timeout:58000}),
-                  click ? sendButton.click({timeout:15000}) : composer.press('Enter',{timeout:15000}),
-                ]);
-              }
-              await send(query);
-              stage('first-model-request');
-              const saved = await page.waitForFunction(({sample,expected}) => {
-                for (const key of Object.keys(localStorage).filter(key=>key.includes('cg-original-app-server:v1:account:'))) {
-                  const data = JSON.parse(localStorage.getItem(key));
-                  for (const thread of data.threads) {
-                    if (thread.executionSurface !== 'codex' && thread.adapterMetadata?.conversationOrigin !== 'codex') continue;
-                    for (const turn of thread.turns) {
-                      if (turn.status !== 'completed' || !turn.items.some(item=>item.type==='userMessage'&&JSON.stringify(item.content).includes(sample))) continue;
-                      const python = turn.items.filter(item => item.type==='mcpToolCall' && item.tool==='python');
-                      const exact = python.find(item => item.result?.structuredContent?.stdout?.includes(expected) ||
-                        item.result?.content?.some(part => part.type==='text' && part.text.includes(expected)));
-                      if (exact && turn.items.some(item=>item.type==='agentMessage'&&item.text?.includes(expected))) {
-                        return { runs:python.length, model:turn.model, effort:turn.reasoningEffort,
-                          durationMs:turn.durationMs, hasRealToolOutput:true };
-                      }
-                    }
-                  }
-                }
-                return null;
-              },{sample,expected},{timeout:135000});
-              stage('python-output-and-final-answer-verified',await saved.jsonValue());
-              assert.ok(await page.locator('main').getByText(new RegExp(expected)).first().waitFor({state:'visible',timeout:12000}).then(()=>true));
-              await send(continuation);
-              await page.locator('main').getByText(expected+'-NEXT',{exact:true}).first().waitFor({state:'visible',timeout:85000});
-              stage('same-thread-contextual-follow-up-verified');
-              const [logout] = await Promise.all([
-                page.waitForResponse(r=>r.url()===API+'/auth/logout'&&r.request().method()==='POST',{timeout:22000}),
-                page.goto(new URL('auth/logout/',home).href,{waitUntil:'domcontentloaded',timeout:30000}),
-              ]);
-              assert.ok(logout.ok());
-              await page.waitForURL(u=>u.origin===home.origin&&u.pathname===home.pathname,{timeout:22000});
-              stage('signed-out-on-original-base-path');
+              await capture('mounted-home');
+              const work = page.getByRole('button',{name:'工作',exact:true}).filter({visible:true}).first();
+              if (await work.isVisible()) await work.click();
+              await new Promise(resolve=>setTimeout(resolve,2500));
+              await capture('mode-after-the-work-control');
+              const profile = page.getByRole('button',{name:'打开个人资料菜单',exact:true}).first();
+              if (await profile.isVisible()) await profile.click();
+              await new Promise(resolve=>setTimeout(resolve,600));
+              await capture('mode-entries-in-the-profile-menu');
             } finally {
               const details = await page.evaluate(({sample})=>({
                 path:location.pathname.replace(/(\/(?:c|t)\/)[^/]+/,'$1<thread>'),
