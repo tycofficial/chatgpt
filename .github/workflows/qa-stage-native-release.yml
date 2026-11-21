@@ -1,4 +1,4 @@
-name: Exercise public Codex with real browser Python and a follow-up
+name: Enter Codex from the published native product selector
 on:
   push:
     branches: [qa/codex-public-summary-heading]
@@ -78,17 +78,34 @@ jobs:
               await page.waitForURL(url=>url.origin===home.origin&&url.pathname===home.pathname,{timeout:40000});
               await page.waitForFunction(release=>window.__CHATGPT_REPLICA_ENV__?.release===release, RELEASE,{timeout:30000});
               await page.waitForFunction(()=>Array.isArray(window.__originalClientProbe),undefined,{timeout:30000});
-              const links = page.locator('a[href]').filter({hasText:/^\s*Codex\s*$/i}).filter({visible:true});
-              const navPath = await links.first().getAttribute('href',{timeout:8000}).catch(()=>null);
-              if (navPath && new URL(navPath, home).origin === home.origin) {
-                await links.first().click();
-                stage('clicked-the-visible-home-codex-link');
-              } else {
-                await page.goto(new URL('codex/',home).href,{waitUntil:'domcontentloaded',timeout:40000});
-                stage('opened-the-codex-route');
+              const relevantControls = () => page.evaluate(() => [...document.querySelectorAll('button, a, [role="menuitem"], [role="tab"]')]
+                .filter(node => node.getClientRects().length)
+                .map(node => ({tag:node.tagName, role:node.getAttribute('role'), name:node.innerText?.trim().slice(0,70),
+                  label:node.getAttribute('aria-label'), title:node.getAttribute('title'), testId:node.getAttribute('data-testid')}))
+                .filter(x => x.name || x.label || x.title || x.testId).slice(0,90));
+              const codexName = /^(?:(?:进入|切换至|切换到|打开|前往)\s*)?Codex(?:\s*模式)?$/i;
+              const choice = page.getByRole('button',{name:codexName})
+                .or(page.getByRole('link',{name:codexName}))
+                .or(page.getByRole('menuitem',{name:codexName}))
+                .or(page.getByRole('tab',{name:codexName})).filter({visible:true});
+              let selected = choice.first();
+              if (!(await selected.isVisible())) {
+                stage('home-visible-controls', await relevantControls());
+                const trigger = page.locator('[data-testid*="product-switcher" i], [data-testid*="product-mode" i]')
+                  .or(page.getByRole('button',{name:/^(?:ChatGPT|切换产品模式|产品模式)$/i})).filter({visible:true}).first();
+                if (await trigger.isVisible()) await trigger.click();
+                selected = choice.first();
+                await selected.waitFor({state:'visible',timeout:10000}).catch(async error => {
+                  stage('available-mode-controls', await relevantControls());
+                  throw error;
+                });
               }
-              await page.waitForURL(u=>u.origin===home.origin&&/^\/chatgpt\/codex(?:\/|$)/i.test(u.pathname),{timeout:30000});
-              const composer = page.locator('main #prompt-textarea[contenteditable="true"], main .ProseMirror[contenteditable="true"], main textarea:not([disabled]), [data-testid="codex-composer"] [contenteditable="true"]').filter({visible:true}).first();
+              await selected.click();
+              await page.waitForFunction(() =>
+                (history.state?.usr?.sidebarProductMode ?? history.state?.sidebarProductMode) === 'codex',
+                undefined,{timeout:17000});
+              stage('selected-codex-in-the-original-home-interface');
+              const composer = page.locator('main #prompt-textarea[contenteditable="true"], main .ProseMirror[contenteditable="true"], main textarea:not([disabled]), [data-testid="codex-composer"] [contenteditable="true"], textarea:not([disabled]), [role="textbox"][contenteditable="true"]').filter({visible:true}).first();
               await composer.waitFor({state:'visible',timeout:28000});
               stage('opened-the-codex-composer-without-selecting-a-project');
               async function send(prompt) {
