@@ -15,7 +15,7 @@
 import { WORK_MODEL_IDS } from './model-catalog.js';
 export const CODEX_DETAIL_MODE = 'STEPS_COMMANDS';
 export const WORK_DETAIL_MODE = 'STEPS_PROSE';
-export const CODEX_BROWSER_UI_GATES = Object.freeze(['3999836663', '4019944087', '515412992']);
+export const CODEX_BROWSER_UI_GATES = Object.freeze(['3999836663', '4019944087', '515412992', '3085093835']);
 export const CODEX_MODEL_IDS = WORK_MODEL_IDS;
 export const CODEX_SOURCE_CONTRACT = Object.freeze({
   route: '/', routeState: 'sidebarProductMode', productMode: 'codex',

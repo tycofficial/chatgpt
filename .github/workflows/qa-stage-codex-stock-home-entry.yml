@@ -1,0 +1,81 @@
+name: Verify and stage the restored native Codex entry
+
+on:
+  push:
+    branches: [qa/codex-stock-home-entry]
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: windows-2025
+    defaults:
+      run:
+        shell: bash
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    env:
+      DEPLOY_BASE: 6c39d9d4e99ebcd961aeff4fe116015c9c693907
+      VERIFIED_REF: refs/heads/qa/verified-codex-stock-home-entry
+    outputs:
+      release: ${{ steps.export.outputs.release }}
+      commit: ${{ steps.export.outputs.commit }}
+      index_sha: ${{ steps.export.outputs.index_sha }}
+      adapter_sha: ${{ steps.export.outputs.adapter_sha }}
+      worker_sha: ${{ steps.export.outputs.worker_sha }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 8
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Install the repository dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Build and validate the native client
+        run: |
+          set -euo pipefail
+          npm run release:prepare
+          npm run native:check
+          export GENERATED_PUBLICATION_TEST_TMPDIR="$(node -p "require('node:fs').realpathSync(process.env.RUNNER_TEMP)")"
+          node --test --test-concurrency=2 tests/*.test.mjs
+          git -c core.whitespace=cr-at-eol diff --check "$DEPLOY_BASE"
+          git diff --exit-code "$DEPLOY_BASE" -- original-client _orbit-renderer
+      - name: Compare the public upstream build if reachable
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync } from 'node:fs';
+          const packaged = JSON.parse(readFileSync('native-client/active.json', 'utf8')).sourceBuild;
+          try {
+            const response = await fetch('https://chatgpt.com/', { redirect: 'follow', signal: AbortSignal.timeout(12000) });
+            const upstream = response.ok && /\bdata-build="([a-f\d]{40})"/i.exec(await response.text())?.[1];
+            console.log(JSON.stringify({ packaged, upstream: upstream || null, http: response.status, matches: upstream === packaged }));
+          } catch (error) {
+            console.log(JSON.stringify({ packaged, upstream: null, observation: error.name }));
+          }
+          NODE
+      - id: export
+        name: Push the checked release commit to the verification ref
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$DEPLOY_BASE" HEAD
+          git rm -- .github/workflows/qa-stage-codex-stock-home-entry.yml
+          git add -u
+          [[ -z "$(git ls-files --others --exclude-standard)" ]]
+          [[ -z "$(git diff --cached --name-only "$DEPLOY_BASE" -- .github original-client _orbit-renderer)" ]]
+          release="$(node -p "require('./native-client/active.json').release")"
+          [[ "$release" =~ ^[a-f0-9]{16}$ ]]
+          [[ "$release" != 3627b234b2f18cbf ]]
+          tree="$(git write-tree)"
+          packed="$(git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit-tree "$tree" -p "$DEPLOY_BASE" -m 'Restore the current native Codex entry for eligible site accounts')"
+          git push origin "$packed:$VERIFIED_REF"
+          {
+            printf 'release=%s\ncommit=%s\n' "$release" "$packed"
+            printf 'index_sha=%s\n' "$(git cat-file blob "$packed:index.html" | sha256sum | cut -d' ' -f1)"
+            printf 'adapter_sha=%s\n' "$(git cat-file blob "$packed:native-client/boot-adapter.mjs" | sha256sum | cut -d' ' -f1)"
+            printf 'worker_sha=%s\n' "$(git cat-file blob "$packed:native-client-worker.js" | sha256sum | cut -d' ' -f1)"
+          } >> "$GITHUB_OUTPUT"
+          printf 'Verified native release %s at %s\n' "$release" "$packed"
