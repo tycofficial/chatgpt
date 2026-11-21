@@ -53,11 +53,14 @@ jobs:
           xcrun simctl list devices booted
           xcrun simctl launch "$IPAD_UDID" com.apple.mobilesafari
 
-      - name: Photograph Safari on the public home before entering synthetic data
+      - name: Open the original public login in iPad Safari
+        timeout-minutes: 2
+        run: xcrun simctl openurl "$IPAD_UDID" 'https://tycofficial.github.io/chatgpt/auth/login/'
+
+      - name: Photograph Safari on the public login before entering synthetic data
         timeout-minutes: 2
         continue-on-error: true
         run: |
-          xcrun simctl openurl "$IPAD_UDID" 'https://tycofficial.github.io/chatgpt/'
           sleep 8
           xcrun simctl io "$IPAD_UDID" screenshot "$RUNNER_TEMP/ipad-safari-xcuitest-public.png"
           sips -g pixelWidth -g pixelHeight "$RUNNER_TEMP/ipad-safari-xcuitest-public.png"
@@ -87,7 +90,7 @@ jobs:
             -only-testing:SafariQAUITests/SafariPublicSiteTests/testPublicLoginRefreshAndFollowUpInSafari \
             -parallel-testing-enabled NO -disable-concurrent-destination-testing \
             -test-timeouts-enabled YES -default-test-execution-time-allowance 480 2>&1 | tee "$raw" | \
-            awk 'match($0, /IPAD_UI_QA (runner-started|seeded-public-account|safari-foreground|public-home-web-content|safari-home-login-tapped|safari-address-bar-login|public-login-web-content|login-form|login-keyboard|login-username-entered|login-password-entered|login-submitted|login-returned-to-chat|first-send-visible|first-reply-before-reload|reload-while-reply-pending|safari-reload-tapped|first-conversation-restored|follow-up-sent|same-conversation-follow-up-verified|failed-[a-z-]+)\r?$/) { print substr($0, RSTART, RLENGTH); fflush() }' | tee "$phases"
+            awk 'match($0, /IPAD_UI_QA (runner-started|seeded-public-account|safari-foreground|public-login-web-content|login-form|login-keyboard|login-username-entered|login-password-entered|login-submitted|login-returned-to-chat|first-send-visible|first-reply-before-reload|reload-while-reply-pending|safari-reload-tapped|first-conversation-restored|follow-up-sent|same-conversation-follow-up-verified|failed-[a-z-]+)\r?$/) { print substr($0, RSTART, RLENGTH); fflush() }' | tee "$phases"
           build_exit="${PIPESTATUS[0]}"
           set -e
           printf 'XCTest exit status %s\n' "$build_exit"

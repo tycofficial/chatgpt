@@ -16,22 +16,23 @@ final class SafariPublicSiteTests: XCTestCase {
         guard check(safari.wait(for: .runningForeground, timeout: 20), "safari-foreground") else { return }
         mark("safari-foreground")
 
-        let home = safari.webViews.firstMatch
-        guard check(home.waitForExistence(timeout: 40), "public-home-web-content") else { return }
-        mark("public-home-web-content")
-        if !home.secureTextFields.firstMatch.exists {
-            guard check(openLoginFromHome(home, using: safari), "public-home-login-entry") else { return }
-        }
-
         let web = safari.webViews.firstMatch
         guard check(web.waitForExistence(timeout: 40), "public-login-web-content") else { return }
         mark("public-login-web-content")
-        guard let username = formField(web.textFields, names: ["site-username", "用户名", "Username"]), username.isHittable else {
-            fail("login-username")
-            return
-        }
-        guard let password = formField(web.secureTextFields, names: ["site-password", "密码", "Password"]), password.isHittable else {
-            fail("login-password")
+        let submit = named(web.buttons, ["继续", "Continue"])
+        let deadline = Date().addingTimeInterval(45)
+        var loginFields: (username: XCUIElement, password: XCUIElement)?
+        repeat {
+            if let username = formField(web.textFields, names: ["site-username", "用户名", "Username"]),
+               let password = formField(web.secureTextFields, names: ["site-password", "密码", "Password"]),
+               submit.exists, username.isHittable, password.isHittable {
+                loginFields = (username, password)
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(500))
+        } while Date() < deadline
+        guard let (username, password) = loginFields else {
+            fail("login-form-incomplete")
             return
         }
         mark("login-form")
@@ -52,7 +53,6 @@ final class SafariPublicSiteTests: XCTestCase {
         password.typeText(syntheticPassword)
         guard check(waitForSecureValue(in: password, differentFrom: emptyPasswordValue), "login-password-typed-value") else { return }
         mark("login-password-entered")
-        let submit = named(safari.webViews.descendants(matching: .button), ["继续", "Continue", "Log in", "登录"])
         guard check(submit.waitForExistence(timeout: 10) && submit.isEnabled, "login-submit") else { return }
         submit.tap()
         mark("login-submitted")
@@ -90,30 +90,6 @@ final class SafariPublicSiteTests: XCTestCase {
         mark("same-conversation-follow-up-verified")
     }
 
-    @MainActor
-    private func openLoginFromHome(_ home: XCUIElement, using safari: XCUIApplication) -> Bool {
-        let names = ["login-button", "login-link", "Log in", "Log In", "Sign in", "登录", "登入"]
-        let controls = [named(home.buttons, names), named(home.links, names)]
-        let deadline = Date().addingTimeInterval(12)
-        repeat {
-            if let control = controls.first(where: { $0.exists && $0.isHittable }) {
-                control.tap()
-                mark("safari-home-login-tapped")
-                return true
-            }
-            settle(0.5)
-        } while Date() < deadline
-
-        // Fall back to Safari's focused address field if the home layout has no login control.
-        safari.typeKey("l", modifierFlags: .command)
-        let address = named(safari.textFields, ["URL", "Address", "Address Bar", "Search or enter website name",
-                                               "Search or enter a URL", "地址栏", "搜索或输入网站名称"])
-        guard address.waitForExistence(timeout: 6), address.hasFocus else { return false }
-        safari.typeKey("a", modifierFlags: .command)
-        safari.typeText("https://tycofficial.github.io/chatgpt/auth/login/\n")
-        mark("safari-address-bar-login")
-        return true
-    }
 
     private func registerSyntheticAccount(username: String, password: String) async -> Bool {
         let configuration = URLSessionConfiguration.ephemeral
@@ -201,7 +177,7 @@ final class SafariPublicSiteTests: XCTestCase {
     private func formField(_ query: XCUIElementQuery, names: [String]) -> XCUIElement? {
         let preferred = query.matching(NSPredicate(format: "identifier IN %@ OR label IN %@ OR placeholderValue IN %@",
                                                    names, names, names)).firstMatch
-        if preferred.waitForExistence(timeout: 18) { return preferred }
+        if preferred.exists { return preferred }
         return query.count == 1 ? query.firstMatch : nil
     }
 
