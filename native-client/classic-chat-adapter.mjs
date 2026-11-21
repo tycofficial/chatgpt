@@ -1,13 +1,13 @@
 /** Original classic Chat REST/SSE shapes over the same real local thread engine. */
-import { FRONTEND_TO_RAW_EFFORT } from './model-catalog-adapter.mjs?v=3627b234b2f18cbf';
-import { hostedSearchMessage, mergeWebSearchReferences } from './local-web-search.mjs?v=3627b234b2f18cbf';
-import { terminalSiteInferenceReason } from './site-inference-transport.mjs?v=3627b234b2f18cbf';
-import { turnHostCheckpoints } from './preferred-host-transport.mjs?v=3627b234b2f18cbf';
-import { storedConversationOrigin, storedConversationSurface } from './local-app-server.mjs?v=3627b234b2f18cbf';
-import { projectNativePythonActivity } from './native-python-activity.mjs?v=3627b234b2f18cbf';
+import { FRONTEND_TO_RAW_EFFORT } from './model-catalog-adapter.mjs?v=bfb322d68717147e';
+import { hostedSearchMessage, mergeWebSearchReferences } from './local-web-search.mjs?v=bfb322d68717147e';
+import { terminalSiteInferenceReason } from './site-inference-transport.mjs?v=bfb322d68717147e';
+import { turnHostCheckpoints } from './preferred-host-transport.mjs?v=bfb322d68717147e';
+import { storedConversationOrigin, storedConversationSurface } from './local-app-server.mjs?v=bfb322d68717147e';
+import { projectNativePythonActivity } from './native-python-activity.mjs?v=bfb322d68717147e';
 
-import { parseClassicInputMessages } from './classic-input-messages.mjs?v=3627b234b2f18cbf';
-export { parseClassicInputMessages, CLASSIC_CONTEXT_LIMITS } from './classic-input-messages.mjs?v=3627b234b2f18cbf';
+import { parseClassicInputMessages } from './classic-input-messages.mjs?v=bfb322d68717147e';
+export { parseClassicInputMessages, CLASSIC_CONTEXT_LIMITS } from './classic-input-messages.mjs?v=bfb322d68717147e';
 
 function isLocalAssistantText(message) {
   return message?.metadata?.adapter_source === 'local-original-client-adapter' &&

@@ -50,6 +50,14 @@ test('verified ready local Codex uses the native settled discovery branch withou
  const{adapter}=fixture();for(const original of [undefined,true,false])assert.equal(adapter.resolveBrowserDiscovery(original,{inputs,browserCapability:ready}),false);
  assert.equal(adapter.discoverySource.source,'site-local-codex-provider');assert.equal(adapter.discoverySource.officialCloudEntitlement,false);assert.equal(adapter.discoverySource.officialDesktopUsageClaimed,false);
 });
+test('the current stock Codex rail is enabled only for a verified local model-selection account',()=>{
+ const{state,adapter}=fixture();
+ assert.equal(adapter.featureGateEntries()['3085093835'].value,true);
+ state.modelSelection=false;
+ assert.equal(adapter.featureGateEntries()['3085093835'].value,false);
+ state.local=false;
+ assert.equal(adapter.featureGateEntries()['3085093835'],undefined);
+});
 test('Free, signed-out, expired and unverified provider states preserve original discovery',()=>{
  for(const patch of [{modelSelection:false},{local:false},{identity:null}]){const{adapter}=fixture(patch);assert.equal(adapter.resolveBrowserDiscovery(undefined,{inputs,browserCapability:ready}),undefined);assert.equal(adapter.resolveBrowserDiscovery(true,{inputs,browserCapability:ready}),true);}
  const{state,adapter}=fixture();state.modelSelection=false;assert.equal(adapter.resolveBrowserDiscovery(true,{inputs,browserCapability:ready}),true);
