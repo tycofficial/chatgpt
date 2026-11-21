@@ -225,8 +225,13 @@ self.addEventListener('fetch',event=>{
  if(event.request.mode==='navigate'&&requested.origin===self.location.origin&&requested.pathname.startsWith(BASE)&&uiNavigation){
   event.respondWith((async()=>{const cache=await caches.open(SHELL_CACHE).catch(()=>null),key=new URL(BASE+'index.html',self.location.origin).href;
    const saved=cache&&await cache.match(key).catch(()=>null);
-   if(saved&&!requested.searchParams.has('__native_release')&&/^(?:index\\.html)?$/.test(subpath))return saved;
-   try{let page=await fetch(event.request,{cache:'no-store'});if(page.status===404)page=await fetch(key,{cache:'no-store'});if(page.ok&&cache&&/^text\\/html(?:;|$)/i.test(page.headers.get('Content-Type')||''))await cache.put(key,page.clone()).catch(()=>{});return page;}
+   try {
+    let page=await fetch(event.request,{cache:'no-store'});
+    if(page.status===404)page=await fetch(key,{cache:'no-store'});
+    if(page.status>=500&&saved)return saved;
+    if(page.ok&&cache&&/^text\\/html(?:;|$)/i.test(page.headers.get('Content-Type')||''))await cache.put(key,page.clone()).catch(()=>{});
+    return page;
+   }
    catch(error){if(saved)return saved;throw error;}
   })());return;
  }

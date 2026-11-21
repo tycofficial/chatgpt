@@ -1,11 +1,11 @@
 /** Original app-server protocol over real, resumable local execution. */
-import { hasUncertainPlainResponse, plainInterruptionMessage, runAgentTurn } from './agent-turn-runner.mjs?v=dea77d65adc42752';
-import { readWebSearchIntent, interruptHostedSearch } from './local-web-search.mjs?v=dea77d65adc42752';
-import { terminalSiteInferenceReason } from './site-inference-transport.mjs?v=dea77d65adc42752';
-import { readClassicBranchRequest, getClassicExecutionThread } from './classic-response-branches.mjs?v=dea77d65adc42752';
-import { parseClassicInputMessages } from './classic-input-messages.mjs?v=dea77d65adc42752';
-import { compactPreparedUserContent, isProviderContent, needsPreparedInputStorage } from './prepared-input-store.mjs?v=dea77d65adc42752';
-import { allowedReasoningEfforts, isPublicReasoningPart } from '../runtime.js?v=dea77d65adc42752';
+import { hasUncertainPlainResponse, plainInterruptionMessage, runAgentTurn } from './agent-turn-runner.mjs?v=dee4682939543502';
+import { readWebSearchIntent, interruptHostedSearch } from './local-web-search.mjs?v=dee4682939543502';
+import { terminalSiteInferenceReason } from './site-inference-transport.mjs?v=dee4682939543502';
+import { readClassicBranchRequest, getClassicExecutionThread } from './classic-response-branches.mjs?v=dee4682939543502';
+import { parseClassicInputMessages } from './classic-input-messages.mjs?v=dee4682939543502';
+import { compactPreparedUserContent, isProviderContent, needsPreparedInputStorage } from './prepared-input-store.mjs?v=dee4682939543502';
+import { allowedReasoningEfforts, isPublicReasoningPart } from '../runtime.js?v=dee4682939543502';
 export class RpcError extends Error {
   constructor(code, message, data) { super(message); this.name = 'RpcError'; this.code = code; if (data !== undefined) this.data = data; }
 }
@@ -45,7 +45,16 @@ export function wrapNativeCodexActivityItem(classify) {
 
 export function projectNativeCodexPublicSummary(item) {
   const summary = item?.type === 'reasoning' && item[siteCodexActivity];
-  return typeof summary === 'string' && summary !== item.content ? { ...item, content: summary } : item;
+  if (typeof summary !== 'string') return item;
+
+  // The original completed activity consumes its opening Markdown title.
+  // Keep the provider's opening text as a paragraph in the details.
+  const paragraph = summary.replace(
+    /^((?:[ \t]*\r?\n)* {0,3})#{1,6}[ \t]+([^\r\n]+?)(?:[ \t]+#+)?[ \t]*(?=\r?\n|$)/,
+    '$1$2',
+  );
+  const content = paragraph.replace(/^(\s*)\*\*([^\r\n]+?)\*\*/, '$1$2');
+  return content === item.content ? item : { ...item, content };
 }
 
 export function wrapNativeCodexWorkTiming(projectTurn, server) {

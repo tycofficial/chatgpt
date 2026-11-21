@@ -1,9 +1,9 @@
-import {BrowserWorkspaceStore,workspacePath} from './native-client/browser-tool-executor.mjs?v=dea77d65adc42752';
+import {BrowserWorkspaceStore,workspacePath} from './native-client/browser-tool-executor.mjs?v=dee4682939543502';
 const workspace=new BrowserWorkspaceStore();
 const SOURCE_BUILD="b6348792a294e8e04a67660959ba41914937938f";
 const BASE=new URL('./',self.location.href).pathname;
 const CACHE='chatgpt-original-assets-'+SOURCE_BUILD;
-const SHELL_CACHE='chatgpt-native-shell-dea77d65adc42752';
+const SHELL_CACHE='chatgpt-native-shell-dee4682939543502';
 self.addEventListener('install',event=>event.waitUntil(self.skipWaiting()));
 self.addEventListener('activate',event=>event.waitUntil(self.clients.claim()));
 function mirror(url){
@@ -39,8 +39,13 @@ self.addEventListener('fetch',event=>{
  if(event.request.mode==='navigate'&&requested.origin===self.location.origin&&requested.pathname.startsWith(BASE)&&uiNavigation){
   event.respondWith((async()=>{const cache=await caches.open(SHELL_CACHE).catch(()=>null),key=new URL(BASE+'index.html',self.location.origin).href;
    const saved=cache&&await cache.match(key).catch(()=>null);
-   if(saved&&!requested.searchParams.has('__native_release')&&/^(?:index\.html)?$/.test(subpath))return saved;
-   try{let page=await fetch(event.request,{cache:'no-store'});if(page.status===404)page=await fetch(key,{cache:'no-store'});if(page.ok&&cache&&/^text\/html(?:;|$)/i.test(page.headers.get('Content-Type')||''))await cache.put(key,page.clone()).catch(()=>{});return page;}
+   try {
+    let page=await fetch(event.request,{cache:'no-store'});
+    if(page.status===404)page=await fetch(key,{cache:'no-store'});
+    if(page.status>=500&&saved)return saved;
+    if(page.ok&&cache&&/^text\/html(?:;|$)/i.test(page.headers.get('Content-Type')||''))await cache.put(key,page.clone()).catch(()=>{});
+    return page;
+   }
    catch(error){if(saved)return saved;throw error;}
   })());return;
  }
@@ -48,7 +53,7 @@ self.addEventListener('fetch',event=>{
  // Only immutable public assets belong here. Keep account data and release discovery on the network.
  const relative=requested.pathname.slice(BASE.length);
  const own=requested.origin===self.location.origin&&requested.pathname.startsWith(BASE);
- const revision=requested.search==='?v=dea77d65adc42752';
+ const revision=requested.search==='?v=dee4682939543502';
  const nativeStatic=revision&&(/^(?:native-client\/[a-zA-Z0-9_./-]+\.(?:mjs|js|json|css)|(?:runtime|config|model-catalog|release-updater|python-worker)\.js)$/.test(relative))&&!relative.endsWith('/active.json');
  const immutable=!requested.search&&/^original-client\/public\/(?:chatgpt\.com\/cdn\/assets|cdn\.oaistatic\.com\/assets)\/(?:[a-zA-Z0-9_-]+\/)*(?:[a-zA-Z0-9_-]+[.-])?[0-9a-f]{8,64}\.(?:js|mjs|json|css|woff2|png|webp|svg)$/.test(relative);
  if(own&&(nativeStatic||immutable)&&!event.request.headers.has('authorization')&&!event.request.headers.has('range')){

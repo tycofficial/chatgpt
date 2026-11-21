@@ -238,8 +238,8 @@ test('close after a real tool and saved public text, then restore the same leg w
     const id = url.pathname.split('/').at(-1), after = Number(url.searchParams.get('after'));
     polls.push([id, after]);
     if (id === uuid(1)) {
-      clock += 15;
-      return receipt(id, { startedAt: clockStart + 25, finishedAt: clockStart + 40 });
+      clock = Math.max(clock, clockStart + 40);
+      return receipt(id, { startedAt: clockStart + 25, finishedAt: clockStart + 40, data: after === -1 ? [leg1] : [] });
     }
     return receipt(id, { startedAt: clockStart + 65, finishedAt: clockStart + 150, data: [delta, leg2] });
   });
@@ -266,7 +266,13 @@ test('close after a real tool and saved public text, then restore the same leg w
   assert.equal(after.status, 'completed');
   assert.equal(after.items.find(item => item.type === 'agentMessage').text, finalText);
   assert.deepEqual(appended, [' 后续内容。']);
-  assert.deepEqual(polls, [[uuid(1), Number.MAX_SAFE_INTEGER], [uuid(2), -1]]);
+  // A reader may prefetch the first leg's journal at EOF before it consumes
+  // the already queued terminal event and cancels the response.
+  const firstLegCursors = polls.filter(([id]) => id === uuid(1)).map(([, after]) => after);
+  assert.ok(firstLegCursors.length > 0);
+  assert.equal(new Set(firstLegCursors).size, firstLegCursors.length);
+  assert.ok(firstLegCursors.every(after => after === -1 || after === Number.MAX_SAFE_INTEGER));
+  assert.deepEqual(polls.filter(([id]) => id !== uuid(1)), [[uuid(2), -1]]);
   assert.equal(posts, 2);
   assert.equal(executions, 1);
   assert.equal(after.durationMs, 150);

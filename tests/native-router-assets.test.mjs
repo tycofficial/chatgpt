@@ -69,3 +69,56 @@ test('the packaged entry mounts a client root on the static Pages document', () 
   assert.equal(plan.mountMode, 'client');
   assert.equal(embedded.mountMode, plan.mountMode);
 });
+
+test('a revisited Pages homepage reads the live release and keeps a shell for outages', async () => {
+  const home = 'https://fixture.test/chatgpt/';
+  const worker = fs.readFileSync(new URL('../native-client-worker.js', import.meta.url), 'utf8')
+    .replace(/^import[^\n]*\n/, '');
+  const html = body => new Response(body, { headers: { 'Content-Type': 'text/html' } });
+  let saved = html('previous release');
+  const cache = {
+    match: async key => {
+      assert.equal(key, home + 'index.html');
+      return saved.clone();
+    },
+    put: async (key, response) => {
+      assert.equal(key, home + 'index.html');
+      saved = response;
+    }
+  };
+  const listeners = new Map();
+  let network = 'available';
+  let requests = 0;
+  vm.runInNewContext(worker, {
+    URL,
+    Response,
+    BrowserWorkspaceStore: class {},
+    caches: { open: async () => cache },
+    self: {
+      location: new URL(home + 'native-client-worker.js'),
+      addEventListener: (type, handler) => listeners.set(type, handler)
+    },
+    fetch: async (request, options) => {
+      requests++;
+      assert.equal(request.url, home);
+      assert.equal(options.cache, 'no-store');
+      if (network === 'offline') throw new TypeError('Load failed');
+      return network === 'unavailable' ? new Response('unavailable', { status: 503 }) : html('current release');
+    }
+  });
+  async function reopen() {
+    let response;
+    listeners.get('fetch')({
+      request: { url: home, method: 'GET', mode: 'navigate' },
+      respondWith: value => { response = value; }
+    });
+    return (await response).text();
+  }
+  assert.equal(await reopen(), 'current release');
+  assert.equal(requests, 1);
+  network = 'offline';
+  assert.equal(await reopen(), 'current release');
+  network = 'unavailable';
+  assert.equal(await reopen(), 'current release');
+  assert.equal(requests, 3);
+});
