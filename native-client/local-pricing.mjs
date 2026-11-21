@@ -11,7 +11,7 @@
  * p3vI, 396705.00162c6ea9.js:564237-564553 (payment methods).
  * wbWw/Bhuf/YoTg/JGV6, async/899311.9233e1594e.js (billing read shapes).
  */
-import { claimSiteTrial, getSiteAccount, getSiteSessionToken, getSiteTrialPlan, refreshSiteAccount } from './site-account.mjs?v=39c29eae31156e71';
+import { claimSiteTrial, getSiteAccount, getSiteSessionToken, getSiteTrialPlan, refreshSiteAccount } from './site-account.mjs?v=ca63aad189abab8c';
 
 export const LOCAL_PRICING_REFERENCE = Object.freeze({
   source: 'https://learn.chatgpt.com/docs/pricing',
@@ -139,8 +139,72 @@ const EMPTY_BILLING_READS = new Map([
   ['/user_segments', () => ({ segments: {}, adapter_source: LOCAL_MARKER })],
 ]);
 
+const siteUsageSource = 'site-docode';
+const secondsPerDay = 86_400;
+const usageNumber = new Intl.NumberFormat();
+const requestCount = value => Number.isSafeInteger(value) && value >= 0 ? value : null;
+
+function dailyRequestLimit(daily, currentTime) {
+  const used = requestCount(daily?.requests);
+  const limit = requestCount(daily?.limit);
+  const resetsAt = requestCount(daily?.resetsAt);
+  if (used === null || !limit || resetsAt === null || resetsAt <= currentTime) return null;
+  const resetAt = Math.floor(resetsAt / 1_000);
+  return {
+    allowed: used < limit,
+    limit_reached: used >= limit,
+    primary_window: {
+      used_percent: Math.min(100, used / limit * 100),
+      limit_window_seconds: secondsPerDay,
+      reset_after_seconds: Math.max(0, resetAt - Math.floor(currentTime / 1_000)),
+      reset_at: resetAt,
+    },
+    secondary_window: null,
+  };
+}
+
+function nativeUsage(receipt, membership, identity, currentTime) {
+  if (receipt?.plan?.id !== membership.id || !identity?.userId || !identity?.accountId) return null;
+  const source = Array.isArray(receipt.sources) && receipt.sources.find(row => row?.source === siteUsageSource);
+  const requested = requestCount(source?.requests);
+  if (requested === null) return null;
+  const completed = requestCount(source.completed);
+  const reports = requestCount(source.token_reports);
+  if (completed === null || reports === null || completed > requested || reports > requested) return null;
+  const input = requestCount(source.input_tokens);
+  const output = requestCount(source.output_tokens);
+  const plan = normalizeLocalMembership(receipt.plan, currentTime).plan_type;
+  const rateLimit = plan === 'free' ? dailyRequestLimit(source.freeDaily, currentTime) : null;
+  const rows = [
+    ['本站请求', requested],
+    ['已完成', completed],
+    ['有用量回执的请求', reports],
+    ['输入令牌（已回报）', input],
+    ['输出令牌（已回报）', output],
+  ].filter(([, value]) => value !== null).map(([label, value]) => ({
+    label, value: { text: usageNumber.format(value), tone: 'neutral' },
+  }));
+  return {
+    user_id: identity.userId,
+    account_id: identity.accountId,
+    plan_type: plan,
+    rate_limit: rateLimit,
+    code_review_rate_limit: null,
+    credits: null,
+    ambient_usage: {
+      default: {
+        profile_subtext: usageNumber.format(requested) + ' 次本站请求',
+        source: { kind: 'included', heading: '本站已记录用量' },
+        menu: { rows },
+      },
+    },
+    adapter_source: siteUsageSource,
+    site_usage: { requests: requested, completed, token_reports: reports, input_tokens: input, output_tokens: output },
+  };
+}
+
 /**
- * API: createLocalPricingAdapter({readMembership?, diagnostics?, now?})
+ * API: createLocalPricingAdapter({readMembership?, readUsage?, readUsageIdentity?, diagnostics?, now?})
  * -> {handle(Request, canonicalPath?), getMembershipView()}.
  *
  * handle returns Response|null. Canonical paths omit /backend-api or
@@ -152,6 +216,8 @@ const EMPTY_BILLING_READS = new Map([
  */
 export function createLocalPricingAdapter({
   readMembership = () => null,
+  readUsage = () => null,
+  readUsageIdentity = () => null,
   diagnostics,
   now = Date.now,
 } = {}) {
@@ -170,6 +236,25 @@ export function createLocalPricingAdapter({
       .replace(/^\/(?:backend-api|__codex-api)(?=\/)/, '')
       .replace(/\/+$/, '') || '/';
     const method = request.method.toUpperCase();
+    if (path === '/wham/usage') {
+      if (method !== 'GET') return json({ detail: 'Method Not Allowed' }, 405, { Allow: 'GET' });
+      const owner = await readMembership();
+      if (!owner?.id) return json({ error: { code: 'SITE_AUTH_REQUIRED', message: '请先登录本站账户。' } }, 401);
+      try {
+        const receipt = await readUsage({ signal: request.signal });
+        request.signal.throwIfAborted();
+        const current = await readMembership();
+        const view = current?.id === owner.id ? nativeUsage(receipt, current, await readUsageIdentity(), now()) : null;
+        if (view) {
+          note(method, path, 'site-inference-usage');
+          return json(view);
+        }
+        return json({ error: { code: 'SITE_USAGE_UNAVAILABLE', message: '当前账户暂无本站用量记录。' } }, 404);
+      } catch {
+        request.signal.throwIfAborted();
+        return json({ error: { code: 'SITE_USAGE_CONNECTION_FAILED', message: '暂时无法读取本站用量。' } }, 503);
+      }
+    }
     const pricing = path.match(/^\/checkout_pricing_config\/configs\/([^/]+)$/);
     if (pricing) {
       note(method, path, 'public-reference-price');

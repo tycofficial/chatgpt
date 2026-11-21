@@ -1,5 +1,5 @@
 /** Explicit publication of real completed workspace deliverables into this site's Library. */
-import { workspacePath } from './browser-tool-executor.mjs?v=39c29eae31156e71';
+import { workspacePath } from './browser-tool-executor.mjs?v=ca63aad189abab8c';
 
 const FILE_ID = /^file_local_[0-9a-f]{32}$/;
 const SHA = /^[0-9a-f]{64}$/;

@@ -432,7 +432,7 @@ async function loginOfflineAdministrator(password) {
 
 export function loginSiteAccount(username, password) {
   const administrator = String(username).normalize('NFKC').trim().toLowerCase() === 'tyc';
-  if (globalThis.__CHATGPT_REPLICA_ENV__?.siteWorkspace) {
+  if (globalThis.__CHATGPT_REPLICA_ENV__?.siteAccountService) {
     if (administrator && isOffline()) return loginOfflineAdministrator(password);
     if (isOffline()) return Promise.reject(Error('请联网登录本站账户。'));
     return authenticateSiteAccount('/auth/login', username, password, { legacyGuestFallback: false }).catch(error => {
@@ -449,7 +449,7 @@ export function registerSiteAccount(username, password) {
   return authenticateSiteAccount('/auth/register', username, password);
 }
 
-export function logoutSiteAccount() {
+export function logoutSiteAccount({ waitForRemote = false } = {}) {
   const tabIsGuest = guestActive || getTabGuestFlag();
   const session = tabIsGuest ? null : readStoredSession() ?? remembered;
   const token = session?.kind === offlineAdminKind ? null : session?.token;
@@ -457,7 +457,10 @@ export function logoutSiteAccount() {
   forgetAccount(null, { removeStored: !tabIsGuest, receiptToken: session?.token });
   setTabGuest(false);
   setNativeSessionFlag('0');
-  if (isToken(token)) return api('/auth/logout', { body: {}, token, keepalive: true, timeoutMs: 2000 }).catch(() => {});
+  if (isToken(token)) {
+    const revocation = api('/auth/logout', { body: {}, token, keepalive: true, timeoutMs: 2000 }).catch(() => {});
+    if (waitForRemote) return revocation;
+  }
 }
 
 export async function claimSiteTrial(tier) {

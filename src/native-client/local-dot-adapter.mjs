@@ -191,10 +191,14 @@ export function createLocalDotAdapter({
   validateAppearance,
   makeAssetURL,
   getFileRecord,
+  files: fileService,
+  backgroundRoomPump = false,
   isOnline = () => globalThis.navigator?.onLine !== false,
 } = {}) {
   const bootstraps = new Map();
   const roomMessageUpdates = new Set();
+  const activeRooms = new Map();
+  let roomPumpStarted = false;
   const usesSitePolicy = () => siteAccountsOnly || isLocalSession() === true;
   function diagnostic(kind, details = {}) {
     diagnostics.push({ type: 'local-dot', kind, at: now(), ...details });
@@ -237,7 +241,7 @@ export function createLocalDotAdapter({
   }
   const save = (session, value) => writeJSON(stateKey(session), value, session);
   function publicProfile(row) {
-    const { thread_ids, room_reactions, room_journal, room_queue, room_automations, ...profile } = row;
+    const { thread_ids, room_reactions, room_journal, room_command_log, room_queue, room_automations, room_file_ids, ...profile } = row;
     const manifest = profile.avatar_manifest;
     if (profile.avatar_type === 'default' && ACCESSORIES.has(profile.avatar_id ?? profile.avatar)
       && manifest?.schema_version === 1 && manifest.tint === LOCAL_DOT_DEFAULT_APPEARANCE.color
@@ -368,12 +372,13 @@ export function createLocalDotAdapter({
   const roomReplyRoot = turn => turn.adapterMetadata?.clientMetadata?.dotReplyRootMessageId ?? roomReplyId(turn);
   const roomFiles = turn => turn.adapterMetadata?.classicUserMessage?.metadata?.attachments ?? [];
   const isRecovering = turn => turn?.status === 'interrupted' || (turn?.status === 'failed' && turn.adapterMetadata?.resumePolicy === 'automatic');
+  const nativeAttachment = file => ({ ...file, type: 'file', file_id: file.id, size_bytes: file.size, status: 'ready' });
   function roomUserMessage(session, turn, item, replyTarget) {
     const created_at = timestamp(turn.startedAt);
     const replyId = roomReplyId(turn);
     const text = turn.adapterMetadata?.clientMetadata?.dotUserText ?? item.content.filter(part => part.type === 'text').map(part => part.text).join('\n');
-    const attachments = roomFiles(turn);
-    return { id: item.id, role: 'user', account_user_id: session.accountUserId, created_at, updated_at: created_at,
+    const attachments = roomFiles(turn).map(nativeAttachment);
+    return { id: turn.adapterMetadata?.clientMetadata?.dotRoomMessageId ?? item.id, role: 'user', account_user_id: session.accountUserId, created_at, updated_at: created_at,
       request_id: turn.clientUserMessageId, content: { text, ...(attachments.length ? { attachments } : {}) },
       ...(replyId ? { reply_root_message_id: roomReplyRoot(turn), reply_to: { message_id: replyId, ...(replyTarget && { message: { ...replyTarget, reply_to: undefined } }) } } : {}),
     };
@@ -404,6 +409,10 @@ export function createLocalDotAdapter({
       const updatedAt = record?.updatedAt ?? message.updated_at;
       messages.set(message.id, { ...message, updated_at: updatedAt, reactions: reaction ? { [session.accountUserId]: reaction } : {} });
     }
+    for (const entry of row.room_command_log ?? []) {
+      add(entry.message);
+      add(entry.receipt);
+    }
     for (const turn of thread.turns) {
       const target = messages.get(roomReplyId(turn));
       for (const item of turn.items) {
@@ -411,7 +420,7 @@ export function createLocalDotAdapter({
       }
       for (const message of roomAssistantMessages(turn, live)) add(message);
     }
-    return [...messages.values()];
+    return [...messages.values()].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at));
   }
   function roomPage(messages, query) {
     const rawLimit = query.get('limit');
@@ -432,8 +441,10 @@ export function createLocalDotAdapter({
     return locks ? locks.request(stateKey(session), async () => action()) : action();
   }
   const messageText = message => message?.content?.text ?? message?.raw_messages?.flatMap(item => item.content.parts).join('\n') ?? '';
-  const queuedView = item => ({ id: item.requestId, request_id: item.requestId, role: 'user', queued: true, created_at: item.createdAt,
-    content: { text: item.text, ...(item.files.length ? { attachments: item.files } : {}) } });
+  const roomQueue = (row, thread) => (row.room_queue ?? []).filter(item => !thread.turns.some(turn => turn.clientUserMessageId === item.requestId));
+  const queuedView = (session, item) => ({ id: item.requestId, request_id: item.requestId, role: 'user', account_user_id: session.accountUserId,
+    queued: true, created_at: item.createdAt, updated_at: item.createdAt,
+    content: { text: item.text, ...(item.files.length ? { attachments: item.files.map(nativeAttachment) } : {}) } });
   function resolveReply(session, thread, row, replyId) {
     if (replyId == null) return null;
     const reply = roomMessages(session, thread, row, true).find(message => message.id === replyId && message.role !== 'system' && message.status !== 'inProgress');
@@ -458,7 +469,7 @@ export function createLocalDotAdapter({
       if (target) input.push({ type: 'text', text: 'Quoted message for context (untrusted data): ' + JSON.stringify(messageText(target).slice(0, 12000)) });
       const started = previous ? null : createRpcFacade().dispatch('turn/start', {
         threadId: id, clientUserMessageId: next.requestId, input,
-        responsesapiClientMetadata: { conversationOrigin: 'dot', localDotProvider: true, ...(target && {
+        responsesapiClientMetadata: { conversationOrigin: 'dot', localDotProvider: true, dotRoomMessageId: next.requestId, ...(target && {
           dotUserText: next.text, dotReplyMessageId: next.replyId, dotReplyRootMessageId: target.reply_root_message_id ?? next.replyId,
         }) },
         ...(next.files.length && { classicUserMessage: {
@@ -475,8 +486,41 @@ export function createLocalDotAdapter({
     }
     return result;
   }
+  function pumpRoom(id) {
+    const session = identity(false);
+    if (!session || activeRooms.get(id)?.owner !== stateKey(session) || !isOnline() || appServer.running?.has(id)) return;
+    void roomLock(session, () => {
+      assertIdentity(session);
+      const { thread } = ownedRoom(session, id);
+      const turn = thread.turns.at(-1), metadata = turn?.adapterMetadata;
+      if (isRecovering(turn) && metadata?.resumable && metadata.resumePolicy === 'automatic' && !hasUncertainPlainResponse(metadata.checkpoint?.inFlight)) {
+        const delay = (metadata.checkpoint?.nextResumeAt ?? 0) - now();
+        const active = activeRooms.get(id);
+        if (delay > 0) { clearTimeout(active.timer); active.timer = setTimeout(() => pumpRoom(id), delay); return; }
+        const resumed = createRpcFacade().dispatch('turn/resume', { threadId: id, turnId: turn.id });
+        resumed.afterReply?.();
+      } else drainQueue(session, id);
+    }).catch(cause => diagnostic('room-pump-error', { code: cause.code ?? 'LOCAL_DOT_PUMP_ERROR' }));
+  }
+  function activateRoom(session, id) {
+    if (!backgroundRoomPump) return;
+    if (!roomPumpStarted) {
+      roomPumpStarted = true;
+      appServer.subscribe(event => { if (event.method === 'turn/completed' && activeRooms.has(event.params.threadId)) queueMicrotask(() => pumpRoom(event.params.threadId)); });
+      globalThis.addEventListener?.('online', () => { for (const roomId of activeRooms.keys()) pumpRoom(roomId); tickAutomations(); });
+      const interval = setInterval(tickAutomations, 15000);
+      interval.unref?.();
+    }
+    const owner = stateKey(session);
+    const previous = activeRooms.get(id);
+    if (previous?.owner === owner) return;
+    clearTimeout(previous?.timer);
+    activeRooms.set(id, { owner, timer: null });
+    queueMicrotask(() => pumpRoom(id));
+  }
   function enqueueMessage(session, id, next) {
     const { data, row, thread } = ownedRoom(session, id);
+    if (row.room_command_log?.some(value => value.message.request_id === next.requestId)) throw error('此 Dot 消息请求已使用。', 409, 'LOCAL_DOT_REQUEST_CONFLICT');
     const target = resolveReply(session, thread, row, next.replyId);
     const previous = thread.turns.find(turn => turn.clientUserMessageId === next.requestId);
     if (previous) {
@@ -496,33 +540,79 @@ export function createLocalDotAdapter({
       queue.push(next);
       save(session, data);
     }
-    const admitted = drainQueue(session, id);
-    return admitted?.request_id === next.requestId ? json(admitted) : json(queuedView(pending ?? next), 202);
+    const last = thread.turns.at(-1);
+    const admitted = drainQueue(session, id, backgroundRoomPump && last?.adapterMetadata?.resumePolicy !== 'automatic');
+    return admitted?.request_id === next.requestId ? json(admitted) : json(queuedView(session, pending ?? next), 202);
   }
+  const readOwnedFileRecord = getFileRecord ?? (typeof fileService?.readFile === 'function'
+    ? async (id, options) => (await fileService.readFile(id, options)).record : null);
   async function messageAttachments(value, signal) {
     if (value == null) return [];
     if (!Array.isArray(value) || value.length > 10) throw error('每条 Dot 消息最多可附加 10 个文件。');
-    if (value.length && typeof getFileRecord !== 'function') throw error('本站的 Dot 文件服务尚未接入。', 503, 'LOCAL_DOT_FILES_UNAVAILABLE');
-    const ids = value.map(file => file?.id);
+    if (value.length && !readOwnedFileRecord) throw error('本站的 Dot 文件服务尚未接入。', 503, 'LOCAL_DOT_FILES_UNAVAILABLE');
+    const ids = value.map(file => file?.type === 'file' ? file.file_id : file?.id);
     if (ids.some(id => !/^file_local_[0-9a-f]{32}$/.test(id ?? '')) || new Set(ids).size !== ids.length) throw error('Dot 附件引用无效。');
     return Promise.all(ids.map(async id => {
-      const file = await getFileRecord(id, { signal });
+      const file = await readOwnedFileRecord(id, { signal });
       if (file?.fileId !== id || file.status !== 'ready') throw error('Dot 附件还没有上传完成。', 422, 'LOCAL_DOT_FILE_NOT_READY');
       return { id, name: file.fileName, mime_type: file.mimeType, size: file.size };
     }));
   }
-  function journal(session, roomId, entryId, method, supplied) {
-    const { data, row } = ownedRoom(session, roomId);
-    const entries = row.room_journal ??= [];
-    if (method === 'GET' && !entryId) return json({ items: entries });
+  async function roomFileRequest(request, adapterPath, localPath, method, payload) {
+    const url = new URL(request.url);
+    const at = url.pathname.endsWith(adapterPath) ? url.pathname.slice(0, -adapterPath.length) : '';
+    const result = await fileService.handle(new Request(new URL(at + localPath, url), {
+      method, signal: request.signal, ...(payload && { body: JSON.stringify(payload) }),
+    }), localPath);
+    const body = await result?.json();
+    if (!result?.ok) throw error(body?.error?.message ?? body?.detail ?? '无法读取或保存此附件。', result?.status ?? 503, body?.error?.code ?? 'LOCAL_DOT_FILE_REQUEST_FAILED');
+    return body;
+  }
+  async function roomFile(session, roomId, request, path, fileId) {
+    const { row, thread } = ownedRoom(session, roomId);
+    if (!fileService) throw error('本站的 Dot 文件服务尚未接入。', 503, 'LOCAL_DOT_FILES_UNAVAILABLE');
+    if (fileId) {
+      const linked = row.room_file_ids?.includes(fileId) || thread.turns.some(turn => roomFiles(turn).some(file => file.id === fileId));
+      if (!linked || !/^file_local_[0-9a-f]{32}$/.test(fileId)) throw error('找不到这个 Dot 会话的附件。', 404, 'LOCAL_DOT_FILE_NOT_FOUND');
+      const record = await readOwnedFileRecord(fileId, { signal: request.signal });
+      const receipt = await roomFileRequest(request, path, '/files/download/' + fileId, 'GET');
+      assertIdentity(session);
+      return json({ ...nativeAttachment({ id: fileId, name: record.fileName, mime_type: record.mimeType, size: record.size }), download_url: receipt.download_url });
+    }
+    let multipart;
+    try { multipart = await request.formData(); } catch { throw error('Dot 附件需要 multipart 文件。', 415, 'LOCAL_DOT_INVALID_UPLOAD'); }
+    const file = multipart.get('file');
+    if (typeof file?.arrayBuffer !== 'function' || typeof file.name !== 'string') throw error('请选择要上传的文件。');
+    assertIdentity(session);
+    const receipt = await roomFileRequest(request, path, '/files', 'POST', { file_name: file.name, file_size: file.size, mime_type: file.type });
+    const id = receipt.file_id;
+    try {
+      const upload = new FormData();
+      upload.append('file', file, file.name);
+      await fileService.upload('POST', receipt.upload_url, { body: upload, signal: request.signal });
+      await roomFileRequest(request, path, `/files/${id}/uploaded`, 'POST', {});
+      const record = await readOwnedFileRecord(id, { signal: request.signal });
+      request.signal?.throwIfAborted();
+      await roomLock(session, () => {
+        const { data, row } = ownedRoom(session, roomId);
+        row.room_file_ids ??= [];
+        row.room_file_ids.push(id);
+        save(session, data);
+      });
+      return json(nativeAttachment({ id, name: record.fileName, mime_type: record.mimeType, size: record.size }));
+    } catch (cause) {
+      const current = identity(false);
+      if (current?.accountId === session.accountId && current.userId === session.userId) await fileService.cancelUpload(id).catch(() => {});
+      throw cause;
+    }
+  }
+  function changeJournal(entries, entryId, method, supplied) {
     const index = entries.findIndex(entry => entry.id === entryId);
     if (entryId && index === -1) throw error('这条日记已不存在。', 404, 'LOCAL_DOT_JOURNAL_NOT_FOUND');
-    if (method === 'GET') return json(entries[index]);
-    if (entryId && supplied?.revision !== entries[index].revision) throw error('这条日记已更新，请刷新后再编辑。', 409, 'LOCAL_DOT_JOURNAL_CONFLICT');
+    if (entryId && supplied?.revision != null && supplied.revision !== entries[index].revision) throw error('这条日记已更新，请刷新后再编辑。', 409, 'LOCAL_DOT_JOURNAL_CONFLICT');
     if (method === 'DELETE' && entryId) {
       entries.splice(index, 1);
-      save(session, data);
-      return new Response(null, { status: 204 });
+      return null;
     }
     if (method !== (entryId ? 'PATCH' : 'POST')) throw error('此日记操作不可用。', 405);
     if (!entryId && entries.length >= 200) throw error('这个浏览器中的 Dot 日记已达 200 条。', 413);
@@ -535,8 +625,106 @@ export function createLocalDotAdapter({
     };
     if (entryId) entries[index] = entry;
     else entries.unshift(entry);
+    return entry;
+  }
+  function nativeJournal(session, thread, row, url) {
+    const view = url.searchParams.get('view');
+    const taskId = url.searchParams.get('task_id');
+    const messageByTurn = new Map(thread.turns.map(turn => {
+      const user = turn.items.find(item => item.type === 'userMessage');
+      return [turn.id, user ? [roomUserMessage(session, turn, user), ...roomAssistantMessages(turn, true)] : []];
+    }));
+    const notes = row.room_journal ?? [];
+    if (taskId != null) {
+      const turn = thread.turns.find(item => item.id === taskId);
+      const note = notes.find(item => item.id === taskId);
+      if (!turn && !note) throw error('找不到此日记条目。', 404, 'LOCAL_DOT_JOURNAL_NOT_FOUND');
+      if (url.searchParams.get('files_only') === 'true') return json({ files: (turn ? roomFiles(turn) : []).map(file => ({ kind: 'file', id: file.id, label: file.name, mime: file.mime_type })), before: null });
+      const messages = note ? [{ id: note.id, role: 'user', content: { text: note.content }, created_at: note.updated_at }] : messageByTurn.get(taskId);
+      if (view === 'progress') {
+        const updates = messages.filter(message => message.role !== 'user' && messageText(message)).map(message => ({
+          id: message.id, at: Date.parse(message.created_at) / 1000, message_id: message.id,
+          kind: message.role === 'system' ? 'blocked' : turn.status === 'completed' ? 'delivered' : 'finding',
+          title: message.role === 'system' ? '运行状态' : row.display_name, detail: messageText(message),
+        }));
+        return json({ before: null, resume_message_id: messages[0]?.id ?? null, exchanges: updates.length ? [{ revision: String(turn.completedAt ?? turn.startedAt), items: updates }] : [] });
+      }
+      return json({ before: null, turns: [{ id: taskId, messages: messages.filter(message => message.role !== 'system').map(message => ({
+        id: message.id, at: Date.parse(message.created_at) / 1000, speaker: message.role === 'user' ? 'owner' : 'dot', text: messageText(message),
+      })) }] });
+    }
+    const title = text => text.trim().split('\n')[0]?.slice(0, 80) || 'Dot';
+    const tasks = notes.map(note => ({ id: note.id, title: title(note.content), outcome_state: 'reached', description: note.content,
+      progress: null, input_needed: null, resume_message_id: null,
+    }));
+    const items = [];
+    for (const turn of [...thread.turns].reverse()) {
+      const messages = messageByTurn.get(turn.id);
+      if (!messages.length) continue;
+      const label = title(messageText(messages[0]));
+      const status = turn.status === 'completed' ? 'complete' : turn.status === 'failed' ? 'failed' : turn.status === 'interrupted' ? 'cancelled' : 'in_progress';
+      const output = messages.findLast(message => message.role === 'assistant');
+      tasks.push({ id: turn.id, title: label, outcome_state: status === 'complete' ? 'reached' : 'ongoing', description: messageText(messages[0]),
+        progress: output ? messageText(output) : null, input_needed: null, resume_message_id: messages[0].id });
+      items.push({ id: turn.id, topic_id: turn.id, title: label, status,
+        description: output ? messageText(output) : null, completed_at: turn.completedAt ?? null, message_refs: messages.map(message => message.id), outputs: [] });
+    }
+    const taskCursor = url.searchParams.get('cursor');
+    const itemCursor = url.searchParams.get('item_cursor');
+    function page(rows, cursor) {
+      const start = cursor == null || cursor === 'null' ? 0 : Number(/^local-journal:(\d+)$/.exec(cursor)?.[1]);
+      if (!Number.isSafeInteger(start) || start > rows.length) throw error('无效的 Dot 日记分页位置。');
+      const end = Math.min(rows.length, start + 30);
+      return [rows.slice(start, end), end < rows.length ? `local-journal:${end}` : null];
+    }
+    const [visibleTasks, before] = page(tasks, taskCursor), [visibleItems, itemsBefore] = page(items, itemCursor);
+    return json({ tasks: visibleTasks, items: visibleItems, before, items_before: itemsBefore });
+  }
+  function journal(session, roomId, entryId, method, supplied, url) {
+    const { data, row, thread } = ownedRoom(session, roomId);
+    const entries = row.room_journal ??= [];
+    if (method === 'GET' && !entryId) return url.searchParams.has('view') ? nativeJournal(session, thread, row, url) : json({ items: entries });
+    if (method === 'GET') {
+      const entry = entries.find(value => value.id === entryId);
+      if (!entry) throw error('这条日记已不存在。', 404, 'LOCAL_DOT_JOURNAL_NOT_FOUND');
+      return json(entry);
+    }
+    if (entryId && !Number.isSafeInteger(supplied?.revision)) throw error('请提供当前日记版本。', 409, 'LOCAL_DOT_JOURNAL_CONFLICT');
+    const entry = changeJournal(entries, entryId, method, supplied);
     save(session, data);
-    return json(entry, entryId ? 200 : 201);
+    return entry == null ? new Response(null, { status: 204 }) : json(entry, entryId ? 200 : 201);
+  }
+  function roomCommand(session, roomId, requestId, text, action) {
+    const { data, row, thread } = ownedRoom(session, roomId);
+    const commands = row.room_command_log ??= [];
+    const old = commands.find(value => value.message.request_id === requestId);
+    if (old && old.message.content.text === text) return json(old.message);
+    if (old || thread.turns.some(turn => turn.clientUserMessageId === requestId) || roomQueue(row, thread).some(item => item.requestId === requestId)) throw error('此 Dot 消息请求已使用。', 409, 'LOCAL_DOT_REQUEST_CONFLICT');
+    const output = action(row, thread);
+    const at = new Date(now()).toISOString();
+    const message = { id: requestId, request_id: requestId, role: 'user', account_user_id: session.accountUserId,
+      content: { text }, created_at: at, updated_at: at };
+    const receipt = { id: uuid(), role: 'system', content: { type: 'text', text: output }, preview: output, created_at: at, updated_at: at };
+    commands.push({ message, receipt });
+    save(session, data);
+    publishRoomUpdate({ type: 'calpico-message-add', payload: { room_id: roomId, message: receipt } });
+    return json(message);
+  }
+  function journalCommand(row, command) {
+    const entries = row.room_journal ??= [];
+    const [, verb, rest = ''] = command;
+    const [entryId, ...chunks] = rest.trim().split(/\s+/u);
+    if (verb === 'add' && rest.trim()) return '已保存日记 · ' + changeJournal(entries, null, 'POST', { content: rest }).id;
+    if (verb === 'edit' && entryId && chunks.length) {
+      changeJournal(entries, entryId, 'PATCH', { content: rest.trim().slice(entryId.length).trimStart() });
+      return '已修改日记 · ' + entryId;
+    }
+    if (verb === 'delete' && entryId && !chunks.length) {
+      changeJournal(entries, entryId, 'DELETE', {});
+      return '已删除日记 · ' + entryId;
+    }
+    if (verb === 'list' && !entryId) return entries.length ? entries.map(entry => `${entry.id} · ${entry.content.trim().split('\n')[0].slice(0, 80)}`).join('\n') : '日记里还没有条目。';
+    return '日记命令：/journal add 内容、/journal list、/journal edit 编号 内容、/journal delete 编号。';
   }
   function automationView(schedule, thread) {
     const turn = thread?.turns.find(value => value.clientUserMessageId === schedule.last_request_id);
@@ -549,57 +737,184 @@ export function createLocalDotAdapter({
     };
     return { ...schedule, last_run: lastRun };
   }
-  function automations(session, profileId, scheduleId, run, method, supplied, url) {
-    const data = state(session), row = findProfile(data, profileId);
-    const thread = appServer.threads.get(row.active_root_thread_id);
+  function createSchedule(row, supplied) {
+    const name = safeText(supplied.name, 'automation name', 120).trim();
+    const prompt = safeText(supplied.prompt, 'automation prompt', 12000);
+    const minutes = supplied.interval_minutes ?? 0;
+    if (!name || !prompt.trim() || !Number.isSafeInteger(minutes) || minutes < 0 || minutes > 10080) throw error('请输入任务名称、提示词和有效间隔。');
     const rows = row.room_automations ??= [];
-    if (method === 'GET' && !scheduleId) return json(pagination(rows.map(row => automationView(row, thread)), url));
-    if (method === 'POST' && !scheduleId) {
-      const name = safeText(supplied.name, 'automation name', 120).trim();
-      const prompt = safeText(supplied.prompt, 'automation prompt', 12000);
-      const minutes = supplied.interval_minutes ?? 0;
-      if (!name || !prompt.trim() || !Number.isSafeInteger(minutes) || minutes < 0 || minutes > 10080) throw error('请输入任务名称、提示词和有效间隔。');
-      if (rows.length >= 30) throw error('一个 Dot 最多保存 30 条自动化。', 413);
-      const row = { id: uuid(), name, prompt, interval_minutes: minutes, enabled: true, next_at: minutes ? now() + minutes * 60000 : null, last_request_id: null };
-      rows.push(row);
-      save(session, data);
-      return json(automationView(row, thread), 201);
+    if (rows.length >= 30) throw error('一个 Dot 最多保存 30 条自动化。', 413);
+    const at = new Date(now()).toISOString();
+    const created = { id: uuid(), name, prompt, interval_minutes: minutes, enabled: true, next_at: minutes ? now() + minutes * 60000 : null,
+      created_at: at, updated_at: at, last_request_id: null };
+    rows.push(created);
+    return created;
+  }
+  function setScheduleEnabled(row, schedule, enabled) {
+    if (typeof enabled !== 'boolean') throw error('请选择启动或停用。');
+    if (schedule.enabled === enabled) return false;
+    schedule.enabled = enabled;
+    schedule.updated_at = new Date(now()).toISOString();
+    schedule.next_at = enabled && schedule.interval_minutes ? now() + schedule.interval_minutes * 60000 : null;
+    if (!enabled && row.room_queue?.some(item => item.requestId === schedule.last_request_id)) {
+      row.room_queue = row.room_queue.filter(item => item.requestId !== schedule.last_request_id);
+      schedule.last_request_id = null;
     }
-    const schedule = rows.find(row => row.id === scheduleId);
-    if (!schedule) throw error('找不到这条自动化。', 404, 'LOCAL_DOT_AUTOMATION_NOT_FOUND');
-    if (method === 'PATCH' && !run) {
-      if (typeof supplied.enabled !== 'boolean') throw error('请选择启动或停用。');
-      if (schedule.enabled !== supplied.enabled) {
-        schedule.enabled = supplied.enabled;
-        schedule.next_at = schedule.enabled && schedule.interval_minutes ? now() + schedule.interval_minutes * 60000 : null;
-        if (!schedule.enabled && row.room_queue?.some(item => item.requestId === schedule.last_request_id)) {
-          row.room_queue = row.room_queue.filter(item => item.requestId !== schedule.last_request_id);
-          schedule.last_request_id = null;
-        }
-        save(session, data);
-      }
-      return json(automationView(schedule, thread));
-    }
-    if (!run || method !== 'POST') throw error('此自动化操作不可用。', 405);
+    return true;
+  }
+  function queueAutomationRun(row, thread, schedule, supplied) {
     if (!isOnline()) throw error('联网后可以执行自动化。', 503, 'LOCAL_DOT_OFFLINE');
     if (!schedule.enabled) throw error('此自动化已停用。', 409, 'LOCAL_DOT_AUTOMATION_DISABLED');
     if (!row.messaging_room_id || !thread) throw error('请先打开 Dot 对话。', 409);
     const due = supplied.scheduled_for;
-    if (due != null && (schedule.next_at !== due || due > now())) return json(automationView(schedule, thread));
+    if (due != null && (schedule.next_at !== due || due > now())) return false;
     const latest = automationView(schedule, thread).last_run;
-    if (latest?.status === 'queued' || latest?.status === 'inProgress') return json(automationView(schedule, thread));
+    if (latest?.status === 'queued' || latest?.status === 'inProgress') return false;
     const requestId = safeText(supplied.request_id, 'automation request ID', 120);
     if (!requestId) throw error('自动化请求 ID 缺失。');
     const runId = `dot-automation-${schedule.id}-${due ?? requestId}`;
-    if (thread.turns.some(turn => turn.clientUserMessageId === runId)) return json(automationView(schedule, thread));
+    if (thread.turns.some(turn => turn.clientUserMessageId === runId)) return false;
     const queue = row.room_queue ??= [];
     if (queue.length >= 16) throw error('Dot 的待发送队列已满。', 429, 'LOCAL_DOT_QUEUE_FULL');
-    queue.push({ requestId: runId, text: schedule.prompt, replyId: null, files: [], createdAt: new Date(now()).toISOString() });
+    schedule.updated_at = new Date(now()).toISOString();
+    queue.push({ requestId: runId, text: schedule.prompt, replyId: null, files: [], createdAt: schedule.updated_at });
     schedule.last_request_id = runId;
     if (schedule.interval_minutes) schedule.next_at = now() + schedule.interval_minutes * 60000;
+    return true;
+  }
+  function tickAutomations() {
+    const session = identity(false);
+    if (!session || !isOnline()) return;
+    for (const [id, active] of activeRooms) if (active.owner === stateKey(session)) {
+      void roomLock(session, () => {
+        assertIdentity(session);
+        const { data, row, thread } = ownedRoom(session, id);
+        const due = row.room_automations?.find(schedule => schedule.enabled && schedule.next_at != null && schedule.next_at <= now());
+        if (!due || !queueAutomationRun(row, thread, due, { scheduled_for: due.next_at, request_id: 'scheduled' })) return;
+        save(session, data);
+        drainQueue(session, id);
+      }).catch(cause => diagnostic('automation-tick-error', { code: cause.code ?? 'LOCAL_DOT_AUTOMATION_TICK' }));
+    }
+  }
+  function nativeAutomation(row, schedule, thread) {
+    return { ...automationView(schedule, thread), title: schedule.name, user_access: 'owner', aeon_id: row.id,
+      conversation_id: row.messaging_room_id ?? row.active_root_thread_id, executor: 'local', can_run_manually: true,
+      default_timezone: 'UTC', email_enabled: false, notifications_enabled: false, is_enabled: schedule.enabled,
+      timing_mode: 'exact_schedule', schedule: schedule.interval_minutes ? 'RRULE:FREQ=MINUTELY;INTERVAL=' + schedule.interval_minutes : '',
+      schedule_components: { frequency: schedule.interval_minutes ? 'minutely' : 'once', start_time: null },
+      next_run_times: schedule.next_at == null ? [] : [new Date(schedule.next_at).toISOString()],
+      updated_at: schedule.updated_at ?? row.updated_at, created_at: schedule.created_at ?? row.created_at,
+      execution_scope: 'site-browser-online',
+    };
+  }
+  function automationCommand(row, thread, requestId, command) {
+    const [, verb, rest = ''] = command;
+    const rows = row.room_automations ??= [];
+    if (verb === 'add') {
+      const [name, interval, ...description] = rest.split('|');
+      if (name?.trim() && /^\d+$/.test(interval?.trim() ?? '') && description.join('|').trim()) {
+        const schedule = createSchedule(row, { name, interval_minutes: Number(interval), prompt: description.join('|').trim() });
+        return `已创建自动化 · ${schedule.id}\n定时运行需要保持本站页面打开且联网。`;
+      }
+    }
+    if (verb === 'list' && !rest.trim()) return rows.length ? rows.map(schedule => {
+      const view = automationView(schedule, thread);
+      return `${schedule.id} · ${schedule.name} · ${schedule.enabled ? '启用' : '停用'}${view.last_run?.output ? '\n' + view.last_run.output : ''}`;
+    }).join('\n') : '没有已保存的自动化。';
+    if (['run','off','on'].includes(verb) && rest.trim()) {
+      const schedule = rows.find(item => item.id === rest.trim());
+      if (!schedule) throw error('找不到这条自动化。', 404, 'LOCAL_DOT_AUTOMATION_NOT_FOUND');
+      if (verb === 'run') return queueAutomationRun(row, thread, schedule, { request_id: requestId }) ? '自动化已排队，运行结果将出现在当前对话。' : '这条自动化正在等待或运行。';
+      setScheduleEnabled(row, schedule, verb === 'on');
+      return verb === 'on' ? '已启用自动化。' : '已停用自动化。';
+    }
+    return '自动化命令：/automation add 名称 | 分钟 | 提示词（0 为手动）、/automation list、/automation run 编号、/automation off 编号。';
+  }
+  function automations(session, profileId, scheduleId, run, method, supplied, url) {
+    const data = state(session), row = findProfile(data, profileId);
+    const thread = appServer.threads.get(row.active_root_thread_id);
+    const rows = row.room_automations ??= [];
+    if (method === 'GET' && !scheduleId) return json(pagination(rows.map(schedule => nativeAutomation(row, schedule, thread)), url));
+    if (method === 'POST' && !scheduleId) {
+      const created = createSchedule(row, supplied);
+      save(session, data);
+      return json(automationView(created, thread), 201);
+    }
+    const schedule = rows.find(row => row.id === scheduleId);
+    if (!schedule) throw error('找不到这条自动化。', 404, 'LOCAL_DOT_AUTOMATION_NOT_FOUND');
+    if (method === 'PATCH' && !run) {
+      if (setScheduleEnabled(row, schedule, supplied.enabled)) save(session, data);
+      return json(automationView(schedule, thread));
+    }
+    if (!run || method !== 'POST') throw error('此自动化操作不可用。', 405);
+    if (!queueAutomationRun(row, thread, schedule, supplied)) return json(automationView(schedule, thread));
     save(session, data);
     drainQueue(session, row.messaging_room_id);
     return json(automationView(schedule, appServer.threads.get(thread.id)), 202);
+  }
+  function nativeRunRecord(schedule, row, turn) {
+    const status = turn.status === 'completed' ? 'completed' : turn.status === 'failed' ? 'failed' : turn.status === 'interrupted' ? 'cancelled' : 'in_progress';
+    const output = turn.items.findLast(item => item.type === 'agentMessage' && item.phase !== 'commentary' && item.text)?.text ?? '';
+    return { id: turn.id, automation_id: schedule.id, conversation_id: row.messaging_room_id, status, output,
+      started_at: timestamp(turn.startedAt), created_at: timestamp(turn.startedAt), updated_at: timestamp(turn.completedAt ?? turn.startedAt),
+      error: turn.error?.message ?? null,
+    };
+  }
+  function nativeAutomationRequest(session, parts, method, supplied, url) {
+    const data = state(session);
+    const [resource, action, sub, item] = parts.slice(1);
+    const rows = data.profiles.flatMap(row => (row.room_automations ?? []).map(schedule => ({ row, schedule,
+      thread: appServer.threads.get(row.active_root_thread_id) })));
+    if (resource === 'automations' && (!action && method === 'GET' || action === 'query' && method === 'POST')) {
+      const query = supplied?.query?.trim?.()?.toLocaleLowerCase();
+      const filter = supplied?.filter ?? url.searchParams.get('filter');
+      const visible = url.searchParams.get('include_dot_context') === 'false' ? [] : rows
+        .filter(({ schedule }) => (!query || `${schedule.name}\n${schedule.prompt}`.toLocaleLowerCase().includes(query)) &&
+          (filter !== 'active' || schedule.enabled) && (filter !== 'paused' || !schedule.enabled));
+      if (supplied?.cursor) url.searchParams.set('cursor', supplied.cursor);
+      return json(pagination(visible.map(({ row, schedule, thread }) => nativeAutomation(row, schedule, thread)), url));
+    }
+    if (resource === 'automations' && action === 'save' && method === 'POST' && !supplied.jawbone_id) {
+      const row = data.profiles.find(profile => profile.id === supplied.aeon_id || typeof profile.messaging_room_id === 'string' &&
+        [supplied.conversation_id, supplied.source_conversation_id].includes(profile.messaging_room_id));
+      if (!row || supplied.executor === 'cloud') throw error('本站的 Dot 定时任务在浏览器中运行。请在 Dot 对话发送 /automation 查看创建方式。', 422, 'LOCAL_DOT_CLOUD_AUTOMATION_UNAVAILABLE');
+      const fixedRule = /^(?:RRULE:)?FREQ=MINUTELY;INTERVAL=(\d+)(?:;BYSECOND=0)?$/i.exec(supplied.schedule?.trim?.() ?? '');
+      if (supplied.schedule && !fixedRule) throw error('此浏览器任务需要固定分钟间隔。', 422, 'LOCAL_DOT_AUTOMATION_RULE_UNSUPPORTED');
+      const schedule = createSchedule(row, { name: supplied.title, prompt: supplied.prompt, interval_minutes: Number(fixedRule?.[1] ?? 0) });
+      save(session, data);
+      return json(nativeAutomation(row, schedule, appServer.threads.get(row.active_root_thread_id)));
+    }
+    const id = resource === 'automation' ? action : supplied?.jawbone_id ?? supplied?.automation_id;
+    const owned = rows.find(value => value.schedule.id === id);
+    if (!owned) throw error('找不到这条 Dot 自动化。', 404, 'LOCAL_DOT_AUTOMATION_NOT_FOUND');
+    const { row, schedule, thread } = owned;
+    if (resource === 'automations' && action === 'set_status' && method === 'POST') {
+      if (setScheduleEnabled(row, schedule, supplied.is_enabled)) save(session, data);
+      return json(nativeAutomation(row, schedule, thread));
+    }
+    if (resource === 'automations' && action === 'remove' && method === 'POST') {
+      setScheduleEnabled(row, schedule, false);
+      row.room_automations = row.room_automations.filter(value => value !== schedule);
+      save(session, data);
+      return json({ id });
+    }
+    if (resource === 'automation' && !sub && method === 'GET') return json(nativeAutomation(row, schedule, thread));
+    if (resource === 'automation' && sub === 'run' && method === 'POST') {
+      if (queueAutomationRun(row, thread, schedule, { request_id: supplied.idempotency_key })) {
+        save(session, data);
+        drainQueue(session, row.messaging_room_id);
+      }
+      return json({ automation_id: id, status: 'accepted' }, 202);
+    }
+    if (resource === 'automation' && sub === 'runs' && method === 'GET') {
+      const prefix = `dot-automation-${schedule.id}-`;
+      const runs = (thread?.turns ?? []).filter(turn => turn.clientUserMessageId?.startsWith(prefix)).reverse().map(turn => nativeRunRecord(schedule, row, turn));
+      if (!item) return json(pagination(runs, url));
+      const run = item === 'latest' ? runs[0] ?? null : runs.find(value => value.id === item);
+      if (run === undefined) throw error('找不到这次运行。', 404, 'LOCAL_DOT_AUTOMATION_RUN_NOT_FOUND');
+      return json(item === 'latest' ? { last_run: run, latest_update: run ? { run } : null } : { run });
+    }
+    throw error('此 Dot 自动化操作不可用。', 501, 'LOCAL_DOT_SERVICE_UNAVAILABLE');
   }
   function subscribeRoomMessages(listener) {
     const session = identity(false);
@@ -618,11 +933,17 @@ export function createLocalDotAdapter({
     roomMessageUpdates.add(deliver);
     return () => { roomMessageUpdates.delete(deliver); unsubscribe(); };
   }
+  function publishRoomUpdate(update) {
+    for (const deliver of roomMessageUpdates) {
+      try { deliver(update); } catch { diagnostic('room-message-update-listener-error'); }
+    }
+  }
   async function handle(request, canonicalPath) {
     const url = new URL(request.url), requestPath = canonicalPath ?? url.pathname;
     const nativePetUpdate = request.method === 'PATCH' && /^\/cloud-aeons\/local-dot-[A-Za-z0-9-]{1,100}$/.test(requestPath);
     const path = nativePetUpdate ? '/tbo' + requestPath.slice('/cloud-aeons'.length) : requestPath;
-    const relevant = path === '/tbo' || path.startsWith('/tbo/') || path.startsWith('/cloud-aeons/avatar-snapshots')
+    const nativeSchedule = path === '/automations' || /^\/automations\/(?:query|save|set_status|remove)$/.test(path) || path.startsWith('/automation/');
+    const relevant = nativeSchedule || path === '/tbo' || path.startsWith('/tbo/') || path.startsWith('/cloud-aeons/avatar-snapshots')
       || path.startsWith('/local-dot/assets/') || path.startsWith('/files/download/local-dot-avatar-')
       || path === '/pins' || path.startsWith('/pins/feature/') || path.startsWith('/messaging/rooms/');
     if (!relevant) return null;
@@ -631,24 +952,34 @@ export function createLocalDotAdapter({
       const method = request.method.toUpperCase();
       const parts = decodePath(path);
       request.signal?.throwIfAborted();
+      if (nativeSchedule) {
+        const supplied = method === 'POST' ? await body(request) : null;
+        request.signal?.throwIfAborted();
+        return await roomLock(session, () => nativeAutomationRequest(session, parts, method, supplied, url));
+      }
       if (parts[1] === 'messaging' && parts[2] === 'rooms') {
         const id = parts[3], action = parts[4];
         if (parts.length === 4 && method === 'GET') {
           const { row, thread } = ownedRoom(session, id);
+          activateRoom(session, id);
           const last_read_at = row.last_read_at ?? null;
           return json({ id, type: 'DM', app_source: 'chatgpt:messaging', aeon_id: row.id, name: row.display_name,
             dm_lifecycle_state: 'connected', created_at: row.created_at, updated_at: timestamp(thread.updatedAt), last_read_at,
             members: [{ account_user_id: session.accountUserId, name: session.name }, { account_user_id: row.id, aeon_id: row.id, name: row.display_name }],
             member_profile_snapshots: [], read_receipts: last_read_at ? [{ account_user_id: session.accountUserId, last_read_at }] : [],
-            latest_messages: roomMessages(session, thread, row).slice(-20),
+            latest_messages: [...roomMessages(session, thread, row), ...roomQueue(row, thread).map(item => queuedView(session, item))].slice(-20),
           });
+        }
+        if (action === 'files' && (parts.length === 5 && method === 'POST' || parts.length === 6 && parts[5] !== 'uploads' && method === 'GET')) {
+          return await roomFile(session, id, request, path, parts[5]);
         }
         if (parts.length === 5 && action === 'messages' && method === 'GET') {
           const { row, thread } = ownedRoom(session, id);
           const live = url.searchParams.get('live') === '1';
           const messages = roomMessages(session, thread, row, live), replyRoot = url.searchParams.get('reply_root_message_id');
           if (replyRoot != null && !messages.some(message => message.id === replyRoot)) throw error('找不到要回复的 Dot 消息。', 404, 'LOCAL_DOT_MESSAGE_NOT_FOUND');
-          const scope = replyRoot == null ? messages : messages.filter(message => message.reply_root_message_id === replyRoot);
+          const queued = roomQueue(row, thread).map(item => queuedView(session, item));
+          const scope = replyRoot == null ? (live ? messages : [...messages, ...queued]) : messages.filter(message => message.reply_root_message_id === replyRoot);
           const page = roomPage(scope, url.searchParams);
           if (live) {
             const last = thread.turns.at(-1);
@@ -657,7 +988,7 @@ export function createLocalDotAdapter({
               resumable: last.adapterMetadata?.resumable === true && !hasUncertainPlainResponse(last.adapterMetadata.checkpoint?.inFlight),
               resume_policy: last.adapterMetadata?.resumePolicy ?? null, resume_at: last.adapterMetadata?.checkpoint?.nextResumeAt ?? null,
             } : null;
-            page.queued = (row.room_queue ?? []).filter(item => !thread.turns.some(turn => turn.clientUserMessageId === item.requestId)).map(queuedView);
+            page.queued = queued;
           }
           return json(page);
         }
@@ -668,7 +999,7 @@ export function createLocalDotAdapter({
         if (action === 'journal' && [5, 6].includes(parts.length) && ['GET','POST','PATCH','DELETE'].includes(method)) {
           const supplied = method === 'GET' ? null : await body(request);
           request.signal?.throwIfAborted();
-          return await roomLock(session, () => journal(session, id, parts[5], method, supplied));
+          return await roomLock(session, () => journal(session, id, parts[5], method, supplied, url));
         }
         if (parts.length === 5 && action === 'queue' && method === 'POST') {
           const supplied = await body(request);
@@ -691,9 +1022,7 @@ export function createLocalDotAdapter({
             row.room_reactions = { ...row.room_reactions, [messageId]: { reaction, updatedAt } };
             save(session, data);
             const update = { type: 'calpico-message-update', payload: { room_id: id, message_id: messageId } };
-            for (const deliver of roomMessageUpdates) {
-              try { deliver(update); } catch { diagnostic('room-message-update-listener-error'); }
-            }
+            publishRoomUpdate(update);
           }
           return new Response(null, { status: 204 });
         }
@@ -720,6 +1049,16 @@ export function createLocalDotAdapter({
             if ((!text.trim() && !files.length) || !requestId || (supplied.idempotency_token != null && supplied.idempotency_token !== requestId)) throw error('Invalid Dot message or request ID');
             const replyId = supplied.reply_to == null ? null : safeText(supplied.reply_to.message_id, 'Dot reply message ID');
             request.signal?.throwIfAborted();
+            if (!files.length && replyId == null) {
+              const journal = /^\/journal(?:\s+(add|list|edit|delete)(?:\s+([\s\S]*))?)?\s*$/u.exec(text.trim());
+              if (journal) return await roomLock(session, () => roomCommand(session, id, requestId, text, row => journalCommand(row, journal)));
+              const automation = /^\/automation(?:\s+(add|list|run|off|on)(?:\s+([\s\S]*))?)?\s*$/u.exec(text.trim());
+              if (automation) return await roomLock(session, () => {
+                const result = roomCommand(session, id, requestId, text, (row, thread) => automationCommand(row, thread, requestId, automation));
+                if (automation[1] === 'run') drainQueue(session, id, true);
+                return result;
+              });
+            }
             return await roomLock(session, () => enqueueMessage(session, id, { requestId, text, replyId, files, createdAt: new Date(now()).toISOString() }));
           }
         }
@@ -886,6 +1225,7 @@ export function createLocalDotAdapter({
             row.messaging_room_id = thread.id;
             save(session, data);
           }
+          activateRoom(session, thread.id);
           return json(publicProfile(row));
         }
         if (parts.length === 4 && method === 'GET' && parts[3] === 'root-thread') return json({ root_thread_id: row.active_root_thread_id });
@@ -905,6 +1245,8 @@ export function createLocalDotAdapter({
           }
           return json({ environmentId: null, status: 'unknown', capabilities: [] });
         }
+        if (parts[3] === 'environment' && parts[4] === 'wake') throw error('本站尚未配置云电脑执行服务。', 501, 'LOCAL_DOT_COMPUTER_UNCONFIGURED');
+        if (parts[3] === 'voice') throw error('本站尚未配置 Dot 实时语音服务。', 501, 'LOCAL_DOT_REALTIME_UNCONFIGURED');
       }
       throw error('This Dot operation needs a service that is not provided locally', 501, 'LOCAL_DOT_SERVICE_UNAVAILABLE');
     } catch (cause) {

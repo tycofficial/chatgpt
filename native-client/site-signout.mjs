@@ -1,4 +1,4 @@
-import { getSiteAuthEntryKind, isHistoricalSitePath, resolveSiteHomeUrl, siteRelativePath } from './site-paths.mjs?v=39c29eae31156e71';
+import { getSiteAuthEntryKind, isHistoricalSitePath, resolveSiteHomeUrl, siteRelativePath } from './site-paths.mjs?v=ca63aad189abab8c';
 
 const originalOrigin = 'https://chatgpt.com';
 
@@ -106,7 +106,7 @@ export function createSiteSignOutController({
     return completion ??= Promise.resolve().then(async () => {
       const target = getSiteSignedOutUrl(home());
       if (prepare) await runBounded(prepare, timeoutMs);
-      try { clearSiteAccount(); } catch {}
+      try { await clearSiteAccount(); } catch {}
       try { clearNativeSession(); } catch {}
       return target;
     });

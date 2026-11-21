@@ -1,13 +1,34 @@
 /** Resumable API/tool loop. Original frontend receives its existing item lifecycle. */
-import { isHostCheckpoint } from './preferred-host-transport.mjs?v=39c29eae31156e71';
-import { parseClassicInputMessages } from './classic-input-messages.mjs?v=39c29eae31156e71';
-import { compactPreparedUserContent, deduplicateProviderImages, isProviderContent, needsPreparedInputStorage } from './prepared-input-store.mjs?v=39c29eae31156e71';
-import { webSearchRequest, updateHostedSearch, interruptHostedSearch, webSearchReferences } from './local-web-search.mjs?v=39c29eae31156e71';
+import { createReplayDeltaGate, isHostCheckpoint } from './preferred-host-transport.mjs?v=ca63aad189abab8c';
+import { isSiteInferenceCheckpoint } from './site-inference-transport.mjs?v=ca63aad189abab8c';
+import { parseClassicInputMessages } from './classic-input-messages.mjs?v=ca63aad189abab8c';
+import { compactPreparedUserContent, deduplicateProviderImages, isProviderContent, needsPreparedInputStorage } from './prepared-input-store.mjs?v=ca63aad189abab8c';
+import { webSearchRequest, updateHostedSearch, interruptHostedSearch, webSearchReferences } from './local-web-search.mjs?v=ca63aad189abab8c';
 const clone = value => structuredClone(value);
 const CONTINUE = 'Continue the unfinished response from the saved text, without repeating it. Preserve the requested task, model and reasoning effort. Do not claim any tool succeeded unless its recorded output confirms it.';
 const inputStorageError = (message, cause) => Object.assign(Error(message), { code: 'LOCAL_INPUT_CHECKPOINT_STORAGE', status: 507, retryable: false, cause });
 const compactUsage = usage => Object.fromEntries(['input_tokens', 'output_tokens', 'total_tokens', 'prompt_tokens', 'completion_tokens', 'input_tokens_details', 'output_tokens_details', 'prompt_tokens_details', 'completion_tokens_details'].filter(key => usage[key] !== undefined).map(key => [key, clone(usage[key])]));
 const toolError = message => ({ isError: true, content: [{ type: 'text', text: message }], structuredContent: { error: message } });
+const durableResponse = transport => isHostCheckpoint(transport) || isSiteInferenceCheckpoint(transport);
+export const hasUncertainPlainResponse = frame => Boolean(frame && !frame.result && !durableResponse(frame.transport) && (frame.transport?.apiProviderId || frame.transport?.apiAttempted));
+export const plainInterruptionMessage = '连接中断，无法确认上一次请求的结果。已保存收到的回复，可在此对话中发送新消息继续。';
+const plainInterruption = () => Object.assign(Error(plainInterruptionMessage), { code: 'PLAIN_INFERENCE_INTERRUPTED', retryable: false });
+const canRetryStream = (error, message) => error.retryable === true || error.retryable !== false && ![400, 401, 402, 403, 404, 422].includes(error.status) && /fetch|network|stream|connection|timeout|terminated|socket|^load failed$/i.test(message);
+
+function observeReceipt(frame, metric, running, now) {
+  if (!isSiteInferenceCheckpoint(frame.transport)) return now;
+  const { startedAt, finishedAt } = frame.transport;
+  if (!Number.isFinite(startedAt) || !Number.isFinite(finishedAt) || finishedAt < startedAt) return now;
+  const duration = finishedAt - startedAt;
+  metric.workerStartedAt = startedAt;
+  metric.workerFinishedAt = finishedAt;
+  metric.workerDurationMs = duration;
+  const requestSentAt = metric.requestSentAt ?? metric.startedAt;
+  // Keep provider elapsed time when browser and Worker clocks disagree.
+  const end = finishedAt <= now && startedAt >= requestSentAt ? finishedAt : Math.min(now, requestSentAt + duration);
+  if (running.reasoning && !running.reasoningComplete) running.reasoning.startedAtMs = Math.max(running.turn.adapterMetadata.startedAtMs, end - duration);
+  return end;
+}
 function waitForRetry(ms, signal) { return new Promise((resolve, reject) => { const abort = () => { clearTimeout(timer); reject(signal.reason); }; const timer = setTimeout(() => { signal.removeEventListener('abort', abort); resolve(); }, ms); signal.addEventListener('abort', abort, { once: true }); if (signal.aborted) abort(); }); }
 function responsePhase(result) {
   const lastMessage = result.output_messages?.at(-1);
@@ -46,10 +67,10 @@ export async function runAgentTurn(server, running) {
     const settings = { ...server.readSettings(), model: turn.model, reasoningEffort: turn.reasoningEffort === 'ultra' ? 'max' : turn.reasoningEffort, reasoningMode: turn.reasoningMode ?? 'standard', autoPython: false };
     if (executor?.tools?.length) settings.apiTransport = server.agentOptions.toolTransport ?? 'responses';
     if (meta.webSearchIntent?.enabled) settings.apiTransport = 'responses';
-    const priority = turn.serviceTier === 'fast' && server.agentOptions.verifiedPriority === true;
+    const priority = turn.serviceTier === 'fast' && (server.agentOptions.requestPriority ?? server.agentOptions.verifiedPriority) === true;
     settings.fastMode = priority; settings.serviceTier = priority ? 'priority' : undefined;
     if (priority) settings.apiTransport = 'responses';
-    meta.serviceTierExecution = { uiServiceTier: turn.serviceTier ?? null, apiServiceTier: priority ? 'priority' : null, verifiedPriority: priority };
+    meta.serviceTierExecution = { uiServiceTier: turn.serviceTier ?? null, apiServiceTier: priority ? 'priority' : null, verifiedPriority: false };
     return settings;
   };
   try {
@@ -115,11 +136,12 @@ export async function runAgentTurn(server, running) {
     meta.underlyingApiEffort = turn.reasoningEffort === 'ultra' ? 'max' : turn.reasoningEffort;
     if (turn.reasoningEffort === 'ultra') {
       if (server.agentOptions.ultraOrchestration !== true) throw Object.assign(Error('Site Ultra orchestration is not enabled in this deployment. No provider request was submitted.'), { code: 'ULTRA_ORCHESTRATION_NOT_ENABLED', retryable: false });
-      const { createUltraToolExecutor } = await import('./site-ultra-orchestrator.mjs?v=39c29eae31156e71');
-      executor = createUltraToolExecutor({ baseExecutor: executor, streamCompletion: options => server.streamCompletion(options), turn, checkpoint: cp, save, getSettings: executionSettings, getContext: providerContext, getAbortMode: () => running.interruptReason === 'pagehide' ? 'pagehide' : signal.reason?.requiresTransportResume ? 'transport' : 'user', now: server.now, redact: errorText });
+      const { createUltraToolExecutor } = await import('./site-ultra-orchestrator.mjs?v=ca63aad189abab8c');
+      executor = createUltraToolExecutor({ baseExecutor: executor, streamCompletion: options => server.streamCompletion(options), turn, checkpoint: cp, save, getSettings: executionSettings, getContext: providerContext, getAbortMode: () => running.interruptReason === 'pagehide' ? 'pagehide' : signal.reason?.requiresTransportResume ? 'transport' : 'user', ephemeral: thread.ephemeral === true, now: server.now, redact: errorText });
     }
     // A partial response is genuine saved output, not a completed tool call.
-    const reattachFrame = cp.inFlight && (isHostCheckpoint(cp.inFlight.transport) || cp.inFlight.result);
+    const reattachFrame = cp.inFlight && (durableResponse(cp.inFlight.transport) || cp.inFlight.result);
+    if (hasUncertainPlainResponse(cp.inFlight)) throw plainInterruption();
     if (cp.partialResponse && !reattachFrame) {
       const partial = cp.partialResponse;
       if (partial.content) cp.transcript.push({ role: 'assistant', content: partial.content, ...(partial.phase ? { phase: partial.phase } : {}) });
@@ -172,7 +194,7 @@ export async function runAgentTurn(server, running) {
       if (turn.reasoningEffort === 'ultra') instruction.push({ role: 'system', content: 'This is the site-provided Ultra execution mode. Use delegate_tasks for independent analysis when it benefits the task; it runs1–3 real parallel workers from the same selected family at API max effort. Inspect their actual results and reconcile differences. You own the real file/Python tools and final synthesis. This is application orchestration, not OpenAI private Ultra infrastructure. Never claim a worker or tool succeeded when its result reports failure.' });
       const messages = [...instruction, ...providerContext()];
       let frame = cp.inFlight, metric;
-      if (frame && (isHostCheckpoint(frame.transport) || frame.result)) {
+      if (frame && (durableResponse(frame.transport) || frame.result)) {
         metric = cp.metrics[frame.metricIndex]; if (!metric) throw Error('The in-flight transport metric is missing; no replacement request was submitted');
         running.assistant = turn.items.find(item => item.id === frame.assistantItemId) ?? (cp.partialResponse?.content ? turn.items.findLast(item => item.type === 'agentMessage' && item.text === cp.partialResponse.content) : null);
         running.reasoning = turn.items.find(item => item.id === frame.reasoningItemId) ?? (cp.partialResponse?.reasoning ? turn.items.findLast(item => item.type === 'reasoning' && item.summary?.[0] === cp.partialResponse.reasoning) : null);
@@ -189,31 +211,40 @@ export async function runAgentTurn(server, running) {
       metric.requestedReasoningMode ??= settings.reasoningMode ?? 'standard';
       cp.state = 'model'; await save(); metric.requestSentAt ??= server.now();
       if (!frame.result) server.beginReasoning(running, { startedAtMs: metric.requestSentAt });
+      const siteReplay = isSiteInferenceCheckpoint(frame.transport);
+      const applyDelta = (_delta, assembled) => {
+        if (running.terminal) return;
+        if (metric.firstOutputAt == null && (assembled.content || assembled.reasoning || assembled.tool_calls?.length)) metric.firstOutputAt = server.now();
+        if (!siteReplay && metric.firstTextAt == null && assembled.content?.trim()) {
+          metric.firstTextAt = server.now();
+          meta.firstTextAtMs ??= metric.firstTextAt;
+        }
+        updateHostedSearch(server, running, assembled);
+        cp.partialResponse = { content: assembled.content || '', reasoning: assembled.reasoning || '', ...(assembled.phase ? { phase: assembled.phase } : {}) };
+        server.append(running, assembled.content || '', assembled.reasoning || '', assembled.phase, assembled.output_messages);
+        frame.assistantItemId = running.assistant?.id ?? frame.assistantItemId; frame.reasoningItemId = running.reasoning?.id ?? frame.reasoningItemId; frame.reasoningComplete = running.reasoningComplete === true;
+      };
+      const onDelta = siteReplay ? createReplayDeltaGate(cp.partialResponse, applyDelta) : applyDelta;
       let result;
       try {
         result = frame.result ? clone(frame.result) : await server.streamCompletion({ settings, messages, tools, toolChoice: searchRequest.toolChoice, signal,
           providerRoutingContext: { threadId: thread.id, conversationOrigin: thread.adapterMetadata?.conversationOrigin, isFreeChat: turn.executionSurface === 'chat' && !server.executionPolicy().modelSelection },
-          transportContext: { checkpoint: frame.transport, requestId: turn.id + ':' + metric.sequence, onCheckpoint: save, reattach: isHostCheckpoint(frame.transport), savedPartial: cp.partialResponse, requiredConcurrency: turn.reasoningEffort === 'ultra' ? 3 : 1, getAbortMode: () => running.interruptReason === 'pagehide' ? 'pagehide' : signal.reason?.requiresTransportResume ? 'transport' : 'user' },
-          onActivity: () => { if (metric.firstOutputAt == null) metric.firstOutputAt = server.now(); }, onDelta: (_delta, assembled) => {
-          if (running.terminal) return;
-          if (metric.firstOutputAt == null && (assembled.content || assembled.reasoning || assembled.tool_calls?.length)) metric.firstOutputAt = server.now();
-          updateHostedSearch(server, running, assembled);
-          cp.partialResponse = { content: assembled.content || '', reasoning: assembled.reasoning || '', ...(assembled.phase ? { phase: assembled.phase } : {}) };
-          server.append(running, assembled.content || '', assembled.reasoning || '', assembled.phase, assembled.output_messages);
-          frame.assistantItemId = running.assistant?.id ?? frame.assistantItemId; frame.reasoningItemId = running.reasoning?.id ?? frame.reasoningItemId; frame.reasoningComplete = running.reasoningComplete === true;
-        } });
-        metric.responseReceivedAt ??= server.now();
+          transportContext: { checkpoint: frame.transport, requestId: turn.id + ':' + metric.sequence, onCheckpoint: save, reattach: durableResponse(frame.transport), savedPartial: cp.partialResponse, ephemeral: thread.ephemeral === true, requiredConcurrency: turn.reasoningEffort === 'ultra' ? 3 : 1, getAbortMode: () => running.interruptReason === 'pagehide' ? 'pagehide' : signal.reason?.requiresTransportResume ? 'transport' : 'user' },
+          onActivity: () => { if (!siteReplay && metric.firstOutputAt == null) metric.firstOutputAt = server.now(); }, onDelta });
+        metric.responseReceivedAt ??= observeReceipt(frame, metric, running, server.now());
         if (!['stop', 'tool_calls', 'length'].includes(result.finish_reason)) throw Object.assign(Error('The provider stream did not confirm a complete or explicitly truncated response; no tool was executed and no commentary continuation was submitted.'), { code: 'INCOMPLETE_RESPONSE_STREAM', retryable: false });
         frame.result = clone(result); await save();
       } catch (error) {
-        metric.endedAt = server.now(); metric.totalMs = metric.endedAt - metric.startedAt; metric.error = errorText(error);
-        const hostPending = isHostCheckpoint(frame.transport) && !frame.transport.consumerFinished && !frame.transport.cancelRequested && frame.transport.state !== 'cancelled';
-        if (hostPending && (error.requiresTransportResume || signal.aborted && running.interruptReason === 'pagehide')) {
+        metric.endedAt = observeReceipt(frame, metric, running, server.now()); metric.totalMs = metric.endedAt - metric.startedAt; metric.error = errorText(error);
+        const transportPending = durableResponse(frame.transport) && !frame.transport.consumerFinished && !frame.transport.cancelRequested && frame.transport.state !== 'cancelled';
+        if (transportPending && (error.requiresTransportResume || signal.aborted && running.interruptReason === 'pagehide')) {
           frame.needsReattach = true; error.requiresTransportResume = true; if (!signal.aborted) { cp.hostFailures = (cp.hostFailures || 0) + 1; error.hostFailureCounted = true; }
           metric.status = error.status ?? null; metric.code = error.code ?? null; metric.retryable = false; await save(); throw error;
         }
-        const retryable = error.retryable === true || error.retryable !== false && ![400,401,402,403,404,422].includes(error.status) && /fetch|network|stream|connection|timeout|terminated|socket/i.test(metric.error);
+        const retryable = canRetryStream(error, metric.error);
         metric.status = error.status ?? null; metric.code = error.code ?? null; metric.retryable = retryable;
+        if (isSiteInferenceCheckpoint(frame.transport)) { error.retryable = false; metric.retryable = false; throw error; }
+        if (hasUncertainPlainResponse(frame) && (retryable || error.code === 'INCOMPLETE_RESPONSE_STREAM') && !signal.aborted) throw plainInterruption();
         if (retryable) cp.networkFailures = (cp.networkFailures || 0) + 1;
         if (!signal.aborted && retryable && retries++ < (server.agentOptions.streamRetries ?? 2)) {
           completeItems(server, running, 'cancelled');
@@ -229,6 +260,10 @@ export async function runAgentTurn(server, running) {
       const phase = responsePhase(result);
       updateHostedSearch(server, running, result);
       if (meta.webSearchIntent?.required && !turn.items.some(item => item.type === 'webSearch' && item.responseItem?.status === 'completed')) throw Object.assign(Error('The provider did not perform the requested hosted web search. No search success or sourced answer was reported.'), { code: 'WEB_SEARCH_NOT_PERFORMED', retryable: false });
+      if (!siteReplay && metric.firstTextAt == null && result.content?.trim()) {
+        metric.firstTextAt = server.now();
+        meta.firstTextAtMs ??= metric.firstTextAt;
+      }
       server.append(running, result.content || '', result.reasoning || '', phase ?? (result.tool_calls?.length ? 'commentary' : 'final_answer'), result.output_messages);
       const responseItems = result.response_items ?? [];
       for (const item of server.assistantMessages(running)) {
@@ -236,7 +271,12 @@ export async function runAgentTurn(server, running) {
         item.webSearchReferences = webSearchReferences(item.text, message?.id ? responseItems.filter(value => value.id === message.id) : responseItems);
       }
       completeItems(server, running, 'completed', metric.responseReceivedAt);
-      metric.endedAt = server.now(); metric.totalMs = metric.endedAt - metric.startedAt; metric.ttftMs = metric.firstOutputAt == null ? null : metric.firstOutputAt - metric.requestSentAt; metric.finishReason = result.finish_reason;
+      metric.endedAt = metric.responseReceivedAt; metric.totalMs = metric.endedAt - metric.startedAt; metric.ttftMs = metric.firstTextAt == null ? null : metric.firstTextAt - metric.requestSentAt; metric.finishReason = result.finish_reason;
+      if (typeof result.service_tier === 'string') {
+        metric.actualServiceTier = result.service_tier;
+        meta.serviceTierExecution.actualServiceTier = result.service_tier;
+        meta.serviceTierExecution.verifiedPriority = result.service_tier === 'priority' || result.service_tier === 'fast';
+      }
       if (result.usage) metric.usage = compactUsage(result.usage);
       if (result.adapter_execution) metric.adapterExecution = clone(result.adapter_execution);
       if (['standard', 'pro'].includes(result.actual_reasoning?.mode)) metric.actualReasoningMode = result.actual_reasoning.mode;
@@ -298,13 +338,13 @@ export async function runAgentTurn(server, running) {
     if (running.terminal) return;
     interruptHostedSearch(server, running);
     cp.state = signal.aborted ? 'interrupted' : 'failed'; meta.resumable = true;
-    const retryable = error.retryable === true || error.retryable !== false && ![400, 401, 402, 403, 404, 422].includes(error.status) && /fetch|network|stream|connection|timeout|terminated|socket/i.test(errorText(error));
+    const retryable = canRetryStream(error, errorText(error));
     if (error.requiresTransportResume && !error.hostFailureCounted && !signal.aborted) cp.hostFailures = (cp.hostFailures || 0) + 1;
-    const transportRetry = error.requiresTransportResume === true && ![401,403].includes(error.status) && (cp.hostFailures || 0) < (server.agentOptions.maxConsecutiveFailures ?? 6);
+    const transportRetry = error.requiresTransportResume === true && ![401,403,404,410,422].includes(error.status) && (cp.hostFailures || 0) < (server.agentOptions.maxConsecutiveFailures ?? 6);
     meta.resumePolicy = signal.aborted ? running.interruptReason === 'pagehide' ? 'automatic' : 'manual' : transportRetry ? 'automatic' : retryable && (cp.networkFailures || 0) < (server.agentOptions.maxConsecutiveFailures ?? 6) ? 'automatic' : 'manual';
     if (error.requiresTransportResume) cp.nextResumeAt = server.now() + Math.min(30000, (server.agentOptions.retryDelayMs ?? 500) * 2 ** Math.min(cp.hostFailures || 1, 5));
     if (retryable) cp.nextResumeAt = server.now() + Math.min(30000, (server.agentOptions.retryDelayMs ?? 500) * 2 ** Math.min(cp.networkFailures || 1, 5));
-    meta.lastFailure = { code: error.code ?? null, status: error.status ?? null, providerCode: error.providerCode ?? null, requestId: error.requestId ?? null, param: error.param ?? null, retryable, requiresTransportResume: error.requiresTransportResume === true }; 
+    meta.lastFailure = { code: error.code ?? null, status: error.status ?? null, providerCode: error.providerCode ?? null, requestId: error.requestId ?? null, param: error.param ?? null, retryable, requiresTransportResume: error.requiresTransportResume === true };
     try { await save(); } catch (saveError) { server.diagnostics.push({ type: 'checkpoint-error', message: errorText(saveError) }); }
     if (signal.aborted || error?.name === 'AbortError') server.finish(running, 'interrupted', null);
     else server.finish(running, 'failed', { message: errorText(error), codexErrorInfo: null, additionalDetails: null, misalignment: null });

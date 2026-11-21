@@ -1,10 +1,10 @@
 /** Original app-server protocol over real, resumable local execution. */
-import { runAgentTurn } from './agent-turn-runner.mjs?v=39c29eae31156e71';
-import { readWebSearchIntent, interruptHostedSearch } from './local-web-search.mjs?v=39c29eae31156e71';
-import { readClassicBranchRequest, getClassicExecutionThread } from './classic-response-branches.mjs?v=39c29eae31156e71';
-import { parseClassicInputMessages } from './classic-input-messages.mjs?v=39c29eae31156e71';
-import { compactPreparedUserContent, isProviderContent, needsPreparedInputStorage } from './prepared-input-store.mjs?v=39c29eae31156e71';
-import { allowedReasoningEfforts } from '../runtime.js?v=39c29eae31156e71';
+import { hasUncertainPlainResponse, plainInterruptionMessage, runAgentTurn } from './agent-turn-runner.mjs?v=ca63aad189abab8c';
+import { readWebSearchIntent, interruptHostedSearch } from './local-web-search.mjs?v=ca63aad189abab8c';
+import { readClassicBranchRequest, getClassicExecutionThread } from './classic-response-branches.mjs?v=ca63aad189abab8c';
+import { parseClassicInputMessages } from './classic-input-messages.mjs?v=ca63aad189abab8c';
+import { compactPreparedUserContent, isProviderContent, needsPreparedInputStorage } from './prepared-input-store.mjs?v=ca63aad189abab8c';
+import { allowedReasoningEfforts } from '../runtime.js?v=ca63aad189abab8c';
 export class RpcError extends Error {
   constructor(code, message, data) { super(message); this.name = 'RpcError'; this.code = code; if (data !== undefined) this.data = data; }
 }
@@ -104,11 +104,13 @@ export class LocalAppServer {
       for (const thread of state.threads) {
         if (!object(thread) || typeof thread.id !== 'string' || !Array.isArray(thread.turns)) throw Error('Invalid local conversation storage');
         for (const turn of thread.turns) if (turn.status === 'inProgress') {
+          const plainAttempt = hasUncertainPlainResponse(turn.adapterMetadata?.checkpoint?.inFlight);
           turn.status = 'interrupted';
-          turn.error = null;
+          turn.error = plainAttempt ? errorShape(plainInterruptionMessage) : null;
           turn.completedAt = null;
           turn.durationMs = null;
-          turn.adapterMetadata = { ...turn.adapterMetadata, interruption: 'page-reload-checkpoint-saved', resumable: Boolean(turn.adapterMetadata?.checkpoint), resumePolicy: 'automatic' };
+          turn.adapterMetadata = { ...turn.adapterMetadata, interruption: 'page-reload-checkpoint-saved', resumable: Boolean(turn.adapterMetadata?.checkpoint) && !plainAttempt, resumePolicy: plainAttempt ? 'manual' : 'automatic' };
+          if (plainAttempt) turn.adapterMetadata.lastFailure = { code: 'PLAIN_INFERENCE_INTERRUPTED', retryable: false };
           for (const call of turn.adapterMetadata.checkpoint?.pendingCalls || []) if (call.state === 'running') call.state = 'uncertain';
           // A crash has no observed provider end time. Stop the local pending
           // presentation without inventing elapsed compute/offline duration.
@@ -264,7 +266,7 @@ export class LocalAppServer {
   }
   executionPolicy() {
     let policy; try { policy = this.getExecutionPolicy(); } catch { throw new RpcError(-32003, 'The account execution policy could not be verified'); }
-    return policy?.modelSelection === true ? { modelSelection: true } : { modelSelection: false, fixedModel: 'gpt-6-luna', chatModel: this.catalog.WORK_MODEL_IDS.includes(policy?.freeChatModel) ? policy.freeChatModel : 'gpt-5.6-luna', defaultEffort: 'low', allowedEfforts: ['low', 'medium'] };
+    return policy?.modelSelection === true ? { modelSelection: true } : { modelSelection: false, fixedModel: 'gpt-6-luna', chatModel: this.catalog.WORK_MODEL_IDS.includes(policy?.freeChatModel) ? policy.freeChatModel : 'gpt-5.6-luna', chatDefaultEffort: policy?.freeChatEffort ?? 'none', defaultEffort: 'low', allowedEfforts: ['low', 'medium'] };
   }
   assertExecutionAllowed(turn) {
     const policy = this.executionPolicy();
@@ -288,7 +290,7 @@ export class LocalAppServer {
     if (!policy.modelSelection) {
       if (surface === 'work' || surface === 'codex') throw new RpcError(-32003, 'Work and Codex require model-selection access');
       model = surface === 'chat' ? policy.chatModel : policy.fixedModel;
-      effort = supplied === 'medium' || Array.isArray(params.systemHints) && params.systemHints.some(hint=>hint==='reason'||hint==='search') ? 'medium' : surface === 'chat' ? 'none' : policy.defaultEffort;
+      effort = supplied === 'medium' || Array.isArray(params.systemHints) && params.systemHints.some(hint=>hint==='reason'||hint==='search') ? 'medium' : surface === 'chat' ? policy.chatDefaultEffort : policy.defaultEffort;
       frontendModelSlug = surface === 'chat' ? 'auto' : model;
     } else if (surface === 'chat') {
       const explicit = params.frontendModelSlug != null || params.model != null;
@@ -502,7 +504,7 @@ export class LocalAppServer {
         (JSON.stringify(original) === JSON.stringify(classic.incoming) || JSON.stringify(original) === JSON.stringify(legacyUser));
       const legacySurfaceRetry = !webSearchIntent && selected.reasoningMode === 'standard' && (duplicate.reasoningMode ?? 'standard') === 'standard' && duplicate.adapterMetadata.executionSurface == null && duplicate.adapterMetadata.fingerprint === legacyContextFingerprint;
       if (duplicate.adapterMetadata.fingerprint !== fingerprint && !legacyClassicRetry && !legacySurfaceRetry) throw new RpcError(-32602, 'A client user-message ID cannot be reused with different input, Classic records or model settings');
-      if (duplicate.status !== 'completed' && duplicate.adapterMetadata?.resumable && duplicate.adapterMetadata?.checkpoint) return this.resumeTurn({ threadId: thread.id, turnId: duplicate.id });
+      if (duplicate.status !== 'completed' && duplicate.adapterMetadata?.resumable && duplicate.adapterMetadata.resumePolicy === 'automatic' && duplicate.adapterMetadata.checkpoint) return this.resumeTurn({ threadId: thread.id, turnId: duplicate.id });
       return { result: { turn: copy(duplicate), ...(admission ? { clientUserMessageId: params.clientUserMessageId, admissionOutcome: 'duplicate', serverUserMessageId: duplicate.items[0].id } : {}) } };
     }
     if (classic) this.assertClassicMessageIdsAvailable(thread, classic.originalMessages);
@@ -696,6 +698,7 @@ export class LocalAppServer {
     if (turn.status === 'completed' || turn.adapterMetadata?.checkpoint?.state === 'completed') return { result: { turn: copy(turn) } };
     this.assertExecutionAllowed(turn);
     if (!turn.adapterMetadata?.checkpoint) throw new RpcError(-32602, 'No resumable execution checkpoint exists');
+    if (hasUncertainPlainResponse(turn.adapterMetadata.checkpoint.inFlight)) throw new RpcError(-32000, plainInterruptionMessage, { adapterCode: 'PLAIN_INFERENCE_INTERRUPTED' });
     if (params.model && params.model !== turn.model) throw new RpcError(-32602, 'Resume preserves the original turn model');
     const previousTurn = copy(turn), previousThreadStatus = thread.status;
     turn.status = 'inProgress'; turn.error = null; turn.completedAt = null; turn.durationMs = null; thread.status = active();
@@ -711,7 +714,7 @@ export class LocalAppServer {
     if (status !== 'completed') interruptHostedSearch(this, running);
     const { thread, turn } = running;
     turn.status = status;
-    if (turn.adapterMetadata?.checkpoint && status !== 'completed') { turn.adapterMetadata.resumable = true; turn.adapterMetadata.resumePolicy ??= status === 'interrupted' && running.interruptReason === 'pagehide' ? 'automatic' : 'manual'; turn.adapterMetadata.checkpoint.state = status; for (const call of turn.adapterMetadata.checkpoint.pendingCalls || []) if (call.state === 'running') call.state = 'uncertain'; }
+    if (turn.adapterMetadata?.checkpoint && status !== 'completed') { turn.adapterMetadata.resumable = !hasUncertainPlainResponse(turn.adapterMetadata.checkpoint.inFlight); turn.adapterMetadata.resumePolicy ??= status === 'interrupted' && running.interruptReason === 'pagehide' ? 'automatic' : 'manual'; turn.adapterMetadata.checkpoint.state = status; for (const call of turn.adapterMetadata.checkpoint.pendingCalls || []) if (call.state === 'running') call.state = 'uncertain'; }
     for (const item of turn.items) if (item.type === 'mcpToolCall' && item.status === 'inProgress') { item.status = 'failed'; item.result = { content: [{ type: 'text', text: 'Execution was interrupted; tool completion is unknown. It has not been reported as successful.' }], isError: true }; item.error = null; this.notify('item/completed', { threadId: thread.id, turnId: turn.id, item }); }
     const finishedAtMs = Math.max(turn.adapterMetadata.startedAtMs, completedAtMs);
     const lifecycle = turn.adapterMetadata.reasoningLifecycle;
@@ -739,9 +742,11 @@ export class LocalAppServer {
       return;
     }
     running.interruptReason = reason;
-    running.turn.adapterMetadata.resumePolicy = reason === 'pagehide' ? 'automatic' : 'manual';
+    const plainAttempt = reason === 'pagehide' && hasUncertainPlainResponse(running.turn.adapterMetadata?.checkpoint?.inFlight);
+    running.turn.adapterMetadata.resumePolicy = reason === 'pagehide' && !plainAttempt ? 'automatic' : 'manual';
+    if (plainAttempt) running.turn.adapterMetadata.lastFailure = { code: 'PLAIN_INFERENCE_INTERRUPTED', retryable: false };
     running.controller.abort(new DOMException('Turn interrupted locally', 'AbortError'));
-    this.finish(running, 'interrupted', null);
+    this.finish(running, 'interrupted', plainAttempt ? errorShape(plainInterruptionMessage) : null);
   }
   interruptAll({ reason = 'pagehide' } = {}) { for (const threadId of this.running.keys()) this.interrupt(threadId, { reason }); }
 }

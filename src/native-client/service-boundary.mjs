@@ -5,7 +5,6 @@ import * as modelCatalog from '../../model-catalog.js';
 import { createModelCatalogAdapter } from './model-catalog-adapter.mjs';
 import { DEFAULT_SETTINGS } from '../../config.js';
 import { streamCompletion, PythonRuntime, PYTHON_TOOL } from '../../runtime.js';
-import { createProviderCompletionRouter } from './provider-routing.mjs';
 import { LocalAppServer, LocalProtocolSocket } from './local-app-server.mjs';
 import { getPrototypeLocalSession, getPrototypeLocalAuth, getLocalAccountCheck, getLocalOptimizedAccount, getLocalWhamAccounts, getPrototypeCurrentUser, isPrototypeLocalSession, clearPrototypeLocalSession, getLocalAccountStorageKey } from './local-identity.mjs';
 import { getPrototypeConfiguration, setLocalLibraryAvailability } from './local-configuration.mjs';
@@ -71,19 +70,8 @@ export const localPersonalizationService = createLocalPersonalizationService({
   getIdentity: getPersonalizationIdentity, getStorageKey: getLocalAccountStorageKey,
   onDiagnostic: event => localProtocolDiagnostics.push(event),
 });
-export function readWorkspacePreferences() {
-  try {
-    const value = JSON.parse(localStorage.getItem(getLocalAccountStorageKey('workspace-preferences:v1')));
-    return value && typeof value === 'object' ? value : {};
-  } catch { return {}; }
-}
-export function saveWorkspacePreferences(value) {
-  const next = { ...readWorkspacePreferences(), ...value };
-  localStorage.setItem(getLocalAccountStorageKey('workspace-preferences:v1'), JSON.stringify(next));
-  return next;
-}
 const readPersonalizedSettings = createPersonalizedSettingsReader({
-  readSettings: () => ({ ...DEFAULT_SETTINGS, customInstructions: readWorkspacePreferences().instructions ?? '' }),
+  readSettings: () => ({ ...DEFAULT_SETTINGS }),
   personalization: localPersonalizationService, getIdentity: getPersonalizationIdentity,
 });
 // A local preview/session flag is not a verified site account. File ownership
@@ -103,7 +91,6 @@ const siteInferenceTransport = createSiteInferenceTransport({
   getAccountId: () => getSiteAccount()?.id ?? null,
 });
 function completeWithSiteInference(options) {
-  if (!globalThis.__CHATGPT_REPLICA_ENV__?.siteWorkspace && !['gpt-6.2-sol', 'gpt-6.2-astra'].includes(options.settings.model)) return streamCompletion(options);
   // Chat's Pro presentation is backed by the highest conventional effort for Astra.
   const settings = options.settings.reasoningMode === 'pro' && options.settings.model === 'gpt-6-astra'
     ? { ...options.settings, reasoningMode: 'standard', reasoningEffort: 'max' }
@@ -119,25 +106,13 @@ function completeWithSiteInference(options) {
       : directSiteResponse(payload, transport),
   });
 }
-export const localAPIRouter = createProviderCompletionRouter({
-  complete: completeWithSiteInference, getProviders: () => DEFAULT_SETTINGS.apiProviders,
-  isCurrent: () => Boolean(getConversationIdentity()),
-  onDiagnostic: event => localProtocolDiagnostics.push(event),
-});
-const localHostCompletion = createPreferredCompletion({ runtimeCompletion: localAPIRouter.complete, preferredTransport: localPreferredHostTransport,
-  enabled: () => globalThis.__CHATGPT_REPLICA_ENV__?.preferredHostEnabled === true,
-});
-const workspaceHostCompletion = createPreferredCompletion({
+const localHostCompletion = createPreferredCompletion({
   runtimeCompletion: completeWithSiteInference, preferredTransport: localPreferredHostTransport,
-  enabled: () => getSiteAccount()?.role === 'administrator',
+  enabled: () => globalThis.__CHATGPT_REPLICA_ENV__?.preferredHostEnabled === true && getSiteAccount()?.role === 'administrator',
 });
 export function localPreferredCompletion(options) {
   if (options.providerRoutingContext?.conversationOrigin === 'dot') return localDotAdapter.complete(options);
-  if (globalThis.__CHATGPT_REPLICA_ENV__?.siteWorkspace) {
-    if (isSiteInferenceCheckpoint(options.transportContext?.checkpoint)) return completeWithSiteInference(options);
-    return workspaceHostCompletion(options);
-  }
-  if (['gpt-6.2-sol', 'gpt-6.2-astra'].includes(options.settings.model)) return localAPIRouter.complete(options);
+  if (isSiteInferenceCheckpoint(options.transportContext?.checkpoint)) return completeWithSiteInference(options);
   return localHostCompletion(options);
 }
 const localWorkspaceExecutor = createBrowserToolExecutor({ PythonRuntime, PYTHON_TOOL,
@@ -194,7 +169,18 @@ setLocalLibraryAvailability(() => localLibraryService.source.nativeNodeListing =
   && localLibraryService.source.rawFileListing === true && localLibraryService.source.localFolders === true
   && localLibraryService.source.permanentDelete === true);
 globalThis.addEventListener('pagehide', () => { localLibraryService.dispose(); localNativeLibraryRefresh.dispose(); });
-export const localPricingAdapter = createLocalPricingAdapter({ diagnostics: localProtocolDiagnostics, readMembership: () => getSiteAccount() });
+export const localPricingAdapter = createLocalPricingAdapter({
+  diagnostics: localProtocolDiagnostics, readMembership: getSiteAccount, readUsageIdentity: getPrototypeLocalAuth,
+  async readUsage({ signal }) {
+    const token = await verifiedSiteToken();
+    if (!token) return null;
+    const response = await fetch(SITE_ACCOUNT_SERVICE + '/inference/v1/usage', {
+      credentials: 'omit', redirect: 'error', cache: 'no-store', signal,
+      headers: { Authorization: 'Bearer ' + token },
+    });
+    return response.ok ? response.json() : null;
+  },
+});
 export const localDiscoveryAdapter = createLocalDiscoveryAdapter({ storage: { getItem: key => globalThis.localStorage.getItem(key), setItem: (key, value) => globalThis.localStorage.setItem(key, value) }, getAccountId: () => getPrototypeLocalAuth()?.accountId ?? null, diagnostics: localProtocolDiagnostics });
 export const localMapsService = createLocalMapsService({ storage: { getItem: key => globalThis.localStorage.getItem(key), setItem: (key, value) => globalThis.localStorage.setItem(key, value) }, getAccountId: () => getPrototypeLocalAuth()?.accountId ?? null, diagnostics: localProtocolDiagnostics });
 // Verified site ownership and the local namespace are both bound at boot.
@@ -225,7 +211,7 @@ export const localAppServer = new LocalAppServer({
   toolExecutor: localToolExecutor,
   prepareUserInput: createLocalInputPreparer({ files: localFilesService }),
   preparedInputStore: createPreparedInputStore({ namespace: getLocalAccountStorageKey('cg-original-app-server:v1') }),
-  agentOptions: { toolTransport: 'responses', requestPriority: globalThis.__CHATGPT_REPLICA_ENV__?.siteWorkspace === true, ultraOrchestration: true },
+  agentOptions: { toolTransport: 'responses', requestPriority: true, ultraOrchestration: true },
   getExecutionPolicy: () => ({ modelSelection: hasModelSelectionAccess(), freeChatModel: DEFAULT_SETTINGS.freeChatModel, freeChatEffort: 'medium' }),
   onPersist: threads => localAccountHistory?.capture(threads),
 });
@@ -364,7 +350,7 @@ async function finishAccountHistoryBeforeLogout(signal) {
   } finally { localAccountHistory.dispose(); historyFeedback?.dispose(); }
 }
 export const siteSignOut = createSiteSignOutController({
-  home: getSiteHomeUrl, clearSiteAccount: logoutSiteAccount, clearNativeSession: clearPrototypeLocalSession,
+  home: getSiteHomeUrl, clearSiteAccount: () => logoutSiteAccount({ waitForRemote: true }), clearNativeSession: clearPrototypeLocalSession,
   async prepare(signal) {
     localAppServer.interruptAll({ reason: 'logout' });
     localNativeLibraryRefresh.dispose();
@@ -381,11 +367,12 @@ export const localDotAdapter = createLocalDotAdapter({
   complete: createLocalDotCompletion({
     complete: streamCompletion, getProviders: () => DEFAULT_SETTINGS.apiProviders, siteOrigin: SITE_ACCOUNT_SERVICE,
     fetchDirectModels: (url, options) => globalThis.fetch(url, options),
-    responsesTransport: globalThis.__CHATGPT_REPLICA_ENV__?.siteWorkspace ? siteInferenceTransport.request : undefined,
+    responsesTransport: siteInferenceTransport.request,
   }),
   storage: { getItem: key => globalThis.localStorage.getItem(key), setItem: (key, value) => globalThis.localStorage.setItem(key, value) },
   appServer: localAppServer, getIdentity: getPrototypeLocalAuth, isLocalSession: isPrototypeLocalSession,
   hasDotAccess: () => getSitePlanCapabilities().dot, siteAccountsOnly: true,
+  files: localFilesService, backgroundRoomPump: true,
   getFileRecord: async (id, options) => (await localFilesService.readFile(id, options)).record,
   readSettings: () => ({ ...DEFAULT_SETTINGS }), getCapabilities: getLocalExecutionCapabilities, diagnostics: localProtocolDiagnostics,
 });
@@ -459,7 +446,6 @@ export function installNetworkBoundary() {
   URL.revokeObjectURL = url => { localOwnedDownloadTransport.forgetNativeDownloadURL(url); return originalRevokeObjectURL(url); };
   const diagnostics = localProtocolDiagnostics;
   const localCsrfToken = crypto.randomUUID();
-  const gatewayRules = localAPIRouter.getAllowedRequests();
   const response = (body, status = 200) => new Response(JSON.stringify(body), {
     status, headers: { 'Content-Type': 'application/json' },
   });
@@ -480,7 +466,7 @@ export function installNetworkBoundary() {
     if (url.origin === SITE_ACCOUNT_SERVICE && request.method === 'POST' && /^\/api-proxy\/(?:docode|openclawplan)\/v1\/responses$/.test(url.pathname)) {
       return originalFetch(new Request(request, { credentials: 'omit', redirect: 'error' }));
     }
-    if (url.origin === SITE_ACCOUNT_SERVICE && /^\/(?:auth\/(?:login|register|session|logout|site-trial)|inference\/v1\/responses|bridge\/status|usage|jobs(?:\/[^/]+(?:\/events)?)?|sync\/(?:conversations(?:\/[^/]+)?|changes|batch))$/.test(url.pathname)) return originalFetch(new Request(request, {
+    if (url.origin === SITE_ACCOUNT_SERVICE && /^\/(?:auth\/(?:login|register|session|logout|site-trial)|inference\/v1\/(?:usage|responses(?:\/[a-f0-9-]{36})?)|bridge\/status|usage|jobs(?:\/[^/]+(?:\/events)?)?|sync\/(?:conversations(?:\/[^/]+)?|changes|batch))$/.test(url.pathname)) return originalFetch(new Request(request, {
       credentials: 'omit', redirect: url.pathname.startsWith('/auth/') ? 'manual' : 'error',
     }));
     // Consume analytics locally; never forward captured telemetry to its vendor.
@@ -490,10 +476,6 @@ export function installNetworkBoundary() {
       headers.delete('Authorization');
       headers.delete('Cookie');
       return originalFetch(new Request(request, { headers, credentials: 'omit' }));
-    }
-    if (gatewayRules.some(rule => url.origin === rule.origin && url.pathname === rule.path && request.method === rule.method && !url.search)) {
-      diagnostics.push({ type: 'authorized-gateway-request', method: request.method, path: url.pathname });
-      return originalFetch(new Request(request, { credentials: 'omit', redirect: 'error' }));
     }
     // Log the contract name, never query parameters, headers or payload values.
     diagnostics.push({ type: 'request', method: request.method, path: url.pathname });

@@ -6,7 +6,6 @@ import { createModelCatalogAdapter } from '../src/native-client/model-catalog-ad
 import { LocalAppServer, LocalProtocolSocket } from '../src/native-client/local-app-server.mjs';
 import { createLocalFilesService } from '../src/native-client/local-files-service.mjs';
 import { createLocalInputPreparer } from '../src/native-client/local-input-preparation.mjs';
-import { storeDotFile } from '../src/native-client/dot-panel.mjs';
 import { streamCompletion } from '../runtime.js';
 import {
   createLocalDotAdapter, createLocalDotCompletion, LOCAL_DOT_DEFAULT_IMAGE_URL, LOCAL_DOT_RESOURCE_BUNDLE,
@@ -712,6 +711,34 @@ test('journal create, edit and delete persist with revisions and account isolati
   assert.equal((await request(reopened.adapter, journal)).response.status, 404);
 });
 
+test('native Dot composer can write, edit and delete journal notes shown in the original journal shape', async () => {
+  const env = fixture();
+  const profile = (await request(env.adapter, '/tbo')).data.items[0];
+  await request(env.adapter, `/tbo/${profile.id}/messaging-room`, 'POST');
+  const room = `/messaging/rooms/${profile.root_thread_id}`;
+  const journal = `${room}/journal`;
+  const send = (adapter, id, text) => request(adapter, `${room}/messages`, 'POST', { request_id: id, idempotency_token: id, content: { text } });
+  const events = [];
+  const unsubscribe = env.adapter.subscribeRoomMessages(event => events.push(event));
+  const first = await send(env.adapter, 'entry-write', '/journal add Native journal fixture');
+  assert.equal((await send(env.adapter, 'entry-write', '/journal add Native journal fixture')).data.id, first.data.id);
+  assert.equal((await send(env.adapter, 'entry-write', '/journal add Different fixture')).response.status, 409);
+  unsubscribe();
+  assert.equal(events.length, 1);
+  assert.match(events[0].payload.message.content.text, /已保存日记/);
+  assert.equal(env.appServer.getThread(profile.root_thread_id).turns.length, 0);
+  const reopened = fixture({ storage: env.storage });
+  const native = (await request(reopened.adapter, `${journal}?view=tasks`)).data;
+  assert.equal(native.tasks[0].description, 'Native journal fixture');
+  assert.deepEqual(native.items, []);
+  const entryId = native.tasks[0].id;
+  assert.equal((await send(reopened.adapter, 'entry-edit', `/journal edit ${entryId} Updated native fixture`)).response.status, 200);
+  const details = (await request(reopened.adapter, `${journal}?view=tasks&task_id=${entryId}`)).data;
+  assert.equal(details.turns[0].messages[0].text, 'Updated native fixture');
+  assert.equal((await send(reopened.adapter, 'entry-delete', `/journal delete ${entryId}`)).response.status, 200);
+  assert.deepEqual((await request(fixture({ storage: env.storage }).adapter, `${journal}?view=tasks`)).data.tasks, []);
+});
+
 test('queued Dot messages recover after reload and admit a repeated request ID once', async () => {
   const first = Promise.withResolvers();
   const env = fixture({ streamCompletion: async () => first.promise });
@@ -740,6 +767,31 @@ test('queued Dot messages recover after reload and admit a repeated request ID o
   assert.equal((await request(reopened.adapter, `${room}/messages?live=1`)).data.queued.length, 0);
 });
 
+test('the native Dot room auto-advances a queued send and preserves its message ID', async () => {
+  const first = Promise.withResolvers(), calls = [];
+  const env = fixture({ backgroundRoomPump: true, streamCompletion: async ({ messages }) => {
+    calls.push(messages.at(-1).content);
+    return calls.length === 1 ? first.promise : { content: 'Second native reply', finish_reason: 'stop' };
+  } });
+  const profile = (await request(env.adapter, '/tbo')).data.items[0];
+  const id = profile.root_thread_id, base = `/messaging/rooms/${id}`;
+  await request(env.adapter, `/tbo/${profile.id}/messaging-room`, 'POST');
+  await request(env.adapter, `${base}/messages`, 'POST', { request_id: 'native-first', content: { text: 'First native send' } });
+  const next = { request_id: 'native-next', content: { text: 'Second native send' } };
+  const queued = await request(env.adapter, `${base}/messages`, 'POST', next);
+  assert.equal(queued.status ?? queued.response.status, 202);
+  assert.equal((await request(env.adapter, `${base}/messages`)).data.items.at(-1).id, queued.data.id);
+  const finished = new Promise(resolve => {
+    const off = env.appServer.subscribe(event => {
+      if (event.method === 'turn/completed' && event.params.turn.clientUserMessageId === next.request_id) { off(); resolve(); }
+    });
+  });
+  first.resolve({ content: 'First native reply', finish_reason: 'stop' });
+  await finished;
+  assert.equal((await request(env.adapter, `${base}/messages`, 'POST', next)).data.id, queued.data.id);
+  assert.deepEqual(calls, ['First native send', 'Second native send']);
+});
+
 test('Dot uses actual uploaded bytes for a message and its follow-up after reload', async () => {
   const bytes = new Map();
   const storage = memory();
@@ -749,8 +801,7 @@ test('Dot uses actual uploaded bytes for a message and its follow-up after reloa
   });
   const requests = [];
   const options = {
-    storage, prepareUserInput: createLocalInputPreparer({ files }),
-    getFileRecord: async (id, opts) => (await files.readFile(id, opts)).record,
+    storage, prepareUserInput: createLocalInputPreparer({ files }), files,
     streamCompletion: async ({ messages }) => { requests.push(messages); return { content: 'Read actual attached text.', finish_reason: 'stop' }; },
   };
   const env = fixture(options);
@@ -759,15 +810,23 @@ test('Dot uses actual uploaded bytes for a message and its follow-up after reloa
   const room = `/messaging/rooms/${id}`;
   await request(env.adapter, `/tbo/${profile.id}/messaging-room`, 'POST');
   const file = new File(['Dot fixture token A682.'], 'dot-fixture.txt', { type: 'text/plain' });
-  const attachment = await storeDotFile(files, file, { baseURL: 'https://site.invalid' });
+  const form = new FormData();
+  form.append('file', file);
+  const uploaded = await env.adapter.handle(new Request(`https://site.invalid/backend-api${room}/files`, { method: 'POST', body: form }), `${room}/files`);
+  assert.equal(uploaded.status, 200);
+  const attachment = await uploaded.json();
+  assert.equal(attachment.type, 'file');
+  assert.equal(attachment.status, 'ready');
+  assert.equal(attachment.size_bytes, file.size);
   const done = waitDotTurn(env.appServer, id);
-  const sent = await request(env.adapter, `${room}/messages`, 'POST', { request_id: 'dot-upload', content: { text: '', attachments: [attachment] } });
+  const sent = await request(env.adapter, `${room}/messages`, 'POST', { request_id: 'dot-upload', content: { text: '', attachments: [{ type: 'file', file_id: attachment.file_id }] } });
   assert.equal(sent.response.status, 200);
   assert.equal((await done).status, 'completed');
   assert.match(JSON.stringify(requests[0]), /Dot fixture token A682/);
   assert.equal((await files.readFile(attachment.id)).bytes.byteLength, file.size);
   const reopened = fixture(options);
-  assert.equal((await request(reopened.adapter, `${room}/messages`)).data.items[0].content.attachments[0].id, attachment.id);
+  assert.equal((await request(reopened.adapter, `${room}/messages`)).data.items[0].content.attachments[0].file_id, attachment.id);
+  assert.match((await request(reopened.adapter, `${room}/files/${attachment.file_id}`)).data.download_url, /\/__local_artifacts\//);
   const next = waitDotTurn(reopened.appServer, id);
   await request(reopened.adapter, `${room}/messages`, 'POST', { request_id: 'dot-upload-follow-up', content: { text: 'What was the fixture token?' } });
   assert.equal((await next).status, 'completed');
@@ -800,4 +859,35 @@ test('Dot automation uses one actual model turn per scheduled interval, stores i
   await request(reopened.adapter, `${path}/${schedule.id}`, 'PATCH', { enabled: false });
   assert.equal((await request(reopened.adapter, `${path}/${schedule.id}/run`, 'POST', { request_id: 'disabled-fixture' })).response.status, 409);
   assert.equal((await request(reopened.adapter, path)).data.items[0].last_run.output, 'Fixture task result');
+});
+
+test('a schedule made from the original Dot composer can run and stop through native automation actions', async () => {
+  const env = fixture({ streamCompletion: async ({ messages }) => {
+    assert.match(JSON.stringify(messages.at(-1)), /Native automation prompt/);
+    return { content: 'Native automation result', finish_reason: 'stop' };
+  } });
+  const profile = (await request(env.adapter, '/tbo')).data.items[0];
+  const id = profile.root_thread_id;
+  await request(env.adapter, `/tbo/${profile.id}/messaging-room`, 'POST');
+  const schedules = `/tbo/${profile.id}/automations`;
+  const message = { request_id: 'automation-create', content: { text: '/automation add Native task | 0 | Native automation prompt' } };
+  const compose = `/messaging/rooms/${id}/messages`;
+  await request(env.adapter, compose, 'POST', message);
+  await request(env.adapter, compose, 'POST', message);
+  const { items: [schedule, duplicate] } = (await request(env.adapter, schedules)).data;
+  assert.equal(duplicate, undefined);
+  assert.equal(schedule.executor, 'local');
+  assert.equal(schedule.title, 'Native task');
+  assert.equal(schedule.aeon_id, profile.id);
+  const global = `/automation/${schedule.id}`;
+  const done = waitDotTurn(env.appServer, id);
+  const start = { idempotency_key: 'native-manual-run' };
+  assert.equal((await request(env.adapter, `${global}/run`, 'POST', start)).response.status, 202);
+  assert.equal((await done).status, 'completed');
+  await request(env.adapter, `${global}/run`, 'POST', start);
+  const reopened = fixture({ storage: env.storage });
+  assert.equal((await request(reopened.adapter, `${global}/runs/latest`)).data.last_run.output, 'Native automation result');
+  assert.equal((await request(reopened.adapter, `${global}/runs`)).data.items.length, 1);
+  assert.equal((await request(reopened.adapter, '/automations/set_status', 'POST', { jawbone_id: schedule.id, is_enabled: false })).data.is_enabled, false);
+  assert.equal((await request(reopened.adapter, `${global}/run`, 'POST', { idempotency_key: 'stopped' })).response.status, 409);
 });

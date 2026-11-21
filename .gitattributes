@@ -1,0 +1,9 @@
+# Release checksums cover the exact bytes of these generated and canonical files.
+/native-client/** -text
+/src/native-client/** -text
+/scripts/build-native-client.mjs -text
+/config.js -text
+/model-catalog.js -text
+/runtime.js -text
+/python-worker.js -text
+/release-updater.js -text

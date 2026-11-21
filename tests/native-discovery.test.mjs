@@ -433,17 +433,105 @@ test('billing reads distinguish no OpenAI subscription, unavailable site balance
   await assert.rejects(() => broken.getMembershipView(), /Trusted membership source unavailable/);
 });
 
-test('actual original ra39 schema, PXhB formatter and aFrt card conversion accept adapter DTOs', async () => {
+const usageTime = Date.parse('2026-11-21T03:00:00Z');
+const usageOwner = { id: 'site-user:fixture', accountId: 'fixture', role: 'user', planType: 'free', membershipSource: 'site-registration' };
+const usageIdentity = { accountId: usageOwner.accountId, userId: usageOwner.id };
+function workerUsage(plan = usageOwner, fields = {}) {
+  return {
+    plan,
+    sources: [{
+      source: 'site-docode', requests: 9, completed: 8, token_reports: 7, input_tokens: 83, output_tokens: 24,
+      freeDaily: { requests: 3, limit: 20, resetsAt: Date.parse('2026-11-22T00:00:00Z') }, ...fields,
+    }],
+  };
+}
+
+test('native usage reports actual site counts and only makes a daily limit from an active Free meter', async () => {
+  let membership = usageOwner, receipt = workerUsage();
+  const diagnostic = [];
+  const adapter = createLocalPricingAdapter({
+    readMembership: () => membership, readUsageIdentity: () => usageIdentity,
+    readUsage: ({ signal }) => {
+      assert.ok(signal instanceof AbortSignal && !signal.aborted);
+      return receipt;
+    },
+    now: () => usageTime, diagnostics: diagnostic,
+  });
+  const free = await rpc(adapter, '/wham/usage');
+  assert.equal(free.response.status, 200);
+  assert.equal(free.body.plan_type, 'free');
+  assert.equal(free.body.user_id, usageIdentity.userId);
+  assert.equal(free.body.account_id, usageIdentity.accountId);
+  assert.deepEqual(free.body.rate_limit, {
+    allowed: true, limit_reached: false,
+    primary_window: { used_percent: 15, limit_window_seconds: 86400, reset_after_seconds: 75600, reset_at: 1795305600 },
+    secondary_window: null,
+  });
+  assert.deepEqual(free.body.site_usage, { requests: 9, completed: 8, token_reports: 7, input_tokens: 83, output_tokens: 24 });
+  assert.deepEqual(free.body.ambient_usage.default.menu.rows.map(row => row.value.text), ['9', '8', '7', '83', '24']);
+  assert.equal(diagnostic.at(-1).capability, 'site-inference-usage');
+  assert.equal(free.body.credits, null);
+
+  receipt = workerUsage(usageOwner, { freeDaily: { requests: 20, limit: 20, resetsAt: usageTime + 1000 } });
+  assert.equal((await rpc(adapter, '/wham/usage')).body.rate_limit.primary_window.used_percent, 100);
+  assert.equal((await rpc(adapter, '/wham/usage')).body.rate_limit.limit_reached, true);
+  receipt = workerUsage(usageOwner, { freeDaily: { requests: 20, limit: 20, resetsAt: usageTime } });
+  assert.equal((await rpc(adapter, '/wham/usage')).body.rate_limit, null);
+
+  membership = { ...usageOwner, planType: 'pro', siteTrial: { tier: 'promax', expiresAt: usageTime + 86400000 } };
+  receipt = workerUsage(membership, { requests: 4, completed: 4, token_reports: 0, input_tokens: null, output_tokens: null });
+  const paid = (await rpc(adapter, '/wham/usage')).body;
+  assert.equal(paid.plan_type, 'pro');
+  assert.equal(paid.rate_limit, null);
+  assert.equal(paid.credits, null);
+  assert.equal(paid.site_usage.input_tokens, null);
+  assert.deepEqual(paid.ambient_usage.default.menu.rows.map(row => row.value.text), ['4', '4', '0']);
+  assert.equal((await rpc(adapter, '/subscriptions')).body, null);
+  assert.equal((await rpc(adapter, '/wham/usage', 'POST', {})).response.status, 405);
+});
+
+test('native usage rejects missing, unrelated and superseded usage receipts', async () => {
+  let membership = usageOwner, receipt = null, failure = false;
+  const adapter = createLocalPricingAdapter({
+    readMembership: () => membership, readUsageIdentity: () => usageIdentity,
+    readUsage: () => {
+      if (failure) throw new Error('Unreachable');
+      return receipt;
+    },
+    now: () => usageTime,
+  });
+  assert.equal((await rpc(adapter, '/wham/usage')).response.status, 404);
+  receipt = workerUsage({ ...usageOwner, id: 'other-owner' });
+  assert.equal((await rpc(adapter, '/wham/usage')).response.status, 404);
+  receipt = workerUsage(usageOwner, { requests: 2, completed: 3 });
+  assert.equal((await rpc(adapter, '/wham/usage')).response.status, 404);
+  failure = true;
+  assert.equal((await rpc(adapter, '/wham/usage')).response.status, 503);
+  membership = null;
+  assert.equal((await rpc(adapter, '/wham/usage')).response.status, 401);
+  membership = usageOwner;
+  const interrupted = createLocalPricingAdapter({
+    readMembership: () => membership, readUsageIdentity: () => usageIdentity, now: () => usageTime,
+    readUsage: async () => {
+      membership = { ...usageOwner, id: 'signed-into-different-account' };
+      return workerUsage();
+    },
+  });
+  assert.equal((await rpc(interrupted, '/wham/usage')).response.status, 404);
+});
+
+test('actual original usage, pricing and plugin readers accept adapter DTOs', async () => {
   const ranges = [{"id":"ASxG","file":"226913.27c93050ff.js","start":598394,"end":621545,"sha256":"b763ce260aa76a201d498108541090c46c7089a9862f2f93209c81266e09dffc"},{"id":"BTwN","file":"226913.27c93050ff.js","start":659336,"end":662612,"sha256":"ef5250e79bf5cb7fa1df37bd0e265f4ffbd59fcde0d6a957683134eeb40308a1"},{"id":"pZ3S","file":"226913.27c93050ff.js","start":720872,"end":734252,"sha256":"c9046738b436679fb0ac8bd9f15db7a172a0adc97459d439c088d481172af812"},{"id":"IWEP","file":"226913.27c93050ff.js","start":641316,"end":643157,"sha256":"57528eb933d7b2c98ae63867b07484961df7a47b52b583a3f1c9528f877b18be"},{"id":"QKjC","file":"226913.27c93050ff.js","start":672126,"end":712046,"sha256":"50307d6dce6eebe8b9bd5e9c34be7fd2ac437e242b85f224b641cb327dcb4e1b"},{"id":"MSU2","file":"226913.27c93050ff.js","start":734260,"end":734316,"sha256":"ec79751c9b91f69e6ab45a90e7da500998abade08fff636513efd764200f0fef"},{"id":"XQrv","file":"226913.27c93050ff.js","start":665321,"end":671320,"sha256":"296b6ec622d5837713c8350aa4d37406faf2cc7149496ba0eeac4849ab6df717"},{"id":"ac24","file":"226913.27c93050ff.js","start":643165,"end":643805,"sha256":"58b8b8f41dac0b3548b0cd894dbe82374f18fe0382e6256a11e3d4a5b2377eb7"},{"id":"bpsm","file":"226913.27c93050ff.js","start":633754,"end":641308,"sha256":"a7d6f1a3f64f375488e2717159bdf35f8793ee60d0d9551fa38779c489565bf3"},{"id":"fttz","file":"226913.27c93050ff.js","start":662620,"end":665313,"sha256":"be3842eb41303d93720e55dc01d660fb978948267818b7e03a45449c480aa28d"},{"id":"CsuQ","file":"226913.27c93050ff.js","start":643813,"end":646974,"sha256":"e0094008a2e7d150a8574cc031f7d4223fb523936b32f0c3c1dad82973d24258"},{"id":"eESV","file":"226913.27c93050ff.js","start":646982,"end":659328,"sha256":"9683b667ad8d1952f04633c39b8a7a69b21c5ff4b4576300a5ff558db0cd2169"},{"id":"ygkR","file":"226913.27c93050ff.js","start":712054,"end":720864,"sha256":"03fa4f8c791079f49c0cfd7c33ec2a668ac84c0079fe51381d54d4c2f04efcb1"},{"id":"oG25","file":"226913.27c93050ff.js","start":671328,"end":672118,"sha256":"a0a3e546af314423f44b6f6d0cf1b08ca06346d0f04a7ebcebb22510920c0ce7"},{"id":"fVBu","file":"226913.27c93050ff.js","start":598127,"end":598386,"sha256":"97407d750df1d1dd13f2d7358fd79f97190c5c2ebcee0806bf7562317a0615aa"},{"id":"d7QT","file":"226913.27c93050ff.js","start":596812,"end":597725,"sha256":"813be7b3f9f647923d8e6ecad8c0185e8fc651e41e7791a4c6ff6723fb1fc645"},{"id":"mMAU","file":"226913.27c93050ff.js","start":734324,"end":737142,"sha256":"1df06255c8d064887c766919797c0d3e7a1f0ce946b80667af6476e62a5002c2"},{"id":"rrbL","file":"226913.27c93050ff.js","start":621553,"end":633746,"sha256":"ae7197624fcb1e1aaa136e4ee5b70e8f533e38284b2cbaa772c9b4babe1c40cf"},{"id":"ra39","file":"async/899311.9233e1594e.js","start":244862,"end":247167,"sha256":"6e157171be840ffd142b78a18978137f4f8a3bbb3b7d27d0558af366f7c582f5"},{"id":"PXhB","file":"async/508240.39cb6eb1b8.js","start":33329,"end":34131,"sha256":"f49f92138119eed78e3719beca2fd18e318405bdfb9d8ee734cd7655606be0f3"},{"id":"aFrt","file":"731863.bbf914bfbc.js","start":2265191,"end":2270695,"sha256":"0bfeb83ca7b96e71a03f271855b50f74f83db16c86df798c118d8dce85dfa639"}];
+  ranges.push({ id: 'TDk3', file: '396705.00162c6ea9.js', start: 738635, end: 743265, sha256: '5cd6928eb4764701f5e82bbe952d45d0eba973abbf572439c8f5f5244722cd2d' });
   const context = vm.createContext({ console, setTimeout, clearTimeout, TextEncoder, TextDecoder, AbortController, AbortSignal, URL });
   const files = new Map(), factories = new Map(), loaded = new Map();
   // Query hooks and unrelated page/RPC branches are never invoked; only the
   // actual pure exported schemas/formatter/converters are exercised.
-  const unusedDependencies = new Set(['laUo', 'smwl', 'S2r0', 'ufra', 'I07G', 'D4ZO', 'SaEY', 'k7G6', 'SlNh', 'ueue']);
+  const unusedDependencies = new Set(['laUo', 'smwl', 'S2r0', 'ufra', 'I07G', 'D4ZO', 'SaEY', 'k7G6', 'SlNh', 'ueue', 'IRAT']);
   for (const range of ranges) {
     let source = files.get(range.file);
     if (!source) {
-      source = await fs.readFile(new URL('../original-client/public/chatgpt.com/cdn/assets/' + range.file, import.meta.url), 'utf8');
+      source = (await fs.readFile(new URL('../original-client/public/chatgpt.com/cdn/assets/' + range.file, import.meta.url), 'utf8')).replaceAll('\r\n', '\n');
       files.set(range.file, source);
     }
     const original = source.slice(range.start, range.end);
@@ -472,6 +560,12 @@ test('actual original ra39 schema, PXhB formatter and aFrt card conversion accep
   };
   nativeRequire.r = exports => Object.defineProperty(exports, '__esModule', { value: true });
   const schema = nativeRequire('ra39').a;
+  const usageAdapter = createLocalPricingAdapter({
+    readMembership: () => usageOwner, readUsageIdentity: () => usageIdentity, readUsage: () => workerUsage(), now: () => usageTime,
+  });
+  const nativeUsage = nativeRequire('TDk3').a((await rpc(usageAdapter, '/wham/usage')).body);
+  assert.equal(nativeUsage.ambient_usage.default.menu.rows[0].value.text, '9');
+  assert.equal(nativeUsage.rate_limit.primary_window.limit_window_seconds, 86400);
   for (const scope of ['US', 'USD', 'CN']) {
     const result = schema.safeParse(getLocalReferencePricingConfig(scope));
     assert.equal(result.success, true, 'The real native price schema must parse the read DTO');

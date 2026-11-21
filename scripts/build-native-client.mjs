@@ -10,7 +10,7 @@ const output=path.join(root,'native-client');
 const servicesOnly = process.argv.includes('--services-only');
 const sha256 = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const helpers=['boot-adapter.mjs','startup-compatibility.mjs','image-input-compression.mjs','service-boundary.mjs','provider-routing.mjs','local-native-read-aloud.mjs','local-web-search.mjs','preferred-host-transport.mjs','synthetic-bootstrap.mjs','public-auth-envelope.mjs','local-identity.mjs','local-token-identity.mjs','site-account.mjs','chat-history-sync.mjs','account-history-coordinator.mjs','native-cloud-sync-feedback.mjs','local-model-selection-policy.mjs','local-configuration.mjs','local-user-preferences.mjs','local-personalization-service.mjs','local-personalization-context.mjs','local-host-settings.mjs','local-work-policy.mjs','local-codex-adapter.mjs','local-dot-adapter.mjs','local-map-provider.mjs','local-maps-service.mjs','local-discovery.mjs','public-plugin-catalog.mjs','local-pubsub.mjs','model-catalog-adapter.mjs','local-app-server.mjs','classic-chat-adapter.mjs','portable-conversation-share.mjs','classic-response-branches.mjs','classic-input-messages.mjs','agent-turn-runner.mjs','site-ultra-orchestrator.mjs','browser-tool-executor.mjs','local-document-extraction.mjs','document-text-worker.mjs','local-ooxml-container.mjs','local-office-xml.mjs','local-xlsx-extraction.mjs','local-pptx-extraction.mjs','local-files-service.mjs','local-library-service.mjs','local-library-publisher.mjs','published-resource-rehydration.mjs','native-library-refresh.mjs','native-publication-references.mjs','native-workspace-references.mjs','native-file-reference-composition.mjs','local-native-upload.mjs','local-native-download.mjs','local-workspace-download-source.mjs','local-workspace-download-service.mjs','owned-download-transport.mjs','local-input-preparation.mjs','local-pricing.mjs','entry-library.mjs'];
-helpers.push('native-pricing-trials.mjs', 'site-signout.mjs', 'native-site-login.mjs', 'site-paths.mjs', 'prepared-input-store.mjs');
+helpers.push('native-pricing-trials.mjs', 'site-signout.mjs', 'native-site-login.mjs', 'site-paths.mjs', 'prepared-input-store.mjs', 'site-inference-transport.mjs');
 if(new Set(helpers).size!==helpers.length)throw Error('Duplicate native helper declaration');
 if(process.argv.includes('--from-reference')){
  if (servicesOnly) throw Error('A service update requires a previously published client');
@@ -20,7 +20,8 @@ if(process.argv.includes('--from-reference')){
 const raw=new Map(await Promise.all(helpers.map(async name=>[name,await fs.readFile(path.join(input,name),'utf8')])));
 const entryPlanInput=await fs.readFile(path.join(input,'entry-plan.json'),'utf8');
 const plan=JSON.parse(entryPlanInput);
-const sourceBuild='ef0c3fb941611420d8683bf88f61acf1a8ac6b19';
+const sourceBuild=plan.sourceBuild??'ef0c3fb941611420d8683bf88f61acf1a8ac6b19';
+if (!/^[a-f\d]{40}$/.test(sourceBuild)) throw Error('Invalid upstream build identifier');
 const publicAssets=[];
 async function collectAssets(directory){
  let entries;try{entries=await fs.readdir(path.join(input,directory),{withFileTypes:true});}catch(error){if(error.code==='ENOENT')return;throw error;}
@@ -119,7 +120,7 @@ for(const [name,original]of raw){
   text=replace(text,'// Log the contract name, never query parameters, headers or payload values.',"// Normalize the deployment basename at the service boundary.\n    if (local && deploymentBase !== '/' && url.pathname.startsWith(deploymentBase)) url.pathname = '/' + url.pathname.slice(deploymentBase.length);\n    // Log the contract name, never query parameters, headers or payload values.");
  }
  if(name==='local-app-server.mjs')text=replace(text,"from '../../runtime.js'","from '../runtime.js?v="+release+"'");
- text=text.replace(/(\bfrom\s*|\bimport\s*(?:\(\s*)?)(['"])\.\/(model-catalog|config|runtime)\.js\2/g,(_match,prefix,quote,module)=>prefix+quote+'../'+module+'.js?v='+release+quote);
+ text=text.replace(/(\bfrom\s*|\bimport\s*(?:\(\s*)?)(['"])(?:\.\/|\.\.\/\.\.\/)(model-catalog|config|runtime)\.js\2/g,(_match,prefix,quote,module)=>prefix+quote+'../'+module+'.js?v='+release+quote);
  text=text.replace(/(\bfrom\s*|\bimport\s*(?:\(\s*)?)(['"])(\.\/[^'"?]+\.mjs)\2/g,(_match,prefix,quote,specifier)=>prefix+quote+specifier+'?v='+release+quote);
  await write(path.join(output,name),text);
  provenance.push({file:name,inputSha256:crypto.createHash('sha256').update(original).digest('hex'),publishedSha256:crypto.createHash('sha256').update(text).digest('hex')});
@@ -133,7 +134,7 @@ const rootURL = new URL('../', import.meta.url);
 document.documentElement.dataset.routerBasename = rootURL.pathname.replace(/\\/$/, '') || '/';
 await installBrowserCompatibility();
 const releaseFetch = globalThis.fetch.bind(globalThis);
-globalThis.__CHATGPT_REPLICA_ENV__ = Object.freeze({basePath:rootURL.pathname,localIdentity:true,useOriginalAuth:true,preferredHostEnabled:true,directAssetHost:true,release:${JSON.stringify(release)},sourceBuild:${JSON.stringify(sourceBuild)}});
+globalThis.__CHATGPT_REPLICA_ENV__ = Object.freeze({basePath:rootURL.pathname,localIdentity:true,useOriginalAuth:true,siteAccountService:true,preferredHostEnabled:true,directAssetHost:true,release:${JSON.stringify(release)},sourceBuild:${JSON.stringify(sourceBuild)}});
 const workerURL = new URL('native-client-worker.js?v='+${JSON.stringify(release)}, rootURL);
 installDirectAssetHost(rootURL, { fetchImpl: releaseFetch });
 // Storage-backed hosting is optional; import maps host the original modules.
@@ -148,7 +149,7 @@ let isBusy;
 const pagePath = location.pathname.replace(/\\/index\\.html$/, '/').replace(/\\/$/, '');
 const authEntry = getSiteAuthEntryKind(location.href, rootURL);
 if (authEntry === 'logout') {
- siteAccount.logoutSiteAccount();
+ await siteAccount.logoutSiteAccount({waitForRemote:true});
  location.replace(signOut.getSiteSignedOutUrl(rootURL));
 } else if(authEntry === 'login' || authEntry === 'signup') {
  siteAccount.renderSiteLoginPage();
@@ -305,6 +306,7 @@ await write(path.join(root,'native-client-shell.html'),html);
 await write(path.join(output,'adapter-provenance.json'),JSON.stringify({sourceBuild,release,deploymentBase,...(priorPlan?{preservedRegistrationEntry:registrationEntry}:{}),builderSha256:sha256(builderBytes),entryPlanInputSha256:sha256(entryPlanInput),sourceEntry:plan.sourceEntrySha256,runtime:plan.runtime,manifest:plan.manifest,componentFactoriesModified:false,legacyUiImported:false,serviceAdapter:'Browser-local account/storage and the explicitly configured API; no original private backend or Google authentication is claimed.',sharedAssets:sharedAssets.map(({file,bytes,inputFile})=>({file,...(inputFile?{inputFile,inputSha256:sha256(bytes)}:{}),sha256:sha256(bytes)})),resources:publicAssets.map(({relative,bytes})=>({file:relative,sha256:sha256(bytes)})),siteResourceAliases,supplementalManifest:{file:supplementalManifestFile,sha256:sha256(supplementalManifestBytes)},supplementalResources:supplementalAssets.map(({file,bytes})=>({file,sha256:sha256(bytes)})),helpers:provenance},null,2)+'\n');
 if(process.argv.includes('--activate')){
  const backup=path.join(root,'.test-output/index-before-native-client.html');
+ await fs.mkdir(path.dirname(backup),{recursive:true});
  try{await fs.access(backup);}catch{await fs.copyFile(path.join(root,'index.html'),backup);}
  await write(path.join(root,'index.html'),html);
  await write(path.join(root,'404.html'),html);

@@ -12,7 +12,7 @@
  * aVy5 async/131573.a965ef0d42.js:523279-547256 (local submission hook).
  * EAKz retains its original protocol/state reconciliation over LocalProtocolSocket.
  */
-import { WORK_MODEL_IDS } from '../model-catalog.js?v=39c29eae31156e71';
+import { WORK_MODEL_IDS } from '../model-catalog.js?v=ca63aad189abab8c';
 export const CODEX_DETAIL_MODE = 'STEPS_COMMANDS';
 export const WORK_DETAIL_MODE = 'STEPS_PROSE';
 export const CODEX_BROWSER_UI_GATES = Object.freeze(['3999836663', '4019944087', '515412992']);

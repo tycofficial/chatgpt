@@ -344,7 +344,7 @@ export async function runAgentTurn(server, running) {
     meta.resumePolicy = signal.aborted ? running.interruptReason === 'pagehide' ? 'automatic' : 'manual' : transportRetry ? 'automatic' : retryable && (cp.networkFailures || 0) < (server.agentOptions.maxConsecutiveFailures ?? 6) ? 'automatic' : 'manual';
     if (error.requiresTransportResume) cp.nextResumeAt = server.now() + Math.min(30000, (server.agentOptions.retryDelayMs ?? 500) * 2 ** Math.min(cp.hostFailures || 1, 5));
     if (retryable) cp.nextResumeAt = server.now() + Math.min(30000, (server.agentOptions.retryDelayMs ?? 500) * 2 ** Math.min(cp.networkFailures || 1, 5));
-    meta.lastFailure = { code: error.code ?? null, status: error.status ?? null, providerCode: error.providerCode ?? null, requestId: error.requestId ?? null, param: error.param ?? null, retryable, requiresTransportResume: error.requiresTransportResume === true }; 
+    meta.lastFailure = { code: error.code ?? null, status: error.status ?? null, providerCode: error.providerCode ?? null, requestId: error.requestId ?? null, param: error.param ?? null, retryable, requiresTransportResume: error.requiresTransportResume === true };
     try { await save(); } catch (saveError) { server.diagnostics.push({ type: 'checkpoint-error', message: errorText(saveError) }); }
     if (signal.aborted || error?.name === 'AbortError') server.finish(running, 'interrupted', null);
     else server.finish(running, 'failed', { message: errorText(error), codexErrorInfo: null, additionalDetails: null, misalignment: null });
