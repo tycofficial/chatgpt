@@ -1,4 +1,5 @@
 import Foundation
+import CoreGraphics
 import XCTest
 
 final class SafariPublicSiteTests: XCTestCase {
@@ -32,7 +33,7 @@ final class SafariPublicSiteTests: XCTestCase {
         let syntheticName = "qaipad" + String(syntheticID.prefix(9))
         guard check(enterUsername(syntheticName, in: username, using: safari), "signup-username-not-entered") else { return }
         mark("signup-username-entered")
-        password.tap()
+        guard check(focusWithKeyboard(password, using: safari), "signup-password-focus") else { return }
         safari.typeText("Qa9ipad" + UUID().uuidString.replacingOccurrences(of: "-", with: ""))
         let signup = named(safari.webViews.descendants(matching: .button), ["继续", "Continue", "Sign up", "注册"])
         guard check(signup.waitForExistence(timeout: 10) && signup.isEnabled, "signup-submit") else { return }
@@ -74,20 +75,38 @@ final class SafariPublicSiteTests: XCTestCase {
 
     @MainActor
     private func enterUsername(_ username: String, in field: XCUIElement, using safari: XCUIApplication) -> Bool {
-        for attempt in 0..<2 {
-            field.tap()
-            if safari.keyboards.firstMatch.waitForExistence(timeout: 5) && attempt == 0 { mark("signup-keyboard") }
-            if attempt > 0, let previous = field.value as? String, !previous.isEmpty {
-                safari.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: previous.count))
-            }
-            safari.typeText(username)
-            let deadline = Date().addingTimeInterval(5)
-            repeat {
-                if (field.value as? String)?.lowercased() == username { return true }
-                _ = RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.4))
-            } while Date() < deadline
+        guard focusWithKeyboard(field, using: safari) else { return check(false, "signup-username-focus") }
+        mark("signup-keyboard")
+        safari.typeText(username)
+        let deadline = Date().addingTimeInterval(5)
+        repeat {
+            if (field.value as? String)?.lowercased() == username { return true }
+            settle(0.4)
+        } while Date() < deadline
+        return false
+    }
+
+    @MainActor
+    private func focusWithKeyboard(_ field: XCUIElement, using safari: XCUIApplication) -> Bool {
+        for attempt in 0..<3 {
+            guard field.exists && field.isHittable else { return false }
+            if attempt == 0 { field.tap() }
+            else { field.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap() }
+            if keyboardSettled(in: safari) { return true }
         }
         return false
+    }
+
+    @MainActor
+    private func keyboardSettled(in safari: XCUIApplication) -> Bool {
+        let keyboard = safari.keyboards.firstMatch
+        guard keyboard.waitForExistence(timeout: 4) else { return false }
+        settle(0.35)
+        return keyboard.exists
+    }
+
+    private func settle(_ seconds: TimeInterval) {
+        _ = RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(seconds))
     }
 
     @MainActor
@@ -131,10 +150,24 @@ final class SafariPublicSiteTests: XCTestCase {
 
     @MainActor
     private func send(_ prompt: String, in safari: XCUIApplication, failure: String) -> Bool {
-        guard let editor = findEditor(in: safari, timeout: 15) else { return check(false, failure + "-editor") }
-        editor.tap()
-        safari.typeText(prompt)
         let button = named(safari.webViews.descendants(matching: .button), sendNames)
+        guard check(button.waitForExistence(timeout: 15), failure + "-control") else { return false }
+        var focused = false
+        if let editor = findEditor(in: safari, timeout: 10) {
+            focused = focusWithKeyboard(editor, using: safari)
+        }
+        if !focused && button.isHittable {
+            // The original mobile composer keeps its editable area immediately left of Send.
+            let frame = button.frame
+            let distance = max(105, frame.width * 3)
+            if frame.midX - distance > safari.webViews.firstMatch.frame.minX {
+                button.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+                    .withOffset(CGVector(dx: -distance, dy: 0)).tap()
+                focused = keyboardSettled(in: safari)
+            }
+        }
+        guard check(focused, failure + "-editor-focus") else { return false }
+        safari.typeText(prompt)
         guard check(button.waitForExistence(timeout: 10) && button.isEnabled, failure + "-control") else { return false }
         button.tap()
         return true
@@ -151,6 +184,6 @@ final class SafariPublicSiteTests: XCTestCase {
     }
 
     private func mark(_ event: String) {
-        print("IPAD_UI_QA \(event)")
+        FileHandle.standardOutput.write(Data("IPAD_UI_QA \(event)\n".utf8))
     }
 }
