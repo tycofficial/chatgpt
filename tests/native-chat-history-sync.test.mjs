@@ -235,6 +235,51 @@ test('a verified reattaching turn advances an unsent browser history capture wit
   assert.deepEqual(recovered.threads, [projectChatHistoryThread(restored)]);
 });
 
+test('a completed browser reattachment recovers the first upload while a changed prompt stays conflicted', async t => {
+  const f = await fixture(t), a = device(f);
+  const make = (id, changed) => {
+    const previous = thread(id, 'Unchanged visible beginning.');
+    const pending = previous.turns[0];
+    pending.status = 'inProgress';
+    pending.completedAt = pending.durationMs = null;
+    pending.items[1] = { ...pending.items[1], status: 'inProgress', startedAtMs: 1000000, durationMs: null };
+    pending.adapterMetadata.reasoningLifecycle = { status: 'inProgress', startedAtMs: 1000000, workStartedAtMs: 1000000, attemptDurationMs: 0 };
+    pending.items.pop();
+    const completed = thread(id, 'The actual confirmed answer.');
+    completed.updatedAt = completed.recencyAt = 1012;
+    const turn = completed.turns[0];
+    turn.items[1] = { ...turn.items[1], status: 'completed', startedAtMs: 1000050, completedAtMs: 1012000, durationMs: 11950 };
+    turn.adapterMetadata.interruption = 'page-reload-checkpoint-saved';
+    turn.adapterMetadata.resumePolicy = 'automatic';
+    turn.adapterMetadata.checkpoint = { state: 'completed' };
+    turn.adapterMetadata.reasoningLifecycle = { status: 'completed', startedAtMs: 1000000, workStartedAtMs: 1000000, completedAtMs: 1012000, attemptDurationMs: 11950, workDurationMs: 12000 };
+    if (changed) turn.items[0].content[0].text = 'A different prompt in a competing branch.';
+    return { previous, completed };
+  };
+  const recovered = make('initial-local-recovery', false), divergent = make('initial-local-divergence', true);
+  a.state.online = false;
+  await a.sync.initialize([recovered.previous, divergent.previous]);
+  const key = [...a.store.values.keys()][0];
+  await a.store.transact(key, state => {
+    for (const { previous, completed } of [recovered, divergent]) {
+      const id = previous.id;
+      state.conflicts[id] = { id, reason: 'startup-local-diverged', local: projectChatHistoryThread(completed),
+        remote: copy(state.heads[id]), remoteMetadata: { id, revision: 0, sequence: 0, deleted: false } };
+      state.heads[id] = projectChatHistoryThread(completed);
+    }
+    state.outbox = [];
+  });
+
+  a.state.online = true;
+  const before = await a.create().initialize([recovered.completed, divergent.completed]);
+  assert.deepEqual(before.conflicts.map(conflict => conflict.id), [divergent.completed.id]);
+  const writes = a.calls.filter(call => call.method === 'PUT');
+  assert.equal(writes.length, 1);
+  assert.equal(writes[0].body.baseRevision, 0);
+  const anotherDevice = device(f);
+  assert.deepEqual((await anotherDevice.sync.initialize([])).threads, [projectChatHistoryThread(recovered.completed)]);
+});
+
 test('startup with divergent older native storage preserves both branches and requires an explicit decision', async t => {
   const f = await fixture(t), a = device(f), original = thread(); await a.sync.initialize([original]); await a.sync.synchronize([addTurn(original, 'Previously synced newer branch')]);
   const reloaded = await a.create().initialize([original]); assert.equal(reloaded.conflicts.length, 1); assert.equal(reloaded.conflicts[0].local.turns.length, 1); assert.equal(reloaded.conflicts[0].remote.turns.length, 2); assert.equal(reloaded.queuedCount, 0); assert.equal(f.DB.raw.prepare('SELECT revision FROM chat_sync_conversations').get().revision, 2);

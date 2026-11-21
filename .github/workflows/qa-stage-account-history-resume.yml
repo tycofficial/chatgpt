@@ -18,7 +18,7 @@ jobs:
       contents: write
     env:
       DEPLOY_BASE: 89e38b1a4b0fec865a2cc1956a68c5c91bd68a88
-      VERIFIED_REF: refs/heads/qa/verified-account-history-resume
+      VERIFIED_REF: refs/heads/qa/verified-account-history-exact
     outputs:
       release: ${{ steps.export.outputs.release }}
       commit: ${{ steps.export.outputs.commit }}
@@ -70,7 +70,7 @@ jobs:
           [[ "$release" =~ ^[a-f0-9]{16}$ ]]
           [[ "$release" != dee4682939543502 ]]
           tree="$(git write-tree)"
-          packed="$(git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit-tree "$tree" -p "$DEPLOY_BASE" -m 'Keep the first history upload when the browser reattaches')"
+          packed="$(git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit-tree "$tree" -p "$DEPLOY_BASE" -m 'Preserve account history when a resumed first reply completes')"
           git push origin "$packed:$VERIFIED_REF"
           {
             printf 'release=%s\ncommit=%s\n' "$release" "$packed"
