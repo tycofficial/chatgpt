@@ -370,9 +370,9 @@ export function createChatHistorySync({ baseURL, fetchImpl = globalThis.fetch?.b
     observedRevisions = new Map(documents.map(document => [document.id, result.observed[document.id]]));
     return { queuedCount: result.queuedCount, conflictCount: result.conflictCount };
   }
-  async function adopt(remoteMetadata, document) {
+  async function adopt(remoteMetadata, document, wireDocument = document) {
     const id = safeId(remoteMetadata.id);
-    return update(state => {
+    const acknowledged = await update(state => {
       const known = state.known[id], pending = state.outbox.filter(item => item.id === id);
       if ((known?.revision ?? 0) > remoteMetadata.revision) return;
       const local = state.heads[id] ?? null;
@@ -382,8 +382,23 @@ export function createChatHistorySync({ baseURL, fetchImpl = globalThis.fetch?.b
         else if (state.conflicts[id]?.local === null) delete state.conflicts[id];
         delete state.heads[id]; state.outbox = state.outbox.filter(item => item.id !== id); state.known[id] = clone(remoteMetadata); state.localIds = state.localIds.filter(value => value !== id); return;
       }
-      const match = pending.findLastIndex(item => item.method === 'PUT' && item.attempted && item.baseRevision === remoteMetadata.revision - 1 && equal(item.document, document));
-      if (match >= 0) { const remove = new Set(pending.slice(0, match + 1).map(item => item.mutationId)); const resolved = remove.has(state.conflicts[id]?.resolution?.mutationId); state.outbox = state.outbox.filter(item => !remove.has(item.mutationId)); state.known[id] = clone(remoteMetadata); if (resolved) { delete state.conflicts[id]; if (state.heads[id] && !equal(state.heads[id], document) && !state.outbox.some(item => item.id === id)) queue(state, id, 'PUT', state.heads[id], remoteMetadata.revision); } else if (!state.outbox.some(item => item.id === id)) state.heads[id] = clone(document); return; }
+      const match = pending.findLastIndex(item => item.method === 'PUT' && item.attempted &&
+        item.baseRevision === remoteMetadata.revision - 1 && equal(item.document, wireDocument));
+      if (match >= 0) {
+        const remove = new Set(pending.slice(0, match + 1).map(item => item.mutationId));
+        const resolved = remove.has(state.conflicts[id]?.resolution?.mutationId);
+        state.outbox = state.outbox.filter(item => !remove.has(item.mutationId));
+        state.known[id] = clone(remoteMetadata);
+        if (resolved) {
+          delete state.conflicts[id];
+          if (state.heads[id] && !equal(state.heads[id], document) && !state.outbox.some(item => item.id === id)) {
+            queue(state, id, 'PUT', state.heads[id], remoteMetadata.revision);
+          }
+        } else if (!state.outbox.some(item => item.id === id)) {
+          state.heads[id] = clone(document);
+        }
+        return true;
+      }
       if (local && equal(local, document)) { state.outbox = state.outbox.filter(item => item.id !== id); state.known[id] = clone(remoteMetadata); state.heads[id] = clone(document); delete state.conflicts[id]; return; }
       if (pending.length || state.conflicts[id]) {
         const resolving = state.conflicts[id];
@@ -394,6 +409,9 @@ export function createChatHistorySync({ baseURL, fetchImpl = globalThis.fetch?.b
       }
       state.known[id] = clone(remoteMetadata); state.heads[id] = clone(document);
     });
+    if (acknowledged && localBaseline?.has(id) && equal(localBaseline.get(id), wireDocument)) {
+      observedRevisions.set(id, remoteMetadata.revision);
+    }
   }
   async function fetchRemote(id, signal) {
     const result = await request('/sync/conversations/' + encodeURIComponent(safeId(id)), { signal });
@@ -401,7 +419,7 @@ export function createChatHistorySync({ baseURL, fetchImpl = globalThis.fetch?.b
     if (!result.response.ok) throw responseError(result);
     const meta = metadata(result.value, id); if (meta.deleted) fail('SYNC_PROTOCOL_ERROR', 'A live history response cannot be deleted.');
     const document = projectChatHistoryThread(result.value.document); if (!document || document.id !== id) fail('SYNC_PROTOCOL_ERROR', 'The remote document ID does not match its history entry.');
-    await adopt(meta, document);
+    await adopt(meta, document, result.value.document);
   }
   async function pullInside({ signal } = {}) {
     let state = await load(), after = state.cursor;

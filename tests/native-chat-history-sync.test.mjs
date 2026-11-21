@@ -95,6 +95,28 @@ test('new next-turn queued behind a lost acknowledgement is not overwritten by t
   const remote = await device(f).sync.initialize([]); assert.equal(remote.threads[0].turns.length, 2); assert.equal(remote.threads[0].turns[1].model, 'gpt-6-astra'); assert.equal(remote.threads[0].turns[1].reasoningEffort, 'max');
 });
 
+test('a later local capture uses the exact Worker revision recovered from a lost acknowledgement', async t => {
+  const f = await fixture(t), a = device(f);
+  const first = thread('capture-after-lost-acknowledgement');
+  await a.sync.initialize([first]);
+  const second = addTurn(first, 'Confirmed by the Worker before the reply was lost.');
+  await a.sync.capture([second]);
+  a.state.loseAckOnce = true;
+  await assert.rejects(a.sync.flush(), { code: 'SYNC_NETWORK_UNAVAILABLE' });
+  assert.equal([...a.store.values.values()][0].outbox[0].attempted, true);
+
+  await a.sync.pull();
+  assert.equal((await a.sync.snapshot()).queuedCount, 0);
+  const third = addTurn(second, 'Captured after reading the missing acknowledgement.');
+  await a.sync.capture([third]);
+  assert.equal([...a.store.values.values()][0].outbox[0].baseRevision, 2);
+  await a.sync.flush();
+
+  const other = device(f);
+  assert.deepEqual((await other.sync.initialize([])).threads, [projectChatHistoryThread(third)]);
+  assert.deepEqual(a.calls.filter(call => call.method === 'PUT').map(call => call.body.baseRevision), [0, 1, 2]);
+});
+
 test('two concurrent device edits preserve both real documents and never retry a stale CAS as success', async t => {
   const f = await fixture(t), a = device(f), original = thread(); await a.sync.initialize([original]); const b = device(f); await b.sync.acknowledgeApplied((await b.sync.initialize([])).threads);
   const aEdit = addTurn(original, 'device A update'), bEdit = addTurn(original, 'device B conflicting update'); await a.sync.synchronize([aEdit]);
