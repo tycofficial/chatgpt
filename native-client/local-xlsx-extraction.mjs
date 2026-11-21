@@ -2,7 +2,7 @@
 import { OFFICE_XML_PARSER, OFFICE_NAMESPACES as NS, officeError, officeXmlLimits,
   directChildren, firstChild, officeAttribute, readOfficePart,
   readOfficeRelationships, resolveOfficeTarget, findOfficeDocumentPart,
-  readOfficeContentTypes } from './local-office-xml.mjs?v=bfb322d68717147e';
+  readOfficeContentTypes } from './local-office-xml.mjs?v=923e7f59b16a7c09';
 
 export const XLSX_PARSER = Object.freeze({ name: 'site-ooxml-spreadsheetml', version: '1.0.0', xml: OFFICE_XML_PARSER });
 const SHEET_NS = Object.freeze(['http://schemas.openxmlformats.org/spreadsheetml/2006/main', 'http://purl.oclc.org/ooxml/spreadsheetml/main']);

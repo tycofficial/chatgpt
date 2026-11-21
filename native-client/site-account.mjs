@@ -1,5 +1,5 @@
 /** Account verification, browser-local guest sessions, and site-only trials. */
-import { getSiteAuthEntryKind, isHistoricalSitePath, resolveSiteHomeUrl } from './site-paths.mjs?v=bfb322d68717147e';
+import { getSiteAuthEntryKind, isHistoricalSitePath, resolveSiteHomeUrl } from './site-paths.mjs?v=923e7f59b16a7c09';
 
 export const SITE_ACCOUNT_SERVICE = 'https://chatgpt-admin-bridge-tyc.hushedtarragon1.chatgpt.site';
 

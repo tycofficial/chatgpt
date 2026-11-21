@@ -1,9 +1,9 @@
-import {BrowserWorkspaceStore,workspacePath} from './native-client/browser-tool-executor.mjs?v=bfb322d68717147e';
+import {BrowserWorkspaceStore,workspacePath} from './native-client/browser-tool-executor.mjs?v=923e7f59b16a7c09';
 const workspace=new BrowserWorkspaceStore();
 const SOURCE_BUILD="b6348792a294e8e04a67660959ba41914937938f";
 const BASE=new URL('./',self.location.href).pathname;
 const CACHE='chatgpt-original-assets-'+SOURCE_BUILD;
-const SHELL_CACHE='chatgpt-native-shell-bfb322d68717147e';
+const SHELL_CACHE='chatgpt-native-shell-923e7f59b16a7c09';
 self.addEventListener('install',event=>event.waitUntil(self.skipWaiting()));
 self.addEventListener('activate',event=>event.waitUntil(self.clients.claim()));
 function mirror(url){
@@ -53,7 +53,7 @@ self.addEventListener('fetch',event=>{
  // Only immutable public assets belong here. Keep account data and release discovery on the network.
  const relative=requested.pathname.slice(BASE.length);
  const own=requested.origin===self.location.origin&&requested.pathname.startsWith(BASE);
- const revision=requested.search==='?v=bfb322d68717147e';
+ const revision=requested.search==='?v=923e7f59b16a7c09';
  const nativeStatic=revision&&(/^(?:native-client\/[a-zA-Z0-9_./-]+\.(?:mjs|js|json|css)|(?:runtime|config|model-catalog|release-updater|python-worker)\.js)$/.test(relative))&&!relative.endsWith('/active.json');
  const immutable=!requested.search&&/^original-client\/public\/(?:chatgpt\.com\/cdn\/assets|cdn\.oaistatic\.com\/assets)\/(?:[a-zA-Z0-9_-]+\/)*(?:[a-zA-Z0-9_-]+[.-])?[0-9a-f]{8,64}\.(?:js|mjs|json|css|woff2|png|webp|svg)$/.test(relative);
  if(own&&(nativeStatic||immutable)&&!event.request.headers.has('authorization')&&!event.request.headers.has('range')){

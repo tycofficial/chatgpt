@@ -14,7 +14,7 @@
  */
 import {
   PUBLIC_PLUGIN_CATALOG, PUBLIC_PLUGIN_CATALOG_PROVENANCE,
-} from './public-plugin-catalog.mjs?v=bfb322d68717147e';
+} from './public-plugin-catalog.mjs?v=923e7f59b16a7c09';
 
 const SOURCE = 'official-public-manifests-and-site-local-registry';
 const copy = value => structuredClone(value);
