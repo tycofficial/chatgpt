@@ -40,8 +40,9 @@ final class SafariPublicSiteTests: XCTestCase {
         let signup = named(safari.webViews.descendants(matching: .button), ["继续", "Continue", "Sign up", "注册"])
         guard check(signup.waitForExistence(timeout: 10) && signup.isEnabled, "signup-submit") else { return }
         signup.tap()
-        guard check(findEditor(in: safari, timeout: 60) != nil, "signup-did-not-reach-chat") else { return }
-        guard check(!username.exists && !password.exists, "signup-form-still-present") else { return }
+        mark("signup-submitted")
+        guard check(username.waitForNonExistence(timeout: 60) && password.waitForNonExistence(timeout: 10), "signup-form-still-present") else { return }
+        guard check(findEditor(in: safari, timeout: 55) != nil, "signup-did-not-reach-chat") else { return }
         mark("signup-returned-to-chat")
 
         let token = "IPAD-QA-" + String(syntheticID.prefix(10))
