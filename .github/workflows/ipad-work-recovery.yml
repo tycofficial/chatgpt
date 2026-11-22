@@ -1,0 +1,63 @@
+name: iPad MobileSafari Work recovery
+on:
+  push:
+    branches: [qa/ipad-work-recovery-3a59867]
+
+permissions:
+  contents: read
+
+jobs:
+  safari:
+    runs-on: macos-26
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Build the isolated iPad XCTest harness
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin d1c9ca2aa55d2a32c624317c276d4204905dfc8b
+          qa_root="$RUNNER_TEMP/tyc-ipad-work"
+          mkdir -p "$qa_root"
+          git archive FETCH_HEAD scripts/qa/ipad-xcuitest | tar -x -C "$qa_root"
+          qa_project="$qa_root/scripts/qa/ipad-xcuitest"
+          cp scripts/qa/ipad-work/SafariPublicSiteTests.swift "$qa_project/SafariQAUITests/SafariPublicSiteTests.swift"
+          xcrun simctl list devices available -j | node "$qa_project/select-device.mjs" > "$qa_root/device"
+          source "$qa_root/device"
+          xcodebuild build-for-testing -project "$qa_project/SafariQA.xcodeproj" -scheme SafariQA \
+            -destination "platform=iOS Simulator,id=$IPAD_UDID" \
+            -derivedDataPath "$qa_root/build" -parallel-testing-enabled NO -quiet
+
+      - name: Test Work against the runner-local fixture in MobileSafari
+        shell: bash
+        run: |
+          set -euo pipefail
+          qa_root="$RUNNER_TEMP/tyc-ipad-work"
+          source "$qa_root/device"
+          qa_project="$qa_root/scripts/qa/ipad-xcuitest"
+          bash scripts/qa/ipad-work/create-loopback-tls.sh "$qa_root/tls"
+          TYC_IPAD_TLS_KEY="$qa_root/tls/leaf.key" TYC_IPAD_TLS_CERT="$qa_root/tls/leaf.crt" \
+            node scripts/qa/ipad-work/serve-ipad-fixture.mjs "$GITHUB_WORKSPACE" > "$qa_root/fixture.log" 2>&1 &
+          fixture_pid=$!
+          trap 'kill "$fixture_pid" 2>/dev/null || true' EXIT
+          curl --cacert "$qa_root/tls/ca.crt" --fail --silent --show-error --retry 8 --retry-connrefused --max-time 5 \
+            https://127.0.0.1:4400/__ipad_qa/metrics
+          defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool NO
+          if ! xcrun simctl bootstatus "$IPAD_UDID" -b; then
+            xcrun simctl bootstatus "$IPAD_UDID"
+          fi
+          xcrun simctl keychain "$IPAD_UDID" add-root-cert "$qa_root/tls/ca.crt"
+          xcrun simctl launch "$IPAD_UDID" com.apple.mobilesafari
+          xcrun simctl openurl "$IPAD_UDID" https://127.0.0.1:4400/__ipad_qa/seed
+          xcodebuild test-without-building -project "$qa_project/SafariQA.xcodeproj" -scheme SafariQA \
+            -destination "platform=iOS Simulator,id=$IPAD_UDID" -derivedDataPath "$qa_root/build" \
+            -resultBundlePath "$qa_root/work-recovery.xcresult" \
+            -only-testing:SafariQAUITests/SafariPublicSiteTests/testWorkTogglesAndBrowserChromeReload \
+            -parallel-testing-enabled NO -disable-concurrent-destination-testing \
+            -test-timeouts-enabled YES -default-test-execution-time-allowance 360
+          result="$(curl --cacert "$qa_root/tls/ca.crt" --fail --silent --show-error https://127.0.0.1:4400/__ipad_qa/metrics)"
+          echo "$result"
+          printf '%s\n' "$result" | jq -e '.documentLoads >= 2 and .inferenceCalls == 0 and .planType == "plus"'
