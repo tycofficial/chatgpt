@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
+import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {createBrowserToolExecutor,workspacePath} from '../src/native-client/browser-tool-executor.mjs';
@@ -10,7 +11,7 @@ import {createNativePublicationReferences} from '../src/native-client/native-pub
 import {normalizePublicationReceipt} from '../src/native-client/local-library-publisher.mjs';
 import {projectChatHistoryThread} from '../src/native-client/chat-history-sync.mjs';
 import {parseOriginalMarkdown,originalMarkdownFixture} from './support/original-markdown.mjs';
-const base='https://neutral-owned.test/chatgpt/',parent='D:/Codex-Agent-Validation/test-temp';
+const base='https://neutral-owned.test/chatgpt/',parent=path.resolve(tmpdir());
 globalThis.__CHATGPT_REPLICA_ENV__={basePath:'/chatgpt/'};globalThis.location={origin:new URL(base).origin};
 const encoder=new TextEncoder(),decoder=new TextDecoder(),sha=b=>createHash('sha256').update(b).digest('hex'),identityA={accountId:'reference-owner-a',userId:'reference-user-a',accountUserId:null},identityB={accountId:'reference-owner-b',userId:'reference-user-b',accountUserId:'reference-account-user-b'};
 async function environment(t,options={}){

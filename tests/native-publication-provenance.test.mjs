@@ -2,10 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
+import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {createLocalFilesService} from '../src/native-client/local-files-service.mjs';
-const parent='D:/Codex-Agent-Validation/test-temp',encoder=new TextEncoder(),sha=b=>createHash('sha256').update(b).digest('hex');
+const parent=path.resolve(tmpdir()),encoder=new TextEncoder(),sha=b=>createHash('sha256').update(b).digest('hex');
 async function environment(t){
  fs.mkdirSync(parent,{recursive:true});const root=fs.mkdtempSync(path.join(parent,'publication-provenance-')),workspace=path.join(root,'workspace'),metadata=path.join(root,'metadata');fs.mkdirSync(workspace);fs.mkdirSync(metadata);let account='publication-owner-a',counter=0;const hooks={},metrics={reads:0,writes:0,removes:0,metaReads:0,metaWrites:0},threads=new Set(['actual-source-thread','second-source-thread']);
  const filename=key=>{const value=path.resolve(workspace,key);if(!value.startsWith(workspace+path.sep))throw Error('Invalid test filesystem key');return value;},metaFile=key=>path.join(metadata,encodeURIComponent(key)+'.json');
