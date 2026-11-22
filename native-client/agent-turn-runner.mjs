@@ -1,9 +1,9 @@
 /** Resumable API/tool loop. Original frontend receives its existing item lifecycle. */
-import { createReplayDeltaGate, isHostCheckpoint } from './preferred-host-transport.mjs?v=923e7f59b16a7c09';
-import { isSiteInferenceCheckpoint } from './site-inference-transport.mjs?v=923e7f59b16a7c09';
-import { parseClassicInputMessages } from './classic-input-messages.mjs?v=923e7f59b16a7c09';
-import { compactPreparedUserContent, deduplicateProviderImages, isProviderContent, needsPreparedInputStorage } from './prepared-input-store.mjs?v=923e7f59b16a7c09';
-import { webSearchRequest, updateHostedSearch, interruptHostedSearch, webSearchReferences } from './local-web-search.mjs?v=923e7f59b16a7c09';
+import { createReplayDeltaGate, isHostCheckpoint } from './preferred-host-transport.mjs?v=593898ac3966c2a8';
+import { isSiteInferenceCheckpoint } from './site-inference-transport.mjs?v=593898ac3966c2a8';
+import { parseClassicInputMessages } from './classic-input-messages.mjs?v=593898ac3966c2a8';
+import { compactPreparedUserContent, deduplicateProviderImages, isProviderContent, needsPreparedInputStorage } from './prepared-input-store.mjs?v=593898ac3966c2a8';
+import { webSearchRequest, updateHostedSearch, interruptHostedSearch, webSearchReferences } from './local-web-search.mjs?v=593898ac3966c2a8';
 const clone = value => structuredClone(value);
 const CONTINUE = 'Continue the unfinished response from the saved text, without repeating it. Preserve the requested task, model and reasoning effort. Do not claim any tool succeeded unless its recorded output confirms it.';
 const inputStorageError = (message, cause) => Object.assign(Error(message), { code: 'LOCAL_INPUT_CHECKPOINT_STORAGE', status: 507, retryable: false, cause });
@@ -181,7 +181,7 @@ export async function runAgentTurn(server, running) {
     meta.underlyingApiEffort = turn.reasoningEffort === 'ultra' ? 'max' : turn.reasoningEffort;
     if (turn.reasoningEffort === 'ultra') {
       if (server.agentOptions.ultraOrchestration !== true) throw Object.assign(Error('Site Ultra orchestration is not enabled in this deployment. No provider request was submitted.'), { code: 'ULTRA_ORCHESTRATION_NOT_ENABLED', retryable: false });
-      const { createUltraToolExecutor } = await import('./site-ultra-orchestrator.mjs?v=923e7f59b16a7c09');
+      const { createUltraToolExecutor } = await import('./site-ultra-orchestrator.mjs?v=593898ac3966c2a8');
       executor = createUltraToolExecutor({ baseExecutor: executor, streamCompletion: options => server.streamCompletion(options), turn, checkpoint: cp, save, getSettings: executionSettings, getContext: providerContext, getAbortMode: () => running.interruptReason === 'pagehide' ? 'pagehide' : signal.reason?.requiresTransportResume ? 'transport' : 'user', ephemeral: thread.ephemeral === true, now: server.now, redact: errorText });
     }
     // A partial response is genuine saved output, not a completed tool call.

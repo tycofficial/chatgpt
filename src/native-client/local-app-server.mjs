@@ -317,7 +317,7 @@ export class LocalAppServer {
       const surface = turn.executionSurface ?? turn.adapterMetadata?.executionSurface;
       const mode = turn.reasoningMode ?? turn.adapterMetadata?.reasoningMode ?? 'standard';
       const allowed = surface === 'chat'
-        ? [policy.chatModel,'gpt-5.6-luna'].includes(turn.model) && ['none', 'medium'].includes(turn.reasoningEffort) && mode === 'standard'
+        ? [policy.chatModel,'gpt-5.6-luna'].includes(turn.model) && ['none', 'low', 'medium'].includes(turn.reasoningEffort) && mode === 'standard'
         : !surface && turn.model === policy.fixedModel && policy.allowedEfforts.includes(turn.reasoningEffort) && mode === 'standard';
       if (!allowed) throw new RpcError(-32003, 'This saved turn requires model access unavailable to this account. Send a new message using the Free model instead.');
     }
@@ -350,10 +350,13 @@ export class LocalAppServer {
     }
     const catalog = availableModels.find(entry => entry.model === model);
     if (!catalog) throw new RpcError(-32602, `The local adapter does not offer model ${String(model)}`);
-    effort ??= supplied ?? previous.reasoningEffort ?? catalog.defaultReasoningEffort;
     const apiEfforts = allowedReasoningEfforts(model), ultra = this.catalog.SITE_ULTRA_ORCHESTRATION;
-    const siteUltra = effort === 'ultra' && ultra?.effort === 'ultra' && ultra.mode === 'parallel-agents' && ultra.providerReasoningEffort === false && ultra.baseReasoningEffort === 'max' && Array.isArray(ultra.models) && ultra.models.includes(model) && apiEfforts.includes(ultra.baseReasoningEffort);
-    if (!apiEfforts.includes(effort) && !siteUltra) throw new RpcError(-32602, `The local adapter does not support effort ${String(effort)} for ${model}`);
+    const supportsSiteUltra = ultra?.effort === 'ultra' && ultra.mode === 'parallel-agents' && ultra.providerReasoningEffort === false && ultra.baseReasoningEffort === 'max' && Array.isArray(ultra.models) && ultra.models.includes(model) && apiEfforts.includes(ultra.baseReasoningEffort);
+    const supportsEffort = value => apiEfforts.includes(value) || (value === 'ultra' && supportsSiteUltra);
+    // A model-only change can carry an effort from the previous model.
+    const inheritedEffort = previous.model === model || supportsEffort(previous.reasoningEffort) ? previous.reasoningEffort : undefined;
+    effort ??= supplied ?? inheritedEffort ?? catalog.defaultReasoningEffort;
+    if (!supportsEffort(effort)) throw new RpcError(-32602, `The local adapter does not support effort ${String(effort)} for ${model}`);
     if (params.serviceTier != null && !['standard', 'default', 'fast', 'priority'].includes(params.serviceTier)) throw new RpcError(-32602, `The local text adapter does not implement service tier ${String(params.serviceTier)}`);
     const tier = params.serviceTier ?? previous.serviceTier ?? null;
     const explicitMode = params.selectionMode ?? params.modelSelection?.selectionMode ?? params.responsesapiClientMetadata?.selectionMode;
@@ -846,7 +849,7 @@ export class LocalAppServer {
   }
   interrupt(threadId, { reason = 'user', turnId = null } = {}) {
     const running = this.running.get(threadId);
-    if (!running) {
+    if (!running || (turnId != null && running.turn.id !== turnId)) {
       const thread = this.threads.get(threadId), turn = turnId ? thread?.turns.find(value => value.id === turnId) : thread?.turns.at(-1);
       if (turn && this.onIdleTurnInterrupt) Promise.resolve(this.onIdleTurnInterrupt({ threadId, turn, reason })).catch(error => this.diagnostics.push({ type: 'local-idle-transport-stop-error', message: String(error?.message || error) }));
       return;

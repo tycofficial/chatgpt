@@ -7,11 +7,12 @@ import {ClassicChatAdapter} from '../src/native-client/classic-chat-adapter.mjs'
 import {createUltraToolExecutor,ULTRA_MODELS} from '../src/native-client/site-ultra-orchestrator.mjs';
 import {projectChatHistoryThread} from '../src/native-client/chat-history-sync.mjs';
 import {allowedReasoningEfforts,streamCompletion} from '../runtime.js';
+import {DEFAULT_SETTINGS} from '../config.js';
 const models=createModelCatalogAdapter(catalog);
 const expected=['gpt-6.2-sol','gpt-6.2-astra','gpt-6.1-terra','gpt-6.1-sol','gpt-6-astra','gpt-6-sol','gpt-6-luna','gpt-5.6-sol','gpt-5.6-terra','gpt-5.6-luna'];
 const sleep=()=>new Promise(resolve=>setImmediate(resolve));
-function fixture({privileged=true,storage=new Map(),transport}={}){
- const requests=[];const server=new LocalAppServer({storage:{getItem:key=>storage.get(key)??null,setItem:(key,value)=>storage.set(key,value)},models,catalog,getExecutionPolicy:()=>({modelSelection:privileged}),readSettings:()=>({apiBase:'https://neutral-model.fixture',apiKey:'neutral-only',model:'gpt-6.1-sol'}),streamCompletion:transport??(async options=>{requests.push({model:options.settings.model,effort:options.settings.reasoningEffort,mode:options.settings.reasoningMode});return{content:'Neutral actual fixture reply',finish_reason:'stop',actual_reasoning:{mode:options.settings.reasoningMode}};}),agentOptions:{toolTransport:'responses',ultraOrchestration:true}});
+function fixture({privileged=true,storage=new Map(),transport,freePolicy={}}={}){
+ const requests=[];const server=new LocalAppServer({storage:{getItem:key=>storage.get(key)??null,setItem:(key,value)=>storage.set(key,value)},models,catalog,getExecutionPolicy:()=>({modelSelection:privileged,...freePolicy}),readSettings:()=>({apiBase:'https://neutral-model.fixture',apiKey:'neutral-only',model:'gpt-6.1-sol'}),streamCompletion:transport??(async options=>{requests.push({model:options.settings.model,effort:options.settings.reasoningEffort,mode:options.settings.reasoningMode});return{content:'Neutral actual fixture reply',finish_reason:'stop',actual_reasoning:{mode:options.settings.reasoningMode}};}),agentOptions:{toolTransport:'responses',ultraOrchestration:true}});
  return{server,requests,storage,classic:new ClassicChatAdapter({appServer:server,models,heartbeatMs:100})};
 }
 function nextBody(model='auto',thinking_effort='standard',extra={}){return{action:'next',model,thinking_effort,parent_message_id:crypto.randomUUID(),messages:[{id:crypto.randomUUID(),author:{role:'user'},content:{content_type:'text',parts:['Neutral manual model correction input']},metadata:{}}],...extra};}
@@ -64,10 +65,87 @@ test('implicit new Work and Codex RPC turns use Sol Light and inherited threads 
     assert.deepEqual([inherited.model, inherited.reasoningEffort], ['gpt-6.1-sol', 'high']);
   }
 });
+test('Work and Codex model-only switches during a reply use a supported effort on the next turn', {timeout: 3000}, async () => {
+  for (const executionSurface of ['work', 'codex']) {
+    const requests = [];
+    const firstStarted = Promise.withResolvers();
+    const releaseFirst = Promise.withResolvers();
+    const {server} = fixture({transport: async ({settings}) => {
+      requests.push([settings.model, settings.reasoningEffort]);
+      if (requests.length === 1) {
+        firstStarted.resolve();
+        await releaseFirst.promise;
+      }
+      return {content: 'Fixture reply', finish_reason: 'stop'};
+    }});
+    const {thread} = server.dispatch('thread/start', {executionSurface, model: 'gpt-6.1-sol', effort: 'ultra'}).result;
+    const first = server.dispatch('turn/start', {threadId: thread.id, input: [{type: 'text', text: 'First turn'}]});
+    const events = [];
+    server.subscribe(event => events.push(event));
+    first.afterReply();
+    try {
+      await firstStarted.promise;
+      assert.throws(() => server.dispatch('thread/settings/update', {threadId: thread.id, model: 'gpt-6-luna', effort: 'ultra'}), {code: -32602});
+      assert.equal(server.getThread(thread.id).model, 'gpt-6.1-sol');
+      server.dispatch('thread/settings/update', {threadId: thread.id, model: 'gpt-6-luna'}).afterReply();
+      assert.equal(server.running.get(thread.id).turn.model, 'gpt-6.1-sol');
+      assert.equal(server.running.get(thread.id).turn.reasoningEffort, 'ultra');
+    } finally {
+      releaseFirst.resolve();
+    }
+    while (server.running.has(thread.id)) await sleep();
+    const second = server.dispatch('turn/start', {threadId: thread.id, input: [{type: 'text', text: 'Second turn'}]});
+    second.afterReply();
+    while (server.running.has(thread.id)) await sleep();
+    assert.deepEqual(requests, [['gpt-6.1-sol', 'max'], ['gpt-6-luna', 'low']]);
+    const turns = server.getThread(thread.id).turns;
+    assert.deepEqual(turns.map(turn => [turn.status, turn.reasoningEffort]), [['completed', 'ultra'], ['completed', 'low']]);
+    const update = events.find(event => event.method === 'thread/settings/updated');
+    assert.equal(update.params.threadSettings.model, 'gpt-6-luna');
+    assert.equal(update.params.threadSettings.effort, 'low');
+  }
+});
+test('a follow-up Work request can change model with no effort field', async () => {
+  const f = fixture();
+  const first = await classicTurn(f, nextBody('gpt-6.1-sol', 'ultra', {conversation_origin: 'tpp'}));
+  const second = await classicTurn(f, nextBody('gpt-6-luna', null, {conversation_id: first.thread.id}));
+  assert.equal(second.turn.status, 'completed');
+  assert.equal(second.turn.reasoningEffort, 'low');
+  assert.equal(first.turn.reasoningEffort, 'ultra');
+  const third = await classicTurn(f, nextBody('gpt-6-astra', null, {conversation_id: first.thread.id}));
+  assert.equal(third.turn.status, 'completed');
+  assert.equal(third.turn.reasoningEffort, 'low');
+  assert.deepEqual(f.requests.map(({model, effort}) => [model, effort]), [['gpt-6.1-sol', 'max'], ['gpt-6-luna', 'low'], ['gpt-6-astra', 'low']]);
+});
 test('Free Chat uses 5.6 Luna Instant or explicit Think and cannot obtain Work/Pro/Ultra',async()=>{
  const f=fixture({privileged:false});const first=await classicTurn(f,nextBody('chat-gpt-6-pro','ultra'));assert.equal(first.turn.model,'gpt-5.6-luna');assert.equal(first.turn.reasoningEffort,'none');assert.equal(first.turn.reasoningMode,'standard');assert.equal(first.turn.adapterMetadata.frontendModelSlug,'auto');
  const second=await classicTurn(f,nextBody('auto','standard',{conversation_id:first.thread.id,system_hints:['reason']}));assert.equal(second.turn.reasoningEffort,'medium');assert.equal(second.turn.model,'gpt-5.6-luna');assert(f.requests.every(row=>row.mode==='standard'));
  for(const executionSurface of ['work','codex'])assert.throws(()=>f.server.selection({executionSurface,model:'gpt-6-luna',effort:'low'}),{code:-32003});
+});
+test('the production Free Chat model sends low by default and medium with the composer Think hint', {timeout: 3000}, async () => {
+  const payloads = [];
+  const {freeChatModel, freeChatEffort} = DEFAULT_SETTINGS;
+  const f = fixture({privileged: false, freePolicy: {freeChatModel, freeChatEffort}, transport: options => streamCompletion({
+    ...options,
+    settings: {...options.settings, apiTransport: 'responses'},
+    responsesTransport: async payload => {
+      payloads.push(payload);
+      return Response.json({status: 'completed', model: payload.model, output: [{
+        id: `free-reply-${payloads.length}`, type: 'message', role: 'assistant', phase: 'final_answer',
+        content: [{type: 'output_text', text: 'Fixture reply'}],
+      }]});
+    },
+  })});
+  const first = await classicTurn(f, nextBody('auto', null));
+  const second = await classicTurn(f, nextBody('auto', null, {conversation_id: first.thread.id, system_hints: ['reason']}));
+  const third = await classicTurn(f, nextBody('auto', null, {conversation_id: first.thread.id}));
+  assert.deepEqual([first.turn.status, second.turn.status, third.turn.status], ['completed', 'completed', 'completed']);
+  assert.deepEqual(payloads.map(payload => [payload.model, payload.reasoning.effort]), [
+    ['gpt-6-sol', 'low'], ['gpt-6-sol', 'medium'], ['gpt-6-sol', 'low'],
+  ]);
+  f.server.assertExecutionAllowed(first.turn);
+  f.server.assertExecutionAllowed(second.turn);
+  f.server.assertExecutionAllowed({...first.turn, reasoningEffort: 'none'});
 });
 test('actual native RPC transport cannot label a Free mutation as Chat to bypass its Work/Codex policy',async()=>{
  const f=fixture({privileged:false}),socket=new LocalProtocolSocket(f.server);await new Promise(resolve=>socket.addEventListener('open',resolve,{once:true}));const result=new Promise(resolve=>socket.addEventListener('message',event=>{const data=JSON.parse(event.data);if(data.id===123)resolve(data);},{once:true}));socket.send(JSON.stringify({id:123,method:'thread/start',params:{executionSurface:'chat',model:'auto',effort:'medium'}}));assert.equal((await result).error.code,-32003);assert.equal(f.server.threads.size,0);socket.close();

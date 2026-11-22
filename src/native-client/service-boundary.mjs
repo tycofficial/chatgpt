@@ -228,7 +228,7 @@ export const localAppServer = new LocalAppServer({
   prepareUserInput: createLocalInputPreparer({ files: localFilesService }),
   preparedInputStore: createPreparedInputStore({ namespace: getLocalAccountStorageKey('cg-original-app-server:v1') }),
   agentOptions: { toolTransport: 'responses', requestPriority: true, ultraOrchestration: true },
-  getExecutionPolicy: () => ({ modelSelection: hasModelSelectionAccess(), freeChatModel: DEFAULT_SETTINGS.freeChatModel, freeChatEffort: 'medium' }),
+  getExecutionPolicy: () => ({ modelSelection: hasModelSelectionAccess(), freeChatModel: DEFAULT_SETTINGS.freeChatModel, freeChatEffort: DEFAULT_SETTINGS.freeChatEffort }),
   onPersist: threads => localAccountHistory?.capture(threads),
 });
 await localAppServer.migratePreparedInputs();

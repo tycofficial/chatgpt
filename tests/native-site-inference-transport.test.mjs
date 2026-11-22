@@ -345,3 +345,29 @@ test('a plain stream lost after provider pinning retains text and never resubmit
   assert.equal((await launch(restored, started.threadId, 'new-fixture-message').done).status, 'completed');
   assert.equal(calls, 2);
 });
+
+test('a delayed stop for a completed turn leaves the next turn running', { timeout: 3000 }, async () => {
+  const nextEntered = deferred(), nextAnswer = deferred();
+  const stoppedTurns = [];
+  let calls = 0;
+  const server = createServer(memory(), async () => {
+    if (++calls === 1) return { content: 'First answer.', finish_reason: 'stop' };
+    nextEntered.resolve();
+    await nextAnswer.promise;
+    return { content: 'Second answer.', finish_reason: 'stop' };
+  }, { onIdleTurnInterrupt: ({ turn }) => stoppedTurns.push(turn.id) });
+
+  const first = launch(server);
+  const stop = server.dispatch('turn/interrupt', { threadId: first.threadId, turnId: first.turn.id });
+  assert.equal((await first.done).status, 'completed');
+
+  const next = launch(server, first.threadId, 'next-message');
+  await nextEntered.promise;
+  stop.afterReply();
+  nextAnswer.resolve();
+
+  const result = await next.done;
+  assert.equal(result.status, 'completed');
+  assert.equal(result.items.find(item => item.type === 'agentMessage').text, 'Second answer.');
+  assert.deepEqual(stoppedTurns, [first.turn.id]);
+});

@@ -49,6 +49,7 @@ export const DEFAULT_SETTINGS = {
     }
   ],
   "freeChatModel": "gpt-6-sol",
+  "freeChatEffort": "low",
   "freeChatModelProvenance": {
     "selection": "lowest published reference price tier with Instant support among available GPT IDs",
     "providerPricingAvailable": false,
