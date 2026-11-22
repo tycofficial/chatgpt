@@ -20,7 +20,7 @@ const user = { id: 'site-user:' + accountId, accountId, username: 'qa-work', nam
   siteTrial: planType === 'free' ? null : { tier: planType, expiresAt } };
 const release = JSON.parse(await readFile(resolve(workspace, 'native-client/active.json'), 'utf8')).release;
 if (!/^[a-f0-9]{16}$/.test(release || '')) throw Error('Could not find a built Pages release');
-const metrics = { documentLoads: 0, inferenceCalls: 0 };
+const metrics = { seedLoads: 0, accountRequests: 0, sessionChecks: 0, documentLoads: 0, inferenceCalls: 0 };
 const headers = {
   'Cache-Control': 'no-store',
   'X-Content-Type-Options': 'nosniff',
@@ -37,9 +37,15 @@ function json(res, status, body) {
   send(res, status, contentTypes.json, JSON.stringify(body));
 }
 function respondAccount(req, res, route) {
-  if (route === '/auth/login' && req.method === 'POST') return json(res, 200, { user, expiresAt, token });
+  if (route === '/auth/login' && req.method === 'POST') {
+    metrics.accountRequests++;
+    return json(res, 200, { user, expiresAt, token });
+  }
   if (req.headers.authorization !== 'Bearer ' + token) return json(res, 401, { error: { code: 'SITE_AUTH_REQUIRED' } });
-  if (route === '/auth/session' && req.method === 'GET') return json(res, 200, { user, expiresAt });
+  if (route === '/auth/session' && req.method === 'GET') {
+    metrics.sessionChecks++;
+    return json(res, 200, { user, expiresAt });
+  }
   if (route === '/sync/conversations' && req.method === 'GET') return json(res, 200, { conversations: [], cursor: 0, nextCursor: null });
   if (route === '/sync/changes' && req.method === 'GET') return json(res, 200, { changes: [], cursor: 0, hasMore: false });
   if (route === '/inference/v1/usage' && req.method === 'GET') return json(res, 200, { requests: 0, completed: 0 });
@@ -60,6 +66,7 @@ createServer(tls, async (req, res) => {
     if (url.pathname === fixtureBase + 'metrics') return json(res, 200, { ...metrics, release, planType });
     if (/^\/(?:auth|sync|inference)\//.test(url.pathname)) return respondAccount(req, res, url.pathname);
     if (url.pathname === fixtureBase + 'seed') {
+      metrics.seedLoads++;
       return send(res, 200, contentTypes.html, `<!doctype html><html lang="en"><meta charset="utf-8"><title>Test fixture</title>
 <p id="status">Preparing isolated fixture</p>
 <script type="module">

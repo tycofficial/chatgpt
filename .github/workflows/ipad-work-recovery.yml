@@ -27,7 +27,7 @@ jobs:
           cp scripts/qa/ipad-work/SafariPublicSiteTests.swift "$qa_project/SafariQAUITests/SafariPublicSiteTests.swift"
           xcrun simctl list devices available -j | node "$qa_project/select-device.mjs" > "$qa_root/device"
           IPAD_UDID="$(sed -n 's/^IPAD_UDID=//p' "$qa_root/device")"
-          [[ "$IPAD_UDID" =~ ^[A-Fa-f0-9-]{36}$ ]]
+          [[ "$IPAD_UDID" =~ ^[a-fA-F0-9-]{36}$ ]]
           xcodebuild build-for-testing -project "$qa_project/SafariQA.xcodeproj" -scheme SafariQA \
             -destination "platform=iOS Simulator,id=$IPAD_UDID" \
             -derivedDataPath "$qa_root/build" -parallel-testing-enabled NO -quiet
@@ -38,13 +38,21 @@ jobs:
           set -euo pipefail
           qa_root="$RUNNER_TEMP/tyc-ipad-work"
           IPAD_UDID="$(sed -n 's/^IPAD_UDID=//p' "$qa_root/device")"
-          [[ "$IPAD_UDID" =~ ^[A-Fa-f0-9-]{36}$ ]]
+          [[ "$IPAD_UDID" =~ ^[a-fA-F0-9-]{36}$ ]]
           qa_project="$qa_root/scripts/qa/ipad-xcuitest"
           bash scripts/qa/ipad-work/create-loopback-tls.sh "$qa_root/tls"
           TYC_IPAD_TLS_KEY="$qa_root/tls/leaf.key" TYC_IPAD_TLS_CERT="$qa_root/tls/leaf.crt" \
             node scripts/qa/ipad-work/serve-ipad-fixture.mjs "$GITHUB_WORKSPACE" > "$qa_root/fixture.log" 2>&1 &
           fixture_pid=$!
-          trap 'kill "$fixture_pid" 2>/dev/null || true' EXIT
+          report_fixture() {
+            curl --cacert "$qa_root/tls/ca.crt" --max-time 4 --fail --silent --show-error \
+              https://127.0.0.1:4400/__ipad_qa/metrics > "$qa_root/safari-metrics.json" || true
+            cat "$qa_root/safari-metrics.json" || true
+            printf '\n'
+            xcrun simctl io "$IPAD_UDID" screenshot "$qa_root/safari-after.png" || true
+            kill "$fixture_pid" 2>/dev/null || true
+          }
+          trap report_fixture EXIT
           curl --cacert "$qa_root/tls/ca.crt" --fail --silent --show-error --retry 8 --retry-connrefused --max-time 5 \
             https://127.0.0.1:4400/__ipad_qa/metrics
           defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool NO
@@ -63,3 +71,13 @@ jobs:
           result="$(curl --cacert "$qa_root/tls/ca.crt" --fail --silent --show-error https://127.0.0.1:4400/__ipad_qa/metrics)"
           echo "$result"
           printf '%s\n' "$result" | jq -e '.documentLoads >= 2 and .inferenceCalls == 0 and .planType == "plus"'
+
+      - name: Attach simulator evidence
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ipad-work-simulator-evidence
+          path: |
+            ${{ runner.temp }}/tyc-ipad-work/safari-after.png
+            ${{ runner.temp }}/tyc-ipad-work/safari-metrics.json
+          if-no-files-found: ignore

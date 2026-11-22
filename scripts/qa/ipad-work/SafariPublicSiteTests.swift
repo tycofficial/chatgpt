@@ -2,7 +2,6 @@ import XCTest
 
 final class SafariPublicSiteTests: XCTestCase {
     private let workNames = ["Work", "工作"]
-    private let chatNames = ["Chat", "聊天", "对话"]
     private let projectNames = ["Choose project", "Select project", "选择项目"]
     private let modelNames = ["Choose ChatGPT model", "Choose model", "选择 ChatGPT 模型", "选择模型"]
     private let sendNames = ["Send", "Send message", "Send prompt", "发送", "发送消息", "发送提示"]
@@ -14,12 +13,14 @@ final class SafariPublicSiteTests: XCTestCase {
     }
 
     func testWorkTogglesAndBrowserChromeReload() throws {
+        XCUIDevice.shared.orientation = .landscapeLeft
         let safari = XCUIApplication(bundleIdentifier: "com.apple.mobilesafari")
         safari.activate()
         XCTAssertTrue(safari.wait(for: .runningForeground, timeout: 20), "Safari is not foregrounded")
         let web = safari.webViews.firstMatch
         XCTAssertTrue(web.waitForExistence(timeout: 35), "Fixture web view did not start")
 
+        print("IPAD_QA safari-webview-visible")
         try exerciseWork(safari, web, phrase: "ipad work before reload")
         print("IPAD_QA work-before-toolbar-reload")
 
@@ -32,9 +33,20 @@ final class SafariPublicSiteTests: XCTestCase {
     }
 
     private func exerciseWork(_ safari: XCUIApplication, _ web: XCUIElement, phrase: String) throws {
-        let chat = try waitForHittable(named(chatNames, in: web.buttons), seconds: 35)
-        chat.tap()
-        let work = try waitForHittable(named(workNames, in: web.buttons), seconds: 15)
+        let candidates = [named(workNames, in: web.buttons), named(workNames, in: web.descendants(matching: .any))]
+        let work: XCUIElement
+        do {
+            work = try waitForHittable(candidates, seconds: 50)
+        } catch {
+            let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+            attachment.name = "Safari before Work selection"
+            attachment.lifetime = .keepAlways
+            add(attachment)
+            let sample = web.debugDescription.prefix(2500)
+            print("IPAD_QA web-view hierarchy: \(sample)")
+            throw error
+        }
+        print("IPAD_QA tappable Work selector found")
         work.tap()
 
         _ = try waitForHittable(named(projectNames, in: web.buttons), seconds: 15)
@@ -80,6 +92,8 @@ final class SafariPublicSiteTests: XCTestCase {
             }
             RunLoop.current.run(until: Date().addingTimeInterval(0.2))
         } while Date() < expiry
-        return try XCTUnwrap(nil as XCUIElement?, "No matching hittable Safari element after \(seconds) seconds")
+        throw NSError(domain: "SafariQA", code: 1, userInfo: [
+            NSLocalizedDescriptionKey: "No matching hittable Safari element after \(seconds) seconds"
+        ])
     }
 }
