@@ -98,6 +98,6 @@ if (!authHtml.includes('bootstrap.mjs?v=' + release) || authHtml.includes('rel="
     html.includes('site-start-status') || authHtml.includes('site-start-status')) throw Error('Invalid browser entry shells');
 const bootstrap=await fs.readFile(path.join(directory,'bootstrap.mjs'),'utf8');
 if(!bootstrap.includes('release:'+JSON.stringify(release))||bootstrap.includes('release-updater.js')||
-   !bootstrap.includes('__TYC_PAGE_START__?.ready()'))throw Error('Invalid browser bootstrap');
+   !bootstrap.includes('startup?.ready()'))throw Error('Invalid browser bootstrap');
 execFileSync(process.execPath,['--check',path.join(root,'native-client-worker.js')],{stdio:'pipe'});
 console.log(JSON.stringify({nativeMain:true,release,canonicalHashesVerified:true,helperModules:files.length,sharedAssets:provenance.sharedAssets.length,resources:provenance.resources.length,supplementalResources:provenance.supplementalResources.length,ownImports,originalEntryResources:urls.length,legacyUiImported:false}));

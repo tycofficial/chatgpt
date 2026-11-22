@@ -2,7 +2,7 @@
 export async function installBrowserCompatibility(scope = globalThis) {
   if (!Array.prototype.toSorted || !Array.prototype.findLast || !Array.prototype.at || !Array.prototype.with ||
       !Object.hasOwn || !Promise.withResolvers || !scope.structuredClone) {
-    await import('./compat-assets/standards.mjs?v=1e91c1a3ce5a11ff');
+    await import('./compat-assets/standards.mjs?v=a288d45728a939a0');
   }
   const define = (object, key, value) => {
     if (object && !(key in object)) Object.defineProperty(object, key, { configurable: true, writable: true, value });

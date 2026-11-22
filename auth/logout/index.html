@@ -1,8 +1,20 @@
 <!DOCTYPE html>
-<html class="chatgpt-theme" lang="zh-CN" dir="ltr" data-theme="light" data-appearance-preset="codex" data-ios="false" data-build="b6348792a294e8e04a67660959ba41914937938f" data-client-build-revision="b6348792a294e8e04a67660959ba41914937938f" data-router-basename="/chatgpt" data-icon-sprite-url="/chatgpt/original-client/public/chatgpt.com/cdn/assets/icons-0af79c30a0f03fad.svg" data-codex-cli-version="0.171.0-alpha.2" data-codex-window-type="browser" data-window-type="browser" data-native-client-release="1e91c1a3ce5a11ff">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>TYC Chat</title>
+<html class="chatgpt-theme" lang="zh-CN" dir="ltr" data-theme="light" data-appearance-preset="codex" data-ios="false" data-build="b6348792a294e8e04a67660959ba41914937938f" data-client-build-revision="b6348792a294e8e04a67660959ba41914937938f" data-router-basename="/chatgpt" data-icon-sprite-url="/chatgpt/original-client/public/chatgpt.com/cdn/assets/icons-0af79c30a0f03fad.svg" data-codex-cli-version="0.171.0-alpha.2" data-codex-window-type="browser" data-window-type="browser" data-native-client-release="a288d45728a939a0">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ChatGPT</title>
+<style>
+#site-load-progress{position:fixed;z-index:2147483647;top:0;right:0;left:0;height:3px;overflow:hidden;pointer-events:none;background:#ddd5ee}
+#site-load-progress::before{content:"";display:block;width:28%;height:100%;background:linear-gradient(90deg,#7154b1,#9b84c4);animation:site-load-sweep 1.35s ease-in-out infinite}
+@keyframes site-load-sweep{from{transform:translateX(-100%)}to{transform:translateX(357%)}}
+@media(prefers-reduced-motion:reduce){
+ #site-load-progress::before{width:100%;animation:none;background:repeating-linear-gradient(120deg,#7154b1 0 7px,#9b84c4 7px 14px)}
+}
+</style>
 <script>(function(){
- var notice,finished=false,failed=false;
+ var notice,resolveStyles,stylesLoaded=false,stylesFailed=false,finished=false,failed=false;
+ function hideProgress(){
+  var bar=document.getElementById('site-load-progress');
+  if(bar&&bar.parentNode)bar.parentNode.removeChild(bar);
+ }
  function showFailure(){
   notice=notice||document.getElementById('site-load-error');
   if(!notice||!document.body)return;
@@ -11,27 +23,46 @@
  }
  var timer=setTimeout(function(){
   var sheet=document.getElementById('site-main-style');
-  if(sheet&&!sheet.sheet){
-   state.styleFailed=true;
+  if(sheet&&!stylesLoaded){
    sheet.disabled=true;
-  }
-  state.fail();
+   state.failStyles();
+  }else state.fail();
  },60000);
  var state=window.__TYC_PAGE_START__={
-  styleFailed:false,
+  loadStyles:function(sheet){
+   if(stylesFailed)return;
+   sheet.media='all';
+   stylesLoaded=true;
+   if(resolveStyles)resolveStyles(true);
+  },
+  failStyles:function(){
+   stylesFailed=true;
+   if(resolveStyles)resolveStyles(false);
+   state.fail();
+  },
+  waitForStyles:function(){
+   if(!document.getElementById('site-main-style')||stylesLoaded)return Promise.resolve(true);
+   if(stylesFailed)return Promise.resolve(false);
+   return new Promise(function(resolve){resolveStyles=resolve});
+  },
   attach:function(node){
    notice=node;
-   if(failed&&!finished)showFailure();
+   if(failed&&!finished){
+    hideProgress();
+    showFailure();
+   }
   },
   fail:function(){
    if(finished)return;
    failed=true;
    clearTimeout(timer);
+   hideProgress();
    showFailure();
   },
   ready:function(){
    finished=true;
    clearTimeout(timer);
+   hideProgress();
    notice=notice||document.getElementById('site-load-error');
    if(notice&&notice.parentNode)notice.parentNode.removeChild(notice);
   },
@@ -47,11 +78,11 @@
 })()</script>
 <script type="importmap">{"imports":{"/cdn/":"/chatgpt/original-client/public/chatgpt.com/cdn/","https://chatgpt.com/cdn/":"/chatgpt/original-client/public/chatgpt.com/cdn/","https://cdn.oaistatic.com/":"/chatgpt/original-client/public/cdn.oaistatic.com/"}}</script>
 
-<link rel="modulepreload" href="/chatgpt/native-client/bootstrap.mjs?v=1e91c1a3ce5a11ff" crossorigin="anonymous">
-<link rel="modulepreload" href="/chatgpt/native-client/startup-compatibility.mjs?v=1e91c1a3ce5a11ff" crossorigin="anonymous">
-<link rel="modulepreload" href="/chatgpt/native-client/site-account.mjs?v=1e91c1a3ce5a11ff" crossorigin="anonymous">
-<link rel="modulepreload" href="/chatgpt/native-client/site-signout.mjs?v=1e91c1a3ce5a11ff" crossorigin="anonymous">
-<link rel="modulepreload" href="/chatgpt/native-client/site-paths.mjs?v=1e91c1a3ce5a11ff" crossorigin="anonymous">
+<link rel="modulepreload" href="/chatgpt/native-client/bootstrap.mjs?v=a288d45728a939a0" crossorigin="anonymous">
+<link rel="modulepreload" href="/chatgpt/native-client/startup-compatibility.mjs?v=a288d45728a939a0" crossorigin="anonymous">
+<link rel="modulepreload" href="/chatgpt/native-client/site-account.mjs?v=a288d45728a939a0" crossorigin="anonymous">
+<link rel="modulepreload" href="/chatgpt/native-client/site-signout.mjs?v=a288d45728a939a0" crossorigin="anonymous">
+<link rel="modulepreload" href="/chatgpt/native-client/site-paths.mjs?v=a288d45728a939a0" crossorigin="anonymous">
 
 <style data-native-asset-rebase>.miniIcon-rOR6tX{-webkit-mask:url(/chatgpt/original-client/public/chatgpt.com/cdn/assets/mini.5d171bda87.svg) 50%/contain no-repeat;mask:url(/chatgpt/original-client/public/chatgpt.com/cdn/assets/mini.5d171bda87.svg) 50%/contain no-repeat}
 .rear-sJvh8d{background-image:url(/chatgpt/original-client/public/chatgpt.com/cdn/assets/envelope-back.b92c6f3ec6.svg)}
@@ -83,12 +114,13 @@
 @font-face{font-family:OpenAI Sans;src:url(/chatgpt/original-client/public/chatgpt.com/cdn/assets/OpenAISans-Semibold.ba1cdafb47.woff2)format("woff2");font-style:normal;font-weight:600;font-display:swap}</style><style data-codex-app-themes></style>
 </head>
 <body>
+<div id="site-load-progress" role="progressbar" aria-label="页面加载中"></div>
 <main id="site-load-error" hidden role="alert" style="max-width:36rem;margin:12vh auto;padding:24px;font:16px/1.6 system-ui">
-<h1 style="font-size:22px">TYC Chat</h1><p>页面未能完成加载。请检查网络连接后重试。</p><button type="button" onclick="window.__TYC_PAGE_START__.retry()" style="min-height:44px;padding:8px 16px">重新加载</button>
+<h1 style="font-size:22px">ChatGPT</h1><p>页面未能完成加载。请检查网络连接后重试。</p><button type="button" onclick="window.__TYC_PAGE_START__.retry()" style="min-height:44px;padding:8px 16px">重新加载</button>
 </main>
-<noscript><p>此页面需要浏览器启用 JavaScript。</p></noscript>
+<noscript><style>#site-load-progress{display:none}</style><p>此页面需要浏览器启用 JavaScript。</p></noscript>
 <script>window.__TYC_PAGE_START__.attach(document.getElementById('site-load-error'))</script>
 <script nomodule>window.__TYC_PAGE_START__.fail()</script>
-<script type="module" src="/chatgpt/native-client/bootstrap.mjs?v=1e91c1a3ce5a11ff" onerror="window.__TYC_PAGE_START__.fail()"></script>
+<script type="module" src="/chatgpt/native-client/bootstrap.mjs?v=a288d45728a939a0" onerror="window.__TYC_PAGE_START__.fail()"></script>
 </body>
 </html>

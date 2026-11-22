@@ -1,11 +1,11 @@
 /** Original app-server protocol over real, resumable local execution. */
-import { hasUncertainPlainResponse, plainInterruptionMessage, runAgentTurn } from './agent-turn-runner.mjs?v=1e91c1a3ce5a11ff';
-import { readWebSearchIntent, interruptHostedSearch } from './local-web-search.mjs?v=1e91c1a3ce5a11ff';
-import { terminalSiteInferenceReason } from './site-inference-transport.mjs?v=1e91c1a3ce5a11ff';
-import { readClassicBranchRequest, getClassicExecutionThread } from './classic-response-branches.mjs?v=1e91c1a3ce5a11ff';
-import { parseClassicInputMessages } from './classic-input-messages.mjs?v=1e91c1a3ce5a11ff';
-import { compactPreparedUserContent, isProviderContent, needsPreparedInputStorage } from './prepared-input-store.mjs?v=1e91c1a3ce5a11ff';
-import { allowedReasoningEfforts, isPublicReasoningPart } from '../runtime.js?v=1e91c1a3ce5a11ff';
+import { hasUncertainPlainResponse, plainInterruptionMessage, runAgentTurn } from './agent-turn-runner.mjs?v=a288d45728a939a0';
+import { readWebSearchIntent, interruptHostedSearch } from './local-web-search.mjs?v=a288d45728a939a0';
+import { terminalSiteInferenceReason } from './site-inference-transport.mjs?v=a288d45728a939a0';
+import { readClassicBranchRequest, getClassicExecutionThread } from './classic-response-branches.mjs?v=a288d45728a939a0';
+import { parseClassicInputMessages } from './classic-input-messages.mjs?v=a288d45728a939a0';
+import { compactPreparedUserContent, isProviderContent, needsPreparedInputStorage } from './prepared-input-store.mjs?v=a288d45728a939a0';
+import { allowedReasoningEfforts, isPublicReasoningPart } from '../runtime.js?v=a288d45728a939a0';
 export class RpcError extends Error {
   constructor(code, message, data) { super(message); this.name = 'RpcError'; this.code = code; if (data !== undefined) this.data = data; }
 }

@@ -46,6 +46,8 @@ test('the browser discovers the entry modules and stylesheet directly, with a li
   assert.doesNotMatch(auth, /rel="stylesheet"/);
   for (const shell of [html, auth]) {
     assert.doesNotMatch(shell, /正在打开|site-start-status/);
+    assert.match(shell, /<title>ChatGPT<\/title>/);
+    assert.match(shell, /<div id="site-load-progress" role="progressbar" aria-label="页面加载中"/);
     assert.match(shell, /<main id="site-load-error" hidden role="alert"/);
   }
   const originals = [plan.runtime, ...plan.registrationChunks, plan.manifest, ...Object.values(plan.initialRoutes)];
@@ -75,11 +77,13 @@ function startupFixture({ stylesheet } = {}) {
   const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   const guard = html.match(/<script>([\s\S]*?)<\/script>/)[1];
   const notice = { hidden: true };
+  const progress = {};
   const body = {
     appendChild(node) { node.parentNode = body; },
     removeChild(node) { node.parentNode = null; },
   };
   body.appendChild(notice);
+  body.appendChild(progress);
   let callback, replaced, timeout;
   const window = {};
   vm.runInNewContext(guard, {
@@ -88,19 +92,26 @@ function startupFixture({ stylesheet } = {}) {
     clearTimeout() { callback = null; },
     document: {
       body, addEventListener() {},
-      getElementById: id => id === 'site-load-error' ? notice : stylesheet,
+      getElementById: id => ({
+        'site-load-error': notice,
+        'site-load-progress': progress,
+        'site-main-style': stylesheet,
+      })[id],
     },
     location: { href: 'https://fixture.test/chatgpt/c/abc?keep=1#turn', replace: value => { replaced = new URL(value); } },
   });
-  return { notice, timeout, state: window.__TYC_PAGE_START__, triggerTimeout: () => callback?.(), replacement: () => replaced };
+  return { notice, progress, timeout, state: window.__TYC_PAGE_START__, triggerTimeout: () => callback?.(), replacement: () => replaced };
 }
 
 test('a stalled module exposes a retry without showing a waiting screen or navigating automatically', () => {
   const fixture = startupFixture({ stylesheet: { sheet: {} } });
+  fixture.state.loadStyles({});
   assert.equal(fixture.notice.hidden, true);
+  assert.ok(fixture.progress.parentNode);
   assert.ok(fixture.timeout < 90000);
   fixture.triggerTimeout();
   assert.equal(fixture.notice.hidden, false);
+  assert.equal(fixture.progress.parentNode, null);
   assert.equal(fixture.replacement(), undefined);
   fixture.state.retry();
   const target = fixture.replacement();
@@ -112,17 +123,28 @@ test('a stalled module exposes a retry without showing a waiting screen or navig
   assert.equal(fixture.notice.parentNode, null);
 });
 
-test('a stalled stylesheet is released for error rendering, and a ready page is left alone', () => {
-  const stylesheet = { sheet: null };
+test('a stalled stylesheet releases the startup wait and exposes retry', async () => {
+  const stylesheet = { media: 'print' };
   const stalled = startupFixture({ stylesheet });
+  const pending = stalled.state.waitForStyles();
   stalled.triggerTimeout();
-  assert.equal(stalled.state.styleFailed, true);
+  assert.equal(await pending, false);
   assert.equal(stylesheet.disabled, true);
   assert.equal(stalled.notice.hidden, false);
+  assert.equal(stalled.progress.parentNode, null);
+});
 
-  const ready = startupFixture();
+test('the progress stays visible until the stylesheet and application are ready', async () => {
+  const stylesheet = { media: 'print' };
+  const ready = startupFixture({ stylesheet });
+  const pending = ready.state.waitForStyles();
+  ready.state.loadStyles(stylesheet);
+  assert.equal(await pending, true);
+  assert.equal(stylesheet.media, 'all');
+  assert.ok(ready.progress.parentNode);
   ready.state.ready();
   ready.triggerTimeout();
   ready.state.fail();
   assert.equal(ready.notice.parentNode, null);
+  assert.equal(ready.progress.parentNode, null);
 });

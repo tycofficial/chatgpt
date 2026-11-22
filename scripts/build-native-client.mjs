@@ -140,7 +140,8 @@ await write(path.join(output,'entry-plan.json'),JSON.stringify(plan,null,2)+'\n'
 const bootstrap=`import { installBrowserCompatibility, installDirectAssetHost, registerOptionalAssetWorker, showStartupError } from './startup-compatibility.mjs?v=${release}';
 import { installRestrictedBrowserStorage } from './restricted-browser-storage.mjs?v=${release}';
 try {
-if (globalThis.__TYC_PAGE_START__?.styleFailed) throw Error('The page stylesheet could not be loaded.');
+const startup = globalThis.__TYC_PAGE_START__;
+if (startup && !await startup.waitForStyles()) throw Error('The page stylesheet could not be loaded.');
 const rootURL = new URL('../', import.meta.url);
 document.documentElement.dataset.routerBasename = rootURL.pathname.replace(/\\/$/, '') || '/';
 await installBrowserCompatibility();
@@ -173,7 +174,7 @@ else {
  // The worker is only for private browser-created files. It does not load pages.
  void registerOptionalAssetWorker(workerURL, rootURL.pathname);
 }
-globalThis.__TYC_PAGE_START__?.ready();
+startup?.ready();
 } catch (error) { showStartupError(error); }
 `;
 await write(path.join(output,'bootstrap.mjs'),bootstrap);
@@ -262,8 +263,21 @@ const importMap = JSON.stringify({imports:{
 }});
 const entryScript = ownModule('native-client/bootstrap.mjs');
 const errorMessage = '页面未能完成加载。请检查网络连接后重试。';
+const stylesheetURL = deploymentBase + cssAsset;
+const startupProgressStyle = `<style>
+#site-load-progress{position:fixed;z-index:2147483647;top:0;right:0;left:0;height:3px;overflow:hidden;pointer-events:none;background:#ddd5ee}
+#site-load-progress::before{content:"";display:block;width:28%;height:100%;background:linear-gradient(90deg,#7154b1,#9b84c4);animation:site-load-sweep 1.35s ease-in-out infinite}
+@keyframes site-load-sweep{from{transform:translateX(-100%)}to{transform:translateX(357%)}}
+@media(prefers-reduced-motion:reduce){
+ #site-load-progress::before{width:100%;animation:none;background:repeating-linear-gradient(120deg,#7154b1 0 7px,#9b84c4 7px 14px)}
+}
+</style>`;
 const startupGuard = `<script>(function(){
- var notice,finished=false,failed=false;
+ var notice,resolveStyles,stylesLoaded=false,stylesFailed=false,finished=false,failed=false;
+ function hideProgress(){
+  var bar=document.getElementById('site-load-progress');
+  if(bar&&bar.parentNode)bar.parentNode.removeChild(bar);
+ }
  function showFailure(){
   notice=notice||document.getElementById('site-load-error');
   if(!notice||!document.body)return;
@@ -272,27 +286,46 @@ const startupGuard = `<script>(function(){
  }
  var timer=setTimeout(function(){
   var sheet=document.getElementById('site-main-style');
-  if(sheet&&!sheet.sheet){
-   state.styleFailed=true;
+  if(sheet&&!stylesLoaded){
    sheet.disabled=true;
-  }
-  state.fail();
+   state.failStyles();
+  }else state.fail();
  },60000);
  var state=window.__TYC_PAGE_START__={
-  styleFailed:false,
+  loadStyles:function(sheet){
+   if(stylesFailed)return;
+   sheet.media='all';
+   stylesLoaded=true;
+   if(resolveStyles)resolveStyles(true);
+  },
+  failStyles:function(){
+   stylesFailed=true;
+   if(resolveStyles)resolveStyles(false);
+   state.fail();
+  },
+  waitForStyles:function(){
+   if(!document.getElementById('site-main-style')||stylesLoaded)return Promise.resolve(true);
+   if(stylesFailed)return Promise.resolve(false);
+   return new Promise(function(resolve){resolveStyles=resolve});
+  },
   attach:function(node){
    notice=node;
-   if(failed&&!finished)showFailure();
+   if(failed&&!finished){
+    hideProgress();
+    showFailure();
+   }
   },
   fail:function(){
    if(finished)return;
    failed=true;
    clearTimeout(timer);
+   hideProgress();
    showFailure();
   },
   ready:function(){
    finished=true;
    clearTimeout(timer);
+   hideProgress();
    notice=notice||document.getElementById('site-load-error');
    if(notice&&notice.parentNode)notice.parentNode.removeChild(notice);
   },
@@ -307,20 +340,23 @@ const startupGuard = `<script>(function(){
  },{once:true});
 })()</script>`;
 const startupBody = `<body>
+<div id="site-load-progress" role="progressbar" aria-label="页面加载中"></div>
 <main id="site-load-error" hidden role="alert" style="max-width:36rem;margin:12vh auto;padding:24px;font:16px/1.6 system-ui">
-<h1 style="font-size:22px">TYC Chat</h1><p>${errorMessage}</p><button type="button" onclick="window.__TYC_PAGE_START__.retry()" style="min-height:44px;padding:8px 16px">重新加载</button>
+<h1 style="font-size:22px">ChatGPT</h1><p>${errorMessage}</p><button type="button" onclick="window.__TYC_PAGE_START__.retry()" style="min-height:44px;padding:8px 16px">重新加载</button>
 </main>
-<noscript><p>此页面需要浏览器启用 JavaScript。</p></noscript>
+<noscript><style>#site-load-progress{display:none}</style><p>此页面需要浏览器启用 JavaScript。</p></noscript>
 <script>window.__TYC_PAGE_START__.attach(document.getElementById('site-load-error'))</script>
 <script nomodule>window.__TYC_PAGE_START__.fail()</script>
 <script type="module" src="${entryScript}" onerror="window.__TYC_PAGE_START__.fail()"></script>
 </body>`;
 const entryHTML = ({ auth = false } = {}) => `<!DOCTYPE html>
 <html class="chatgpt-theme" lang="zh-CN" dir="ltr" data-theme="light" data-appearance-preset="codex" data-ios="false" data-build="${sourceBuild}" data-client-build-revision="${sourceBuild}" data-router-basename="${deploymentBase.replace(/\/$/,'') || '/'}" data-icon-sprite-url="${originalOnSite(upstreamSprite)}" data-codex-cli-version="0.171.0-alpha.2" data-codex-window-type="browser" data-window-type="browser" data-native-client-release="${release}">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>TYC Chat</title>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ChatGPT</title>
+${startupProgressStyle}
 ${startupGuard}
 <script type="importmap">${importMap}</script>
-${auth ? '' : `<link id="site-main-style" rel="stylesheet" href="${deploymentBase + cssAsset}" onerror="window.__TYC_PAGE_START__.styleFailed=true;window.__TYC_PAGE_START__.fail()">\n`}
+${auth ? '' : `<link rel="preload" as="style" href="${stylesheetURL}">
+<link id="site-main-style" rel="stylesheet" href="${stylesheetURL}" media="print" onload="window.__TYC_PAGE_START__.loadStyles(this)" onerror="window.__TYC_PAGE_START__.failStyles()">\n`}
 ${earlyModules.map(modulePreload).join('\n')}
 ${auth ? '' : mainModules.map(modulePreload).join('\n')}
 <style data-native-asset-rebase>${localCSS}</style><style data-codex-app-themes></style>
