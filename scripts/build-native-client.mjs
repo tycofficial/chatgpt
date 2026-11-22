@@ -157,6 +157,7 @@ const [siteAccount, signOut, {getSiteAuthEntryKind}] = await Promise.all([
 signOut.installSiteSignOutRestore({home:()=>rootURL});
 const pagePath = location.pathname.replace(/\\/index\\.html$/, '/').replace(/\\/$/, '');
 const authEntry = getSiteAuthEntryKind(location.href, rootURL);
+const homeEntry = !authEntry && pagePath === rootURL.pathname.replace(/\\/$/, '');
 if (authEntry === 'logout') {
  await siteAccount.logoutSiteAccount({waitForRemote:true});
  siteAccount.startSiteGuestSession();
@@ -174,7 +175,8 @@ else {
  // The worker is only for private browser-created files. It does not load pages.
  void registerOptionalAssetWorker(workerURL, rootURL.pathname);
 }
-startup?.ready();
+if (homeEntry) startup?.waitForComposer();
+else startup?.ready();
 } catch (error) { showStartupError(error); }
 `;
 await write(path.join(output,'bootstrap.mjs'),bootstrap);
@@ -264,8 +266,8 @@ const importMap = JSON.stringify({imports:{
 const entryScript = ownModule('native-client/bootstrap.mjs');
 const errorMessage = '页面未能完成加载。请检查网络连接后重试。';
 const stylesheetURL = deploymentBase + cssAsset;
-const startupProgressStyle = `<style>
-#site-load-progress{position:fixed;z-index:2147483647;top:0;right:0;left:0;height:3px;overflow:hidden;pointer-events:none;background:#ddd5ee}
+const startupProgressStyle = `<style id="site-load-progress-style">
+#site-load-progress{position:fixed;z-index:2147483647;top:50%;left:50%;transform:translate(-50%,-50%);width:144px;max-width:45vw;height:4px;border-radius:999px;overflow:hidden;pointer-events:none;background:#ddd5ee}
 #site-load-progress::before{content:"";display:block;width:28%;height:100%;background:linear-gradient(90deg,#7154b1,#9b84c4);animation:site-load-sweep 1.35s ease-in-out infinite}
 @keyframes site-load-sweep{from{transform:translateX(-100%)}to{transform:translateX(357%)}}
 @media(prefers-reduced-motion:reduce){
@@ -273,10 +275,11 @@ const startupProgressStyle = `<style>
 }
 </style>`;
 const startupGuard = `<script>(function(){
- var notice,resolveStyles,stylesLoaded=false,stylesFailed=false,finished=false,failed=false;
+ var notice,progress,progressStyle,composerObserver,resolveStyles;
+ var stylesLoaded=false,stylesFailed=false,finished=false,failed=false;
  function hideProgress(){
-  var bar=document.getElementById('site-load-progress');
-  if(bar&&bar.parentNode)bar.parentNode.removeChild(bar);
+  progress=progress||document.getElementById('site-load-progress');
+  if(progress&&progress.parentNode)progress.parentNode.removeChild(progress);
  }
  function showFailure(){
   notice=notice||document.getElementById('site-load-error');
@@ -310,10 +313,30 @@ const startupGuard = `<script>(function(){
   },
   attach:function(node){
    notice=node;
+   progress=document.getElementById('site-load-progress');
+   progressStyle=document.getElementById('site-load-progress-style');
    if(failed&&!finished){
     hideProgress();
     showFailure();
    }
+  },
+  waitForComposer:function(){
+   var selector='main [contenteditable="true"], main textarea, [contenteditable="true"][role="textbox"]';
+   function update(){
+    var visible=Array.prototype.some.call(document.querySelectorAll(selector),function(composer){
+     return composer.getClientRects().length&&getComputedStyle(composer).visibility==='visible';
+    });
+    if(visible){
+     state.ready();
+     return;
+    }
+    if(failed||finished)return;
+    if(progressStyle&&!progressStyle.isConnected&&document.head)document.head.appendChild(progressStyle);
+    if(progress&&!progress.isConnected&&document.body)document.body.appendChild(progress);
+   }
+   composerObserver=new MutationObserver(update);
+   composerObserver.observe(document,{childList:true,subtree:true,attributes:true,attributeFilter:['class','hidden','style','contenteditable']});
+   update();
   },
   fail:function(){
    if(finished)return;
@@ -324,6 +347,7 @@ const startupGuard = `<script>(function(){
   },
   ready:function(){
    finished=true;
+   if(composerObserver)composerObserver.disconnect();
    clearTimeout(timer);
    hideProgress();
    notice=notice||document.getElementById('site-load-error');

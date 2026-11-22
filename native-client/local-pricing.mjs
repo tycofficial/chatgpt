@@ -11,7 +11,7 @@
  * p3vI, 396705.00162c6ea9.js:564237-564553 (payment methods).
  * wbWw/Bhuf/YoTg/JGV6, async/899311.9233e1594e.js (billing read shapes).
  */
-import { claimSiteTrial, getSiteAccount, getSiteSessionToken, getSiteTrialPlan, refreshSiteAccount } from './site-account.mjs?v=a288d45728a939a0';
+import { claimSiteTrial, getSiteAccount, getSiteSessionToken, getSiteTrialPlan, refreshSiteAccount } from './site-account.mjs?v=771721901c169502';
 
 export const LOCAL_PRICING_REFERENCE = Object.freeze({
   source: 'https://learn.chatgpt.com/docs/pricing',

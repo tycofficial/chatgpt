@@ -1,8 +1,8 @@
-import * as catalog from '../model-catalog.js?v=a288d45728a939a0';
-import { createModelCatalogAdapter } from './model-catalog-adapter.mjs?v=a288d45728a939a0';
-import { getPrototypeStatsigUser, isPrototypeLocalSession } from './local-identity.mjs?v=a288d45728a939a0';
-import { hasModelSelectionAccess, getSitePlanCapabilities } from './site-account.mjs?v=a288d45728a939a0';
-import { hasLocalDotBrowserVoice } from './local-dot-browser-voice.mjs?v=a288d45728a939a0';
+import * as catalog from '../model-catalog.js?v=771721901c169502';
+import { createModelCatalogAdapter } from './model-catalog-adapter.mjs?v=771721901c169502';
+import { getPrototypeStatsigUser, isPrototypeLocalSession } from './local-identity.mjs?v=771721901c169502';
+import { hasModelSelectionAccess, getSitePlanCapabilities } from './site-account.mjs?v=771721901c169502';
+import { hasLocalDotBrowserVoice } from './local-dot-browser-voice.mjs?v=771721901c169502';
 const models = createModelCatalogAdapter(catalog);
 let readLibraryAvailability = () => false;
 /** The Library gate is enabled only after its real local file provider exists. */

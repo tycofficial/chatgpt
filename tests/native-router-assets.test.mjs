@@ -77,30 +77,48 @@ function startupFixture({ stylesheet } = {}) {
   const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   const guard = html.match(/<script>([\s\S]*?)<\/script>/)[1];
   const notice = { hidden: true };
-  const progress = {};
+  const connectedNode = () => ({ get isConnected() { return this.parentNode != null; } });
+  const progress = connectedNode(), progressStyle = connectedNode();
   const body = {
     appendChild(node) { node.parentNode = body; },
     removeChild(node) { node.parentNode = null; },
   };
+  const head = { appendChild(node) { node.parentNode = head; } };
   body.appendChild(notice);
   body.appendChild(progress);
-  let callback, replaced, timeout;
+  head.appendChild(progressStyle);
+  let callback, replaced, timeout, onMutation, composer;
   const window = {};
   vm.runInNewContext(guard, {
     window, URL,
+    MutationObserver: class {
+      constructor(listener) { onMutation = listener; }
+      observe() {}
+      disconnect() { onMutation = undefined; }
+    },
+    getComputedStyle: node => ({ visibility: node.visibility }),
     setTimeout(fn, delay) { callback = fn; timeout = delay; return 1; },
     clearTimeout() { callback = null; },
     document: {
-      body, addEventListener() {},
+      body, head, addEventListener() {},
+      querySelectorAll: () => composer ? [composer] : [],
       getElementById: id => ({
         'site-load-error': notice,
         'site-load-progress': progress,
+        'site-load-progress-style': progressStyle,
         'site-main-style': stylesheet,
       })[id],
     },
     location: { href: 'https://fixture.test/chatgpt/c/abc?keep=1#turn', replace: value => { replaced = new URL(value); } },
   });
-  return { notice, progress, timeout, state: window.__TYC_PAGE_START__, triggerTimeout: () => callback?.(), replacement: () => replaced };
+  return {
+    notice, progress, progressStyle, timeout, state: window.__TYC_PAGE_START__,
+    triggerTimeout: () => callback?.(), replacement: () => replaced,
+    mutate(nextComposer) {
+      composer = nextComposer;
+      onMutation?.();
+    },
+  };
 }
 
 test('a stalled module exposes a retry without showing a waiting screen or navigating automatically', () => {
@@ -147,4 +165,21 @@ test('the progress stays visible until the stylesheet and application are ready'
   ready.state.fail();
   assert.equal(ready.notice.parentNode, null);
   assert.equal(ready.progress.parentNode, null);
+});
+
+test('the homepage keeps its progress across a document mount until the composer is visible', () => {
+  const fixture = startupFixture();
+  fixture.state.attach(fixture.notice);
+  fixture.state.waitForComposer();
+  fixture.progress.parentNode = null;
+  fixture.progressStyle.parentNode = null;
+
+  fixture.mutate({ getClientRects: () => [{}], visibility: 'hidden' });
+  assert.equal(fixture.progress.isConnected, true);
+  assert.equal(fixture.progressStyle.isConnected, true);
+
+  fixture.mutate({ getClientRects: () => [{}], visibility: 'visible' });
+  assert.equal(fixture.progress.isConnected, false);
+  fixture.mutate(null);
+  assert.equal(fixture.progress.isConnected, false);
 });
