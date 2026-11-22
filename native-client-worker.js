@@ -1,4 +1,4 @@
-import { BrowserWorkspaceStore, workspacePath } from './native-client/browser-tool-executor.mjs?v=771721901c169502';
+import { BrowserWorkspaceStore, workspacePath } from './native-client/browser-tool-executor.mjs?v=1e427a8d323976e5';
 const workspace = new BrowserWorkspaceStore();
 const artifactPrefix = new URL('./__local_artifacts/', self.location.href).pathname;
 const contentTypes = {

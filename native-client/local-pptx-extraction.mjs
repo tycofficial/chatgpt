@@ -6,7 +6,7 @@
 import { OFFICE_XML_PARSER, OFFICE_NAMESPACES as NS, officeError, officeXmlLimits,
   directChildren, firstChild, officeAttribute, readOfficePart,
   readOfficeRelationships, resolveOfficeTarget, findOfficeDocumentPart,
-  readOfficeContentTypes } from './local-office-xml.mjs?v=771721901c169502';
+  readOfficeContentTypes } from './local-office-xml.mjs?v=1e427a8d323976e5';
 
 export const PPTX_PARSER = Object.freeze({ name: 'site-ooxml-presentationml', version: '1.0.0', xml: OFFICE_XML_PARSER });
 const PPTX_MAIN = 'application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml';

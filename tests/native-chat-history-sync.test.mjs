@@ -42,6 +42,56 @@ function device(f, actor = f.alice, options = {}) {
   return { sync: create(), create, store: storage, calls, diagnostics, state, setIdentity: value => { identity = value; }, setToken: value => { token = value; }, getIdentity: () => copy(identity) };
 }
 
+test('a stalled IndexedDB write transaction aborts without committing its staged outbox state', { timeout: 3000 }, async () => {
+  const owner = 'neutral-history-owner';
+  const durable = { schemaVersion: 1, cursor: null, heads: {}, known: {}, outbox: [], conflicts: {}, localIds: ['existing-thread'] };
+  const read = { result: copy(durable) };
+  let staged = null, wrote = false, aborted = false;
+  const tx = {
+    objectStore(name) {
+      assert.equal(name, 'owners');
+      return {
+        get(key) {
+          assert.equal(key, owner);
+          queueMicrotask(() => read.onsuccess());
+          return read;
+        },
+        put(state, key) {
+          assert.equal(key, owner);
+          wrote = true;
+          staged = copy(state);
+        },
+      };
+    },
+    abort() {
+      assert.deepEqual(staged.localIds, ['existing-thread', 'pending-thread']);
+      staged = null;
+      aborted = true;
+      queueMicrotask(() => tx.onabort());
+    },
+  };
+  const connection = {
+    transaction(name, mode) {
+      assert.equal(name, 'owners');
+      assert.equal(mode, 'readwrite');
+      return tx;
+    },
+  };
+  const indexedDB = {
+    open() {
+      const open = { result: connection };
+      queueMicrotask(() => open.onsuccess());
+      return open;
+    },
+  };
+  const stateStore = createIndexedDBChatHistoryStore({ indexedDB, timeoutMs: 25 });
+  await assert.rejects(stateStore.transact(owner, state => state.localIds.push('pending-thread')), { code: 'SYNC_LOCAL_STORAGE_TIMEOUT' });
+  assert.equal(wrote, true);
+  assert.equal(aborted, true);
+  assert.equal(staged, null);
+  assert.deepEqual(durable.localIds, ['existing-thread']);
+});
+
 test('actual SQLite account history restores exact native text/IDs/model/effort across two fresh devices', async t => {
   const f = await fixture(t), a = device(f), doc = addTurn(thread(), 'Astra followup', 'gpt-6-astra', 'high'); doc.archived = true;
   const initial = await a.sync.initialize([doc]); assert.equal(initial.queuedCount, 0);

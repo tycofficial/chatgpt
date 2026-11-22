@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { LocalAppServer } from '../src/native-client/local-app-server.mjs';
-import { createChatHistorySync, projectChatHistoryThread } from '../src/native-client/chat-history-sync.mjs';
+import { createChatHistorySync, createIndexedDBChatHistoryStore, projectChatHistoryThread } from '../src/native-client/chat-history-sync.mjs';
 import { createAccountHistoryCoordinator } from '../src/native-client/account-history-coordinator.mjs';
 import { syncFixture, nativeDocument, mutation, save } from '../chatgpt-services/tests/chat-sync-fixture.mjs';
 const copy = value => structuredClone(value);
@@ -15,9 +15,9 @@ function storage(threads) {
   const values = new Map([['cg-original-app-server:v1', JSON.stringify({ schemaVersion: 1, threads })]]);
   return { values, failNext: false, getItem: key => values.get(key) ?? null, setItem(key, value) { if (this.failNext) { this.failNext = false; throw Error('Neutral native quota failure'); } values.set(key, String(value)); } };
 }
-async function fixture(t, documents = []) {
+async function fixture(t, documents = [], stateStore = store()) {
   const backend = await syncFixture(); t.after(() => backend.DB.raw.close());
-  const stateStore = store(), disk = storage(documents), calls = [], events = [], clear = [], applied = [], trace = [], timers = new Map();
+  const disk = storage(documents), calls = [], events = [], clear = [], applied = [], trace = [], timers = new Map();
   let identity = { ownerId: backend.alice.user.id, accountId: backend.alice.user.accountId, namespace: 'neutral-history-a' }, nextTimer = 0, coordinator;
   const network = { online: true, before: null, after: null }, eventTarget = new EventTarget(); eventTarget.document = { visibilityState: 'visible' };
   const app = new LocalAppServer({ storage: disk, streamCompletion: () => { throw Error('No model execution allowed'); }, readSettings: () => ({}), models: {}, catalog: {} });
@@ -60,6 +60,28 @@ test('pre-mount start applies genuine remote JSON through native disk and captur
   const ack = f.trace.findLast(entry => entry.method === 'acknowledgeApplied'), before = f.trace[f.trace.indexOf(ack) - 1];
   assert.equal(before.method, 'capture'); assert.deepEqual(before.input, ack.input);
   assert.equal(f.applied[0].added[0], doc.id); assert.equal(f.calls.filter(call => call.method === 'DELETE').length, 0);
+});
+
+test('a stalled IndexedDB open releases pre-mount history and preserves the local copy', { timeout: 3000 }, async t => {
+  let request, closed = 0;
+  const indexedDB = { open() { return request = { result: { close() { closed++; } } }; } };
+  const stateStore = createIndexedDBChatHistoryStore({ indexedDB, timeoutMs: 25 });
+  const doc = nativeDocument('local-before-indexeddb-timeout');
+  const f = await fixture(t, [doc], stateStore);
+  const before = f.disk.getItem(f.app.storageKey);
+
+  const result = await f.coordinator.start();
+  assert.equal(result.ok, false);
+  assert.equal(result.ready, false);
+  assert.equal(result.restartNeeded, true);
+  assert.equal(result.lastErrorCode, 'SYNC_LOCAL_STORAGE_TIMEOUT');
+  assert.deepEqual(f.app.threads.get(doc.id), doc);
+  assert.equal(f.disk.getItem(f.app.storageKey), before);
+  assert.deepEqual(f.calls, []);
+  assert.deepEqual(f.applied, []);
+
+  request.onsuccess();
+  assert.equal(closed, 1);
 });
 
 test('onPersist clones immediately, queues every capture and a bounded debounce sends the latest native version', async t => {

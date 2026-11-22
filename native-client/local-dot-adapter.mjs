@@ -6,8 +6,8 @@
  * async/569087.5c1de81bf5.js o6Sz (PNG upload -> profile PATCH -> GET confirm).
  * hrUs -> GET /files/download/{file_id}: {status:'success',download_url}.
  */
-import { createProviderCompletionRouter } from './provider-routing.mjs?v=771721901c169502';
-import { hasUncertainPlainResponse } from './agent-turn-runner.mjs?v=771721901c169502';
+import { createProviderCompletionRouter } from './provider-routing.mjs?v=1e427a8d323976e5';
+import { hasUncertainPlainResponse } from './agent-turn-runner.mjs?v=1e427a8d323976e5';
 
 export const LOCAL_DOT_SOURCE = 'site-local-dot-provider';
 export const LOCAL_DOT_DEFAULT_APPEARANCE = Object.freeze({ avatar: 'sunglasses', color: 'pink' });

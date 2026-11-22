@@ -1,5 +1,5 @@
 /** Account-owned text history sync. No model transport or executable remote checkpoint. */
-import { isSiteInferenceCheckpoint } from './site-inference-transport.mjs?v=771721901c169502';
+import { isSiteInferenceCheckpoint } from './site-inference-transport.mjs?v=1e427a8d323976e5';
 
 export const CHAT_HISTORY_SYNC_SCHEMA = 1;
 export const CHAT_HISTORY_SYNC_LIMITS = Object.freeze({ documentBytes: 1_000_000, pageSize: 100, flushMutations: 40, queuedMutations: 2000, threads: 2000, requestTimeoutMs: 15000 });
@@ -244,26 +244,65 @@ function completesSavedReattachment(state, id, head, document, original) {
 function freshState() { return { schemaVersion: 1, cursor: null, heads: Object.create(null), known: Object.create(null), outbox: [], conflicts: Object.create(null), localIds: [] }; }
 function validateState(value) { if (!value) return freshState(); if (value.schemaVersion !== 1 || !object(value.heads) || !object(value.known) || !Array.isArray(value.outbox) || !object(value.conflicts) || !Array.isArray(value.localIds)) fail('SYNC_LOCAL_STATE_INVALID', 'The durable sync state could not be loaded.'); for (const key of ['heads', 'known', 'conflicts']) Object.setPrototypeOf(value[key], null); return value; }
 /** Atomic read-modify-write; callback must be synchronous and never does network I/O. */
-export function createIndexedDBChatHistoryStore({ indexedDB = globalThis.indexedDB, databaseName = 'chatgpt-site-history-sync-v1' } = {}) {
+export function createIndexedDBChatHistoryStore({
+  indexedDB = globalThis.indexedDB, databaseName = 'chatgpt-site-history-sync-v1', timeoutMs = 5000,
+} = {}) {
   if (!indexedDB?.open) fail('SYNC_LOCAL_STORAGE_UNAVAILABLE', 'IndexedDB is required for a durable account sync outbox.', { status: 503 });
+  const timeoutError = () => new ChatHistorySyncError('SYNC_LOCAL_STORAGE_TIMEOUT', 'The durable account history storage did not respond in time.', { status: 503 });
   let openPromise;
-  const open = () => openPromise ??= new Promise((resolve, reject) => {
-    const request = indexedDB.open(databaseName, 1);
-    request.onupgradeneeded = () => { if (!request.result.objectStoreNames.contains('owners')) request.result.createObjectStore('owners'); };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(new ChatHistorySyncError('SYNC_LOCAL_STORAGE_UNAVAILABLE', 'The durable account sync store could not be opened.', { status: 503 }));
-    request.onblocked = () => reject(new ChatHistorySyncError('SYNC_LOCAL_STORAGE_BLOCKED', 'Another browser tab is blocking the sync store upgrade.', { status: 503 }));
-  });
+  const open = () => {
+    if (openPromise) return openPromise;
+    let timer;
+    const pending = new Promise((resolve, reject) => {
+      const request = indexedDB.open(databaseName, 1);
+      let failed = false;
+      const rejectOpen = error => { failed = true; reject(error); };
+      timer = setTimeout(() => rejectOpen(timeoutError()), timeoutMs);
+      request.onupgradeneeded = () => {
+        if (failed) { request.transaction.abort(); return; }
+        if (!request.result.objectStoreNames.contains('owners')) request.result.createObjectStore('owners');
+      };
+      request.onsuccess = () => {
+        if (failed) request.result.close();
+        else resolve(request.result);
+      };
+      request.onerror = () => rejectOpen(new ChatHistorySyncError('SYNC_LOCAL_STORAGE_UNAVAILABLE', 'The durable account sync store could not be opened.', { status: 503 }));
+      request.onblocked = () => rejectOpen(new ChatHistorySyncError('SYNC_LOCAL_STORAGE_BLOCKED', 'Another browser tab is blocking the sync store upgrade.', { status: 503 }));
+    });
+    openPromise = pending;
+    void pending.then(() => clearTimeout(timer), () => {
+      clearTimeout(timer);
+      if (openPromise === pending) openPromise = null;
+    });
+    return pending;
+  };
   const transaction = async (owner, updater) => {
     const db = await open();
     return new Promise((resolve, reject) => {
       const tx = db.transaction('owners', updater ? 'readwrite' : 'readonly'), store = tx.objectStore('owners'), req = store.get(owner); let result, thrown;
+      let expired = false;
+      const timer = setTimeout(() => {
+        expired = true;
+        // A transaction may have finished while its completion event was delayed.
+        // In that case a later read is authoritative and this attempt still reports a timeout.
+        try { tx.abort(); } catch {}
+        reject(timeoutError());
+      }, timeoutMs);
       req.onsuccess = () => {
+        if (expired) return;
         try { const state = validateState(req.result); if (updater) { result = updater(state); if (result?.then) fail('SYNC_LOCAL_TRANSACTION_ASYNC', 'A sync-store mutation must be synchronous.'); store.put(state, owner); } else result = clone(state); }
         catch (error) { thrown = error; tx.abort(); }
       };
-      tx.oncomplete = () => resolve(clone(result));
-      tx.onerror = tx.onabort = () => reject(thrown ?? new ChatHistorySyncError('SYNC_LOCAL_STORAGE_UNAVAILABLE', 'The durable account outbox could not be saved.', { status: 507 }));
+      tx.oncomplete = () => {
+        clearTimeout(timer);
+        if (!expired) {
+          try { resolve(clone(result)); } catch (error) { reject(error); }
+        }
+      };
+      tx.onerror = tx.onabort = () => {
+        clearTimeout(timer);
+        if (!expired) reject(thrown ?? new ChatHistorySyncError('SYNC_LOCAL_STORAGE_UNAVAILABLE', 'The durable account outbox could not be saved.', { status: 507 }));
+      };
     });
   };
   return { load: owner => transaction(owner), transact: transaction, close: async () => (await open()).close() };

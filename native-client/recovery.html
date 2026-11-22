@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>恢复网页加载 · ChatGPT</title>
+  <style>
+    :root { color-scheme: light dark; font: 16px/1.6 system-ui, sans-serif; }
+    body { margin: 0; padding: 24px; }
+    main { max-width: 32rem; margin: min(12vh, 6rem) auto; }
+    h1 { line-height: 1.25; }
+    button { min-height: 44px; padding: 8px 14px; font: inherit; }
+    a { display: inline-block; margin: 10px; }
+    [role="status"] { min-height: 1.6em; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>恢复网页加载</h1>
+    <p>如果本站刷新卡住，可以解除当前浏览器中的本站后台程序，然后重新打开主页。浏览器中已保存的聊天记录和登录信息会保留。</p>
+    <button id="repair" type="button" hidden>恢复并打开主页</button>
+    <a href="../">打开主页</a>
+    <p id="status" role="status"></p>
+    <noscript><p>请启用 JavaScript 后使用恢复功能。</p></noscript>
+  </main>
+  <script>
+    const home = new URL('../', location.href);
+    const workerURL = new URL('native-client-worker.js', home);
+    const repair = document.getElementById('repair');
+    const status = document.getElementById('status');
+    const timeout = '浏览器还未确认恢复，请重试。';
+
+    async function beforeDeadline(operation, deadline) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) throw new Error(timeout);
+      let timer;
+      const expired = new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(timeout)), remaining);
+      });
+      try {
+        return await Promise.race([operation(), expired]);
+      } finally {
+        clearTimeout(timer);
+      }
+    }
+
+    function isAppRegistration(registration) {
+      const workers = [registration.active, registration.waiting, registration.installing].filter(Boolean);
+      return registration.scope === home.href && workers.length > 0 && workers.every(worker => {
+        const url = new URL(worker.scriptURL);
+        return url.origin === workerURL.origin && url.pathname === workerURL.pathname;
+      });
+    }
+
+    repair.hidden = false;
+    repair.addEventListener('click', async () => {
+      repair.disabled = true;
+      status.textContent = '正在检查本站后台程序…';
+      const deadline = Date.now() + 6000;
+      try {
+        const serviceWorkers = navigator.serviceWorker;
+        const getRegistration = () => serviceWorkers.getRegistration(home.href);
+        const registration = serviceWorkers ? await beforeDeadline(getRegistration, deadline) : null;
+        if (registration) {
+          if (!isAppRegistration(registration)) throw new Error('检测到其他页面的后台程序。请使用「打开主页」继续。');
+          await beforeDeadline(() => registration.unregister(), deadline);
+          const remaining = await beforeDeadline(getRegistration, deadline);
+          if (remaining?.scope === home.href) throw new Error(timeout);
+        }
+        status.textContent = '正在打开主页…';
+        location.replace(home.href);
+      } catch (error) {
+        status.textContent = error instanceof Error ? error.message : '恢复未完成，请重试。';
+        repair.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>

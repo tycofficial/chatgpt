@@ -1,4 +1,4 @@
-import { createLocalDotRecognition, hasLocalDotTranscription } from './local-dot-transcription.mjs?v=771721901c169502';
+import { createLocalDotRecognition, hasLocalDotTranscription } from './local-dot-transcription.mjs?v=1e427a8d323976e5';
 
 /** Browser speech input and output for a real, account-owned Dot conversation. */
 const sameContext = (a, b) => a != null && b != null && a.threadId === b.threadId && a.accountId === b.accountId && a.userId === b.userId && a.profileId === b.profileId;
