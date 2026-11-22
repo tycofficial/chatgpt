@@ -160,3 +160,79 @@ test('premature EOF, expiry of a running worker, and early cancel never dispatch
   assert.equal((await lateSubmission.json()).status, 'cancelled');
   assert.equal(upstream.mock.callCount(), 1);
 });
+
+test('a provider disconnect after a complete SSE event preserves the result, usage, and next turn', async t => {
+  const f = await prepare(t);
+  assert.equal((await f.claim(f.alice)).status, 200);
+  let writer;
+  const upstream = t.mock.method(globalThis, 'fetch', async () => new Response(
+    new ReadableStream({ start(controller) { writer = controller; } }), { headers: type },
+  ));
+  const id = crypto.randomUUID();
+  const response = await f.submit(f.alice, id);
+  const client = response.body.getReader();
+  const decoder = new TextDecoder();
+  const terminal = completed.replace(',"response":', ',\ndata: "response":').replaceAll('\n', '\r\n');
+  writer.enqueue(encoder.encode(started + terminal));
+  assert.equal(decoder.decode((await client.read()).value), started + terminal);
+  writer.error(new Error('provider reset after completion'));
+  assert.equal((await client.read()).done, true);
+  await f.settle();
+
+  const recovered = await (await f.receipt(f.alice, id)).json();
+  assert.equal(recovered.status, 'completed');
+  assert.equal(recovered.error, null);
+  assert.equal(recovered.chunks.map(chunk => chunk.data).join(''), started + terminal);
+  const usage = await (await f.call('/inference/v1/usage', { token: f.alice.token })).json();
+  assert.equal(usage.sources[0].completed, 1);
+  assert.equal(usage.sources[0].input_tokens, 12);
+  assert.equal(usage.sources[0].output_tokens, 4);
+  const duplicate = await f.submit(f.alice, id);
+  assert.equal(duplicate.status, 202);
+  assert.equal((await duplicate.json()).status, 'completed');
+  assert.equal(upstream.mock.callCount(), 1);
+
+  const input = [
+    { role: 'user', content: 'Neutral fixture' },
+    { role: 'assistant', content: '已收到 🌐' },
+    { role: 'user', content: 'A follow-up in the same conversation' },
+  ];
+  const nextResponse = await f.submit(f.alice, crypto.randomUUID(), 'gpt-6.2-astra', { input });
+  assert.equal(nextResponse.status, 200);
+  writer.enqueue(encoder.encode(completed.replace('gpt-6.2-sol', 'gpt-6.2-astra')));
+  writer.close();
+  await nextResponse.text();
+  await f.settle();
+  const forwarded = JSON.parse(upstream.mock.calls[1].arguments[1].body);
+  assert.equal(upstream.mock.callCount(), 2);
+  assert.equal(forwarded.model, 'gpt-6.2-astra');
+  assert.deepEqual(forwarded.input, input);
+});
+
+test('a reset retains a complete provider failure and rejects unframed or malformed completion', async t => {
+  const f = await prepare(t);
+  assert.equal((await f.claim(f.alice)).status, 200);
+  let writer;
+  t.mock.method(globalThis, 'fetch', async () => new Response(
+    new ReadableStream({ start(controller) { writer = controller; } }), { headers: type },
+  ));
+  const providerError = { code: 'insufficient_quota', message: 'The provider quota was exhausted.' };
+  const failed = 'data: ' + JSON.stringify({ type: 'response.failed', response: { status: 'failed', error: providerError } }) + '\n\n';
+  for (const terminal of [failed, completed.trimEnd() + '\n', 'data: {"type":"response.completed"}\n\n']) {
+    const id = crypto.randomUUID();
+    const response = await f.submit(f.alice, id);
+    const client = response.body.getReader();
+    writer.enqueue(encoder.encode(started + terminal));
+    assert.equal(new TextDecoder().decode((await client.read()).value), started + terminal);
+    writer.error(new Error('provider reset'));
+    const expectedFailure = terminal === failed;
+    if (expectedFailure) assert.equal((await client.read()).done, true);
+    else await assert.rejects(client.read());
+    await f.settle();
+    const receipt = await (await f.receipt(f.alice, id)).json();
+    assert.equal(receipt.status, expectedFailure ? 'failed' : 'interrupted');
+    assert.equal(receipt.chunks.map(chunk => chunk.data).join(''), started + terminal);
+    if (expectedFailure) assert.deepEqual(receipt.error, providerError);
+    else assert.equal(receipt.error.code, 'INFERENCE_INTERRUPTED');
+  }
+});

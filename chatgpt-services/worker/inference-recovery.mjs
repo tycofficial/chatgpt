@@ -92,34 +92,42 @@ function responseOutcome(contentType) {
   let fragment = '';
   let hasPublicText = false;
   const sse = contentType?.includes('text/event-stream');
-  const event = line => {
-    if (!line.startsWith('data:')) return;
+  const event = frame => {
+    if (receipt.status !== 'interrupted') return;
+    const data = frame.split(/\r?\n/).filter(line => line.startsWith('data:')).map(line => line.slice(5)).join('\n');
+    if (!data) return;
+    let value;
     try {
-      const value = JSON.parse(line.slice(5).trim());
-      if (!hasPublicText && value.type === 'response.output_text.delta' && typeof value.delta === 'string' && value.delta.trim()) {
-        hasPublicText = true;
-      }
-      if (value.type === 'response.completed') rememberOutcome(receipt, { ...value.response, status: 'completed' });
-      else if (['response.failed', 'response.incomplete', 'error'].includes(value.type)) {
-        rememberOutcome(receipt, { ...value.response, status: 'failed', error: value.error ?? value.response?.error ?? value });
-      }
-    } catch {}
+      value = JSON.parse(data);
+    } catch { return; }
+    if (value?.type === 'response.output_text.delta' && typeof value.delta === 'string' && value.delta.trim()) {
+      hasPublicText = true;
+    }
+    const response = value?.response;
+    const status = response?.status;
+    if (['completed', 'failed', 'incomplete'].includes(status) && value.type === 'response.' + status) {
+      rememberOutcome(receipt, { ...response, error: value.error ?? response.error });
+    } else if (value?.type === 'error' && (value.error || typeof value.code === 'string' || typeof value.message === 'string')) {
+      rememberOutcome(receipt, { status: 'failed', error: value.error ?? value });
+    }
   };
   return {
     add(text) {
       fragment += text;
       if (!sse) return false;
       const hadPublicText = hasPublicText;
-      let end;
-      while ((end = fragment.indexOf('\n')) !== -1) {
-        event(fragment.slice(0, end));
-        fragment = fragment.slice(end + 1);
+      let boundary;
+      while ((boundary = /\r?\n\r?\n/.exec(fragment))) {
+        event(fragment.slice(0, boundary.index));
+        fragment = fragment.slice(boundary.index + boundary[0].length);
       }
       return !hadPublicText && hasPublicText;
     },
+    hasTerminalEvent() {
+      return sse && receipt.status !== 'interrupted';
+    },
     finish(ok) {
-      if (sse) event(fragment);
-      else {
+      if (!sse) {
         try {
           const response = JSON.parse(fragment);
           rememberOutcome(receipt, response);
@@ -180,7 +188,14 @@ async function recordBody(env, owner, id, response, liveChunk, abortSignal) {
   try {
     let next = reader.read();
     for (;;) {
-      const read = pending ? await waitForBytes(next, flushAt - Date.now()) : await next;
+      let read;
+      try {
+        read = pending ? await waitForBytes(next, flushAt - Date.now()) : await next;
+      } catch (error) {
+        if (abortSignal.aborted || !outcome.hasTerminalEvent()) throw error;
+        // The provider sent a complete terminal event before its connection failed.
+        break;
+      }
       if (read === timedOut) {
         await flush();
         continue;
