@@ -26,7 +26,8 @@ jobs:
           qa_project="$qa_root/scripts/qa/ipad-xcuitest"
           cp scripts/qa/ipad-work/SafariPublicSiteTests.swift "$qa_project/SafariQAUITests/SafariPublicSiteTests.swift"
           xcrun simctl list devices available -j | node "$qa_project/select-device.mjs" > "$qa_root/device"
-          source "$qa_root/device"
+          IPAD_UDID="$(sed -n 's/^IPAD_UDID=//p' "$qa_root/device")"
+          [[ "$IPAD_UDID" =~ ^[A-Fa-f0-9-]{36}$ ]]
           xcodebuild build-for-testing -project "$qa_project/SafariQA.xcodeproj" -scheme SafariQA \
             -destination "platform=iOS Simulator,id=$IPAD_UDID" \
             -derivedDataPath "$qa_root/build" -parallel-testing-enabled NO -quiet
@@ -36,7 +37,8 @@ jobs:
         run: |
           set -euo pipefail
           qa_root="$RUNNER_TEMP/tyc-ipad-work"
-          source "$qa_root/device"
+          IPAD_UDID="$(sed -n 's/^IPAD_UDID=//p' "$qa_root/device")"
+          [[ "$IPAD_UDID" =~ ^[A-Fa-f0-9-]{36}$ ]]
           qa_project="$qa_root/scripts/qa/ipad-xcuitest"
           bash scripts/qa/ipad-work/create-loopback-tls.sh "$qa_root/tls"
           TYC_IPAD_TLS_KEY="$qa_root/tls/leaf.key" TYC_IPAD_TLS_CERT="$qa_root/tls/leaf.crt" \
