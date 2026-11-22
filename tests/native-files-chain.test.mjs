@@ -387,6 +387,23 @@ test('old inline prepared attachments migrate losslessly and continue the same a
     assert.deepEqual(options.messages.findLast(message => message.role === 'user').content, exactContent);
     return { content: 'Accepted host result resumed.', finish_reason: 'stop' };
   } });
+  const previousSave = inputStore.save;
+  const entered = Promise.withResolvers(), release = Promise.withResolvers();
+  let sameNamespace = true;
+  inputStore.save = async (...args) => {
+    entered.resolve();
+    await release.promise;
+    return previousSave(...args);
+  };
+  const migrating = restored.server.migratePreparedInputs({ isCurrentNamespace: () => sameNamespace });
+  await entered.promise;
+  assert.match(storage.getItem(restored.server.storageKey), /data:image/);
+  sameNamespace = false;
+  release.resolve();
+  await migrating;
+  assert.match(storage.getItem(restored.server.storageKey), /data:image/);
+  assert.equal(inputStore.entries.size, 0);
+  inputStore.save = previousSave;
   await restored.server.migratePreparedInputs();
   assert(!storage.getItem(restored.server.storageKey).includes('data:image'));
   assert.equal(inputStore.entries.size, 1);

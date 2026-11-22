@@ -7,6 +7,7 @@ import { pbkdf2Sync, webcrypto } from 'node:crypto';
 import accountWorker from '../chatgpt-services/worker/service.mjs';
 import { sqliteD1 } from '../chatgpt-services/tests/fixture-db.mjs';
 import { getSiteAuthEntryKind, isHistoricalSitePath, resolveSiteHomeUrl } from '../src/native-client/site-paths.mjs';
+import { installRestrictedBrowserStorage, isVolatileBrowserStorage } from '../src/native-client/restricted-browser-storage.mjs';
 const identitySource=fs.readFileSync(new URL('../src/native-client/local-identity.mjs',import.meta.url),'utf8');
 const pricingSource=fs.readFileSync(new URL('../src/native-client/local-pricing.mjs',import.meta.url),'utf8');
 const source=fs.readFileSync(new URL('../src/native-client/site-account.mjs',import.meta.url),'utf8');
@@ -15,7 +16,7 @@ const names=['getSiteAccount','hasModelSelectionAccess','getSiteSessionToken','g
 // No real browser storage, password, token, account service, or network is used.
 const fixtureToken='c'.repeat(64),key='chatgpt-site-admin-session:v1',now=1800000000000;
 const user=()=>({id:'site-admin',username:'TYC',name:'TYC',role:'administrator',planType:'pro',membershipSource:'site-administrator',createdAt:now-10000,officialSubscriptionVerified:false});
-function fixture(cached, { failWrites = false, online = true, receipts = new Map(), tab = new Map(), href = 'https://tycofficial.github.io/chatgpt/', basePath = '/chatgpt/', routerBasename, modulePath = '/chatgpt/native-client/site-account.mjs?v=fixture', verifierPassword } = {}) {
+function fixture(cached, { failWrites = false, online = true, receipts = new Map(), tab = new Map(), href = 'https://tycofficial.github.io/chatgpt/', basePath = '/chatgpt/', routerBasename, modulePath = '/chatgpt/native-client/site-account.mjs?v=fixture', verifierPassword, volatileStorage = false, indexedDB = makeIndexedDB(receipts) } = {}) {
   let clock = now;
   let handler = async () => ({ user: user() });
   const calls = [];
@@ -37,9 +38,9 @@ function fixture(cached, { failWrites = false, online = true, receipts = new Map
   const context = vm.createContext({
     crypto: webcrypto, TextEncoder, URL, AbortController, Response, Event, setTimeout, clearTimeout, navigator, document,
     Date: class extends Date { static now() { return clock; } },
-    localStorage, sessionStorage, location, indexedDB: makeIndexedDB(receipts),
+    localStorage, sessionStorage, location, indexedDB,
     __CHATGPT_REPLICA_ENV__: basePath === null ? undefined : { basePath },
-    getSiteAuthEntryKind, isHistoricalSitePath, resolveSiteHomeUrl,
+    getSiteAuthEntryKind, isHistoricalSitePath, resolveSiteHomeUrl, isVolatileBrowserStorage,
     addEventListener: (...args) => events.addEventListener(...args),
     removeEventListener: (...args) => events.removeEventListener(...args),
     dispatchEvent: event => events.dispatchEvent(event),
@@ -53,6 +54,10 @@ function fixture(cached, { failWrites = false, online = true, receipts = new Map
       return new Response(JSON.stringify(result.body ?? result), { status: result.status ?? 200, headers: { 'Content-Type': 'application/json' } });
     },
   });
+  if (volatileStorage) {
+    delete context.localStorage;
+    installRestrictedBrowserStorage(context);
+  }
   let authSource = source;
   if (verifierPassword) {
     const salt = '00112233aabbccdd';
@@ -144,6 +149,34 @@ test('invalid or expired cached sessions are removed without granting permission
  }
 });
 test('forged cached administrator fields never bypass server validation',async()=>{const f=fixture(record());f.setHandler(async()=>({status:401,body:{error:{code:'UNAUTHORIZED',message:'Fixture rejected'}}}));await f.api.initializeSiteAccount();assertFree(f);assert.equal(f.values.has(key),false);assert.equal(f.calls[0].path,'/auth/session');});
+
+test('per-page storage can open a guest view but does not start a login or registration that cannot persist', async () => {
+  const f = fixture(record(), { volatileStorage: true });
+  assert.equal(await f.api.initializeSiteAccountForDisplay(), null);
+  await assert.rejects(f.api.loginSiteAccount('fixture-user', 'fixture-password'), /无法保存登录状态/);
+  await assert.rejects(f.api.registerSiteAccount('fixture-user', 'fixture-password'), /无法保存登录状态/);
+  assert.equal(f.api.getSiteAccount(), null);
+  assert.equal(f.api.getSiteSessionToken(), null);
+  assert.equal(f.calls.length, 0);
+});
+
+test('first display recovers from a stuck receipt database open through verified server identity', { timeout: 4500 }, async () => {
+  const receipts = new Map(), normalDatabase = makeIndexedDB(receipts);
+  let lateConnectionClosed = false, opens = 0;
+  const lateRequest = { result: { close() { lateConnectionClosed = true; } } };
+  const indexedDB = { open: () => ++opens === 1 ? lateRequest : normalDatabase.open() };
+  const f = fixture(record(), { receipts, indexedDB });
+  f.setHandler(async () => ({ user: freeAccount() }));
+  const account = await f.api.initializeSiteAccountForDisplay();
+  assert.equal(account.id, freeAccount().id);
+  assert.equal(account.planType, 'free');
+  assert.equal(account.authenticationMode, 'site-server');
+  assert.equal(f.api.getSiteSessionToken(), fixtureToken);
+  assert.deepEqual(f.calls.map(call => call.path), ['/auth/session']);
+  assert.equal(receipts.get(fixtureToken).user.id, freeAccount().id);
+  lateRequest.onsuccess();
+  assert.equal(lateConnectionClosed, true);
+});
 test('only the server user becomes the immutable verified identity',async()=>{const f=fixture(record());await f.api.initializeSiteAccount();assert.equal(f.api.getSiteAccount().username,'TYC');assert.equal(f.api.hasModelSelectionAccess(),true);assert.equal(f.api.getSiteSessionToken(),fixtureToken);assert.equal('canSelectModels'in f.api.getSiteAccount(),false);assert.throws(()=>{f.api.getSiteAccount().planType='free';},/read only|Cannot assign/);});
 test('session responses with invalid permission or identity fields fail closed',async t=>{
  for(const [label,change]of [['free',{planType:'free'}],['non-admin',{role:'member'}],['wrong-id',{id:'claimed-admin'}],['missing-time',{createdAt:undefined}],['wrong-source',{membershipSource:'browser-cache'}],['official-claim',{officialSubscriptionVerified:true}]]){

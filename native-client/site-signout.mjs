@@ -1,4 +1,4 @@
-import { getSiteAuthEntryKind, isHistoricalSitePath, resolveSiteHomeUrl, siteRelativePath } from './site-paths.mjs?v=923e7f59b16a7c09';
+import { getSiteAuthEntryKind, isHistoricalSitePath, resolveSiteHomeUrl, siteRelativePath } from './site-paths.mjs?v=1e91c1a3ce5a11ff';
 
 const originalOrigin = 'https://chatgpt.com';
 

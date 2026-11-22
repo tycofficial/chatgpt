@@ -134,6 +134,10 @@ export function installDirectAssetHost(rootURL, { document = globalThis.document
 export function showStartupError(error, document = globalThis.document) {
   console.error('ChatGPT site startup failed', error);
   globalThis.__CHATGPT_STARTUP_ERROR__ = { name: error?.name, message: String(error?.message ?? error) };
+  if (globalThis.__TYC_PAGE_START__) {
+    globalThis.__TYC_PAGE_START__.fail();
+    return;
+  }
   const panel = document.createElement('main');
   panel.style.cssText = 'max-width:36rem;margin:20vh auto;padding:24px;font:16px/1.6 system-ui;color:#eee;background:#212121;border-radius:16px';
   const title = document.createElement('h1'); title.textContent = '页面未能完成加载'; title.style.fontSize = '22px';

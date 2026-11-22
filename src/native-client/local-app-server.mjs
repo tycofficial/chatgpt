@@ -173,8 +173,8 @@ export class LocalAppServer {
       catch { this.diagnostics.push({ type: 'restored-checkpoint-storage-error' }); }
     }
   }
-  async migratePreparedInputs() {
-    if (this.loadError || !this.storage || !this.preparedInputStore) return;
+  async migratePreparedInputs({ isCurrentNamespace = () => true } = {}) {
+    if (this.loadError || !this.storage || !this.preparedInputStore || !isCurrentNamespace()) return;
     const pending = [];
     try {
       const initialHistory = this.storage.getItem(this.storageKey);
@@ -187,6 +187,7 @@ export class LocalAppServer {
           const location = { threadId: thread.id, turnId: turn.id };
           const reference = await this.preparedInputStore.save(location, user.content);
           pending.push({ checkpoint, previous, user, originalContent: user.content, historyContent: compactPreparedUserContent(turn, previous?.files), location, reference });
+          if (!isCurrentNamespace()) throw Error('Local history account changed during prepared input migration');
         }
       }
       if (!pending.length) return;

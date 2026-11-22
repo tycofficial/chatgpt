@@ -11,6 +11,7 @@ import {createModelCatalogAdapter} from '../src/native-client/model-catalog-adap
 import {createProviderCompletionRouter} from '../src/native-client/provider-routing.mjs';
 import {streamCompletion} from '../runtime.js';
 import {createReleaseUpdater} from '../release-updater.js';
+import {workspacePath} from '../src/native-client/browser-tool-executor.mjs';
 
 function host(identity){
  const models=createModelCatalogAdapter(catalog),requests=[];
@@ -65,158 +66,95 @@ test('updating waits for click inactivity and never repeatedly navigates to the 
 const workerSource = fs.readFileSync(new URL('../native-client-worker.js', import.meta.url), 'utf8').replace(/^import .*;\r?\n/, '');
 const workerURL = new URL('https://fixture.test/chatgpt/native-client-worker.js');
 
-function workerFixture({ failure } = {}) {
+function workerFixture() {
   const handlers = new Map();
-  const cached = new Map();
-  const operations = { opens: [], reads: [], writes: [], requests: [] };
-  let fetcher = async url => new Response('Network ' + url.pathname, {
-    headers: { 'Content-Type': url.pathname.endsWith('/') ? 'text/html; charset=utf-8' : 'application/javascript' },
-  });
+  const operations = { activations: [], workspaceReads: [] };
   const context = vm.createContext({
-    URL, Headers, Response,
-    BrowserWorkspaceStore: class { async read() { return new TextEncoder().encode('Fixture private artifact'); } },
-    workspacePath: path => path,
-    self: { location: workerURL, addEventListener: (name, handler) => handlers.set(name, handler) },
-    caches: {
-      async open(name) {
-        operations.opens.push(name);
-        if (failure === 'open') throw Error('Fixture storage unavailable');
-        if (!cached.has(name)) cached.set(name, new Map());
-        const values = cached.get(name);
-        return {
-          async match(key) {
-            operations.reads.push(String(key));
-            if (failure === 'read') throw Error('Fixture cache read failure');
-            return values.get(String(key))?.clone();
-          },
-          async put(key, response) {
-            operations.writes.push(String(key));
-            if (failure === 'write') throw Error('Fixture cache write failure');
-            values.set(String(key), response.clone());
-          },
-        };
-      },
+    URL, Response, workspacePath,
+    BrowserWorkspaceStore: class {
+      async read(key) {
+        operations.workspaceReads.push(key);
+        if (key !== 'account-fixture--thread/reports/final report.txt') throw Error('File not found');
+        return new TextEncoder().encode('Fixture private artifact');
+      }
     },
-    async fetch(input) {
-      const url = new URL(input.url ?? input, workerURL);
-      operations.requests.push(url.href);
-      return fetcher(url);
+    self: {
+      location: workerURL,
+      addEventListener: (name, handler) => handlers.set(name, handler),
+      skipWaiting: async () => { operations.activations.push('skipWaiting'); },
+      clients: { claim: async () => { operations.activations.push('claim'); } },
     },
+    get caches() { assert.fail('The artifact worker must leave the existing origin caches alone'); },
+    fetch() { assert.fail('The artifact worker must leave network requests alone'); },
   });
   new vm.Script(workerSource, { filename: 'generated native-client-worker.js' }).runInContext(context);
-  const release = new vm.Script('SHELL_CACHE.slice("chatgpt-native-shell-".length)').runInContext(context);
-  assert.match(release, /^[a-f0-9]{16}$/);
+
   return {
     operations,
-    release,
-    setFetch: value => { fetcher = value; },
+    async activate() {
+      for (const name of ['install', 'activate']) {
+        let lifetime;
+        handlers.get(name)({ waitUntil: work => { lifetime = work; } });
+        await lifetime;
+      }
+    },
     async dispatch(input, { mode = 'cors', headers, method = 'GET' } = {}) {
       const request = { url: new URL(input, workerURL).href, mode, method, headers: new Headers(headers) };
       let response;
-      const lifetime = [];
-      handlers.get('fetch')({ request, respondWith: value => { response = value; }, waitUntil: value => lifetime.push(value) });
-      if (response === undefined) return undefined;
-      const result = await response;
-      await Promise.all(lifetime);
-      return result;
+      handlers.get('fetch')({ request, respondWith: value => { response = value; } });
+      return response;
     },
   };
 }
-const immutableChunk = 'original-client/public/chatgpt.com/cdn/assets/807489.36023b676b.js';
 
-test('generated worker reuses release-pinned modules and direct hashed assets when the network is unavailable', async () => {
+test('the artifact worker takes over the existing scope without clearing caches', async () => {
   const f = workerFixture();
-  const paths = ['native-client/bootstrap.mjs?v=' + f.release, 'native-client/entry-plan.json?v=' + f.release,
-    'runtime.js?v=' + f.release, immutableChunk];
-  for (const path of paths) {
-    const url = new URL(path, workerURL);
-    const result = await f.dispatch(url);
-    assert.equal(await result.text(), 'Network ' + url.pathname);
-  }
-  const fetched = paths.map(path => new URL(path, workerURL).href);
-  assert.deepEqual(f.operations.requests, fetched);
-  assert.deepEqual(f.operations.writes, fetched);
-  f.setFetch(() => { throw new TypeError('Fixture network offline'); });
-  for (const path of paths) {
-    const url = new URL(path, workerURL);
-    assert.equal(await (await f.dispatch(url)).text(), 'Network ' + url.pathname);
-  }
-  assert.deepEqual(f.operations.requests, fetched);
+  await f.activate();
+  assert.deepEqual(f.operations.activations, ['skipWaiting', 'claim']);
+  assert.deepEqual(f.operations.workspaceReads, []);
 });
 
-test('the generated worker leaves release checks, unrelated remote requests, and account data out of cache', async () => {
+test('the artifact worker leaves Pages navigations, static assets and account or API requests to the browser', async () => {
   const f = workerFixture();
   for (const [path, options] of [
+    ['./', { mode: 'navigate' }],
+    ['c/example?mode=work#history', { mode: 'navigate' }],
+    ['auth/login/', { mode: 'navigate' }],
+    ['codex', { mode: 'navigate' }],
     ['native-client/active.json?check=123'],
-    ['native-client/active.json?v=' + f.release],
-    ['native-client/active.json', { mode: 'navigate' }],
-    ['native-client/bootstrap.mjs?v=' + f.release + '&check=123'],
-    ['index.html?check_release=' + f.release + '&t=123'],
-    ['native-client/bootstrap.mjs?v=' + (f.release === 'aaaaaaaaaaaaaaaa' ? 'bbbbbbbbbbbbbbbb' : 'aaaaaaaaaaaaaaaa')],
-    [immutableChunk + '?check=123'],
-    ['native-client/bootstrap.mjs?v=' + f.release, { headers: { Authorization: 'Bearer fixture-token' } }],
-    [immutableChunk, { headers: { Range: 'bytes=0-15' } }],
-    ['https://remote.fixture/chatgpt/native-client/bootstrap.mjs?v=' + f.release],
+    ['native-client/bootstrap.mjs?v=1111111111111111'],
+    ['runtime.js?v=1111111111111111'],
+    ['original-client/public/chatgpt.com/cdn/assets/807489.36023b676b.js'],
+    ['/cdn/assets/fixture.js'],
+    ['https://cdn.oaistatic.com/assets/fixture.js'],
     ['https://remote.fixture/auth/session'],
+    ['https://remote.fixture/chatgpt/__local_artifacts/account-fixture--thread/reports/final%20report.txt'],
+    ['/another-site/__local_artifacts/account-fixture--thread/reports/final%20report.txt'],
     ['__codex-api/conversations'],
-    ['__codex-api/conversations', { mode: 'navigate' }],
     ['backend-api/conversation/fixture'],
     ['api/auth/session'],
+    ['__local_artifacts/account-fixture--thread/reports/final%20report.txt', { method: 'POST' }],
   ]) {
     assert.equal(await f.dispatch(path, options), undefined, new URL(path, workerURL).href);
   }
-  const artifact = await f.dispatch('__local_artifacts/fixture/report.txt');
+  assert.deepEqual(f.operations.workspaceReads, []);
+});
+
+test('the artifact worker preserves attached local downloads and private errors', async () => {
+  const f = workerFixture();
+  const artifact = await f.dispatch('__local_artifacts/account-fixture--thread/reports/final%20report.txt', { mode: 'navigate' });
+  assert.equal(artifact.status, 200);
+  assert.equal(artifact.headers.get('Content-Type'), 'text/plain');
+  assert.equal(artifact.headers.get('Content-Disposition'), "attachment; filename*=UTF-8''final%20report.txt");
   assert.equal(artifact.headers.get('Cache-Control'), 'private,no-store');
+  assert.equal(artifact.headers.get('X-Content-Type-Options'), 'nosniff');
   assert.equal(await artifact.text(), 'Fixture private artifact');
-  assert.deepEqual(f.operations.opens, []);
-  assert.deepEqual(f.operations.writes, []);
-  assert.deepEqual(f.operations.requests, []);
-});
+  assert.deepEqual(f.operations.workspaceReads, ['account-fixture--thread/reports/final report.txt']);
 
-test('generated worker caches a successful HTML navigation and leaves JSON navigation responses off disk', async () => {
-  const f = workerFixture();
-  const root = await f.dispatch('./', { mode: 'navigate' });
-  assert.match(root.headers.get('Content-Type'), /^text\/html\b/);
-  const shell = new URL('index.html', workerURL).href;
-  assert.deepEqual(f.operations.writes, [shell]);
-  f.setFetch(async () => Response.json({ data: 'Fixture JSON response' }));
-  const json = await f.dispatch('unexpected-response', { mode: 'navigate' });
-  assert.deepEqual(await json.json(), { data: 'Fixture JSON response' });
-  assert.deepEqual(f.operations.writes, [shell]);
-  f.setFetch(() => { throw new TypeError('Fixture network offline'); });
-  const offline = await f.dispatch('./', { mode: 'navigate' });
-  assert.match(offline.headers.get('Content-Type'), /^text\/html\b/);
-  assert.equal(await offline.text(), 'Network /chatgpt/');
-});
-
-test('generated worker returns fetched HTML and scripts despite rejected cache opens, reads or writes', async t => {
-  for (const failure of ['open', 'read', 'write']) {
-    await t.test(failure, async () => {
-      const f = workerFixture({ failure });
-      for (const [path, mode, responsePath] of [
-        ['/cdn/assets/neutral.js', 'cors', '/chatgpt/original-client/public/chatgpt.com/cdn/assets/neutral.js'],
-        ['./', 'navigate', '/chatgpt/'],
-        ['native-client/bootstrap.mjs?v=' + f.release, 'cors', '/chatgpt/native-client/bootstrap.mjs'],
-        [immutableChunk, 'cors', '/chatgpt/' + immutableChunk],
-      ]) {
-        const response = await f.dispatch(path, { mode });
-        assert.equal(await response.text(), 'Network ' + responsePath);
-      }
-      assert.equal(f.operations.requests.length, 4);
-      assert(f.operations[{ open: 'opens', read: 'reads', write: 'writes' }[failure]].length > 0);
-    });
-  }
-});
-
-test('the service worker retries a transient static asset response once without reissuing API requests', async () => {
-  const f = workerFixture();
-  let requests = 0;
-  f.setFetch(() => ++requests === 1 ? new Response('', { status: 503 }) : Response.json({ value: 'ready' }));
-  const asset = 'native-client/entry-plan.json?v=' + f.release;
-  const response = await f.dispatch(asset);
-  assert.deepEqual(await response.json(), { value: 'ready' });
-  assert.equal(requests, 2);
-  await f.dispatch(asset);
-  assert.equal(requests, 2);
-  assert.equal(await f.dispatch('api/auth/session'), undefined);
+  const missing = await f.dispatch('__local_artifacts/account-fixture--thread/missing.txt');
+  assert.equal(missing.status, 404);
+  assert.equal(missing.headers.get('Cache-Control'), 'private,no-store');
+  const invalid = await f.dispatch('__local_artifacts/account-fixture--thread/reports%2F..%2Fsecret.txt');
+  assert.equal(invalid.status, 404);
+  assert.deepEqual(f.operations.workspaceReads, ['account-fixture--thread/reports/final report.txt', 'account-fixture--thread/missing.txt']);
 });

@@ -35,18 +35,19 @@ test('browser preloads and dynamic navigation resolve inside the Pages project f
   assert.equal(new URL(manifest.url).pathname, '/chatgpt/' + archivedHost + plan.manifest);
 });
 
-test('the archived shell preloads its entry chunks without preloading them for sign-in', () => {
-  const html = fs.readFileSync(new URL('../native-client-shell.html', import.meta.url), 'utf8');
-  const plan = JSON.parse(fs.readFileSync(new URL('../native-client/entry-plan.json', import.meta.url), 'utf8'));
-  const loader = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(match => match[1]).find(code => code.includes('modulepreload'));
-  assert.ok(loader);
-  const run = pathname => {
-    const links = [];
-    const document = { createElement: () => ({}), head: { appendChild(link) { links.push(link); } } };
-    vm.runInNewContext(loader, { document, location: { pathname }, window: { Promise, structuredClone } });
-    return links.filter(link => link.rel === 'modulepreload').map(link => link.href);
-  };
-  const home = run('/chatgpt/'), login = run('/chatgpt/auth/login/');
+test('the browser discovers the entry modules and stylesheet directly, with a lighter sign-in document', () => {
+  const read = path => fs.readFileSync(new URL(path, import.meta.url), 'utf8');
+  const html = read('../native-client-shell.html'), auth = read('../auth/login/index.html');
+  const plan = JSON.parse(read('../native-client/entry-plan.json'));
+  const urls = document => [...document.matchAll(/<link rel="modulepreload" href="([^"]+)"/g)].map(match => match[1]);
+  const home = urls(html), login = urls(auth);
+  assert.match(html, /<script type="module" src="\/chatgpt\/native-client\/bootstrap\.mjs\?v=[a-f0-9]{16}"/);
+  assert.match(html, /<link id="site-main-style" rel="stylesheet" href="\/chatgpt\/original-client\//);
+  assert.doesNotMatch(auth, /rel="stylesheet"/);
+  for (const shell of [html, auth]) {
+    assert.doesNotMatch(shell, /正在打开|site-start-status/);
+    assert.match(shell, /<main id="site-load-error" hidden role="alert"/);
+  }
   const originals = [plan.runtime, ...plan.registrationChunks, plan.manifest, ...Object.values(plan.initialRoutes)];
   for (const file of originals) {
     const deployed = '/chatgpt/original-client/public/chatgpt.com' + file;
@@ -70,55 +71,58 @@ test('the packaged entry mounts a client root on the static Pages document', () 
   assert.equal(embedded.mountMode, plan.mountMode);
 });
 
-test('a revisited Pages homepage reads the live release and keeps a shell for outages', async () => {
-  const home = 'https://fixture.test/chatgpt/';
-  const worker = fs.readFileSync(new URL('../native-client-worker.js', import.meta.url), 'utf8')
-    .replace(/^import[^\n]*\n/, '');
-  const html = body => new Response(body, { headers: { 'Content-Type': 'text/html' } });
-  let saved = html('previous release');
-  const cache = {
-    match: async key => {
-      assert.equal(key, home + 'index.html');
-      return saved.clone();
-    },
-    put: async (key, response) => {
-      assert.equal(key, home + 'index.html');
-      saved = response;
-    }
+function startupFixture({ stylesheet } = {}) {
+  const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+  const guard = html.match(/<script>([\s\S]*?)<\/script>/)[1];
+  const notice = { hidden: true };
+  const body = {
+    appendChild(node) { node.parentNode = body; },
+    removeChild(node) { node.parentNode = null; },
   };
-  const listeners = new Map();
-  let network = 'available';
-  let requests = 0;
-  vm.runInNewContext(worker, {
-    URL,
-    Response,
-    BrowserWorkspaceStore: class {},
-    caches: { open: async () => cache },
-    self: {
-      location: new URL(home + 'native-client-worker.js'),
-      addEventListener: (type, handler) => listeners.set(type, handler)
+  body.appendChild(notice);
+  let callback, replaced, timeout;
+  const window = {};
+  vm.runInNewContext(guard, {
+    window, URL,
+    setTimeout(fn, delay) { callback = fn; timeout = delay; return 1; },
+    clearTimeout() { callback = null; },
+    document: {
+      body, addEventListener() {},
+      getElementById: id => id === 'site-load-error' ? notice : stylesheet,
     },
-    fetch: async (request, options) => {
-      requests++;
-      assert.equal(request.url, home);
-      assert.equal(options.cache, 'no-store');
-      if (network === 'offline') throw new TypeError('Load failed');
-      return network === 'unavailable' ? new Response('unavailable', { status: 503 }) : html('current release');
-    }
+    location: { href: 'https://fixture.test/chatgpt/c/abc?keep=1#turn', replace: value => { replaced = new URL(value); } },
   });
-  async function reopen() {
-    let response;
-    listeners.get('fetch')({
-      request: { url: home, method: 'GET', mode: 'navigate' },
-      respondWith: value => { response = value; }
-    });
-    return (await response).text();
-  }
-  assert.equal(await reopen(), 'current release');
-  assert.equal(requests, 1);
-  network = 'offline';
-  assert.equal(await reopen(), 'current release');
-  network = 'unavailable';
-  assert.equal(await reopen(), 'current release');
-  assert.equal(requests, 3);
+  return { notice, timeout, state: window.__TYC_PAGE_START__, triggerTimeout: () => callback?.(), replacement: () => replaced };
+}
+
+test('a stalled module exposes a retry without showing a waiting screen or navigating automatically', () => {
+  const fixture = startupFixture({ stylesheet: { sheet: {} } });
+  assert.equal(fixture.notice.hidden, true);
+  assert.ok(fixture.timeout < 90000);
+  fixture.triggerTimeout();
+  assert.equal(fixture.notice.hidden, false);
+  assert.equal(fixture.replacement(), undefined);
+  fixture.state.retry();
+  const target = fixture.replacement();
+  assert.equal(target.pathname, '/chatgpt/c/abc');
+  assert.equal(target.searchParams.get('keep'), '1');
+  assert.ok(target.searchParams.has('__tyc_retry'));
+  assert.equal(target.hash, '#turn');
+  fixture.state.ready();
+  assert.equal(fixture.notice.parentNode, null);
+});
+
+test('a stalled stylesheet is released for error rendering, and a ready page is left alone', () => {
+  const stylesheet = { sheet: null };
+  const stalled = startupFixture({ stylesheet });
+  stalled.triggerTimeout();
+  assert.equal(stalled.state.styleFailed, true);
+  assert.equal(stylesheet.disabled, true);
+  assert.equal(stalled.notice.hidden, false);
+
+  const ready = startupFixture();
+  ready.state.ready();
+  ready.triggerTimeout();
+  ready.state.fail();
+  assert.equal(ready.notice.parentNode, null);
 });

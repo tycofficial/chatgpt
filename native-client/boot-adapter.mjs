@@ -1,32 +1,32 @@
-import { createBrowserReadAloudController, createNativeReadAloudBindings } from './local-native-read-aloud.mjs?v=923e7f59b16a7c09';
-import { normalizeWorkUIStoredPreference, WORK_DEFAULT_OPTION } from '../model-catalog.js?v=923e7f59b16a7c09';
-import { consolidateWorkDefaults } from './model-catalog-adapter.mjs?v=923e7f59b16a7c09';
+import { createBrowserReadAloudController, createNativeReadAloudBindings } from './local-native-read-aloud.mjs?v=1e91c1a3ce5a11ff';
+import { normalizeWorkUIStoredPreference, WORK_DEFAULT_OPTION } from '../model-catalog.js?v=1e91c1a3ce5a11ff';
+import { consolidateWorkDefaults } from './model-catalog-adapter.mjs?v=1e91c1a3ce5a11ff';
 /**
  * Loads the public original component graph with explicit local host services.
  * Private original backend credentials are never used by this entry point.
  */
-import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter, localFilesService, localOwnedDownloadTransport, localLibraryByteTransport, initializeLocalAccountHistory, setNativeAccountHistoryToaster, initializeLocalPublishedResources, registerNativeLibrarySource, notifyNativeLibrarySourceReady, registerNativeFileReferenceSources, localReadAloudHost } from './service-boundary.mjs?v=923e7f59b16a7c09';
-import { installDeferredMapProvider } from './local-map-provider.mjs?v=923e7f59b16a7c09';
-import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs?v=923e7f59b16a7c09';
-import { getPrototypeLocalSession, getPrototypeLocalAuth, isPrototypeLocalSession, getPrototypeLocalAuthGeneration, clearPrototypeLocalSession } from './local-identity.mjs?v=923e7f59b16a7c09';
-import { createLocalHostSettingsClass } from './local-host-settings.mjs?v=923e7f59b16a7c09';
-import { createLocalWorkPolicy } from './local-work-policy.mjs?v=923e7f59b16a7c09';
-import { hasModelSelectionAccess, getSiteAccount, getSiteLoginUrl, getSiteHomeUrl } from './site-account.mjs?v=923e7f59b16a7c09';
-import { createNativeSiteTrialCard } from './native-pricing-trials.mjs?v=923e7f59b16a7c09';
-import { createNativeSiteUsageLayout } from './local-pricing.mjs?v=923e7f59b16a7c09';
-import { createNativeSiteSignOut, isSiteSignOutPage } from './site-signout.mjs?v=923e7f59b16a7c09';
-import { createNativeSiteLoginRoute } from './native-site-login.mjs?v=923e7f59b16a7c09';
-import { localizeRouterAssets } from './startup-compatibility.mjs?v=923e7f59b16a7c09';
-import { siteSignOut, localAppServer as timingServer } from './service-boundary.mjs?v=923e7f59b16a7c09';
-import { wrapNativeChatPreamble, wrapNativeClassicChatTiming, wrapNativeClassicStatus, wrapNativeClassicTiming, wrapNativeReasoningGroups } from './classic-chat-adapter.mjs?v=923e7f59b16a7c09';
-import { projectNativeCodexPublicSummary, storedConversationSurface, wrapNativeCodexActivityItem, wrapNativeCodexWorkTiming, wrapNativeWorkedDuration } from './local-app-server.mjs?v=923e7f59b16a7c09';
-import { projectNativeCodexPythonResult } from './native-python-activity.mjs?v=923e7f59b16a7c09';
-import { terminalSiteInferenceReason } from './site-inference-transport.mjs?v=923e7f59b16a7c09';
-import { createNativeModelSelectionPolicy, createNativeThinkingEntryPolicy } from './local-model-selection-policy.mjs?v=923e7f59b16a7c09';
-import { createLocalHostClaimsReader } from './local-token-identity.mjs?v=923e7f59b16a7c09';
-import { wrapNativeFileUploadClass } from './local-native-upload.mjs?v=923e7f59b16a7c09';
-import { wrapNativeDownloadServices } from './local-native-download.mjs?v=923e7f59b16a7c09';
-import { createLocalDotVoiceTargetWrapper, createLocalDotVoiceWrappers } from './local-dot-browser-voice.mjs?v=923e7f59b16a7c09';
+import { installNetworkBoundary, LocalAppServerSocket, getLocalExecutionCapabilities, localCodexAdapter, localDotAdapter, localFilesService, localOwnedDownloadTransport, localLibraryByteTransport, initializeLocalAccountHistory, setNativeAccountHistoryToaster, initializeLocalPublishedResources, registerNativeLibrarySource, notifyNativeLibrarySourceReady, registerNativeFileReferenceSources, localReadAloudHost } from './service-boundary.mjs?v=1e91c1a3ce5a11ff';
+import { installDeferredMapProvider } from './local-map-provider.mjs?v=1e91c1a3ce5a11ff';
+import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs?v=1e91c1a3ce5a11ff';
+import { getPrototypeLocalSession, getPrototypeLocalAuth, isPrototypeLocalSession, getPrototypeLocalAuthGeneration, clearPrototypeLocalSession } from './local-identity.mjs?v=1e91c1a3ce5a11ff';
+import { createLocalHostSettingsClass } from './local-host-settings.mjs?v=1e91c1a3ce5a11ff';
+import { createLocalWorkPolicy } from './local-work-policy.mjs?v=1e91c1a3ce5a11ff';
+import { hasModelSelectionAccess, getSiteAccount, getSiteLoginUrl, getSiteHomeUrl } from './site-account.mjs?v=1e91c1a3ce5a11ff';
+import { createNativeSiteTrialCard } from './native-pricing-trials.mjs?v=1e91c1a3ce5a11ff';
+import { createNativeSiteUsageLayout } from './local-pricing.mjs?v=1e91c1a3ce5a11ff';
+import { createNativeSiteSignOut, isSiteSignOutPage } from './site-signout.mjs?v=1e91c1a3ce5a11ff';
+import { createNativeSiteLoginRoute } from './native-site-login.mjs?v=1e91c1a3ce5a11ff';
+import { localizeRouterAssets } from './startup-compatibility.mjs?v=1e91c1a3ce5a11ff';
+import { siteSignOut, localAppServer as timingServer } from './service-boundary.mjs?v=1e91c1a3ce5a11ff';
+import { wrapNativeChatPreamble, wrapNativeClassicChatTiming, wrapNativeClassicStatus, wrapNativeClassicTiming, wrapNativeReasoningGroups } from './classic-chat-adapter.mjs?v=1e91c1a3ce5a11ff';
+import { projectNativeCodexPublicSummary, storedConversationSurface, wrapNativeCodexActivityItem, wrapNativeCodexWorkTiming, wrapNativeWorkedDuration } from './local-app-server.mjs?v=1e91c1a3ce5a11ff';
+import { projectNativeCodexPythonResult } from './native-python-activity.mjs?v=1e91c1a3ce5a11ff';
+import { terminalSiteInferenceReason } from './site-inference-transport.mjs?v=1e91c1a3ce5a11ff';
+import { createNativeModelSelectionPolicy, createNativeThinkingEntryPolicy } from './local-model-selection-policy.mjs?v=1e91c1a3ce5a11ff';
+import { createLocalHostClaimsReader } from './local-token-identity.mjs?v=1e91c1a3ce5a11ff';
+import { wrapNativeFileUploadClass } from './local-native-upload.mjs?v=1e91c1a3ce5a11ff';
+import { wrapNativeDownloadServices } from './local-native-download.mjs?v=1e91c1a3ce5a11ff';
+import { createLocalDotVoiceTargetWrapper, createLocalDotVoiceWrappers } from './local-dot-browser-voice.mjs?v=1e91c1a3ce5a11ff';
 
 const boundary = installNetworkBoundary();
 globalThis.__originalClientProbe = boundary.diagnostics;

@@ -86,11 +86,18 @@ const authAliases = ['login', 'signup', 'auth/login', 'auth/signup', 'auth/logou
 const planAliases = ['site-plans', 'plans', 'pricing-plan', ...['plus', 'pro5x', 'prolite', 'pro', 'promax'].flatMap(tier => [
   'purchase/' + tier, 'codex/purchase/' + tier,
 ])];
-const entryShells = ['404.html', 'native-client-shell.html', ...[...authAliases, ...planAliases].map(alias => alias + '/index.html')];
+const authHtml = await fs.readFile(path.join(root, 'auth/login/index.html'), 'utf8');
+const entryShells = ['404.html', 'native-client-shell.html', ...planAliases.map(alias => alias + '/index.html')];
 for (const file of entryShells) {
   if (await fs.readFile(path.join(root, file), 'utf8') !== html) throw Error('Stale entry shell: ' + file);
 }
+for (const alias of authAliases) {
+  if (await fs.readFile(path.join(root, alias, 'index.html'), 'utf8') !== authHtml) throw Error('Stale account shell: ' + alias);
+}
+if (!authHtml.includes('bootstrap.mjs?v=' + release) || authHtml.includes('rel="stylesheet"') ||
+    html.includes('site-start-status') || authHtml.includes('site-start-status')) throw Error('Invalid browser entry shells');
 const bootstrap=await fs.readFile(path.join(directory,'bootstrap.mjs'),'utf8');
-if(!bootstrap.includes('release:'+JSON.stringify(release))||!bootstrap.includes('release-updater.js?v='))throw Error('Bootstrap does not install this release');
+if(!bootstrap.includes('release:'+JSON.stringify(release))||bootstrap.includes('release-updater.js')||
+   !bootstrap.includes('__TYC_PAGE_START__?.ready()'))throw Error('Invalid browser bootstrap');
 execFileSync(process.execPath,['--check',path.join(root,'native-client-worker.js')],{stdio:'pipe'});
 console.log(JSON.stringify({nativeMain:true,release,canonicalHashesVerified:true,helperModules:files.length,sharedAssets:provenance.sharedAssets.length,resources:provenance.resources.length,supplementalResources:provenance.supplementalResources.length,ownImports,originalEntryResources:urls.length,legacyUiImported:false}));

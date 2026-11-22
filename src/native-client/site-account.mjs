@@ -1,5 +1,6 @@
 /** Account verification, browser-local guest sessions, and site-only trials. */
 import { getSiteAuthEntryKind, isHistoricalSitePath, resolveSiteHomeUrl } from './site-paths.mjs';
+import { isVolatileBrowserStorage } from './restricted-browser-storage.mjs';
 
 export const SITE_ACCOUNT_SERVICE = 'https://chatgpt-admin-bridge-tyc.hushedtarragon1.chatgpt.site';
 
@@ -9,6 +10,8 @@ const storageKey = 'chatgpt-site-admin-session:v1';
 const guestKey = 'chatgpt-site-local-guest:v1';
 const nativeSessionKey = 'original-client-prototype-local-session';
 const receiptStore = 'verified-sessions';
+const receiptStorageTimeoutMs = 1500;
+const unavailableReceiptStorage = () => Error('本机账户验证缓存不可用。');
 const trialPlans = new Map([
   ['plus', 'plus'],
   ['prolite', 'pro'],
@@ -21,6 +24,7 @@ const accountInvalid = '账户权限验证失败。';
 const sessionExpired = '账户会话已过期，请重新登录。';
 const networkUnavailable = '暂时无法连接本站账户服务。';
 const cancelled = '账户操作已取消。';
+const accountStorageUnavailable = '此浏览器限制了本站存储，当前无法保存登录状态。';
 const guestSession = Object.freeze({ role: 'guest', planType: 'free', authenticationMode: 'browser-guest' });
 const tokenPattern = /^[a-f0-9]{64}$/;
 const accountIdPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -64,12 +68,29 @@ function setNativeSessionFlag(value) {
 }
 
 function openReceiptDatabase() {
-  return databasePromise ??= new Promise((resolve, reject) => {
+  if (databasePromise) return databasePromise;
+  let timer;
+  const pending = new Promise((resolve, reject) => {
     const request = globalThis.indexedDB.open('chatgpt-site-account-verification-v1', 1);
+    timer = setTimeout(() => reject(unavailableReceiptStorage()), receiptStorageTimeoutMs);
     request.onupgradeneeded = () => request.result.createObjectStore(receiptStore);
-    request.onsuccess = () => request.result && resolve(request.result);
-    request.onerror = request.onblocked = () => reject(Error('本机账户验证缓存不可用。'));
+    request.onsuccess = () => {
+      const connection = request.result;
+      if (databasePromise !== pending) { connection?.close(); return; }
+      connection.onversionchange = () => {
+        connection.close();
+        if (databasePromise === pending) databasePromise = undefined;
+      };
+      resolve(connection);
+    };
+    request.onerror = request.onblocked = () => reject(unavailableReceiptStorage());
   });
+  databasePromise = pending;
+  void pending.then(() => clearTimeout(timer), () => {
+    clearTimeout(timer);
+    if (databasePromise === pending) databasePromise = undefined;
+  });
+  return pending;
 }
 
 // Store the last locally observed verified identity separately from the remembered token.
@@ -80,8 +101,13 @@ async function accountReceipt(token, replacement) {
     const tx = db.transaction(receiptStore, read ? 'readonly' : 'readwrite');
     const store = tx.objectStore(receiptStore);
     const request = read ? store.get(token) : replacement === null ? store.delete(token) : store.put(replacement, token);
-    tx.oncomplete = () => resolve(request.result);
-    tx.onerror = tx.onabort = () => reject(Error('本机账户验证缓存不可用。'));
+    const onFailure = () => { clearTimeout(timer); reject(unavailableReceiptStorage()); };
+    const timer = setTimeout(() => {
+      onFailure();
+      try { tx.abort(); } catch {}
+    }, receiptStorageTimeoutMs);
+    tx.oncomplete = () => { clearTimeout(timer); resolve(request.result); };
+    tx.onerror = tx.onabort = onFailure;
   });
 }
 
@@ -431,6 +457,7 @@ async function loginOfflineAdministrator(password) {
 }
 
 export function loginSiteAccount(username, password) {
+  if (isVolatileBrowserStorage(globalThis.localStorage)) return Promise.reject(Error(accountStorageUnavailable));
   const administrator = String(username).normalize('NFKC').trim().toLowerCase() === 'tyc';
   if (globalThis.__CHATGPT_REPLICA_ENV__?.siteAccountService) {
     if (administrator && isOffline()) return loginOfflineAdministrator(password);
@@ -446,6 +473,7 @@ export function loginSiteAccount(username, password) {
 }
 
 export function registerSiteAccount(username, password) {
+  if (isVolatileBrowserStorage(globalThis.localStorage)) return Promise.reject(Error(accountStorageUnavailable));
   return authenticateSiteAccount('/auth/register', username, password);
 }
 

@@ -1,11 +1,11 @@
-import { compressImageInput } from './image-input-compression.mjs?v=923e7f59b16a7c09';
+import { compressImageInput } from './image-input-compression.mjs?v=1e91c1a3ce5a11ff';
 /**
  * Real origin-local file storage behind the original PYGO/LulU contracts.
  * Original UI and event pipeline remain unchanged; no Azure/cookie/private API.
  * POST /files -> upload URL -> actual bytes -> process NDJSON/uploaded.
  */
-import { workspacePath } from './browser-tool-executor.mjs?v=923e7f59b16a7c09';
-import { createLocalDocumentExtractor } from './local-document-extraction.mjs?v=923e7f59b16a7c09';
+import { workspacePath } from './browser-tool-executor.mjs?v=1e91c1a3ce5a11ff';
+import { createLocalDocumentExtractor } from './local-document-extraction.mjs?v=1e91c1a3ce5a11ff';
 export const LOCAL_FILES_SOURCE = 'browser-origin-file-storage';
 export const LOCAL_FILE_PREFIX = 'file_local_';
 /** Pure transport classification: no current-account or metadata dependency. */

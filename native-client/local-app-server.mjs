@@ -1,11 +1,11 @@
 /** Original app-server protocol over real, resumable local execution. */
-import { hasUncertainPlainResponse, plainInterruptionMessage, runAgentTurn } from './agent-turn-runner.mjs?v=923e7f59b16a7c09';
-import { readWebSearchIntent, interruptHostedSearch } from './local-web-search.mjs?v=923e7f59b16a7c09';
-import { terminalSiteInferenceReason } from './site-inference-transport.mjs?v=923e7f59b16a7c09';
-import { readClassicBranchRequest, getClassicExecutionThread } from './classic-response-branches.mjs?v=923e7f59b16a7c09';
-import { parseClassicInputMessages } from './classic-input-messages.mjs?v=923e7f59b16a7c09';
-import { compactPreparedUserContent, isProviderContent, needsPreparedInputStorage } from './prepared-input-store.mjs?v=923e7f59b16a7c09';
-import { allowedReasoningEfforts, isPublicReasoningPart } from '../runtime.js?v=923e7f59b16a7c09';
+import { hasUncertainPlainResponse, plainInterruptionMessage, runAgentTurn } from './agent-turn-runner.mjs?v=1e91c1a3ce5a11ff';
+import { readWebSearchIntent, interruptHostedSearch } from './local-web-search.mjs?v=1e91c1a3ce5a11ff';
+import { terminalSiteInferenceReason } from './site-inference-transport.mjs?v=1e91c1a3ce5a11ff';
+import { readClassicBranchRequest, getClassicExecutionThread } from './classic-response-branches.mjs?v=1e91c1a3ce5a11ff';
+import { parseClassicInputMessages } from './classic-input-messages.mjs?v=1e91c1a3ce5a11ff';
+import { compactPreparedUserContent, isProviderContent, needsPreparedInputStorage } from './prepared-input-store.mjs?v=1e91c1a3ce5a11ff';
+import { allowedReasoningEfforts, isPublicReasoningPart } from '../runtime.js?v=1e91c1a3ce5a11ff';
 export class RpcError extends Error {
   constructor(code, message, data) { super(message); this.name = 'RpcError'; this.code = code; if (data !== undefined) this.data = data; }
 }
@@ -173,8 +173,8 @@ export class LocalAppServer {
       catch { this.diagnostics.push({ type: 'restored-checkpoint-storage-error' }); }
     }
   }
-  async migratePreparedInputs() {
-    if (this.loadError || !this.storage || !this.preparedInputStore) return;
+  async migratePreparedInputs({ isCurrentNamespace = () => true } = {}) {
+    if (this.loadError || !this.storage || !this.preparedInputStore || !isCurrentNamespace()) return;
     const pending = [];
     try {
       const initialHistory = this.storage.getItem(this.storageKey);
@@ -187,6 +187,7 @@ export class LocalAppServer {
           const location = { threadId: thread.id, turnId: turn.id };
           const reference = await this.preparedInputStore.save(location, user.content);
           pending.push({ checkpoint, previous, user, originalContent: user.content, historyContent: compactPreparedUserContent(turn, previous?.files), location, reference });
+          if (!isCurrentNamespace()) throw Error('Local history account changed during prepared input migration');
         }
       }
       if (!pending.length) return;

@@ -207,6 +207,8 @@ const getHistoryIdentity = () => {
 };
 export let localAccountHistory = null;
 let historyFeedback = null, nativeHistoryToaster = () => null, historyApplying = false;
+const getPreparedInputsNamespace = () => getLocalAccountStorageKey('cg-original-app-server:v1');
+const preparedInputsNamespace = getPreparedInputsNamespace();
 export const localAppServer = new LocalAppServer({
   storage: {
     getItem: key => globalThis.localStorage.getItem(getLocalAccountStorageKey(key)),
@@ -226,12 +228,13 @@ export const localAppServer = new LocalAppServer({
   diagnostics: localProtocolDiagnostics,
   toolExecutor: localToolExecutor,
   prepareUserInput: createLocalInputPreparer({ files: localFilesService }),
-  preparedInputStore: createPreparedInputStore({ namespace: getLocalAccountStorageKey('cg-original-app-server:v1') }),
+  preparedInputStore: createPreparedInputStore({ namespace: preparedInputsNamespace }),
   agentOptions: { toolTransport: 'responses', requestPriority: true, ultraOrchestration: true },
   getExecutionPolicy: () => ({ modelSelection: hasModelSelectionAccess(), freeChatModel: DEFAULT_SETTINGS.freeChatModel, freeChatEffort: 'medium' }),
   onPersist: threads => localAccountHistory?.capture(threads),
 });
-await localAppServer.migratePreparedInputs();
+// Old inline checkpoints remain readable while their IndexedDB copy is pending.
+void localAppServer.migratePreparedInputs({ isCurrentNamespace: () => getPreparedInputsNamespace() === preparedInputsNamespace });
 // Transient sandbox files keep their exact assistant/producer context and real
 // workspace bytes. They never enter the permanent Library publication registry.
 export const localWorkspaceDownloadSource = createWorkspaceDownloadSource({
