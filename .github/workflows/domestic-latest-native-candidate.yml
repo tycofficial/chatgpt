@@ -64,3 +64,8 @@ jobs:
           set -euo pipefail
           npm install --no-save --package-lock=false --no-audit --no-fund playwright-core@1.58.2
           node scripts/qa/domestic-startup-admin.mjs
+      - name: Open native Codex and send two turns across a refresh
+        env:
+          QA_BROWSER: edge
+          QA_NATIVE_CODEX_ENTRY: '1'
+        run: node scripts/qa/domestic-startup-admin.mjs

@@ -47,6 +47,11 @@ try {
     const cors = {'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Methods':'GET, POST, OPTIONS',
       'Access-Control-Allow-Headers':'content-type, authorization, x-chat-request-id'};
     let authPosts=0, modelPosts=0;
+    const codexPrompts = [
+      'Codex browser regression first turn CDX-ENTRY-01',
+      'Codex browser regression follow-up CDX-ENTRY-02',
+    ];
+    const codexRequests = [];
     await context.route(backend+'/**', async route => {
       if(route.request().method()==='OPTIONS') return route.fulfill({status:204,headers:cors});
       if(new URL(route.request().url()).pathname==='/auth/login') authPosts++;
@@ -59,7 +64,21 @@ try {
       assert.equal(req.url(),provider+'/responses');
       assert.equal(req.headers().authorization,'Bearer '+credential);
       const body=req.postDataJSON();
-      assert.match(JSON.stringify(body.input),/Direct fallback validation/);
+      const turn = modelPosts + 1;
+      if (turn <= 2) {
+        assert.match(JSON.stringify(body.input), /Direct fallback validation/);
+      } else {
+        const prompt = codexPrompts[turn - 3];
+        assert.ok(process.env.QA_NATIVE_CODEX_ENTRY === '1' && prompt, 'Unexpected or duplicate inference POST');
+        const currentUser = body.input?.findLast?.(item => item.role === 'user');
+        assert.ok(currentUser && JSON.stringify(currentUser).includes(prompt), 'Wrong Codex turn or duplicate prompt');
+        assert.equal(body.model, 'gpt-6.2-sol');
+        assert.equal(body.reasoning?.effort, 'low');
+        const hasPreviousTurn = JSON.stringify(body.input).includes(codexPrompts[0]) &&
+          JSON.stringify(body.input).includes('ADMIN-DIRECT-QA-3');
+        if (turn === 4) assert.equal(hasPreviousTurn, true, 'The same Codex thread omitted its prior turn');
+        codexRequests.push({ turn: turn - 2, model: body.model, effort: body.reasoning.effort, hasPreviousTurn });
+      }
       assert.equal(body.stream,true);
       modelPosts++;
       const text = 'ADMIN-DIRECT-QA-' + modelPosts;
@@ -118,6 +137,120 @@ try {
       assert.equal(authPosts, 1);
       assert.equal(modelPosts, 2);
       console.log('Browser QA '+JSON.stringify({engine,release:active.release,progress,authPosts,modelPosts,reloadedReply:true,sameThread:true,firstReplyMs,secondReplyMs}));
+      if (process.env.QA_NATIVE_CODEX_ENTRY === '1') {
+        const modeLabel = /切换.*模式|切換.*模式|Switch mode/i;
+        const switcher = () => page.getByRole('button', { name: modeLabel }).filter({ visible: true }).first();
+        const selectedMode = () => page.evaluate(() => history.state?.usr?.sidebarProductMode ?? history.state?.sidebarProductMode ?? null);
+        const report = async stage => {
+          const data = await page.evaluate(async () => {
+            const isVisible = node => !!node.getClientRects().length && getComputedStyle(node).visibility === 'visible';
+            const labels = [...document.querySelectorAll('button, a, [role="menuitem"], [role="button"]')]
+              .filter(isVisible).map(node => ({
+                role: node.getAttribute('role') ?? node.tagName.toLowerCase(),
+                aria: node.getAttribute('aria-label'), title: node.getAttribute('title'),
+                testId: node.getAttribute('data-testid'), expanded: node.getAttribute('aria-expanded'),
+                text: (node.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 50),
+                href: node.getAttribute('href'),
+              })).filter(node => node.aria || node.text || node.title);
+            let flags;
+            try {
+              const script = document.getElementById('client-bootstrap');
+              flags = JSON.parse(JSON.parse(script.textContent).statsigPayload);
+            } catch {}
+            const gates = Object.fromEntries(['3999836663', '4019944087', '515412992', '3085093835']
+              .map(key => [key, flags?.feature_gates?.[key]?.value ?? null]));
+            const state = history.state?.usr ?? history.state;
+            return { path: location.pathname, mode: state?.sidebarProductMode ?? null,
+              gates, controls: labels.slice(0, 65) };
+          });
+          console.log('Native mode ' + stage + ' ' + JSON.stringify(data));
+        };
+        await page.goto(home, { waitUntil: 'domcontentloaded', timeout: 45000 });
+        await editor().waitFor({ state: 'visible', timeout: 35000 });
+        await report('homepage');
+        if (!await switcher().isVisible()) {
+          const openSidebar = page.locator('[data-slate-sidebar-toggle][aria-expanded="false"]').filter({ visible: true }).first();
+          const labeledSidebar = page.getByRole('button', { name: /(?:打开|展开|開啟).*侧[边欄栏]|Open sidebar|Show sidebar/i }).filter({ visible: true }).first();
+          if (await openSidebar.isVisible()) await openSidebar.click();
+          else if (await labeledSidebar.isVisible()) await labeledSidebar.click();
+        }
+        await report('sidebar');
+        const explore = page.getByRole('button', { name: /^(?:探索|Explore)(?:\s|$)/i }).filter({ visible: true }).first();
+        const hasRail = await explore.isVisible();
+        let triggerLabel;
+        let codex;
+        if (hasRail) {
+          triggerLabel = (await explore.getAttribute('aria-label') ?? (await explore.innerText()).trim()) || 'Explore';
+          await explore.click();
+          await report('explore');
+          const row = page.locator('[data-explore-row]').filter({ has: page.getByText('Codex', { exact: true }), visible: true }).first();
+          const menu = page.getByRole('menuitem').filter({ hasText: /(?:^|\s)Codex(?:$|\s)/i, visible: true }).first();
+          const label = page.getByText('Codex', { exact: true }).filter({ visible: true }).first();
+          await row.or(menu).or(label).first().waitFor({ state: 'visible', timeout: 11000 });
+          codex = await row.isVisible() ? row.getByText('Codex', { exact: true }).first() : await menu.isVisible() ? menu : label;
+        } else {
+          await switcher().waitFor({ state: 'visible', timeout: 9500 });
+          triggerLabel = await switcher().getAttribute('aria-label');
+          await switcher().click();
+          await report('mode-menu');
+          codex = page.getByRole('menuitem').filter({ hasText: /(?:^|\s)Codex(?:$|\s)/i, visible: true }).first();
+        }
+        await codex.waitFor({ state: 'visible', timeout: 9500 });
+        const codexItem = (await codex.innerText()).replace(/\s+/g, ' ').trim();
+        await codex.click();
+        await page.waitForFunction(() => {
+          const state = history.state?.usr ?? history.state;
+          return state?.sidebarProductMode === 'codex';
+        }, undefined, { timeout: 15000 });
+        await editor().waitFor({ state: 'visible', timeout: 15000 });
+        const codexMode = await selectedMode();
+        assert.equal(codexMode, 'codex');
+        await report('codex');
+        const homePath = new URL(page.url()).pathname.replace(/\/+$/, '');
+        const firstCodexReplyMs = await sendMessage(codexPrompts[0], 3);
+        const codexThread = new URL(page.url());
+        assert.equal(codexThread.origin, origin);
+        assert.ok(codexThread.pathname.startsWith('/chatgpt/'));
+        assert.notEqual(codexThread.pathname.replace(/\/+$/, ''), homePath, 'Codex never opened the saved thread');
+        assert.equal(modelPosts, 3);
+        await page.reload({ waitUntil: 'domcontentloaded', timeout: 45000 });
+        await responseText(3).waitFor({ state: 'visible', timeout: 40000 });
+        await editor().waitFor({ state: 'visible', timeout: 30000 });
+        assert.equal(page.url(), codexThread.href, 'Reload reopened a different Codex thread');
+        assert.equal(await selectedMode(), 'codex', 'Reload selected a different product mode');
+        assert.equal(modelPosts, 3, 'Reload replayed the first Codex response request');
+        const secondCodexReplyMs = await sendMessage(codexPrompts[1], 4);
+        assert.equal(page.url(), codexThread.href, 'Codex follow-up opened another thread');
+        assert.equal(modelPosts, 4);
+        assert.equal(codexRequests.length, 2);
+        for (const [role, texts] of [['user', codexPrompts], ['assistant', ['ADMIN-DIRECT-QA-3', 'ADMIN-DIRECT-QA-4']]]) {
+          for (const expected of texts) {
+            const copies = page.locator('main').getByText(expected, { exact: true }).filter({ visible: true });
+            const messageRoles = await copies.evaluateAll(nodes => nodes.flatMap(node => {
+              const headings = [...node.closest('main').querySelectorAll('h4[data-conversation-role]')];
+              const speaker = headings.findLast(heading => heading.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING);
+              return speaker ? [speaker.dataset.conversationRole] : [];
+            }));
+            assert.deepEqual(messageRoles, [role], 'Missing or duplicate visible Codex message: ' + expected);
+          }
+        }
+        console.log('Native Codex two-turn QA ' + JSON.stringify({ release: active.release,
+          threadPath: codexThread.pathname, nativeMain: true, preservedMode: await selectedMode(),
+          firstCodexReplyMs, secondCodexReplyMs, codexRequests, modelPosts, reloadedReply: true, sameThread: true,
+          visibleUserMessages: 2, visibleAssistantReplies: 2 }));
+        let workItem = null;
+        if (await switcher().isVisible()) {
+          await switcher().click();
+          const work = page.getByRole('menuitem').filter({ hasText: /ChatGPT(?: Work)?|工作/i, visible: true }).first();
+          await work.waitFor({ state: 'visible', timeout: 9500 });
+          workItem = (await work.innerText()).replace(/\s+/g, ' ').trim();
+          await work.click();
+          await editor().waitFor({ state: 'visible', timeout: 15000 });
+          await report('work');
+        }
+        console.log('Native Codex click QA ' + JSON.stringify({ release: active.release, rail: hasRail,
+          triggerLabel, codexItem, codexMode, workItem, currentMode: await selectedMode(), path: new URL(page.url()).pathname }));
+      }
       if (process.env.QA_INSPECT_ENTRIES === '1') {
         const surfaces = [];
         async function inspect(name, open, labels) {
@@ -160,7 +293,6 @@ try {
         const offeredPlans = await page.evaluate(()=>['Free','Go','Plus','Pro'].filter(plan=>
           [...document.querySelectorAll('h2,h3,h4,[role=heading]')].some(node=>node.textContent.trim()===plan&&node.getClientRects().length)));
         console.log('Native Go QA '+JSON.stringify({release:active.release,openedWithoutExpanding:!expandedInTest,goReference:true,hasOfficialPriceAction:true,offeredPlans}));
-        await inspect('codex', () => goto('codex'), {codex: /^Codex$/, project: /项目|project/i});
         await inspect('dot', async () => {
           await goto('');
           await page.getByText('Dot',{exact:true}).filter({visible:true}).first().click({timeout:10000});
@@ -168,7 +300,7 @@ try {
         console.log('Native entry QA '+JSON.stringify({engine,release:active.release,surfaces}));
       }
     } finally {
-      const diagnostic=await page.evaluate(()=>({path:location.pathname,startup:window.__CHATGPT_STARTUP_ERROR__,body:document.body.innerText.slice(0,190)})).catch(()=>null);
+      const diagnostic=await page.evaluate(()=>({path:location.pathname,startup:window.__CHATGPT_STARTUP_ERROR__,body:document.body.innerText.slice(0,190),main:document.querySelector('main')?.innerText.slice(-650)})).catch(()=>null);
       console.log('Browser diagnostic '+JSON.stringify({engine,errors:errors.slice(-6),diagnostic}));
     }
   } finally { await browser.close(); }
