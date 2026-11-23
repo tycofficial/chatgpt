@@ -1,4 +1,4 @@
-name: Inspect Dot account and Read Aloud against the archived native build
+name: Verify Dot account and Read Aloud against both native archives
 on:
   push:
     branches: [qa/sync-0237-dot-audio]
@@ -35,115 +35,14 @@ jobs:
           mkdir -p "$task_tmp/chatgpt-upstream-capture"
           tar -C "$task_tmp/chatgpt-upstream-capture" -xzf "$task_tmp/chatgpt-candidate-archive/chatgpt-upstream.tar.gz"
           npm ci --no-audit --no-fund
-      - name: Identify the actual account and audio factories
+      - name: Verify original Dot and Read Aloud in the published b634 archive
+        run: node --test tests/native-dot.test.mjs tests/native-read-aloud-original-abi.test.mjs
+      - name: Build the isolated 0237 candidate
         run: |
           set -euo pipefail
-          node --input-type=module <<'NODE'
-          import assert from 'node:assert/strict';
-          import { createHash } from 'node:crypto';
-          import { readFile } from 'node:fs/promises';
-          import { join } from 'node:path';
-          import { parse } from 'acorn';
-          
-          const capture = join(process.env.RUNNER_TEMP, 'chatgpt-upstream-capture', process.env.UPSTREAM);
-          const oldRoot = 'original-client';
-          const oldGraph = JSON.parse(await readFile(join(oldRoot, 'resource-manifest.json'), 'utf8'));
-          const newGraph = JSON.parse(await readFile(join(capture, 'capture-manifest.json'), 'utf8'));
-          assert.equal(newGraph.sourceBuild, process.env.UPSTREAM);
-          assert.equal(newGraph.assets.length, newGraph.discoveredAssets);
-          const ids = ['Q840','UQAX','AvFJ','fbKo','J6iR','KoFQ','PKjX','PSDF','vMlG','XNFm','oFsh','iwK1','m4Vs','wFEO','tyzk','Nmf8','jwtq','hffr','ouEa','HkKI','WWxl','NxBK','D7Ms','pEZk','HY2m','H4sS','uyLo','wYVE','wo6g','suje','OtRH','MtYY','OLOS','rbzn','slNz','UKIm','JE6G','WNfO','jiwy','OWtl','Cslg','Sd1s','AXK1','SGsN'];
-          const knownChunks = /\/(?:109308|399565|447351|646436|414022)\.[a-f0-9]+\.js$/;
-          const knownProperties = new RegExp('[,{]\\s*["\\x27]?(' + ids.join('|') + ')["\\x27]?\\s*(?=:\\s*\\(?function|\\()');
-          const keyOf = item => item?.key?.name ?? item?.key?.value;
-          const hash = bytes => createHash('sha256').update(bytes).digest('hex');
-          function walk(node, inspect) {
-            if (!node || typeof node.type !== 'string') return;
-            inspect(node);
-            for (const value of Object.values(node)) {
-              if (Array.isArray(value)) for (const child of value) walk(child, inspect);
-              else walk(value, inspect);
-            }
-          }
-          function member(node) { return node?.property?.name ?? node?.property?.value; }
-          function captureFactory(prop, asset, source) {
-            const root = prop.value;
-            const require = root.params?.[2]?.name;
-            const imports = new Map();
-            const reads = [];
-            const exports = {};
-            const literals = [];
-            const body = root.body.type === 'BlockStatement' ? root.body.body : [root.body];
-            const required = node => node?.type === 'CallExpression' && node.callee?.name === require &&
-              typeof node.arguments?.[0]?.value === 'string' ? node.arguments[0].value : null;
-            for (const statement of body) {
-              for (const decl of statement.declarations ?? []) {
-                const module = required(decl.init);
-                if (module && decl.id.type === 'Identifier') imports.set(decl.id.name, module);
-              }
-            }
-            walk(root.body, node => {
-              const module = required(node);
-              if (module) reads.push(module);
-              if (node.type !== 'CallExpression' || node.callee?.object?.name !== require || member(node.callee) !== 'd') return;
-              for (const obj of [node.arguments[1], node.arguments[2]]) {
-                for (const value of obj?.properties ?? []) {
-                  const field = keyOf(value);
-                  if (typeof field !== 'string') continue;
-                  const result = value.value.type === 'ArrowFunctionExpression' ? value.value.body : value.value;
-                  const dependency = imports.get(result.object?.name);
-                  exports[field] = dependency ? dependency + '.' + member(result) : result.type === 'Identifier' ? result.name : result.type;
-                }
-              }
-            });
-            walk(root.body, node => {
-              if (node.type === 'Literal' && typeof node.value === 'string' && node.value.length < 90 &&
-                /read.?aloud|synthesi|createStore|atom|loading|playing/i.test(node.value)) literals.push(node.value);
-            });
-            const code = source.slice(root.start, root.end);
-            const normalized = require ? code.replace(new RegExp('\\b' + require + '\\(["\\x27][\\w$]{4}["\\x27]\\)', 'g'), require + '("IMPORT")') : code;
-            return { id: keyOf(prop), path: asset.url, sha: hash(code), normalized: hash(normalized),
-              size: code.length, imports: Object.fromEntries(imports), requires: [...new Set(reads)],
-              exports, literals: [...new Set(literals)].slice(0, 12) };
-          }
-          async function inspect(root, graph) {
-            const paths = graph.assets.filter(asset => /^public\/chatgpt\.com\/cdn\/assets\/.*\.js$/.test(asset.path));
-            const factories = [];
-            let cursor = 0;
-            await Promise.all(Array.from({ length: 12 }, async () => {
-              while (cursor < paths.length) {
-                const asset = paths[cursor++];
-                const bytes = await readFile(join(root, asset.path));
-                const source = bytes.toString('utf8');
-                if (!source.includes('__webpack_modules__') || !(knownChunks.test(asset.url) || knownProperties.test(source))) continue;
-                assert.equal(hash(bytes), asset.sha256, asset.path);
-                const coded = parse(source, { ecmaVersion: 'latest', sourceType: 'module' });
-                const table = coded.body.flatMap(part => (part.declaration ?? part).declarations ?? [])
-                  .find(declaration => declaration.id.name === '__webpack_modules__')?.init;
-                if (table?.type !== 'ObjectExpression') continue;
-                for (const prop of table.properties) {
-                  if (knownChunks.test(asset.url) || ids.includes(keyOf(prop))) factories.push(captureFactory(prop, asset, source));
-                }
-              }
-            }));
-            return factories;
-          }
-          const [old, next] = await Promise.all([inspect(oldRoot, oldGraph), inspect(capture, newGraph)]);
-          const ordered = items => items.sort((a,b) => (a.id + a.path).localeCompare(b.id + b.path));
-          const display = ({ normalized, ...entry }) => entry;
-          const storeIds = ['ouEa','HkKI','WWxl'];
-          for (const id of storeIds) {
-            const examples = old.filter(row => row.id === id);
-            assert.ok(examples.length, 'The old archived state module is absent: ' + id);
-            console.log('STORE ' + id + ' ' + JSON.stringify({ old: ordered(examples).map(display),
-              exact: ordered(next.filter(row => examples.some(oldRow => oldRow.normalized === row.normalized))).map(display) }));
-          }
-          for (const [label, rows] of [['OLD', old], ['NEW', next]]) {
-            for (const row of ordered(rows.filter(row => ['Q840','UQAX','AvFJ','fbKo','hffr','jwtq','WNfO','JE6G','jiwy','OWtl','Cslg','Sd1s','AXK1'].includes(row.id)))) {
-              console.log(label + ' ' + JSON.stringify(display(row)));
-            }
-          }
-          const from = new Set(next.filter(row => ['Q840','fbKo','AvFJ','hffr','jwtq'].includes(row.id)).flatMap(row => row.requires));
-          for (const row of ordered(next.filter(row => from.has(row.id) && !ids.includes(row.id)))) {
-            console.log('NEW DEPENDENCY ' + JSON.stringify(display(row)));
-          }
-          NODE
+          node scripts/adopt-native-upstream.mjs "$RUNNER_TEMP/chatgpt-upstream-capture/$UPSTREAM"
+          node scripts/build-native-client.mjs --activate
+          npm run native:check
+          node -e 'console.log("Candidate release " + JSON.stringify(require("./native-client/active.json")))'
+      - name: Verify original Dot and Read Aloud in the current 0237 archive
+        run: node --test tests/native-dot.test.mjs tests/native-read-aloud-original-abi.test.mjs

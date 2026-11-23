@@ -1,73 +1,27 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
-import vm from 'node:vm';
-import crypto from 'node:crypto';
-import { fileURLToPath } from 'node:url';
-import { parse } from 'acorn';
 import { createLocalReadAloudSource, createBrowserReadAloudController, createNativeReadAloudBindings } from '../src/native-client/local-native-read-aloud.mjs';
-const repo = process.env.READ_ALOUD_REPOSITORY_ROOT ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const readJson = file => JSON.parse(fs.readFileSync(path.join(repo, file), 'utf8'));
-const plan = readJson('src/native-client/entry-plan.json');
-const manifest = readJson('original-client/resource-manifest.json');
-assert.equal(manifest.sourceBuild, plan.sourceBuild);
-const factoryChunks = {
-  109308: ['Q840', 'UQAX', 'AvFJ', 'fbKo', 'J6iR', 'KoFQ', 'PKjX', 'PSDF', 'vMlG', 'XNFm', 'oFsh', 'iwK1', 'm4Vs', 'wFEO', 'tyzk', 'Nmf8', 'jwtq', 'hffr'],
-  399565: ['ouEa', 'HkKI', 'WWxl'],
-  447351: ['NxBK', 'D7Ms', 'pEZk', 'HY2m', 'H4sS', 'uyLo', 'wYVE', 'wo6g', 'suje', 'OtRH', 'MtYY', 'OLOS', 'rbzn', 'slNz', 'UKIm'],
-  646436: ['JE6G', 'WNfO'],
-};
-const context = vm.createContext({ console, setTimeout, clearTimeout, queueMicrotask, performance, TextEncoder, TextDecoder, AbortController, AbortSignal, DOMException, crypto: globalThis.crypto });
-const factories = new Map(), modules = new Map();
-for (const [chunkId, ids] of Object.entries(factoryChunks)) {
-  const chunk = plan.registrationChunks.find(url => url.startsWith(`/cdn/assets/${chunkId}.`));
-  assert.ok(chunk, 'Missing original registration chunk ' + chunkId);
-  const captured = manifest.assets.find(asset => asset.url === 'https://chatgpt.com' + chunk);
-  assert.ok(captured, 'Registration chunk was not in the published asset capture ' + chunk);
-  const bytes = fs.readFileSync(path.join(repo, 'original-client', captured.path));
-  assert.equal(crypto.createHash('sha256').update(bytes).digest('hex'), captured.sha256, chunk);
-  const source = bytes.toString('utf8');
-  const { body } = parse(source, { ecmaVersion: 'latest', sourceType: 'module' });
-  const { properties } = body.flatMap(statement => statement.declaration?.declarations ?? [])
-    .find(declaration => declaration.id.name === '__webpack_modules__').init;
-  for (const id of ids) {
-    const factory = properties.find(property => (property.key.name ?? property.key.value) === id)?.value;
-    assert.ok(factory, 'Missing original factory ' + id);
-    const code = source.slice(factory.start, factory.end);
-    factories.set(id, new vm.Script('(' + code + ')', { filename: chunk + '#' + id }).runInContext(context));
-  }
-}
-function define(exports, getters = {}, values = {}) { for (const [key, get] of Object.entries(getters)) Object.defineProperty(exports, key, { get, enumerable: true }); for (const [key, value] of Object.entries(values)) Object.defineProperty(exports, key, { value, enumerable: true }); }
-function pure(id) { if (modules.has(id)) return modules.get(id).exports; assert(factories.has(id), 'Unexpected atom dependency ' + id); const module = { exports: {} }; modules.set(id, module); factories.get(id)(module, module.exports, pure); return module.exports; }
-pure.d = define; pure.o = (x, k) => Object.hasOwn(x, k); pure.n = module => { const get = module?.__esModule ? () => module.default : () => module; Object.defineProperty(get, 'a', { get }); return get; }; pure.r = exports => Object.defineProperty(exports, '__esModule', { value: true });
+import { openNativeAtomFixture } from './support/native-atom-fixture.mjs';
 
-function instantiate(id, dependencies) {
-  const require = dependency => {
-    assert(Object.hasOwn(dependencies, dependency), 'Unexpected ' + id + ' dependency ' + dependency);
-    return dependencies[dependency];
-  };
-  require.d = define;
-  require.n = pure.n;
-  const module = { exports: {} };
-  factories.get(id)(module, module.exports, require);
-  return module.exports;
-}
+const { Q840, createScope, instantiate } = openNativeAtomFixture({
+  repositoryRoot: process.env.READ_ALOUD_REPOSITORY_ROOT, readAloud: true,
+});
 
 function nativeFixture() {
-  const scopeAtom = pure('tyzk').a('NativeReadAloudServiceABI');
-  const store = pure('ouEa').b(), node = { token: scopeAtom, parent: null, value: {}, store, cachedBindings: new WeakMap(), signalBindings: new WeakMap(), familyBindings: new Map(), familyKeysByOwner: new Map(), disposalLifecycles: new Set(), autoDisposeScheduler: new (pure('KoFQ').a)({ active: false }), imperativeReadAtoms: new WeakSet(), imperativeReadDepth: 0, retainedScopeEntries: new Map(), debugEntries: new Set(), contextVersionAtom: pure('ouEa').a(0) }, chain = new Map([[scopeAtom.id, node]]);
-  const scope = pure('fbKo').g(scopeAtom, chain, node);
-  const atomDependencies = ['tyzk', 'hffr', 'Nmf8', 'jwtq', 'J6iR', 'rbzn', 'ouEa', 'iwK1', 'wFEO', 'D7Ms', 'AvFJ', 'fbKo', 'PKjX', 'm4Vs', 'vMlG', 'UQAX', 'KoFQ', 'oFsh'];
-  const Q840 = instantiate('Q840', {
-    ...Object.fromEntries(atomDependencies.map(id => [id, pure(id)])),
-    zd8w: { createContext: value => ({ value }) }, suf3: {}, CdjL: {}, ABep: {}, QosV: {}, SZCv: {}, ns1t: {},
-  });
-  assert.equal(Q840.u, pure('hffr').b);
-  assert.equal(Q840.d, pure('jwtq').a);
-  const dependencies = { Q840, OWtl: { a: scopeAtom }, VpTR: { a: class {} }, Cslg: {}, Kwur: { Request: { getResponse() { throw Error('Encoded synthesize must never be called by local speech.'); } } }, SGsN: {}, GDNt: {}, FAIl: { q: { CHATGPT_VOICE_READ_ALOUD_PLAYBACK_STATE_LOADING: 'loading', CHATGPT_VOICE_READ_ALOUD_PLAYBACK_STATE_PLAYING: 'playing', CHATGPT_VOICE_READ_ALOUD_PLAYBACK_STATE_FAILED: 'failed' } }, D015: { b: Math.round }, w5lF: { c: class extends Error {} }, yGJW: { a() {} }, R9Ov: { a: x => x }, eShZ: { FetchError: class extends Error {} }, wZyU: { a() {}, b() {} } };
+  const { scopeAtom, scope } = createScope('NativeReadAloudServiceABI');
+  const dependencies = {
+    Q840, OWtl: { a: scopeAtom }, VpTR: { a: class {} }, Cslg: {},
+    Kwur: { Request: { getResponse() { throw Error('Encoded synthesize must never be called by local speech.'); } } },
+    SGsN: {}, GDNt: {}, FAIl: { q: {
+      CHATGPT_VOICE_READ_ALOUD_PLAYBACK_STATE_LOADING: 'loading',
+      CHATGPT_VOICE_READ_ALOUD_PLAYBACK_STATE_PLAYING: 'playing',
+      CHATGPT_VOICE_READ_ALOUD_PLAYBACK_STATE_FAILED: 'failed',
+    } },
+    D015: { b: Math.round }, w5lF: { c: class extends Error {} }, yGJW: { a() {} },
+    R9Ov: { a: value => value }, eShZ: { FetchError: class extends Error {} }, wZyU: { a() {}, b() {} },
+  };
   const original = instantiate('WNfO', dependencies);
-  return { scopeAtom, node, scope, original, dependencies, Q840 };
+  return { scopeAtom, scope, original, dependencies, Q840 };
 }
 
 test('exact WNfO status-family and Q840 writable/derived ABI retain native idle/loading/playing on real speech events', () => {
