@@ -118,3 +118,10 @@ jobs:
           originalQueries('original-client', 'resource-manifest.json', 'b6348792a294e8e04a67660959ba41914937938f', 297551, 'sm3b');
           originalQueries(path.join(process.env.RUNNER_TEMP, 'chatgpt-upstream-capture', process.env.UPSTREAM), 'capture-manifest.json', process.env.UPSTREAM, 390269, 'RfIz');
           NODE
+      - name: Test Maps against the retained graph
+        run: node --test tests/native-maps-service.test.mjs
+      - name: Test Maps against the verified 0237 graph
+        run: |
+          set -euo pipefail
+          node scripts/adopt-native-upstream.mjs "$RUNNER_TEMP/chatgpt-upstream-capture/$UPSTREAM"
+          node --test tests/native-maps-service.test.mjs
