@@ -119,6 +119,12 @@ async function completeWithAdminConnection(options, connection) {
     throw error;
   });
 }
+function getDirectAdminCompletion(options) {
+  const checkpoint = options.transportContext?.checkpoint;
+  if (isSiteInferenceCheckpoint(checkpoint) || checkpoint?.route === 'host') return null;
+  const connection = getAdminModelConnection();
+  return connection ? next => completeWithAdminConnection(next, connection) : null;
+}
 const siteInferenceTransport = createSiteInferenceTransport({
   baseURL: SITE_ACCOUNT_SERVICE,
   getSessionToken: verifiedSiteToken,
@@ -157,9 +163,8 @@ export function localPreferredCompletion(options) {
   if (options.providerRoutingContext?.conversationOrigin === 'dot') return localDotAdapter.complete(options);
   const checkpoint = options.transportContext?.checkpoint;
   if (isSiteInferenceCheckpoint(checkpoint)) return completeWithSiteInference(options);
-  const direct = getAdminModelConnection();
-  if (direct && checkpoint?.route !== 'host') return completeWithAdminConnection(options, direct);
-  return localHostCompletion(options);
+  const complete = getDirectAdminCompletion(options) ?? localHostCompletion;
+  return complete(options);
 }
 const localWorkspaceExecutor = createBrowserToolExecutor({ PythonRuntime, PYTHON_TOOL,
   getWorkspaceNamespace: () => {
@@ -436,7 +441,7 @@ export const localDotAdapter = createLocalDotAdapter({
   complete: createLocalDotCompletion({
     complete: streamCompletion, getProviders: () => DEFAULT_SETTINGS.apiProviders, siteOrigin: SITE_ACCOUNT_SERVICE,
     fetchDirectModels: (url, options) => globalThis.fetch(url, options),
-    responsesTransport: siteInferenceTransport.request,
+    responsesTransport: siteInferenceTransport.request, getDirectCompletion: getDirectAdminCompletion,
   }),
   storage: { getItem: key => globalThis.localStorage.getItem(key), setItem: (key, value) => globalThis.localStorage.setItem(key, value) },
   appServer: localAppServer, getIdentity: getPrototypeLocalAuth, isLocalSession: isPrototypeLocalSession,

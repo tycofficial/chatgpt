@@ -30,7 +30,7 @@ export function selectLocalDotModel(input) {
 }
 
 /** Dot uses the same Responses decoder, exact-model admission and request checkpoints as other surfaces. */
-export function createLocalDotCompletion({ complete, getProviders, siteOrigin, fetchDirectModels, responsesTransport }) {
+export function createLocalDotCompletion({ complete, getProviders, siteOrigin, fetchDirectModels, responsesTransport, getDirectCompletion }) {
   const site = new URL(siteOrigin);
   if (site.protocol !== 'https:' || site.username || site.password || site.pathname !== '/' || site.search || site.hash) {
     throw new TypeError('Dot requires the configured HTTPS site service origin');
@@ -87,18 +87,20 @@ export function createLocalDotCompletion({ complete, getProviders, siteOrigin, f
     const model = options.settings?.model, effort = options.settings?.reasoningEffort;
     const route = dotRoutes.find(candidate => candidate.model === model && candidate.effort === effort);
     if (!route || options.settings?.reasoningMode === 'pro') throw error('请选择新消息以使用本站 Dot 支持的模型。', 422, 'LOCAL_DOT_MODEL_UNSUPPORTED');
-    if (route === dotDefault && !responsesTransport) await prepare();
-    const run = responsesTransport ? complete : router.complete;
+    const directCompletion = getDirectCompletion?.(options);
+    if (route === dotDefault && !responsesTransport && !directCompletion) await prepare();
+    const run = directCompletion ?? (responsesTransport ? complete : router.complete);
     const result = await run({
       ...options,
       settings: { model, reasoningEffort: effort, reasoningMode: 'standard', apiTransport: 'responses' },
-      responsesTransport: responsesTransport && ((payload, transport) => responsesTransport(payload, { ...options.transportContext, ...transport })),
+      responsesTransport: !directCompletion && responsesTransport ? (payload, transport) =>
+        responsesTransport(payload, { ...options.transportContext, ...transport }) : undefined,
     });
     if (typeof result.model !== 'string' || result.model !== model && !result.model.startsWith(model + '-') ||
         result.actual_reasoning?.effort !== effort) {
       throw Object.assign(error('服务商未确认 Dot 选用的模型或思考等级。', 502, 'LOCAL_DOT_MODEL_UNVERIFIED'), { retryable: false });
     }
-    return { ...result, adapter_execution: { model: result.model, providerId: responsesTransport ? 'site-inference' : route.providerId, reasoningEffort: effort } };
+    return { ...result, adapter_execution: { model: result.model, providerId: directCompletion ? 'administrator-model' : responsesTransport ? 'site-inference' : route.providerId, reasoningEffort: effort } };
   };
   run.prepare = prepare;
   return run;

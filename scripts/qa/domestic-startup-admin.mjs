@@ -62,8 +62,9 @@ try {
       assert.match(JSON.stringify(body.input),/Direct fallback validation/);
       assert.equal(body.stream,true);
       modelPosts++;
+      const text = 'ADMIN-DIRECT-QA-' + modelPosts;
       const response={model:body.model,reasoning:body.reasoning,status:'completed',
-        output:[{type:'message',role:'assistant',id:'qa-direct-1',phase:'final_answer',content:[{type:'output_text',text:'ADMIN-DIRECT-QA'}]}]};
+        output:[{type:'message',role:'assistant',id:'qa-direct-' + modelPosts,phase:'final_answer',content:[{type:'output_text',text}]}]};
       return route.fulfill({status:200,headers:{...cors,'Content-Type':'text/event-stream'},
         body:'data: '+JSON.stringify({type:'response.completed',response})+'\n\n'});
     });
@@ -97,14 +98,50 @@ try {
       assert.ok(progress.steps.every((value,index,a)=>!index||value>=a[index-1]));
       await page.reload({waitUntil:'domcontentloaded',timeout:45000});
       await editor().waitFor({state:'visible',timeout:45000});
-      await editor().fill('Direct fallback validation');
-      const send=page.locator('#composer-submit-button, button[data-testid="send-button"], button[aria-label="发送"], button[aria-label="发送消息"]').filter({visible:true}).first();
-      if(await send.isVisible()&&await send.isEnabled()) await send.click();
-      else await editor().press('Enter');
-      await page.locator('main').getByText('ADMIN-DIRECT-QA',{exact:true}).first().waitFor({state:'visible',timeout:40000});
-      assert.equal(authPosts,1);
-      assert.equal(modelPosts,1);
-      console.log('Browser QA '+JSON.stringify({engine,release:active.release,progress,authPosts,modelPosts,replyDisplayed:true}));
+      const responseText = number => page.locator('main').getByText('ADMIN-DIRECT-QA-' + number, {exact: true}).first();
+      async function sendMessage(text, expected) {
+        const started = performance.now();
+        await editor().fill(text);
+        const send=page.locator('#composer-submit-button, button[data-testid="send-button"], button[aria-label="发送"], button[aria-label="发送消息"]').filter({visible:true}).first();
+        if(await send.isVisible()&&await send.isEnabled()) await send.click();
+        else await editor().press('Enter');
+        await responseText(expected).waitFor({state:'visible',timeout:40000});
+        return Math.round(performance.now() - started);
+      }
+      const firstReplyMs = await sendMessage('Direct fallback validation', 1);
+      const conversationUrl = page.url();
+      await page.reload({waitUntil:'domcontentloaded',timeout:45000});
+      await responseText(1).waitFor({state:'visible',timeout:45000});
+      await editor().waitFor({state:'visible',timeout:45000});
+      const secondReplyMs = await sendMessage('Direct fallback validation second turn', 2);
+      assert.equal(page.url(), conversationUrl);
+      assert.equal(authPosts, 1);
+      assert.equal(modelPosts, 2);
+      console.log('Browser QA '+JSON.stringify({engine,release:active.release,progress,authPosts,modelPosts,reloadedReply:true,sameThread:true,firstReplyMs,secondReplyMs}));
+      if (process.env.QA_INSPECT_ENTRIES === '1') {
+        const surfaces = [];
+        async function inspect(name, open, labels) {
+          try {
+            await open();
+            const seen = {};
+            for (const [key, pattern] of Object.entries(labels)) {
+              const element = page.getByText(pattern).filter({visible:true}).first();
+              await element.waitFor({state:'visible',timeout:4500}).catch(()=>{});
+              seen[key] = await element.isVisible();
+            }
+            surfaces.push({name, documentPath:new URL(page.url()).pathname, seen});
+          } catch (cause) { surfaces.push({name, failure:cause.name}); }
+        }
+        const goto = path => page.goto(home + path,{waitUntil:'domcontentloaded',timeout:20000});
+        await inspect('usage', () => goto('settings/usage'), {adminPro: /Pro\s*\$?500/});
+        await inspect('personal-pricing', () => goto('#pricing'), {go: /^Go$/, pro: /^Pro$/, dotBenefit: /含站内 Dot/});
+        await inspect('codex', () => goto('codex'), {codex: /^Codex$/, project: /项目|project/i});
+        await inspect('dot', async () => {
+          await goto('');
+          await page.getByText('Dot',{exact:true}).filter({visible:true}).first().click({timeout:10000});
+        }, {dot: /^Dot$/, tools: /语音|日记|自动化|电脑|voice|journal|automation|computer/i});
+        console.log('Native entry QA '+JSON.stringify({engine,release:active.release,surfaces}));
+      }
     } finally {
       const diagnostic=await page.evaluate(()=>({path:location.pathname,startup:window.__CHATGPT_STARTUP_ERROR__,body:document.body.innerText.slice(0,190)})).catch(()=>null);
       console.log('Browser diagnostic '+JSON.stringify({engine,errors:errors.slice(-6),diagnostic}));
