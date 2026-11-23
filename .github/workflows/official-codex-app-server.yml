@@ -1,0 +1,26 @@
+name: Verify real OpenAI Codex App Server on a hosted runner
+on:
+  push:
+    branches: [qa/official-codex-app-server]
+permissions:
+  contents: read
+jobs:
+  app-server:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Install the pinned official Codex distribution
+        run: |
+          npm install --prefix "$RUNNER_TEMP/tyc-codex-cli" --no-save --no-package-lock --ignore-scripts --no-audit --no-fund @openai/codex@0.171.0
+          echo "$RUNNER_TEMP/tyc-codex-cli/node_modules/.bin" >> "$GITHUB_PATH"
+      - name: Run the server, execute Python, and resume the same thread after restart
+        run: |
+          codex --version
+          node scripts/qa/official-codex-app-server.mjs
