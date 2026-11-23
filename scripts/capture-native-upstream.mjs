@@ -31,12 +31,12 @@ const options = new Map();
 for (let index = 0; index < args.length; index++) {
   const flag = args[index];
   if (options.has(flag)) throw Error(`Duplicate option ${flag}`);
-  if (flag === '--resume' || flag === '--help') options.set(flag, true);
+  if (flag === '--resume' || flag === '--public-interactions' || flag === '--help') options.set(flag, true);
   else if (flags.has(flag) && args[index + 1] && !args[index + 1].startsWith('--')) options.set(flag, args[++index]);
   else throw Error(`Invalid option ${flag}`);
 }
 if (options.has('--help')) {
-  console.log('node --use-env-proxy scripts/capture-native-upstream.mjs --out <directory> [--expected-build <sha>] [--concurrency 8] [--min-free-mb 160] [--max-assets N] [--max-bytes-mb N] [--resume]');
+  console.log('node --use-env-proxy scripts/capture-native-upstream.mjs --out <directory> [--expected-build <sha>] [--concurrency 8] [--min-free-mb 160] [--max-assets N] [--max-bytes-mb N] [--resume] [--public-interactions]');
   process.exit(0);
 }
 function integer(flag, fallback, minimum, maximum = Number.MAX_SAFE_INTEGER) {
@@ -634,6 +634,74 @@ async function collect(url) {
   try { await analyze(url, path.join(stage, item.path)); }
   catch (error) { unresolved.push({ source: url.href, reason: error.message }); }
 }
+// Keep the same queue and hashing rules for assets observed by the browser.
+async function observePublicInteractions() {
+  const { chromium } = await import('playwright-core');
+  const browser = await chromium.launch({ channel: process.env.CAPTURE_BROWSER_CHANNEL || 'msedge', headless: true });
+  const actions = [
+    { name: 'tools', roles: ['button'], label: /^(?:tools|add tools|添加工具|工具|添加文件等内容)$/i },
+    { name: 'settings', roles: ['button', 'link'], label: /^(?:settings|设置)$/i },
+    { name: 'images', roles: ['link', 'button'], label: /^(?:images|图像|图片)$/i },
+    { name: 'plugins', roles: ['link', 'button'], label: /^(?:plugins|插件)$/i },
+    { name: 'login-dialog', roles: ['button'], label: /^(?:log in|登录)$/i },
+    { name: 'signup-dialog', roles: ['button'], label: /^(?:sign up for free|免费注册|注册)$/i },
+  ];
+  const outcomes = [];
+  try {
+    const context = await browser.newContext({ locale: 'en-US', serviceWorkers: 'block' });
+    // This anonymous context never submits credentials, prompts, or forms.
+    for (const action of actions) {
+      const page = await context.newPage();
+      const initial = new Set(), afterClick = new Set();
+      let observing = initial;
+      page.on('response', response => {
+        if (response.request().method() !== 'GET' || response.status() !== 200) return;
+        const publicURL = assetURL(response.url(), homepage);
+        if (publicURL) observing.add(publicURL.href);
+      });
+      const item = { action: action.name, status: 'not-visible', newAssets: 0 };
+      const currentBuild = () => page.evaluate(() => document.documentElement?.dataset?.build);
+      const dialogs = () => page.getByRole('dialog').filter({ visible: true }).count();
+      try {
+        await page.goto(homepage, { waitUntil: 'domcontentloaded', timeout: 25000 });
+        if (page.url() !== homepage || await currentBuild() !== shell.build) {
+          item.status = 'build-mismatch';
+          outcomes.push(item);
+          continue;
+        }
+        const visible = action.roles.map(role => page.getByRole(role, { name: action.label }).filter({ visible: true }))
+          .reduce((combined, next) => combined.or(next)).first();
+        if (!await visible.isVisible()) await visible.waitFor({state:'visible',timeout:2200}).catch(()=>{});
+        if (await visible.isVisible()) {
+          const priorDialogs = await dialogs(), priorPath = new URL(page.url()).pathname;
+          observing = afterClick;
+          await visible.click({ timeout: 4500 });
+          await page.waitForLoadState('networkidle', { timeout: 3500 }).catch(() => {});
+          const next = new URL(page.url());
+          if (next.origin !== new URL(homepage).origin || await currentBuild().catch(() => null) !== shell.build) {
+            item.status = 'navigated-outside-build';
+          } else {
+            item.status = await dialogs() > priorDialogs ? 'dialog-opened' : next.pathname !== priorPath ? 'route-opened' : 'clicked';
+            for (const href of afterClick) {
+              if (initial.has(href)) continue;
+              discover(href, homepage, homepage, 'anonymous-' + action.name);
+              item.newAssets++;
+            }
+          }
+        }
+        for (const href of initial) discover(href, homepage, homepage, 'anonymous-initial-render');
+      } catch (error) {
+        item.status = error.name === 'TimeoutError' ? 'timed-out' : 'unavailable';
+      } finally { await page.close(); }
+      outcomes.push(item);
+    }
+    return outcomes;
+  } finally { await browser.close(); }
+}
+
+const publicInteractions = options.has('--public-interactions') ? await observePublicInteractions() : null;
+if (publicInteractions) console.log(JSON.stringify({ publicInteractions }));
+
 // Follow only the values observed from the root, its manifest, and its entry before scanning the remainder.
 await collect(shell.manifest);
 if (entryUrl) await collect(entryUrl);
@@ -696,6 +764,7 @@ const result = {
   discoveredAssets: known.size, capturedAssets: completed.size, capturedBytes: [...completed.values()].reduce((total, item) => total + item.bytes, 0),
   assets: [...completed.values()].sort((left, right) => left.url.localeCompare(right.url)), links: activeLinks,
   pending, failed: [...failed.values()], unresolved, conditionalFallbacks,
+  ...(publicInteractions ? { publicInteractions, allInteractionsVerified: false } : {}),
 };
 const partialManifest = path.join(stage, 'capture-manifest.' + crypto.randomUUID() + '.partial');
 await writeFile(partialManifest, JSON.stringify(result, null, 2) + '\n', { flag: 'wx' });

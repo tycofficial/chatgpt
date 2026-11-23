@@ -1,0 +1,54 @@
+name: Capture the current public frontend and observed menu states in one graph
+on:
+  push:
+    branches: [qa/public-interaction-graph]
+permissions:
+  contents: read
+jobs:
+  capture:
+    runs-on: windows-2025
+    timeout-minutes: 28
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - run: npm ci --no-audit --no-fund
+      - run: npm install --no-save --package-lock=false --no-audit --no-fund playwright-core@1.58.2
+      - name: Observe the current official build
+        continue-on-error: true
+        run: npm run reference:check
+      - name: Capture one complete public graph
+        run: |
+          set -euo pipefail
+          target="$RUNNER_TEMP/chatgpt-public-capture"
+          node --use-env-proxy scripts/capture-native-upstream.mjs --out "$target" --concurrency 12 --min-free-mb 1600 --public-interactions
+          node --input-type=module - "$target" <<'NODE'
+          import { readdir, readFile } from 'node:fs/promises';
+          import { join } from 'node:path';
+          import assert from 'node:assert/strict';
+          const target=process.argv[2], [build,...others]=await readdir(target);
+          assert.equal(others.length,0);
+          const graph=JSON.parse(await readFile(join(target,build,'capture-manifest.json'),'utf8'));
+          assert.equal(graph.status,'complete');
+          assert.equal(graph.sourceBuild,build);
+          assert.equal(graph.currentAtCompletion,true);
+          assert.equal(graph.pending.length+graph.failed.length+graph.unresolved.length,0);
+          assert.equal(graph.allInteractionsVerified,false);
+          console.log('Verified capture '+JSON.stringify({build,assets:graph.capturedAssets,edges:graph.links.length,manifest:graph.shell.manifest,interactions:graph.publicInteractions}));
+          NODE
+          tmp="$(cygpath -u "$RUNNER_TEMP")"
+          tar -C "$tmp/chatgpt-public-capture" -czf "$tmp/chatgpt-public-graph.tar.gz" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: chatgpt-public-interactions-single-graph
+          path: ${{ runner.temp }}/chatgpt-public-graph.tar.gz
+          if-no-files-found: error
+          retention-days: 5
+          compression-level: 0
