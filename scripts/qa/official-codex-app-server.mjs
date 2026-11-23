@@ -97,6 +97,9 @@ try {
   assert.ok(done, 'The real Codex process did not emit a command item: ' + JSON.stringify({
     events: direct.map(event => [event.method, event.params?.item?.type]),
     requests: requested.map(payload => (payload.tools ?? []).map(tool => tool.name ?? tool.type)),
+    results: requested.flatMap(payload => (payload.input ?? []).filter(item => item.type === 'function_call_output')
+      .map(item => [item.call_id, JSON.stringify(item.output).slice(0, 500)])),
+    warnings: direct.filter(event => event.method === 'warning').map(event => event.params?.message?.slice(0, 360)),
     fixtureErrors,
   }));
   assert.equal(done.exitCode, 0, JSON.stringify(done));
