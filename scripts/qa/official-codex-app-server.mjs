@@ -60,14 +60,7 @@ async function runTurn(client, threadId, text) {
       });
     });
     const [start, done] = await Promise.all([
-      client.request('turn/start', {
-        threadId, input: [{ type: 'text', text, textElements: [] }],
-        // GitHub-hosted Ubuntu cannot set up an isolated loopback interface in bwrap.
-        // Only this deterministic test uses the runner's network namespace.
-        ...(process.env.QA_CODEX_LINUX_NETWORK === '1' ? {
-          sandboxPolicy: { type: 'workspaceWrite', writableRoots: [workspace], networkAccess: true },
-        } : {}),
-      }),
+      client.request('turn/start', { threadId, input: [{ type: 'text', text, textElements: [] }] }),
       terminal,
     ]);
     assert.equal(start.turn.id, done.id);
@@ -91,7 +84,7 @@ try {
     'model = "fixture-codex"', 'approval_policy = "never"', 'model_provider = "fixture"',
     '[model_providers.fixture]', 'name = "Local integration test"', 'base_url = "' + url + '"',
     'wire_api = "responses"', 'request_max_retries = 0', 'stream_max_retries = 0',
-    '[features]', 'enable_request_compression = false', 'unified_exec = true', 'shell_snapshot = false', '',
+    '[features]', 'enable_request_compression = false', 'unified_exec = true', 'shell_snapshot = false', 'use_legacy_landlock = true', '',
   ].join('\n'), { mode: 0o600 });
   const env = { ...process.env, CODEX_HOME: state };
   delete env.OPENAI_API_KEY;
