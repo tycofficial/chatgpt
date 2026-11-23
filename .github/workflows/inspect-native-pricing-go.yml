@@ -1,0 +1,39 @@
+name: Locate the original Go pricing visibility policy
+on:
+  push:
+    branches: [qa/inspect-native-pricing-go]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: windows-2025
+    timeout-minutes: 24
+    defaults:
+      run:
+        shell: bash
+    env:
+      UPSTREAM: 0237c4dd9e54c7e3a619581b909d792de582fee9
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: chatgpt-public-interactions-single-graph
+          path: ${{ runner.temp }}/chatgpt-candidate-archive
+          github-token: ${{ github.token }}
+          run-id: 45162484586
+      - name: Unpack the already verified capture on this runner
+        run: |
+          set -euo pipefail
+          task_tmp="$(cygpath -u "$RUNNER_TEMP")"
+          mkdir -p "$task_tmp/chatgpt-upstream-capture"
+          tar -C "$task_tmp/chatgpt-upstream-capture" -xzf "$task_tmp/chatgpt-candidate-archive/chatgpt-public-graph.tar.gz"
+          npm ci --no-audit --no-fund
+      - name: Inspect only native Go eligibility and Codex entry source metadata
+        run: node scripts/qa/native-go-source.mjs
