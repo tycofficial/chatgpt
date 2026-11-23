@@ -1,0 +1,98 @@
+name: Verify currently available model capabilities through the site's provider
+on:
+  push:
+    branches: [qa/weekly-capabilities-0237c4dd]
+permissions:
+  contents: read
+jobs:
+  models:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      SITE: https://tycofficial.github.io
+      API: https://chatgpt-admin-bridge-tyc.hushedtarragon1.chatgpt.site
+      RELEASE: 1e427a8d323976e5
+    steps:
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Read actual provider receipts using a synthetic site account
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { randomUUID } from 'node:crypto';
+          const { API, SITE, RELEASE } = process.env;
+          const live = await fetch(SITE + '/chatgpt/native-client/active.json', { cache:'no-store', signal:AbortSignal.timeout(15000) });
+          assert.equal(live.status, 200);
+          assert.equal((await live.json()).release, RELEASE);
+          const nonce = randomUUID().replace(/-/g, '').slice(0, 12);
+          async function request(path, body, token, timeout) {
+            return fetch(API + path, { method:'POST',
+              headers:{Origin:SITE, 'Content-Type':'application/json', ...(token ? {Authorization:'Bearer ' + token} : {})},
+              body:JSON.stringify(body), signal:AbortSignal.timeout(timeout) });
+          }
+          const signup = await request('/auth/register', {username:'qamodel'+nonce,password:'Q7model'+randomUUID()},null,17000);
+          assert.equal(signup.status,200);
+          const { token } = await signup.json();
+          const trial = await request('/auth/site-trial', {tier:'pro'},token,17000);
+          assert.equal(trial.status,200);
+          assert.equal((await trial.json()).user?.planType,'pro');
+
+          async function terminalSse(response) {
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let pending='', firstTextAt = null;
+            try {
+              for (;;) {
+                const { value, done } = await reader.read();
+                pending += done ? decoder.decode() : decoder.decode(value, {stream:true});
+                let end;
+                while ((end=/\r?\n\r?\n/.exec(pending))) {
+                  const data=pending.slice(0,end.index).split(/\r?\n/).filter(line=>line.startsWith('data:')).map(line=>line.slice(5).trimStart()).join('\n');
+                  pending=pending.slice(end.index+end[0].length);
+                  if (!data || data==='[DONE]') continue;
+                  const event=JSON.parse(data);
+                  if (event.type==='response.output_text.delta' && event.delta?.trim()) firstTextAt ??= Date.now();
+                  if (event.type==='error' || ['response.completed','response.failed','response.incomplete'].includes(event.type)) {
+                    return { terminal:event.type, receipt:event.response ?? event, firstTextAt };
+                  }
+                }
+                if (done) return {terminal:'eof',receipt:null,firstTextAt};
+              }
+            } finally { void reader.cancel().catch(()=>{}); }
+          }
+
+          const probes=[
+            { model:'gpt-6-luna', effort:'none' },
+            { model:'gpt-6-luna', effort:'max' },
+            { model:'gpt-6.2-sol', effort:'low' },
+            { model:'gpt-6.2-astra', effort:'low' },
+            { model:'gpt-6.2-sol', effort:'low', tier:'ultrafast' },
+            { model:'gpt-6.2-astra', effort:'low', tier:'ultrafast' },
+          ];
+          async function probe(target) {
+            const started=Date.now();
+            try {
+              const response=await request('/inference/v1/responses', {
+                model:target.model, reasoning:{effort:target.effort}, input:'Reply with exactly OK.',
+                max_output_tokens:512, store:false, stream:true, ...(target.tier?{service_tier:target.tier}:{}),
+              },token,65000);
+              let status;
+              if (response.headers.get('content-type')?.includes('text/event-stream')) status=await terminalSse(response);
+              else status={terminal:'json',receipt:await response.json().catch(()=>null)};
+              const receipt=status.receipt;
+              return { target, http:response.status, terminal:status.terminal, receivedModel:receipt?.model ?? null,
+                receivedEffort:receipt?.reasoning?.effort ?? null, receivedTier:receipt?.service_tier ?? null,
+                reason:receipt?.error?.code ?? receipt?.incomplete_details?.reason ?? receipt?.code ?? null,
+                param:receipt?.error?.param ?? receipt?.param ?? null,
+                ttftMs:typeof status.firstTextAt==='number' ? status.firstTextAt-started : null, totalMs:Date.now()-started };
+            } catch (error) {
+              return {target, networkError:error.name, totalMs:Date.now()-started};
+            }
+          }
+          for (let i=0;i<probes.length;i+=2) {
+            const rows=await Promise.all(probes.slice(i,i+2).map(probe));
+            for (const row of rows) console.log('Provider capability ' + JSON.stringify(row));
+          }
+          NODE
