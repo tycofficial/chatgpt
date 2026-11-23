@@ -142,6 +142,7 @@ try {
           .filter(node => node.getClientRects().length && getComputedStyle(node).visibility === 'visible')
           .map(node => ({
             tag: node.tagName, role: node.getAttribute('role'), aria: node.getAttribute('aria-label'), title: node.getAttribute('title'),
+            expanded: node.getAttribute('aria-expanded'), state: node.getAttribute('data-state'),
             testId: node.getAttribute('data-testid'), placeholder: node.getAttribute('data-placeholder') ?? node.getAttribute('placeholder'),
             name: (node.innerText ?? '').trim().replace(/\s+/g, ' ').slice(0, 62), href: node.getAttribute('href'),
           })).slice(0, 75));
@@ -202,10 +203,12 @@ try {
         let nativeJournalPanel = false;
         if (journalButton) {
           const triggerLabel = await journalButton.getAttribute('aria-label') ?? (await journalButton.innerText()).trim();
-          await journalButton.click();
+          const before = await journalButton.getAttribute('aria-expanded') ?? await journalButton.getAttribute('data-state');
+          if (before !== 'true' && before !== 'open') await journalButton.click();
           await findText(newNote).waitFor({ state: 'visible', timeout: 6500 }).catch(() => {});
           nativeJournalPanel = await findText(newNote).isVisible();
-          console.log('Native Dot journal panel ' + JSON.stringify({ triggerLabel, listedEntry: nativeJournalPanel }));
+          const after = await journalButton.getAttribute('aria-expanded') ?? await journalButton.getAttribute('data-state');
+          console.log('Native Dot journal panel ' + JSON.stringify({ triggerLabel, listedEntry: nativeJournalPanel, before, after }));
           await report('journal-panel');
         }
         if (page.url() !== room) await page.goto(room, { waitUntil: 'domcontentloaded', timeout: 45000 });
@@ -229,9 +232,16 @@ try {
         assert.ok(scheduleId, 'No saved native Dot automation ID');
         await reloadRoom();
         await submitDot('/automation list', scheduleId + ' · ' + task + ' · 启用');
-        const nativeAutomation = () => page.getByRole('button', { name: task, exact: true }).filter({ visible: true }).first();
-        const scheduleButton = await findDotPanel(nativeAutomation, 'automation');
-        assert.ok(scheduleButton, 'The persisted task is missing from the original Dot profile');
+        const nativeAutomation = () => page.getByRole('button').filter({ hasText: task, visible: true }).first();
+        let scheduleButton = await findDotPanel(nativeAutomation, 'automation');
+        if (!scheduleButton) {
+          const activity = button(/^近期活动$/);
+          const expanded = await activity.getAttribute('aria-expanded') ?? await activity.getAttribute('data-state');
+          if (expanded !== 'true' && expanded !== 'open') await activity.click();
+          await nativeAutomation().waitFor({ state: 'visible', timeout: 10000 });
+          await report('automation-activity');
+          scheduleButton = nativeAutomation();
+        }
         await scheduleButton.click();
         await page.waitForTimeout(600);
         const schedulePanelListed = await findText(task).isVisible();
