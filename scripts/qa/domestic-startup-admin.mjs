@@ -52,6 +52,11 @@ try {
       'Codex browser regression follow-up CDX-ENTRY-02',
     ];
     const codexRequests = [];
+    const dotAutomationPrompt = 'Reply to the Dot automation fixture DOT-AUTO-PROMPT-0237.';
+    const dotAutomationResult = 'DOT-AUTO-FIXTURE-RESULT-0237';
+    const dotAutomationRequests = [];
+    const dotAutomationStarted = Promise.withResolvers();
+    const dotAutomationReleased = Promise.withResolvers();
     await context.route(backend+'/**', async route => {
       if(route.request().method()==='OPTIONS') return route.fulfill({status:204,headers:cors});
       if(new URL(route.request().url()).pathname==='/auth/login') authPosts++;
@@ -64,6 +69,22 @@ try {
       assert.equal(req.url(),provider+'/responses');
       assert.equal(req.headers().authorization,'Bearer '+credential);
       const body=req.postDataJSON();
+      const currentUser = body.input?.findLast?.(item => item.role === 'user');
+      if (process.env.QA_NATIVE_DOT_JOURNAL === '1' && currentUser && JSON.stringify(currentUser).includes(dotAutomationPrompt)) {
+        assert.equal(modelPosts, 2, 'The same Dot automation run sent a duplicate Responses POST');
+        assert.equal(body.model, 'gpt-6.1-terra');
+        assert.equal(body.reasoning?.effort, 'medium');
+        assert.equal(body.stream, true);
+        modelPosts++;
+        dotAutomationRequests.push({ method: req.method(), path: new URL(req.url()).pathname, model: body.model, effort: body.reasoning.effort });
+        dotAutomationStarted.resolve();
+        await dotAutomationReleased.promise;
+        const response = { model: body.model, reasoning: body.reasoning, status: 'completed',
+          output: [{ type: 'message', role: 'assistant', id: 'qa-dot-auto-0237', phase: 'final_answer',
+            content: [{ type: 'output_text', text: dotAutomationResult }] }] };
+        return route.fulfill({ status: 200, headers: { ...cors, 'Content-Type': 'text/event-stream' },
+          body: 'data: ' + JSON.stringify({ type: 'response.completed', response }) + '\n\n' });
+      }
       const turn = modelPosts + 1;
       if (turn <= 2) {
         assert.match(JSON.stringify(body.input), /Direct fallback validation/);
@@ -161,17 +182,22 @@ try {
         const newNote = 'DOT-JOURNAL-CREATE-0237';
         const editedNote = 'DOT-JOURNAL-EDITED-0237';
         const findText = value => page.getByText(value, { exact: true }).filter({ visible: true }).last();
-        async function submitDot(text, receipt) {
+        async function sendDot(text) {
           await composer.fill(text);
           const send = page.getByRole('button', { name: /^(?:发送|发送消息|Send|Send message)$/i }).filter({ visible: true }).last();
           if (await send.isVisible() && await send.isEnabled()) await send.click();
           else await composer.press('Enter');
+        }
+        async function submitDot(text, receipt) {
+          await sendDot(text);
           const result = findText(receipt);
           await result.waitFor({ state: 'visible', timeout: 20000 });
           assert.equal(page.url(), room);
           return (await result.innerText()).trim();
         }
+        let roomReloads = 0;
         async function reloadRoom() {
+          roomReloads++;
           await page.reload({ waitUntil: 'domcontentloaded', timeout: 45000 });
           await composer.waitFor({ state: 'visible', timeout: 30000 });
           assert.equal(page.url(), room);
@@ -222,16 +248,34 @@ try {
         await submitDot('/journal list', '日记里还没有条目。');
         assert.equal(modelPosts, 2, 'A local journal command unexpectedly triggered model inference');
         console.log('Native Dot journal CRUD QA ' + JSON.stringify({ release: active.release, room: new URL(room).pathname,
-          composerCommands: true, created: true, edited: true, deleted: true, reloads: 3, sameRoom: true,
+          composerCommands: true, created: true, edited: true, deleted: true, reloads: roomReloads, sameRoom: true,
           nativeJournalPanel, dotModelPosts: 0 }));
 
+        const automationReloadStart = roomReloads;
         const task = 'Dot manual browser QA 0237';
-        const schedule = await submitDot('/automation add ' + task + ' | 0 | Reply with the automation test marker.',
+        const schedule = await submitDot('/automation add ' + task + ' | 0 | ' + dotAutomationPrompt,
           /已创建自动化 · [a-f0-9-]{36}/);
         const scheduleId = schedule.match(/已创建自动化 · ([a-f0-9-]{36})/)?.[1];
         assert.ok(scheduleId, 'No saved native Dot automation ID');
         await reloadRoom();
         await submitDot('/automation list', scheduleId + ' · ' + task + ' · 启用');
+        const runCommand = '/automation run ' + scheduleId;
+        try {
+          await submitDot(runCommand, '自动化已排队，运行结果将出现在当前对话。');
+          await Promise.race([dotAutomationStarted.promise, delay(14000).then(() => {
+            throw Error('The Dot automation did not reach the configured Responses fixture');
+          })]);
+          await submitDot(runCommand, '这条自动化正在等待或运行。');
+          assert.equal(dotAutomationRequests.length, 1, 'The second click admitted another active run');
+        } finally {
+          dotAutomationReleased.resolve();
+        }
+        await findText(dotAutomationResult).waitFor({ state: 'visible', timeout: 25000 });
+        await reloadRoom();
+        await findText(dotAutomationResult).waitFor({ state: 'visible', timeout: 15000 });
+        const runReplies = page.getByText(dotAutomationResult, { exact: true }).filter({ visible: true });
+        assert.equal(await runReplies.count(), 1, 'Expected one persisted model response in the native Dot conversation');
+        assert.equal(dotAutomationRequests.length, 1, 'Reload issued a duplicate completed run');
         const nativeAutomation = () => page.getByRole('button').filter({ hasText: task, visible: true }).first();
         let scheduleButton = await findDotPanel(nativeAutomation, 'automation');
         if (!scheduleButton) {
@@ -255,11 +299,17 @@ try {
         await findText('已暂停').waitFor({ state: 'visible', timeout: 10000 });
         if (page.url() !== room) await page.goto(room, { waitUntil: 'domcontentloaded', timeout: 45000 });
         await reloadRoom();
-        await submitDot('/automation list', scheduleId + ' · ' + task + ' · 停用');
-        assert.equal(modelPosts, 2, 'Automation setup or disable unexpectedly invoked a model');
-        console.log('Native Dot automation persistence QA ' + JSON.stringify({ release: active.release, created: true,
-          browserManual: true, reloads: 3, enabledAfterCreate: true, disabledAfterReload: true,
-          schedulePanelListed, nativeDisable: true, runControlVisible }));
+        await submitDot('/automation list', new RegExp(scheduleId + ' · ' + task + ' · 停用\\s+' + dotAutomationResult));
+        await sendDot(runCommand);
+        await page.waitForFunction(() => window.__originalClientProbe?.some(event =>
+          event.type === 'local-dot' && event.kind === 'request-error' &&
+          event.code === 'LOCAL_DOT_AUTOMATION_DISABLED' && event.status === 409), undefined, { timeout: 12000 });
+        assert.equal(modelPosts, 3, 'Setup, duplicate attempt, reload or stopped command invoked another model');
+        assert.equal(dotAutomationRequests.length, 1);
+        console.log('Native Dot automation execution QA ' + JSON.stringify({ release: active.release, created: true,
+          reloads: roomReloads - automationReloadStart, enabledAfterCreate: true, disabledAfterReload: true,
+          schedulePanelListed, nativeDisable: true, runControlVisible, duplicateActiveCommandRejected: true,
+          recoveredVisibleResult: dotAutomationResult, stoppedCommandStatus: 409, modelRequests: dotAutomationRequests }));
       }
       if (process.env.QA_NATIVE_CODEX_ENTRY === '1') {
         const modeLabel = /切换.*模式|切換.*模式|Switch mode/i;
