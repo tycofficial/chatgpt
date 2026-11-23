@@ -1,0 +1,58 @@
+name: Verify the native site account against the live AI Studio backend
+on:
+  push:
+    branches: [qa/ai-studio-native-account]
+    paths: [.github/workflows/ai-studio-native-account.yml, scripts/qa/ai-studio-native-account.mjs]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: windows-2025
+    timeout-minutes: 18
+    defaults:
+      run:
+        shell: bash
+    env:
+      UPSTREAM: 0237c4dd9e54c7e3a619581b909d792de582fee9
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: chatgpt-public-interactions-single-graph
+          path: ${{ runner.temp }}/chatgpt-candidate-archive
+          github-token: ${{ github.token }}
+          run-id: 45162484586
+      - name: Unpack the already verified capture on this runner
+        run: |
+          set -euo pipefail
+          task_tmp="$(cygpath -u "$RUNNER_TEMP")"
+          mkdir -p "$task_tmp/chatgpt-upstream-capture"
+          tar -C "$task_tmp/chatgpt-upstream-capture" -xzf "$task_tmp/chatgpt-candidate-archive/chatgpt-public-graph.tar.gz"
+          npm ci --no-audit --no-fund
+      - name: Build a runner-local candidate for the Studio origin
+        run: |
+          set -euo pipefail
+          node scripts/adopt-native-upstream.mjs "$RUNNER_TEMP/chatgpt-upstream-capture/$UPSTREAM"
+          node <<'NODE'
+          const fs = require('node:fs');
+          const file = 'src/native-client/site-account.mjs';
+          const source = fs.readFileSync(file, 'utf8');
+          const original = "export const SITE_ACCOUNT_SERVICE = 'https://chatgpt-admin-bridge-tyc.hushedtarragon1.chatgpt.site';";
+          const candidate = "export const SITE_ACCOUNT_SERVICE = 'https://chatgptapi.ai.studio';";
+          if (source.split(original).length !== 2) throw Error('Account service boundary drifted');
+          fs.writeFileSync(file, source.replace(original, candidate));
+          NODE
+          node scripts/build-native-client.mjs --activate
+          npm run native:check
+      - name: Register and log in through the real backend from hosted Edge
+        run: |
+          set -euo pipefail
+          npm install --no-save --package-lock=false --no-audit --no-fund playwright-core@1.58.2
+          node scripts/qa/ai-studio-native-account.mjs
