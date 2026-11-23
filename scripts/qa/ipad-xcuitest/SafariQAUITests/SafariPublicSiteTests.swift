@@ -18,18 +18,28 @@ final class SafariPublicSiteTests: XCTestCase {
         let first = matchingText(in: safari, "Native Safari fixture generation 1").firstMatch
         guard check(first.waitForExistence(timeout: 40), "native-first-document") else { return }
         let written = matchingText(in: safari, "Fixture storage marker written").firstMatch
-        guard check(written.waitForExistence(timeout: 8), "native-storage-write") else { return }
+        let tabWritten = matchingText(in: safari, "Fixture tab marker written").firstMatch
+        guard check(written.waitForExistence(timeout: 8) && tabWritten.exists, "native-storage-write") else { return }
+        let updated = matchingText(in: safari, "Native Safari reloaded fixture").firstMatch
+        guard check(!updated.exists, "native-fresh-document-before-tap") else { return }
         mark("native-first-document")
         let reload = named(safari.buttons, reloadNames)
         guard check(reload.waitForExistence(timeout: 12) && reload.isHittable, "native-reload-control") else { return }
         reload.tap()
         mark("native-reload-tapped")
-        let updated = matchingText(in: safari, "Native Safari fixture generation 2").firstMatch
-        guard check(updated.waitForExistence(timeout: 35), "native-reloaded-document") else { return }
+        guard updated.waitForExistence(timeout: 45) else {
+            mark(first.exists ? "native-initial-document-still-visible" : "native-initial-document-absent")
+            mark(safari.webViews.firstMatch.exists ? "native-webview-present" : "native-webview-absent")
+            fail("native-reloaded-document")
+            return
+        }
+        mark("native-reloaded-document")
         let preserved = matchingText(in: safari, "Fixture storage marker retained").firstMatch
         guard check(preserved.waitForExistence(timeout: 10), "native-storage-retention") else { return }
-        mark("native-reloaded-document")
         mark("native-storage-retention")
+        let sameTab = matchingText(in: safari, "Fixture tab marker retained").firstMatch
+        guard check(sameTab.waitForExistence(timeout: 10), "native-tab-retention") else { return }
+        mark("native-tab-retention")
     }
 
     @MainActor

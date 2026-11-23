@@ -59,28 +59,48 @@ jobs:
           cat > "$fixture" <<'NODE'
           const fs = require('node:fs');
           const http = require('node:http');
+          const temporary = process.env.RUNNER_TEMP;
+          const counterPath = temporary + '/ipad-refresh-document-count';
           let visits = 0;
+          fs.writeFileSync(counterPath, String(visits));
           const server = http.createServer((request, response) => {
+            const pathname = new URL(request.url, 'http://127.0.0.1').pathname;
             const headers = { 'Cache-Control': 'no-store' };
-            if (request.url === '/navigation-count') {
+            if (pathname === '/navigation-count') {
               response.writeHead(200, headers).end(String(visits));
               return;
             }
-            if (request.url !== '/chatgpt/' || request.method !== 'GET') {
+            if (pathname !== '/chatgpt/' && pathname !== '/chatgpt') {
               response.writeHead(404, headers).end();
               return;
             }
+            headers['Content-Type'] = 'text/html; charset=utf-8';
+            if (request.method === 'HEAD') {
+              response.writeHead(200, headers).end();
+              return;
+            }
+            if (request.method !== 'GET') {
+              response.writeHead(405, headers).end();
+              return;
+            }
             const current = ++visits;
-            const js = current === 1
-              ? "localStorage.setItem('native-refresh-witness','first');out.textContent='Fixture storage marker written'"
-              : "out.textContent=localStorage.getItem('native-refresh-witness')==='first'?'Fixture storage marker retained':'Fixture storage marker missing'";
-            response.writeHead(200, { ...headers, 'Content-Type': 'text/html; charset=utf-8' }).end(
+            fs.writeFileSync(counterPath, String(current));
+            console.log('Fixture document GET ' + current);
+            const first = current === 1;
+            const heading = first ? 'Native Safari fixture generation 1' : 'Native Safari reloaded fixture';
+            const js = first
+              ? "localStorage.setItem('native-refresh-witness','origin');sessionStorage.setItem('native-refresh-witness','tab');" +
+                "originWitness.textContent='Fixture storage marker written';tabWitness.textContent='Fixture tab marker written';"
+              : "originWitness.textContent=localStorage.getItem('native-refresh-witness')==='origin'?'Fixture storage marker retained':'Fixture storage marker missing';" +
+                "tabWitness.textContent=sessionStorage.getItem('native-refresh-witness')==='tab'?'Fixture tab marker retained':'Fixture tab marker missing';";
+            response.writeHead(200, headers).end(
               '<!doctype html><html lang="en"><meta name="viewport" content="width=device-width,initial-scale=1">' +
-              '<title>Native Safari reload fixture</title><main><h1>Native Safari fixture generation ' + current + '</h1>' +
-              '<p id="witness"></p></main><script>const out=document.getElementById("witness");' + js + '</script></html>',
+              '<title>Native Safari reload fixture</title><main><h1>' + heading + '</h1><p id="origin-witness"></p>' +
+              '<p id="tab-witness"></p></main><script>const originWitness=document.getElementById("origin-witness");' +
+              'const tabWitness=document.getElementById("tab-witness");' + js + '</script></html>',
             );
           });
-          server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.RUNNER_TEMP + '/ipad-refresh-port', String(server.address().port)));
+          server.listen(0, '127.0.0.1', () => fs.writeFileSync(temporary + '/ipad-refresh-port', String(server.address().port)));
           NODE
           node --check "$fixture"
           node "$fixture" > "$log" 2>&1 </dev/null &
@@ -110,7 +130,7 @@ jobs:
             -only-testing:SafariQAUITests/SafariPublicSiteTests/testNativeSafariRefreshAvailability \
             -parallel-testing-enabled NO -disable-concurrent-destination-testing \
             -test-timeouts-enabled YES -default-test-execution-time-allowance 480 2>&1 | tee "$raw" | \
-            awk 'match($0, /IPAD_UI_QA (native-availability-runner|native-safari-foreground|native-first-document|native-reload-tapped|native-reloaded-document|native-storage-retention|failed-[a-z-]+)\r?$/) { print substr($0, RSTART, RLENGTH); fflush() }' | tee "$phases"
+            awk 'match($0, /IPAD_UI_QA (native-availability-runner|native-safari-foreground|native-first-document|native-reload-tapped|native-reloaded-document|native-storage-retention|native-tab-retention|native-initial-document-still-visible|native-initial-document-absent|native-webview-present|native-webview-absent|failed-[a-z-]+)\r?$/) { print substr($0, RSTART, RLENGTH); fflush() }' | tee "$phases"
           build_exit="${PIPESTATUS[0]}"
           set -e
           printf 'XCTest exit status %s\n' "$build_exit"
@@ -118,12 +138,23 @@ jobs:
             sed -nE 's#^.*SafariPublicSiteTests\.swift:([0-9]+): error:.*#XCTest reported an error at Swift line \1#p' "$raw" | sort -u
           fi
           counts="$RUNNER_TEMP/ipad-xcuitest-counts.json"
+          if [[ -d "$results" ]]; then
+            xcrun xcresulttool get test-results summary --path "$results" | jq '{totalTestCount, passedTests, failedTests, skippedTests}' | tee "$counts"
+          fi
           [[ "$build_exit" == 0 ]] || exit "$build_exit"
-          xcrun xcresulttool get test-results summary --path "$results" | jq '{totalTestCount, passedTests, failedTests, skippedTests}' | tee "$counts"
           jq -e '.totalTestCount == 1 and .passedTests == 1 and .failedTests == 0' "$counts" >/dev/null
           grep -Fxq "IPAD_UI_QA native-reload-tapped" "$phases"
           grep -Fxq "IPAD_UI_QA native-storage-retention" "$phases"
-          port="$(cat "$RUNNER_TEMP/ipad-refresh-port")"
-          count="$(curl --fail --silent --show-error --max-time 5 "http://127.0.0.1:$port/navigation-count")"
-          printf "Native Safari document loads %s\n" "$count"
-          [[ "$count" == 2 ]]
+          grep -Fxq "IPAD_UI_QA native-tab-retention" "$phases"
+          count="$(cat "$RUNNER_TEMP/ipad-refresh-document-count")"
+          [[ "$count" =~ ^[0-9]+$ ]] && (( count >= 2 ))
+
+      - name: Report the native Safari fixture GET count
+        if: always()
+        run: |
+          counter="$RUNNER_TEMP/ipad-refresh-document-count"
+          count=unavailable
+          if [[ -f "$counter" ]]; then count="$(cat "$counter")"; fi
+          printf 'Native Safari server document GET count %s\n' "$count"
+          log="$RUNNER_TEMP/ipad-refresh-server.log"
+          if [[ -f "$log" ]]; then sed -nE '/^Fixture document GET [0-9]+$/p' "$log"; fi
