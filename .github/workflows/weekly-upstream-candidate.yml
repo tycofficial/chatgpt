@@ -1,4 +1,4 @@
-name: Trace the candidate's native settings registration
+name: Test the candidate's adapted browser settings
 on:
   push:
     branches: [qa/weekly-upstream-0237c4dd]
@@ -35,41 +35,85 @@ jobs:
           mkdir -p "$task_tmp/chatgpt-upstream-capture"
           tar -C "$task_tmp/chatgpt-upstream-capture" -xzf "$task_tmp/chatgpt-candidate-archive/chatgpt-upstream.tar.gz"
           npm ci --no-audit --no-fund
-      - name: Trace initialization and the exact settings service registration
+      - name: Build the isolated candidate from the capture
         run: |
+          set -euo pipefail
+          node scripts/adopt-native-upstream.mjs "$RUNNER_TEMP/chatgpt-upstream-capture/$UPSTREAM"
+          node scripts/build-native-client.mjs --activate
+          npm run native:check
+      - id: smoke
+        name: Open the isolated candidate in real Microsoft Edge
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          npm install --prefix "$RUNNER_TEMP/weekly-browser" --no-audit --no-fund --package-lock=false playwright-core@1.58.2
+          node scripts/serve-native-client.mjs > "$RUNNER_TEMP/weekly-native-preview.log" 2>&1 &
+          site_pid=$!
+          trap 'kill "$site_pid" 2>/dev/null || true' EXIT
+          curl -fSs --retry 9 --retry-connrefused http://127.0.0.1:4400/chatgpt/native-client/active.json > /dev/null
           node --input-type=module <<'NODE'
-          import { readFile } from 'node:fs/promises';
-          import { join } from 'node:path';
-          import { createHash } from 'node:crypto';
-          import { parse } from 'acorn';
           import assert from 'node:assert/strict';
-          const root=join(process.env.RUNNER_TEMP,'chatgpt-upstream-capture',process.env.UPSTREAM);
-          const graph=JSON.parse(await readFile(join(root,'capture-manifest.json'),'utf8'));
-          const row=graph.assets.find(a=>a.path==='public/chatgpt.com/cdn/assets/767086.d600a395f4.js');
-          const bytes=await readFile(join(root,row.path));
-          assert.equal(createHash('sha256').update(bytes).digest('hex'),row.sha256);
-          const source=bytes.toString('utf8'), program=parse(source,{ecmaVersion:'latest',sourceType:'module'});
-          const mods=program.body.flatMap(x=>(x.declaration??x).declarations??[])
-            .find(x=>x.id.name==='__webpack_modules__').init.properties;
-          const property=mods.find(p=>(p.key.name??p.key.value)==='IKem');
-          const factory=property.value;
-          function walk(node,visit){
-            if(!node||typeof node!=='object')return;
-            if(Array.isArray(node)){node.forEach(n=>walk(n,visit));return;}
-            if(node.type)visit(node);
-            for(const child of Object.values(node))if(child&&typeof child==='object')walk(child,visit);
-          }
-          const src=node=>node?source.slice(node.start,node.end):null;
-          const require=factory.params[2].name;
-          const statements=factory.body.body;
-          const map=[];
-          walk(factory,node=>{
-            if (node.type==='NewExpression'&&node.callee.name==='X') map.push({method:'new X',surround:source.slice(node.start-160,node.end+220)});
-            if (node.type==='CallExpression'&&node.callee.name===require&&['GaA7','ZG9f','vOiO','NGML','ZhRn','osjx'].includes(node.arguments[0]?.value)) {
-              map.push({method:'native import',ref:node.arguments[0].value,context:source.slice(node.start-17,node.end+16)});
+          import { join } from 'node:path';
+          import { pathToFileURL } from 'node:url';
+          const {chromium}=await import(pathToFileURL(join(process.env.RUNNER_TEMP,'weekly-browser/node_modules/playwright-core/index.mjs')).href);
+          const base='http://127.0.0.1:4400/chatgpt/';
+          const [manifest, plan]=await Promise.all([fetch(base+'native-client/active.json').then(r=>r.json()),fetch(base+'native-client/entry-plan.json').then(r=>r.json())]);
+          assert.equal(manifest.sourceBuild,process.env.UPSTREAM);
+          const browser=await chromium.launch({channel:'msedge', headless:true});
+          const errors=[],failedAssets=[],consoleErrors=[];
+          try {
+            const context=await browser.newContext({locale:'zh-CN'});
+            const page=await context.newPage();
+            page.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text().slice(0,280));});
+            page.on('pageerror',err=>errors.push({name:err.name,message:err.message.slice(0,180)}));
+            page.on('response',r=>{
+              const url=new URL(r.url());
+              if (r.status()>=400&&url.host==='127.0.0.1:4400'&&url.pathname.includes('/original-client/')) {
+                failedAssets.push({path:url.pathname,status:r.status()});
+              }
+            });
+            try {
+              await page.goto(base,{waitUntil:'domcontentloaded',timeout:35000});
+              await page.locator('#prompt-textarea[contenteditable="true"], .ProseMirror[contenteditable="true"]').first().waitFor({state:'visible',timeout:27000});
+              const flags=await page.evaluate(()=>({sourceBuild:document.documentElement.dataset.build,
+                boot:window.__CHATGPT_REPLICA_ENV__?.release,path:location.pathname,title:document.title,
+                sidebar:!!document.querySelector('[data-testid="profile-button"]'), probe:window.__originalClientProbe?.length ?? null}));
+              assert.equal(flags.sourceBuild, process.env.UPSTREAM);
+              assert.equal(flags.boot,manifest.release);
+              console.log('Edge loaded the candidate ' + JSON.stringify(flags));
+              const first = await page.evaluate(async ({base, runtime}) => {
+                const {__webpack_require__: original}=await import(new URL(runtime,base).href);
+                const service=original('GaA7').a.settings;
+                const result=await service.readAll();
+                const key='enabled-reasoning-efforts', value=['low','medium'];
+                await service.write(key,value);
+                const read=await service.read(key);
+                const stored=JSON.parse(localStorage.getItem('original-client-prototype-host-settings:v1'));
+                return {settings: Object.keys(result.values).length, configured: read.configured, stored: stored[key]};
+              }, {base,runtime:plan.runtime});
+              assert.deepEqual(first.configured, ['low','medium']);
+              assert.deepEqual(first.stored, ['low','medium']);
+              assert.ok(first.settings>0);
+              await page.reload({waitUntil:'domcontentloaded',timeout:25000});
+              await page.locator('#prompt-textarea[contenteditable="true"], .ProseMirror[contenteditable="true"]').first().waitFor({state:'visible',timeout:23000});
+              const resumed=await page.evaluate(async ({base,runtime})=>{
+                const {__webpack_require__: original}=await import(new URL(runtime,base).href);
+                return (await original('GaA7').a.settings.read('enabled-reasoning-efforts')).configured;
+              },{base,runtime:plan.runtime});
+              assert.deepEqual(resumed, ['low','medium']);
+              console.log('Native browser settings survived reload ' + JSON.stringify({before:first,after:resumed}));
+            } finally {
+              const state=await page.evaluate(()=>({title:document.title,path:location.pathname,
+                failure:window.__CHATGPT_STARTUP_ERROR__ ?? null, body:document.body?.innerText.replace(/\s+/g,' ').slice(0,270),
+                controls:[...document.querySelectorAll('button')].filter(btn=>btn.getClientRects().length).slice(0,22).map(btn=>btn.getAttribute('aria-label')??btn.textContent?.trim().slice(0,30)),
+              })).catch(()=>null);
+              console.log('Edge candidate state ' + JSON.stringify({state,errors:errors.slice(-15),consoleErrors:consoleErrors.slice(-12),failedAssets:failedAssets.slice(-30)}));
             }
-          });
-          const entry=statements.find(n=>n.type==='FunctionDeclaration'&&n.id.name==='aS');
-          const service=statements.find(n=>n.type==='ClassDeclaration'&&n.id.name==='X');
-          console.log('Candidate settings routing ' + JSON.stringify({map,entryBytes:src(entry)?.length,entryTail:src(entry)?.slice(-1700),settingsClassHead:src(service)?.slice(0,700)}));
+          } finally { await browser.close(); }
           NODE
+      - name: Record the candidate browser result
+        if: always()
+        shell: bash
+        env:
+          SMOKE: ${{ steps.smoke.outcome }}
+        run: printf 'Candidate startup in Edge %s\n' "$SMOKE" >> "$GITHUB_STEP_SUMMARY"
