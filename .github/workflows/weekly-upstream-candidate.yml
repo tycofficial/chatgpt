@@ -1,85 +1,149 @@
-name: Capture and verify the newly observed public ChatGPT build
+name: Diagnose the new build's native ABI and browser startup
 on:
   push:
     branches: [qa/weekly-upstream-0237c4dd]
 permissions:
   contents: read
+  actions: read
 jobs:
-  candidate:
+  inspect:
     runs-on: windows-2025
-    timeout-minutes: 38
+    timeout-minutes: 16
     defaults:
       run:
         shell: bash
     env:
-      EXPECTED_BUILD: 0237c4dd9e54c7e3a619581b909d792de582fee9
-      PRODUCTION_BASE: 3a59867ab3a8be0ef541bc5fd54161c1ca742a49
+      UPSTREAM: 0237c4dd9e54c7e3a619581b909d792de582fee9
     steps:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-          fetch-depth: 2
       - uses: actions/setup-node@v7
         with:
           node-version: 24
           package-manager-cache: false
-      - name: Install the captured graph parser and test dependencies
-        run: npm ci --no-audit --no-fund
-      - id: capture
-        name: Capture one coherent public asset graph
-        run: |
-          set -euo pipefail
-          capture="$RUNNER_TEMP/chatgpt-upstream-capture"
-          node --use-env-proxy scripts/capture-native-upstream.mjs --out "$capture" \
-            --expected-build "$EXPECTED_BUILD" --concurrency 12 --min-free-mb 1600
-          node --input-type=module - "$capture/$EXPECTED_BUILD/capture-manifest.json" <<'NODE'
-          import assert from 'node:assert/strict';
-          import { createHash } from 'node:crypto';
-          import { readFile } from 'node:fs/promises';
-          const bytes = await readFile(process.argv[2]);
-          const graph = JSON.parse(bytes);
-          assert.equal(graph.sourceBuild, process.env.EXPECTED_BUILD);
-          assert.equal(graph.status, 'complete');
-          assert.equal(graph.currentAtCompletion, true);
-          assert.equal(graph.assets.length, graph.discoveredAssets);
-          console.log('Complete upstream graph ' + JSON.stringify({
-            build: graph.sourceBuild, version: graph.sourceVersion, manifest: graph.shell.manifest,
-            runtime: graph.runtime, entry: graph.entry, assets: graph.assets.length, edges: graph.links.length,
-            bytes: graph.capturedBytes, digest: createHash('sha256').update(bytes).digest('hex'),
-          }));
-          NODE
-      - name: Preserve verified raw resources and the capture manifest
-        run: |
-          set -euo pipefail
-          temp_dir="$(cygpath -u "$RUNNER_TEMP")"
-          tar -C "$temp_dir/chatgpt-upstream-capture" -czf "$temp_dir/chatgpt-upstream.tar.gz" "$EXPECTED_BUILD"
-      - name: Save the captured data for review
-        uses: actions/upload-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: chatgpt-verified-public-graph-0237c4dd
-          path: ${{ runner.temp }}/chatgpt-upstream.tar.gz
-          if-no-files-found: error
-          retention-days: 3
-          compression-level: 0
-      - name: Build the isolated Pages candidate
+          path: ${{ runner.temp }}/chatgpt-candidate-archive
+          github-token: ${{ github.token }}
+          run-id: 45152117130
+      - name: Unpack the already verified capture on this runner
         run: |
           set -euo pipefail
-          git merge-base --is-ancestor "$PRODUCTION_BASE" HEAD
-          node scripts/adopt-native-upstream.mjs "$RUNNER_TEMP/chatgpt-upstream-capture/$EXPECTED_BUILD"
+          task_tmp="$(cygpath -u "$RUNNER_TEMP")"
+          mkdir -p "$task_tmp/chatgpt-upstream-capture"
+          tar -C "$task_tmp/chatgpt-upstream-capture" -xzf "$task_tmp/chatgpt-candidate-archive/chatgpt-upstream.tar.gz"
+          npm ci --no-audit --no-fund
+      - name: Locate original chunks and adapter factories in the captured graph
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFile, readdir } from 'node:fs/promises';
+          import { join } from 'node:path';
+          import { createHash } from 'node:crypto';
+          import assert from 'node:assert/strict';
+          const capture = join(process.env.RUNNER_TEMP, 'chatgpt-upstream-capture', process.env.UPSTREAM);
+          const bytes=await readFile(join(capture,'capture-manifest.json'));
+          assert.equal(createHash('sha256').update(bytes).digest('hex'), 'b2e4fcf1f0c77059f64aa6b8cca9f11312b14fef4920171d131e02f4a2440e59');
+          const graph=JSON.parse(bytes);
+          assert.equal(graph.status,'complete');
+          const paths=new Map();
+          for(const asset of graph.assets) {
+            const url=new URL(asset.url), chunk=/(?:^|\/)(\d+)\.[a-f\d]{8,}\.js$/.exec(url.pathname);
+            if (chunk) {
+              if (!paths.has(chunk[1])) paths.set(chunk[1],[]);
+              paths.get(chunk[1]).push({path:url.pathname, sha256:asset.sha256});
+            }
+          }
+          const tests=(await readdir('tests')).filter(name=>name.endsWith('.test.mjs'));
+          const fixtureNames=new Set();
+          for(const file of tests) {
+            const content=await readFile(join('tests',file),'utf8');
+            for(const [,chunk] of content.matchAll(/\b(\d+\.[a-f\d]{8,}\.js)\b/g)) fixtureNames.add(chunk);
+          }
+          const mappings=[];
+          for(const fixture of [...fixtureNames].sort()) {
+            const options=paths.get(fixture.split('.')[0]) ?? [];
+            if(!options.some(row=>row.path.endsWith('/'+fixture))) mappings.push({fixture, options});
+          }
+          console.log('Updated fixture chunks ' + JSON.stringify(mappings));
+          const boot=await readFile('src/native-client/boot-adapter.mjs','utf8');
+          const adapterFactories=[...new Set([...boot.matchAll(/adaptFactory\('([\w$]+)'/g)].map(m=>m[1]))];
+          const probeFactories=['ouEa','HkKI','WWxl','ZG9f','QkCx','Afr7','JmpW','bsEp','CKur','JrPc','XSEO','SGsN','q3HK','vnLQ','QtaM','zskm','sm3b','Q840','PBZ3','ZQvf','khOd'];
+          const names=[...new Set([...adapterFactories,...probeFactories])];
+          const regexp=new RegExp('[,{]\\s*["\\x27]?(' + names.map(name=>name.replaceAll('$','\\$')).join('|') + ')["\\x27]?\\s*(?=:\\s*\\(?function|\\()','g');
+          const files=graph.assets.filter(asset=>asset.path.startsWith('public/chatgpt.com/cdn/assets/')&&asset.path.endsWith('.js'));
+          const positions=new Map(names.map(name=>[name,new Set()]));
+          let cursor=0;
+          await Promise.all(Array.from({length:12},async()=>{
+            while(cursor<files.length){
+              const asset=files[cursor++];
+              const src=await readFile(join(capture,asset.path),'utf8');
+              for(const match of src.matchAll(regexp)) positions.get(match[1]).add(new URL(asset.url).pathname);
+            }
+          }));
+          const absent=names.filter(name=>!positions.get(name).size);
+          const found=Object.fromEntries(probeFactories.map(name=>[name,[...positions.get(name)].slice(0,12)]));
+          const duplicate=names.filter(name=>positions.get(name).size>1).map(name=>[name,positions.get(name).size]);
+          console.log('Original exports ' + JSON.stringify({adapterCount:adapterFactories.length,absent,found,duplicate}));
+          NODE
+      - name: Build the isolated candidate from the capture
+        run: |
+          set -euo pipefail
+          node scripts/adopt-native-upstream.mjs "$RUNNER_TEMP/chatgpt-upstream-capture/$UPSTREAM"
           node scripts/build-native-client.mjs --activate
           npm run native:check
-          built="$(node -p "require('./native-client/active.json').sourceBuild + ' ' + require('./native-client/active.json').release")"
-          printf 'Isolated candidate %s\n' "$built"
-      - name: Verify adapter and application regressions
+      - id: smoke
+        name: Open the isolated candidate in real Microsoft Edge
+        continue-on-error: true
         run: |
           set -euo pipefail
-          export GENERATED_PUBLICATION_TEST_TMPDIR="$(node -p "require('node:fs').realpathSync(process.env.RUNNER_TEMP)")"
-          node --test --test-concurrency=2 tests/*.test.mjs
-      - name: Save a graph manifest if the capture did not complete
-        if: failure() && steps.capture.outcome == 'failure'
-        uses: actions/upload-artifact@v4
-        with:
-          name: chatgpt-incomplete-capture-diagnostics-0237c4dd
-          path: ${{ runner.temp }}/chatgpt-upstream-capture/0237c4dd9e54c7e3a619581b909d792de582fee9/capture-manifest.json
-          if-no-files-found: ignore
-          retention-days: 3
+          npm install --prefix "$RUNNER_TEMP/weekly-browser" --no-audit --no-fund --package-lock=false playwright-core@1.58.2
+          node scripts/serve-native-client.mjs > "$RUNNER_TEMP/weekly-native-preview.log" 2>&1 &
+          site_pid=$!
+          trap 'kill "$site_pid" 2>/dev/null || true' EXIT
+          curl -fSs --retry 9 --retry-connrefused http://127.0.0.1:4400/chatgpt/native-client/active.json > /dev/null
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { join } from 'node:path';
+          import { pathToFileURL } from 'node:url';
+          const {chromium}=await import(pathToFileURL(join(process.env.RUNNER_TEMP,'weekly-browser/node_modules/playwright-core/index.mjs')).href);
+          const base='http://127.0.0.1:4400/chatgpt/';
+          const manifest=await fetch(base+'native-client/active.json').then(r=>r.json());
+          assert.equal(manifest.sourceBuild,process.env.UPSTREAM);
+          const browser=await chromium.launch({channel:'msedge', headless:true});
+          const errors=[],failedAssets=[];
+          try {
+            const context=await browser.newContext({locale:'zh-CN'});
+            const page=await context.newPage();
+            page.on('pageerror',err=>errors.push({name:err.name,message:err.message.slice(0,180)}));
+            page.on('response',r=>{
+              const url=new URL(r.url());
+              if (r.status()>=400&&url.host==='127.0.0.1:4400'&&url.pathname.includes('/original-client/')) {
+                failedAssets.push({path:url.pathname,status:r.status()});
+              }
+            });
+            try {
+              await page.goto(base,{waitUntil:'domcontentloaded',timeout:35000});
+              await page.locator('#prompt-textarea[contenteditable="true"], .ProseMirror[contenteditable="true"]').first().waitFor({state:'visible',timeout:42000});
+              const flags=await page.evaluate(()=>({sourceBuild:document.documentElement.dataset.build,
+                boot:window.__CHATGPT_REPLICA_ENV__?.release,path:location.pathname,title:document.title,
+                sidebar:!!document.querySelector('[data-testid="profile-button"]'), probe:window.__originalClientProbe?.length ?? null}));
+              assert.equal(flags.sourceBuild, process.env.UPSTREAM);
+              assert.equal(flags.boot,manifest.release);
+              console.log('Edge loaded the candidate ' + JSON.stringify(flags));
+            } finally {
+              const state=await page.evaluate(()=>({title:document.title,path:location.pathname,
+                body:document.body?.innerText.replace(/\s+/g,' ').slice(0,270),
+                controls:[...document.querySelectorAll('button')].filter(btn=>btn.getClientRects().length).slice(0,22).map(btn=>btn.getAttribute('aria-label')??btn.textContent?.trim().slice(0,30)),
+              })).catch(()=>null);
+              console.log('Edge candidate state ' + JSON.stringify({state,errors:errors.slice(-15),failedAssets:failedAssets.slice(-30)}));
+            }
+          } finally { await browser.close(); }
+          NODE
+      - name: Record the candidate browser result
+        if: always()
+        shell: bash
+        env:
+          SMOKE: ${{ steps.smoke.outcome }}
+        run: printf 'Candidate startup in Edge %s\n' "$SMOKE" >> "$GITHUB_STEP_SUMMARY"
