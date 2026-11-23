@@ -52,13 +52,18 @@ jobs:
           import { parse } from 'acorn';
           const graph = JSON.parse(await readFile('original-client/resource-manifest.json', 'utf8'));
           assert.equal(graph.sourceBuild, process.env.UPSTREAM);
-          const tracked = new Set(['pVM9','paCe','ymwH','pasN','khOd','d1ji','ztxE','cKRc','StMt','qixt']);
-          const marker = /sidebarElectron\.productMode\.trigger|codex\.browser\.execution/;
+          const tracked = new Set(['pVM9','paCe','ymwH','pasN','khOd','d1ji','ztxE','cKRc','StMt','qixt','ZQvf','PBZ3']);
+          const marker = /sidebarElectron\.productMode\.trigger|sidebar\.explore\.codex|codex\.browser\.execution/;
           const search = /\/(?:767086|955979|807489)\.[a-f0-9]+\.js$/;
-          for (const asset of graph.assets.filter(asset => search.test(asset.url))) {
+          const js = graph.assets.filter(asset => /^public\/chatgpt\.com\/cdn\/assets\/.*\.js$/.test(asset.path));
+          let offset = 0;
+          async function scan() {
+            while (offset < js.length) {
+              const asset = js[offset++];
             const bytes = await readFile(join('original-client', asset.path));
-            assert.equal(createHash('sha256').update(bytes).digest('hex'), asset.sha256);
             const source = bytes.toString('utf8');
+            if (!source.includes('__webpack_modules__') || !(search.test(asset.url) || marker.test(source))) continue;
+            assert.equal(createHash('sha256').update(bytes).digest('hex'), asset.sha256);
             const { body } = parse(source, { ecmaVersion: 'latest', sourceType: 'module' });
             const table = body.flatMap(statement => (statement.declaration ?? statement).declarations ?? [])
               .find(declaration => declaration.id.name === '__webpack_modules__')?.init;
@@ -72,9 +77,12 @@ jobs:
                 codexMenu: /sidebarElectron\.productMode\.codex/.test(code),
                 nativeTransition: /sidebarProductMode/.test(code), providerCheck: /codex\.browser/.test(code),
                 headingOnlyVariant: /onNewChat|codexAvailable/.test(code),
+              exploreMenu: /sidebar\.explore\.codex/.test(code), nativeDiscovery: /ZQvf|cKRc/.test(code),
               }));
             }
+            }
           }
+          await Promise.all(Array.from({ length: 10 }, scan));
           NODE
       - name: Click the native mode selector in Edge
         env:

@@ -155,31 +155,49 @@ try {
           else if (await labeledSidebar.isVisible()) await labeledSidebar.click();
         }
         await report('sidebar');
-        await switcher().waitFor({ state: 'visible', timeout: 9500 });
-        const triggerLabel = await switcher().getAttribute('aria-label');
-        await switcher().click();
-        await report('menu');
-        const codex = page.getByRole('menuitem').filter({ hasText: /(?:^|\s)Codex(?:$|\s)/i, visible: true }).first();
+        const explore = page.getByRole('button', { name: /^(?:探索|Explore)(?:\s|$)/i }).filter({ visible: true }).first();
+        const hasRail = await explore.isVisible();
+        let triggerLabel;
+        let codex;
+        if (hasRail) {
+          triggerLabel = (await explore.getAttribute('aria-label') ?? (await explore.innerText()).trim()) || 'Explore';
+          await explore.click();
+          await report('explore');
+          const row = page.locator('[data-explore-row]').filter({ has: page.getByText('Codex', { exact: true }), visible: true }).first();
+          const menu = page.getByRole('menuitem').filter({ hasText: /(?:^|\s)Codex(?:$|\s)/i, visible: true }).first();
+          const label = page.getByText('Codex', { exact: true }).filter({ visible: true }).first();
+          await row.or(menu).or(label).first().waitFor({ state: 'visible', timeout: 11000 });
+          codex = await row.isVisible() ? row.getByText('Codex', { exact: true }).first() : await menu.isVisible() ? menu : label;
+        } else {
+          await switcher().waitFor({ state: 'visible', timeout: 9500 });
+          triggerLabel = await switcher().getAttribute('aria-label');
+          await switcher().click();
+          await report('mode-menu');
+          codex = page.getByRole('menuitem').filter({ hasText: /(?:^|\s)Codex(?:$|\s)/i, visible: true }).first();
+        }
         await codex.waitFor({ state: 'visible', timeout: 9500 });
         const codexItem = (await codex.innerText()).replace(/\s+/g, ' ').trim();
         await codex.click();
         await page.waitForFunction(() => {
           const state = history.state?.usr ?? history.state;
           return state?.sidebarProductMode === 'codex';
-        }, { timeout: 15000 });
+        }, undefined, { timeout: 15000 });
         await editor().waitFor({ state: 'visible', timeout: 15000 });
         const codexMode = await selectedMode();
         assert.equal(codexMode, 'codex');
         await report('codex');
-        await switcher().click();
-        const work = page.getByRole('menuitem').filter({ hasText: /ChatGPT(?: Work)?|工作/i, visible: true }).first();
-        await work.waitFor({ state: 'visible', timeout: 9500 });
-        const workItem = (await work.innerText()).replace(/\s+/g, ' ').trim();
-        await work.click();
-        await editor().waitFor({ state: 'visible', timeout: 15000 });
-        await report('work');
-        console.log('Native Codex click QA ' + JSON.stringify({ release: active.release,
-          triggerLabel, codexItem, codexMode, workItem, workMode: await selectedMode(), path: new URL(page.url()).pathname }));
+        let workItem = null;
+        if (await switcher().isVisible()) {
+          await switcher().click();
+          const work = page.getByRole('menuitem').filter({ hasText: /ChatGPT(?: Work)?|工作/i, visible: true }).first();
+          await work.waitFor({ state: 'visible', timeout: 9500 });
+          workItem = (await work.innerText()).replace(/\s+/g, ' ').trim();
+          await work.click();
+          await editor().waitFor({ state: 'visible', timeout: 15000 });
+          await report('work');
+        }
+        console.log('Native Codex click QA ' + JSON.stringify({ release: active.release, rail: hasRail,
+          triggerLabel, codexItem, codexMode, workItem, currentMode: await selectedMode(), path: new URL(page.url()).pathname }));
       }
       if (process.env.QA_INSPECT_ENTRIES === '1') {
         const surfaces = [];
