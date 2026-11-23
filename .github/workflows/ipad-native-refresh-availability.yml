@@ -1,0 +1,121 @@
+name: Verify native iPad Safari reload availability
+
+on:
+  push:
+    branches: [qa/ipad-native-refresh-availability]
+    paths: [.github/workflows/ipad-native-refresh-availability.yml, scripts/qa/ipad-xcuitest/SafariQAUITests/SafariPublicSiteTests.swift]
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  safari:
+    runs-on: macos-26
+    timeout-minutes: 19
+    env:
+      IPAD_QA_PROJECT: scripts/qa/ipad-xcuitest/SafariQA.xcodeproj
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          sparse-checkout: scripts/qa/ipad-xcuitest
+
+      - name: Select the installed iPad Simulator
+        run: |
+          xcodebuild -version
+          sw_vers
+          xcrun simctl list devices available -j | node scripts/qa/ipad-xcuitest/select-device.mjs >> "$GITHUB_ENV"
+
+      - name: Build the native UI test runner for the selected iPad
+        timeout-minutes: 8
+        run: |
+          printf 'Testing %s on iPadOS %s\n' "$IPAD_NAME" "$IPAD_OS"
+          plutil -lint "$IPAD_QA_PROJECT/project.pbxproj"
+          xcodebuild -project "$IPAD_QA_PROJECT" -list -json | jq -e '.project.schemes | index("SafariQA")' >/dev/null
+          xcodebuild build-for-testing -project "$IPAD_QA_PROJECT" -scheme SafariQA \
+            -destination "platform=iOS Simulator,id=$IPAD_UDID" \
+            -derivedDataPath "$RUNNER_TEMP/ipad-xcuitest-build" \
+            -parallel-testing-enabled NO -quiet
+
+      - name: Boot the selected device and verify installed MobileSafari
+        timeout-minutes: 5
+        run: |
+          defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool NO
+          if ! xcrun simctl bootstatus "$IPAD_UDID" -b; then
+            xcrun simctl bootstatus "$IPAD_UDID"
+          fi
+          xcrun simctl list devices booted
+          xcrun simctl launch "$IPAD_UDID" com.apple.mobilesafari
+
+      - name: Open the anonymous loopback fixture in installed Safari
+        run: |
+          node <<'NODE' > "$RUNNER_TEMP/ipad-refresh-server.log" 2>&1 &
+          const fs = require('node:fs');
+          const http = require('node:http');
+          let visits = 0;
+          const server = http.createServer((request, response) => {
+            const headers = { 'Cache-Control': 'no-store' };
+            if (request.url === '/navigation-count') {
+              response.writeHead(200, headers).end(String(visits));
+              return;
+            }
+            if (request.url !== '/chatgpt/' || request.method !== 'GET') {
+              response.writeHead(404, headers).end();
+              return;
+            }
+            const current = ++visits;
+            const js = current === 1
+              ? "localStorage.setItem('native-refresh-witness','first');out.textContent='Fixture storage marker written'"
+              : "out.textContent=localStorage.getItem('native-refresh-witness')==='first'?'Fixture storage marker retained':'Fixture storage marker missing'";
+            response.writeHead(200, { ...headers, 'Content-Type': 'text/html; charset=utf-8' }).end(
+              '<!doctype html><html lang="en"><meta name="viewport" content="width=device-width,initial-scale=1">' +
+              '<title>Native Safari reload fixture</title><main><h1>Native Safari fixture generation ' + current + '</h1>' +
+              '<p id="witness"></p></main><script>const out=document.getElementById("witness");' + js + '</script></html>',
+            );
+          });
+          server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.RUNNER_TEMP + '/ipad-refresh-port', String(server.address().port)));
+          NODE
+          for attempt in {1..30}; do
+            [[ -s "$RUNNER_TEMP/ipad-refresh-port" ]] && break
+            sleep 0.2
+          done
+          port="$(cat "$RUNNER_TEMP/ipad-refresh-port")"
+          xcrun simctl openurl "$IPAD_UDID" "http://127.0.0.1:$port/chatgpt/"
+
+      - name: Tap Safari's native Reload control and verify the new document
+        timeout-minutes: 7
+        run: |
+          # Only the fixed native action markers leave the runner.
+          set -o pipefail
+          umask 077
+          raw="$RUNNER_TEMP/ipad-xcuitest-private.log"
+          phases="$RUNNER_TEMP/ipad-xcuitest-phases.log"
+          results="$RUNNER_TEMP/ipad-xcuitest.xcresult"
+          set +e
+          xcodebuild test-without-building -project "$IPAD_QA_PROJECT" -scheme SafariQA \
+            -destination "platform=iOS Simulator,id=$IPAD_UDID" \
+            -derivedDataPath "$RUNNER_TEMP/ipad-xcuitest-build" -resultBundlePath "$results" \
+            -only-testing:SafariQAUITests/SafariPublicSiteTests/testNativeSafariRefreshAvailability \
+            -parallel-testing-enabled NO -disable-concurrent-destination-testing \
+            -test-timeouts-enabled YES -default-test-execution-time-allowance 480 2>&1 | tee "$raw" | \
+            awk 'match($0, /IPAD_UI_QA (native-availability-runner|native-safari-foreground|native-first-document|native-reload-tapped|native-reloaded-document|native-storage-retention|failed-[a-z-]+)\r?$/) { print substr($0, RSTART, RLENGTH); fflush() }' | tee "$phases"
+          build_exit="${PIPESTATUS[0]}"
+          set -e
+          printf 'XCTest exit status %s\n' "$build_exit"
+          if [[ "$build_exit" != 0 ]]; then
+            sed -nE 's#^.*SafariPublicSiteTests\.swift:([0-9]+): error:.*#XCTest reported an error at Swift line \1#p' "$raw" | sort -u
+          fi
+          counts="$RUNNER_TEMP/ipad-xcuitest-counts.json"
+          [[ "$build_exit" == 0 ]] || exit "$build_exit"
+          xcrun xcresulttool get test-results summary --path "$results" | jq '{totalTestCount, passedTests, failedTests, skippedTests}' | tee "$counts"
+          jq -e '.totalTestCount == 1 and .passedTests == 1 and .failedTests == 0' "$counts" >/dev/null
+          grep -Fxq "IPAD_UI_QA native-reload-tapped" "$phases"
+          grep -Fxq "IPAD_UI_QA native-storage-retention" "$phases"
+          port="$(cat "$RUNNER_TEMP/ipad-refresh-port")"
+          count="$(curl --fail --silent --show-error --max-time 5 "http://127.0.0.1:$port/navigation-count")"
+          printf "Native Safari document loads %s\n" "$count"
+          [[ "$count" == 2 ]]

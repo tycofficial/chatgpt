@@ -8,6 +8,31 @@ final class SafariPublicSiteTests: XCTestCase {
     private let reloadNames = ["Reload", "Reload Page", "Reload This Page", "reloadButton", "重新载入", "重新載入", "重新加载", "重新整理", "刷新"]
 
     @MainActor
+    func testNativeSafariRefreshAvailability() {
+        continueAfterFailure = false
+        mark("native-availability-runner")
+        let safari = XCUIApplication(bundleIdentifier: "com.apple.mobilesafari")
+        safari.activate()
+        guard check(safari.wait(for: .runningForeground, timeout: 20), "native-safari-foreground") else { return }
+        mark("native-safari-foreground")
+        let first = matchingText(in: safari, "Native Safari fixture generation 1").firstMatch
+        guard check(first.waitForExistence(timeout: 40), "native-first-document") else { return }
+        let written = matchingText(in: safari, "Fixture storage marker written").firstMatch
+        guard check(written.waitForExistence(timeout: 8), "native-storage-write") else { return }
+        mark("native-first-document")
+        let reload = named(safari.buttons, reloadNames)
+        guard check(reload.waitForExistence(timeout: 12) && reload.isHittable, "native-reload-control") else { return }
+        reload.tap()
+        mark("native-reload-tapped")
+        let updated = matchingText(in: safari, "Native Safari fixture generation 2").firstMatch
+        guard check(updated.waitForExistence(timeout: 35), "native-reloaded-document") else { return }
+        let preserved = matchingText(in: safari, "Fixture storage marker retained").firstMatch
+        guard check(preserved.waitForExistence(timeout: 10), "native-storage-retention") else { return }
+        mark("native-reloaded-document")
+        mark("native-storage-retention")
+    }
+
+    @MainActor
     func testPublicLoginRefreshAndFollowUpInSafari() async {
         continueAfterFailure = false
         mark("runner-started")
