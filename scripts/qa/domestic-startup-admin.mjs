@@ -223,13 +223,21 @@ try {
         assert.equal(page.url(), codexThread.href, 'Codex follow-up opened another thread');
         assert.equal(modelPosts, 4);
         assert.equal(codexRequests.length, 2);
-        for (const expected of ['ADMIN-DIRECT-QA-3', 'ADMIN-DIRECT-QA-4', ...codexPrompts]) {
-          const message = page.locator('main').getByText(expected, { exact: true }).filter({ visible: true });
-          assert.equal(await message.count(), 1, 'Missing or duplicate visible Codex message: ' + expected);
+        for (const [role, texts] of [['user', codexPrompts], ['assistant', ['ADMIN-DIRECT-QA-3', 'ADMIN-DIRECT-QA-4']]]) {
+          for (const expected of texts) {
+            const copies = page.locator('main').getByText(expected, { exact: true }).filter({ visible: true });
+            const messageRoles = await copies.evaluateAll(nodes => nodes.flatMap(node => {
+              const headings = [...node.closest('main').querySelectorAll('h4[data-conversation-role]')];
+              const speaker = headings.findLast(heading => heading.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING);
+              return speaker ? [speaker.dataset.conversationRole] : [];
+            }));
+            assert.deepEqual(messageRoles, [role], 'Missing or duplicate visible Codex message: ' + expected);
+          }
         }
         console.log('Native Codex two-turn QA ' + JSON.stringify({ release: active.release,
           threadPath: codexThread.pathname, nativeMain: true, preservedMode: await selectedMode(),
-          firstCodexReplyMs, secondCodexReplyMs, codexRequests, modelPosts, reloadedReply: true, sameThread: true }));
+          firstCodexReplyMs, secondCodexReplyMs, codexRequests, modelPosts, reloadedReply: true, sameThread: true,
+          visibleUserMessages: 2, visibleAssistantReplies: 2 }));
         let workItem = null;
         if (await switcher().isVisible()) {
           await switcher().click();
