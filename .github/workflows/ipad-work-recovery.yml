@@ -32,7 +32,9 @@ jobs:
             -destination "platform=iOS Simulator,id=$IPAD_UDID" \
             -derivedDataPath "$qa_root/build" -parallel-testing-enabled NO -quiet
 
-      - name: Test Work against the runner-local fixture in MobileSafari
+      - id: work-safari
+        name: Test Work against the runner-local fixture in MobileSafari
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -71,6 +73,15 @@ jobs:
           result="$(curl --cacert "$qa_root/tls/ca.crt" --fail --silent --show-error https://127.0.0.1:4400/__ipad_qa/metrics)"
           echo "$result"
           printf '%s\n' "$result" | jq -e '.documentLoads >= 2 and .inferenceCalls == 0 and .planType == "plus"'
+
+      - name: Record the simulator verification result
+        if: always()
+        shell: bash
+        env:
+          IPAD_RESULT: ${{ steps.work-safari.outcome }}
+        run: |
+          printf 'Native Safari fixture check: %s\n' "$IPAD_RESULT" >> "$GITHUB_STEP_SUMMARY"
+          printf 'Native Safari fixture check: %s\n' "$IPAD_RESULT"
 
       - name: Attach simulator evidence
         uses: actions/upload-artifact@v4

@@ -2,7 +2,6 @@ import XCTest
 
 final class SafariPublicSiteTests: XCTestCase {
     private let workNames = ["Work", "工作"]
-    private let projectNames = ["Choose project", "Select project", "选择项目"]
     private let modelNames = ["Choose ChatGPT model", "Choose model", "选择 ChatGPT 模型", "选择模型"]
     private let sendNames = ["Send", "Send message", "Send prompt", "发送", "发送消息", "发送提示"]
     private let editorNames = ["prompt-textarea", "使用 ChatGPT Work", "Use ChatGPT Work", "Ask anything", "Message", "发消息", "询问任何问题", "想要了解什么？"]
@@ -47,13 +46,26 @@ final class SafariPublicSiteTests: XCTestCase {
             throw error
         }
         print("IPAD_QA tappable Work selector found")
-        work.tap()
+        let workIsSelected = NSPredicate { _, _ in
+            let state = String(describing: work.value ?? "").lowercased()
+            return work.isSelected || ["1", "true", "on", "打开", "已打开"].contains(state)
+        }
+        if !workIsSelected.evaluate(with: work) {
+            work.tap()
+        }
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: workIsSelected, object: work)], timeout: 12),
+                       .completed, "The native Work switch did not remain selected")
+        print("IPAD_QA native-work-mode-selected")
 
-        _ = try waitForHittable(named(projectNames, in: web.buttons), seconds: 15)
-        let picker = try waitForHittable(named(modelNames, in: web.buttons), seconds: 15)
+        let model = named(modelNames, in: web.descendants(matching: .any))
+        let curated = web.buttons.matching(NSPredicate(format: "label BEGINSWITH[c] %@", "6.2 Sol"))
+        let picker = try waitForHittable([model, curated], seconds: 20)
+        print("IPAD_QA native-work-model-control-visible")
         picker.tap()
-        _ = try waitForHittable(named(["选择模型", "Choose model"], in: web.descendants(matching: .any)), seconds: 10)
+        let effort = named(["轻度", "Low", "提高思考力", "Thinking effort"], in: web.descendants(matching: .any))
+        _ = try waitForHittable(effort, seconds: 12)
         picker.tap()
+        print("IPAD_QA native-work-model-options-visible")
 
         let editor = try waitForHittable(
             [named(editorNames, in: web.descendants(matching: .any)), web.textViews, web.textFields],
@@ -70,8 +82,10 @@ final class SafariPublicSiteTests: XCTestCase {
         XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: typed, object: nil)], timeout: 8),
                        .completed, "Could not verify the typed Work draft")
 
-        // Move focus away from the editor so an iPad software keyboard cannot hide the browser toolbar.
-        work.tap()
+        let hideKeyboard = named(["Hide keyboard", "Dismiss keyboard", "隐藏键盘", "关闭键盘"], in: safari.keyboards.buttons).firstMatch
+        if hideKeyboard.exists && hideKeyboard.isHittable {
+            hideKeyboard.tap()
+        }
     }
 
     private func named(_ names: [String], in query: XCUIElementQuery) -> XCUIElementQuery {
