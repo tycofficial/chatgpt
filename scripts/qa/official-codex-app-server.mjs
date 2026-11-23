@@ -12,6 +12,8 @@ const state = join(root, 'codex-state');
 await Promise.all([mkdir(workspace), mkdir(state)]);
 
 const command = 'python3 -c "print(17 * 13)"';
+const includeTool = process.env.QA_CODEX_TEST_MODE !== 'conversation';
+const firstStageRequestCount = includeTool ? 2 : 1;
 const requested = [];
 const fixtureErrors = [];
 function completed(id) {
@@ -30,11 +32,11 @@ const fixture = createServer(async (req, res) => {
     requested.push(payload);
     const number = requested.length;
     const id = 'resp-' + number;
-    const item = number === 1 ? {
+    const item = includeTool && number === 1 ? {
       type: 'function_call', call_id: 'test-exec', name: 'exec_command', arguments: JSON.stringify({ cmd: command }),
     } : {
       type: 'message', id: 'msg-' + number, role: 'assistant', phase: 'final_answer',
-      content: [{ type: 'output_text', text: number === 2 ? 'The result is 221.' : 'The previous result was 221.' }],
+      content: [{ type: 'output_text', text: number <= firstStageRequestCount ? 'The result is 221.' : 'The previous result was 221.' }],
     };
     res.writeHead(200, { 'Content-Type': 'text/event-stream' });
     for (const event of [{ type: 'response.created', response: { id } }, { type: 'response.output_item.done', item }, completed(id)]) {
@@ -84,7 +86,7 @@ try {
     'model = "fixture-codex"', 'approval_policy = "never"', 'model_provider = "fixture"',
     '[model_providers.fixture]', 'name = "Local integration test"', 'base_url = "' + url + '"',
     'wire_api = "responses"', 'request_max_retries = 0', 'stream_max_retries = 0',
-    '[features]', 'enable_request_compression = false', 'unified_exec = true', 'shell_snapshot = false', 'use_legacy_landlock = true', '',
+    '[features]', 'enable_request_compression = false', 'unified_exec = true', 'shell_snapshot = false', '',
   ].join('\n'), { mode: 0o600 });
   const env = { ...process.env, CODEX_HOME: state };
   delete env.OPENAI_API_KEY;
@@ -94,7 +96,8 @@ try {
   const { thread } = await client.request('thread/start', { model: 'fixture-codex', cwd: workspace, sandbox: 'workspace-write', approvalPolicy: 'never' });
   const direct = await runTurn(client, thread.id, 'Use Python to calculate 17 times 13.');
   const done = direct.find(event => event.method === 'item/completed' && event.params.item.type === 'commandExecution')?.params.item;
-  assert.ok(done, 'The real Codex process did not emit a command item: ' + JSON.stringify({
+  if (includeTool) {
+    assert.ok(done, 'The real Codex process did not emit a command item: ' + JSON.stringify({
     events: direct.map(event => [event.method, event.params?.item?.type]),
     requests: requested.map(payload => (payload.tools ?? []).map(tool => tool.name ?? tool.type)),
     results: requested.flatMap(payload => (payload.input ?? []).filter(item => item.type === 'function_call_output')
@@ -102,22 +105,23 @@ try {
     warnings: direct.filter(event => event.method === 'warning').map(event => event.params?.message?.slice(0, 360)),
     fixtureErrors,
   }));
-  assert.equal(done.exitCode, 0, JSON.stringify(done));
-  assert.match(done.aggregatedOutput, /221/);
+    assert.equal(done.exitCode, 0, JSON.stringify(done));
+    assert.match(done.aggregatedOutput, /221/);
+    assert.ok(requested[1].input.some(item => item.type === 'function_call_output' && item.call_id === 'test-exec' && JSON.stringify(item.output).includes('221')));
+  }
   assert.ok(direct.some(event => event.method === 'item/completed' && event.params.item.type === 'agentMessage' && /221/.test(event.params.item.text)));
-  assert.equal(requested.length, 2);
-  assert.ok(requested[1].input.some(item => item.type === 'function_call_output' && item.call_id === 'test-exec' && JSON.stringify(item.output).includes('221')));
+  assert.equal(requested.length, firstStageRequestCount);
   await client.close();
   client = await connect();
   const resumed = await client.request('thread/resume', { threadId: thread.id, excludeTurns: true });
   assert.equal(resumed.thread.id, thread.id);
   const next = await runTurn(client, thread.id, 'What was the previous result?');
   assert.ok(next.some(event => event.method === 'item/completed' && event.params.item.type === 'agentMessage' && /221/.test(event.params.item.text)));
-  assert.equal(requested.length, 3);
-  assert.match(JSON.stringify(requested[2].input), /Use Python to calculate 17 times 13/);
+  assert.equal(requested.length, firstStageRequestCount + 1);
+  assert.match(JSON.stringify(requested[firstStageRequestCount].input), /Use Python to calculate 17 times 13/);
   console.log('Real Codex App Server QA ' + JSON.stringify({
     server: client.server?.userAgent, upstream: 'loopback Responses fixture', openaiAccountUsed: false,
-    tool: done.type, commandExitCode: done.exitCode, pythonOutput: '221', restarted: true,
+    tool: done?.type ?? null, commandExitCode: done?.exitCode ?? null, pythonOutput: done ? '221' : null, restarted: true,
     resumedSameThread: true, turns: 2, upstreamRequests: requested.length,
   }));
 } finally {

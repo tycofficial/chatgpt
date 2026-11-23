@@ -7,6 +7,8 @@ permissions:
 jobs:
   app-server:
     runs-on: ubuntu-24.04
+    env:
+      QA_CODEX_TEST_MODE: conversation
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v6
@@ -20,7 +22,7 @@ jobs:
         run: |
           npm install --prefix "$RUNNER_TEMP/tyc-codex-cli" --no-save --no-package-lock --ignore-scripts --no-audit --no-fund @openai/codex@0.171.0
           echo "$RUNNER_TEMP/tyc-codex-cli/node_modules/.bin" >> "$GITHUB_PATH"
-      - name: Run the server, execute Python, and resume the same thread after restart
+      - name: Run the official server and resume the same thread after restart
         run: |
           codex --version
           node scripts/qa/official-codex-app-server.mjs
