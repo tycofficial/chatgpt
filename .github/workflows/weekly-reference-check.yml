@@ -1,0 +1,60 @@
+name: Verify the public site against the official frontend
+on:
+  push:
+    branches: [qa/weekly-reference-check]
+permissions:
+  contents: read
+jobs:
+  reference:
+    runs-on: windows-2025
+    timeout-minutes: 5
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Read the live GitHub Pages manifest
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { writeFile } from 'node:fs/promises';
+          import { join } from 'node:path';
+          const url = new URL('https://tycofficial.github.io/chatgpt/native-client/active.json');
+          const response = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(20000) });
+          assert.equal(response.status, 200);
+          const manifest = await response.json();
+          assert.equal(manifest.active, true);
+          assert.match(manifest.release, /^[a-f\d]{16}$/);
+          assert.match(manifest.sourceBuild, /^[a-f\d]{40}$/);
+          console.log('Public release ' + JSON.stringify(manifest));
+          await writeFile(join(process.env.RUNNER_TEMP, 'public-chatgpt-release.json'), JSON.stringify(manifest));
+          NODE
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          persist-credentials: false
+          sparse-checkout: |
+            package.json
+            native-client/active.json
+            scripts/probe-native-upstream.mjs
+          sparse-checkout-cone-mode: false
+      - name: Run the repository's official build check
+        run: |
+          set -euo pipefail
+          git rev-parse HEAD
+          node --input-type=module <<'NODE'
+          import { readFile } from 'node:fs/promises';
+          import { join } from 'node:path';
+          const live = JSON.parse(await readFile(join(process.env.RUNNER_TEMP, 'public-chatgpt-release.json'), 'utf8'));
+          const local = JSON.parse(await readFile('native-client/active.json', 'utf8'));
+          console.log('Commit matches public ' + JSON.stringify({ release: live.release === local.release, sourceBuild: live.sourceBuild === local.sourceBuild }));
+          NODE
+          checked=0
+          for attempt in 1 2 3; do
+            if npm run reference:check; then checked=1; break; fi
+            if [[ "$attempt" != 3 ]]; then sleep 3; fi
+          done
+          [[ "$checked" == 1 ]]
