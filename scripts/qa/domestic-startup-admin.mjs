@@ -246,25 +246,20 @@ try {
         await page.waitForTimeout(600);
         const schedulePanelListed = await findText(task).isVisible();
         await report('automation-detail');
-        const manualRun = panelControl(/^(?:立即运行|运行|Run now|Run)$/i);
-        const disable = panelControl(/^(?:暂停|停用|禁用|Pause|Disable)(?:自动化|计划任务)?$/i);
+        const taskDialog = page.getByRole('dialog').filter({ visible: true }).last();
+        const manualRun = taskDialog.getByRole('button', { name: /^(?:立即运行|运行|Run now|Run)$/i }).filter({ visible: true }).first();
+        const disable = taskDialog.getByRole('button', { name: '暂停', exact: true }).filter({ visible: true }).first();
+        await disable.waitFor({ state: 'visible', timeout: 10000 });
         const runControlVisible = await manualRun.isVisible();
-        const nativeDisable = await disable.isVisible();
-        if (nativeDisable) {
-          await disable.click();
-          const confirm = page.getByRole('dialog').getByRole('button', { name: /^(?:确认|确定|暂停|停用|Pause|Disable|Confirm)$/i })
-            .filter({ visible: true }).first();
-          if (await confirm.isVisible()) await confirm.click();
-        }
+        await disable.click();
+        await findText('已暂停').waitFor({ state: 'visible', timeout: 10000 });
         if (page.url() !== room) await page.goto(room, { waitUntil: 'domcontentloaded', timeout: 45000 });
-        await reloadRoom();
-        if (!nativeDisable) await submitDot('/automation off ' + scheduleId, '已停用自动化。');
         await reloadRoom();
         await submitDot('/automation list', scheduleId + ' · ' + task + ' · 停用');
         assert.equal(modelPosts, 2, 'Automation setup or disable unexpectedly invoked a model');
         console.log('Native Dot automation persistence QA ' + JSON.stringify({ release: active.release, created: true,
           browserManual: true, reloads: 3, enabledAfterCreate: true, disabledAfterReload: true,
-          schedulePanelListed, nativeDisable, runControlVisible }));
+          schedulePanelListed, nativeDisable: true, runControlVisible }));
       }
       if (process.env.QA_NATIVE_CODEX_ENTRY === '1') {
         const modeLabel = /切换.*模式|切換.*模式|Switch mode/i;
