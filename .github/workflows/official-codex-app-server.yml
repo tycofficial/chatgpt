@@ -6,9 +6,17 @@ permissions:
   contents: read
 jobs:
   app-server:
-    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            scenario: conversation
+          - os: macos-15
+            scenario: sandboxed-command
+    runs-on: ${{ matrix.os }}
     env:
-      QA_CODEX_TEST_MODE: conversation
+      QA_CODEX_TEST_MODE: ${{ matrix.scenario }}
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v6
@@ -22,7 +30,7 @@ jobs:
         run: |
           npm install --prefix "$RUNNER_TEMP/tyc-codex-cli" --no-save --no-package-lock --ignore-scripts --no-audit --no-fund @openai/codex@0.171.0
           echo "$RUNNER_TEMP/tyc-codex-cli/node_modules/.bin" >> "$GITHUB_PATH"
-      - name: Run the official server and resume the same thread after restart
+      - name: Run the official server and verify this scenario
         run: |
           codex --version
           node scripts/qa/official-codex-app-server.mjs
