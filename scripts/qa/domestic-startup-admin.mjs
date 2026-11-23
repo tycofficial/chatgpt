@@ -137,6 +137,77 @@ try {
       assert.equal(authPosts, 1);
       assert.equal(modelPosts, 2);
       console.log('Browser QA '+JSON.stringify({engine,release:active.release,progress,authPosts,modelPosts,reloadedReply:true,sameThread:true,firstReplyMs,secondReplyMs}));
+      if (process.env.QA_NATIVE_DOT_JOURNAL === '1') {
+        const controls = () => page.evaluate(() => [...document.querySelectorAll('button, a, [role="menuitem"], [contenteditable="true"], textarea')]
+          .filter(node => node.getClientRects().length && getComputedStyle(node).visibility === 'visible')
+          .map(node => ({
+            tag: node.tagName, role: node.getAttribute('role'), aria: node.getAttribute('aria-label'), title: node.getAttribute('title'),
+            testId: node.getAttribute('data-testid'), placeholder: node.getAttribute('data-placeholder') ?? node.getAttribute('placeholder'),
+            name: (node.innerText ?? '').trim().replace(/\s+/g, ' ').slice(0, 62), href: node.getAttribute('href'),
+          })).slice(0, 75));
+        const report = async stage => console.log('Native Dot ' + stage + ' ' + JSON.stringify({
+          path: new URL(page.url()).pathname, controls: await controls(),
+        }));
+        const clickDot = page.getByRole('button', { name: 'Dot', exact: true }).filter({ visible: true }).first();
+        await page.goto(home, { waitUntil: 'domcontentloaded', timeout: 45000 });
+        await clickDot.click({ timeout: 30000 });
+        await page.waitForURL(url => /^\/chatgpt\/dots\/local-dot-[a-f0-9-]+\/?$/.test(url.pathname), { timeout: 30000 });
+        const room = page.url();
+        await report('entry');
+        const composer = page.locator('main [contenteditable="true"], main textarea, [data-testid*="composer"] [contenteditable="true"]')
+          .filter({ visible: true }).first();
+        await composer.waitFor({ state: 'visible', timeout: 30000 });
+        await report('room-ready');
+        const newNote = 'DOT-JOURNAL-CREATE-0237';
+        const editedNote = 'DOT-JOURNAL-EDITED-0237';
+        const findText = value => page.getByText(value, { exact: true }).filter({ visible: true }).last();
+        async function submitDot(text, receipt) {
+          await composer.fill(text);
+          const send = page.getByRole('button', { name: /^(?:发送|发送消息|Send|Send message)$/i }).filter({ visible: true }).last();
+          if (await send.isVisible() && await send.isEnabled()) await send.click();
+          else await composer.press('Enter');
+          const result = findText(receipt);
+          await result.waitFor({ state: 'visible', timeout: 20000 });
+          assert.equal(page.url(), room);
+          return (await result.innerText()).trim();
+        }
+        async function reloadRoom() {
+          await page.reload({ waitUntil: 'domcontentloaded', timeout: 45000 });
+          await composer.waitFor({ state: 'visible', timeout: 30000 });
+          assert.equal(page.url(), room);
+        }
+
+        const add = await submitDot('/journal add ' + newNote, /^已保存日记 · [0-9a-f-]+$/);
+        const id = add.match(/^已保存日记 · ([0-9a-f-]{36})$/)?.[1];
+        assert.ok(id, 'No saved journal entry ID');
+        await report('journal-added');
+        const journalLabel = /日记|日志|Journal/i;
+        const journalButton = page.getByRole('button', { name: journalLabel }).filter({ visible: true }).first()
+          .or(page.getByRole('link', { name: journalLabel }).filter({ visible: true }).first()).first();
+        let nativeJournalPanel = false;
+        if (await journalButton.isVisible()) {
+          const triggerLabel = await journalButton.getAttribute('aria-label') ?? (await journalButton.innerText()).trim();
+          await journalButton.click();
+          await findText(newNote).waitFor({ state: 'visible', timeout: 6500 }).catch(() => {});
+          nativeJournalPanel = await findText(newNote).isVisible();
+          console.log('Native Dot journal panel ' + JSON.stringify({ triggerLabel, listedEntry: nativeJournalPanel }));
+          await report('journal-panel');
+          if (page.url() !== room) await page.goto(room, { waitUntil: 'domcontentloaded', timeout: 45000 });
+          else await page.keyboard.press('Escape');
+        }
+        await reloadRoom();
+        await submitDot('/journal list', id + ' · ' + newNote);
+        await submitDot('/journal edit ' + id + ' ' + editedNote, '已修改日记 · ' + id);
+        await reloadRoom();
+        await submitDot('/journal list', id + ' · ' + editedNote);
+        await submitDot('/journal delete ' + id, '已删除日记 · ' + id);
+        await reloadRoom();
+        await submitDot('/journal list', '日记里还没有条目。');
+        assert.equal(modelPosts, 2, 'A local journal command unexpectedly triggered model inference');
+        console.log('Native Dot journal CRUD QA ' + JSON.stringify({ release: active.release, room: new URL(room).pathname,
+          composerCommands: true, created: true, edited: true, deleted: true, reloads: 3, sameRoom: true,
+          nativeJournalPanel, dotModelPosts: 0 }));
+      }
       if (process.env.QA_NATIVE_CODEX_ENTRY === '1') {
         const modeLabel = /切换.*模式|切換.*模式|Switch mode/i;
         const switcher = () => page.getByRole('button', { name: modeLabel }).filter({ visible: true }).first();
