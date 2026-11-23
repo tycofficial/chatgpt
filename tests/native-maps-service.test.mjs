@@ -148,14 +148,29 @@ test('the actual original maps home/shared query code consumes local service res
       return actual.body;
     } } },
   });
-  const queryDefinitions = {};
-  for (const id of ['aL', 'aM', 'cb']) {
-    const matches = factory.body.body.filter(node => node.type === 'FunctionDeclaration' && node.id.name === id);
-    assert.equal(matches.length, 1, 'Original maps query was not found: ' + id);
-    const declaration = matches[0];
-    queryDefinitions[id] = new vm.Script('(' + source.slice(declaration.start, declaration.end) + ')', { filename: module + '#' + id }).runInContext(context, { timeout: 1000 });
+  const definitions = factory.body.body.flatMap(statement => statement.declarations ?? [statement]);
+  function originalFunction(id, kind) {
+    const matches = definitions.filter(definition => definition.type === kind && definition.id?.name === id);
+    assert.equal(matches.length, 1, 'Original Maps binding was not found: ' + id);
+    const definition = matches[0];
+    let fn = definition;
+    if (kind === 'VariableDeclarator') {
+      // The original Q840 query registration carries the actual callback as its second argument.
+      const registration = definition.init;
+      assert.equal(registration?.type, 'CallExpression', id);
+      const callee = registration.callee.expressions?.at(-1) ?? registration.callee;
+      assert.equal(callee.object?.name, 'i', id);
+      assert.equal(callee.property?.name, 'q', id);
+      assert.equal(registration.arguments.length, 2, id);
+      fn = registration.arguments[1];
+      assert.equal(fn.type, 'ArrowFunctionExpression', id);
+    }
+    return new vm.Script('(' + source.slice(fn.start, fn.end) + ')', {
+      filename: module + '#' + id,
+    }).runInContext(context, { timeout: 1000 });
   }
-  context.aM = queryDefinitions.aM;
+  for (const id of ['aM', 'aN']) context[id] = originalFunction(id, 'FunctionDeclaration');
+  const queryDefinitions = Object.fromEntries(['aL', 'cb'].map(id => [id, originalFunction(id, 'VariableDeclarator')]));
   const get = key => ({ account: 'neutral-site-account', user: 'neutral-site-user', authenticated: true, guest: false, locale: { locale: 'zh-CN' } })[key];
   const signal = new AbortController().signal;
   const nativeHome = queryDefinitions.aL('neutral-query-key', { get });

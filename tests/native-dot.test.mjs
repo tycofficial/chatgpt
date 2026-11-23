@@ -10,6 +10,7 @@ import { streamCompletion } from '../runtime.js';
 import {
   createLocalDotAdapter, createLocalDotCompletion, LOCAL_DOT_DEFAULT_IMAGE_URL, LOCAL_DOT_RESOURCE_BUNDLE,
 } from '../src/native-client/local-dot-adapter.mjs';
+import { openNativeAtomFixture } from './support/native-atom-fixture.mjs';
 
 const memory = () => {
   const values = new Map();
@@ -460,104 +461,27 @@ test('account switches during real multipart reading abort storage; native capab
   assert.equal(overrides.b({}, 'neutral-site-account'), false);
 });
 
-test('b634 Q840.c passes one native context to the derived Dot account atom', async () => {
-  const fs = await import('node:fs/promises');
-  const vm = await import('node:vm');
-  const { createHash } = await import('node:crypto');
-  const ranges = [
-    {"id":"UQAX","file":"109308.4d55635a3c.js","start":28426,"end":28949,"sha256":"f4113790301efd13c49b60d3f31a740f3958b91365d1034eb476cbff1fd5c31c"},
-    {"id":"tyzk","file":"109308.4d55635a3c.js","start":30179,"end":30355,"sha256":"a3bc52c860f98c26cf8780067056f0e1a31a5b7f396d9f59c419ea5f003d6bfd"},
-    {"id":"ouEa","file":"399565.700e278f2d.js","start":600124,"end":600446,"sha256":"860afae409ae45b603070cd6f812e4af7653ba281ac232e1e137e63fe74c39d7"},
-    {"id":"AvFJ","file":"109308.4d55635a3c.js","start":26092,"end":28418,"sha256":"7bbc8b826b99722219d1b09d3e9928b672ce8fdf4ae245516c431cc9b1ade618"},
-    {"id":"iwK1","file":"109308.4d55635a3c.js","start":32572,"end":38521,"sha256":"41d99ef41c530842530a4b0ab3fa0c3c06e8f4a0d60bc6d66b2113cc672f94d4"},
-    {"id":"fbKo","file":"109308.4d55635a3c.js","start":39890,"end":51815,"sha256":"23f10c7caff927d924480e16a3f9c16bb8937f3e2a385668e1efc65540dc295c"},
-    {"id":"m4Vs","file":"109308.4d55635a3c.js","start":56110,"end":56591,"sha256":"9c96ef3d4b52f320d26fe33e48b3341e454015bcc8c0f363e9a8822765acfe23"},
-    {"id":"vMlG","file":"109308.4d55635a3c.js","start":56599,"end":56888,"sha256":"82110da560adb6855405aef4da7d667af7cca8bd9e91791d164c2a2c27838cb2"},
-    {"id":"KoFQ","file":"109308.4d55635a3c.js","start":22557,"end":26084,"sha256":"f2353f1185e2a426d8e29bda91e154152bf294224337de2ae4a1fbfc14f364f8"},
-    {"id":"HkKI","file":"399565.700e278f2d.js","start":600454,"end":606865,"sha256":"0323381dafa9be94cce36716146e8a711c609613a4ed78b42e1de1656da37341"},
-    {"id":"WWxl","file":"399565.700e278f2d.js","start":606873,"end":607850,"sha256":"e876e66c59e3b728cabef838484b558b068c1f2ce2c6bce6919ac48f9290d4e4"},
-    {"id":"PKjX","file":"109308.4d55635a3c.js","start":54644,"end":56102,"sha256":"3bdbc92b619ec19141ea60b8212106af9fe8040f6a2019b577d1d822722deb10"},
-    {"id":"wFEO","file":"109308.4d55635a3c.js","start":53712,"end":54113,"sha256":"ea823552009d005717c63506eed837c25cabcfec5165b6d9ca8e64afbb1a408a"},
-    {"id":"oFsh","file":"109308.4d55635a3c.js","start":54121,"end":54636,"sha256":"1cba620b7a131c5f8e2edc064d6d148f912264982d1c1987869d9b726e96906a"},
-    {"id":"XNFm","file":"109308.4d55635a3c.js","start":51823,"end":53704,"sha256":"b34d5ef97af3716abc0a55948d7c32189268a8200c7a4cb4c8c2c27320c06633"},
-    {"id":"NxBK","file":"async/414022.d7ac2f8f82.js","start":47187,"end":48551,"sha256":"15b3d446f55b33347584c8dc4ff15777fb0ce135488b577f54dec2842d8da418"},
-    {"id":"J6iR","file":"109308.4d55635a3c.js","start":31676,"end":32564,"sha256":"bdbec6e800bc45907c2045986de017a7ded615df6fe4e06e02693690efc71738"},
-    {"id":"PSDF","file":"109308.4d55635a3c.js","start":38762,"end":39882,"sha256":"62bf7e6b5bc14020defd8744004e8fc8809d53d7b518bda6e7c8ced895cefc1a"},
-    {"id":"suje","file":"async/414022.d7ac2f8f82.js","start":41124,"end":46786,"sha256":"6909b55ab5615af41076b7522c1418d2255cd6404c9721a47c36151f6516c312"},
-    {"id":"wYVE","file":"async/414022.d7ac2f8f82.js","start":27105,"end":27841,"sha256":"f2c79c1ac1a13265c3699d36b6191508b73e437f7d1ad6bdc84d24510b8bc18c"},
-    {"id":"HY2m","file":"async/414022.d7ac2f8f82.js","start":32967,"end":33624,"sha256":"64c1ce397db8657372cbf4455e3b371059c7040b91c8f4307c8be620187ab84b"},
-    {"id":"uyLo","file":"async/414022.d7ac2f8f82.js","start":48858,"end":49145,"sha256":"2a1445a89b2b7b2b61ef25eebc5b5c24d658539486c59675233b5e70d7231f19"},
-    {"id":"wo6g","file":"async/414022.d7ac2f8f82.js","start":27001,"end":27100,"sha256":"7a901fc692fdfcde497d764a7e7f0a301457b2726cf3aab2da1b325f6758719a"},
-    {"id":"D7Ms","file":"async/414022.d7ac2f8f82.js","start":49589,"end":52551,"sha256":"97d9650eb03ec270f97fd761c00c1f3338ea0de878b3730d9b6831c83d9ba9a6"},
-    {"id":"OtRH","file":"async/414022.d7ac2f8f82.js","start":40015,"end":41119,"sha256":"299bc3329f51a775937ceaa07c43fd3cdcba2d10a84b9cbf3694d283bc3c488b"},
-    {"id":"rbzn","file":"async/414022.d7ac2f8f82.js","start":32578,"end":32962,"sha256":"600afe0e4cdcd3045cd0779d893e998eb1f624f392fd8b2e2cffef914da6d29f"},
-    {"id":"UKIm","file":"async/414022.d7ac2f8f82.js","start":29206,"end":32573,"sha256":"a8ec2b8fb1c72e6a0b027b6f4e6090dc2dfd671c220f45c046b41b75893c4925"},
-    {"id":"H4sS","file":"async/414022.d7ac2f8f82.js","start":48556,"end":48853,"sha256":"b64fc8e7ac9ee39bb32f70183f3c7214b0ed08ec38196f66c57d309bfd9d4297"},
-    {"id":"pEZk","file":"async/414022.d7ac2f8f82.js","start":49150,"end":49584,"sha256":"feadbaf925a1f22a7969090da7756944741869eb066a2b35295bfe0350874a53"},
-    {"id":"MtYY","file":"async/414022.d7ac2f8f82.js","start":33629,"end":40010,"sha256":"77878158ed7bcf635717b260425122468d156c0e3a9987ac796cf8dea4d07a32"},
-    {"id":"OLOS","file":"async/414022.d7ac2f8f82.js","start":46791,"end":47182,"sha256":"571c65878710a83f4ce28a74d3e6ab1e9530cd6edc832f9e4213390f54f3c2c5"},
-    {"id":"slNz","file":"async/414022.d7ac2f8f82.js","start":27846,"end":29201,"sha256":"e21b15a404696ebfb22d31e4f8f10680edbcab5381d518882cbfffbe0414da2f"},
-  ];
-  const context = vm.createContext({ console, setTimeout, clearTimeout, queueMicrotask, performance, TextEncoder, TextDecoder, AbortController, AbortSignal });
-  const factories = new Map(), cache = new Map(), sourceFiles = new Map();
-  for (const record of ranges) {
-    let source = sourceFiles.get(record.file);
-    if (!source) {
-      source = await fs.readFile(new URL('../original-client/public/chatgpt.com/cdn/assets/' + record.file, import.meta.url), 'utf8');
-      sourceFiles.set(record.file, source);
-    }
-    const factory = source.slice(record.start, record.end);
-    assert.equal(createHash('sha256').update(factory).digest('hex'), record.sha256, 'Pinned original factory changed: ' + record.id);
-    const expression = factory.startsWith('(') ? 'function ' + factory : factory;
-    factories.set(record.id, new vm.Script('(' + expression + ')', { filename: record.file + '#' + record.id }).runInContext(context, { timeout: 1000 }));
-  }
-  function requireOriginal(id) {
-    if (cache.has(id)) return cache.get(id).exports;
-    assert.ok(factories.has(id), 'Original pure atom closure must not import network/UI module ' + id);
-    const module = { exports: {} };
-    cache.set(id, module);
-    factories.get(id)(module, module.exports, requireOriginal);
-    return module.exports;
-  }
-  requireOriginal.d = (exports, getters = {}, values = {}) => {
-    for (const [name, get] of Object.entries(getters)) Object.defineProperty(exports, name, { get, enumerable: true });
-    for (const [name, value] of Object.entries(values)) Object.defineProperty(exports, name, { value, enumerable: true });
-  };
-  requireOriginal.o = (value, name) => Object.prototype.hasOwnProperty.call(value, name);
-  requireOriginal.n = module => {
-    const get = module?.__esModule ? () => module.default : () => module;
-    Object.defineProperty(get, 'a', { get });
-    return get;
-  };
-  requireOriginal.r = exports => Object.defineProperty(exports, '__esModule', { value: true });
-  // Q840.c reexports UQAX.a. Exercise that factory with its pinned graph and store.
-  const runtime = sourceFiles.get('109308.4d55635a3c.js');
-  const graph = runtime.slice(runtime.indexOf('Q840:(function'));
-  assert.ok(graph.includes('c:()=>N.a') && graph.includes('N=c("UQAX")'));
-  const derive = requireOriginal('UQAX').a;
-  const token = requireOriginal('tyzk').a('DotNativeABITest');
-  function realScope() {
-    const store = requireOriginal('ouEa').b();
-    const node = { token, parent: null, store, cachedBindings: new Map(), signalBindings: new Map(), imperativeReadAtoms: new Set(), debugEntries: new Set(), value: {}, contextVersionAtom: requireOriginal('ouEa').a(0) };
-    const chain = new Map([[token.id, node]]);
-    return { get: atom => store.get(atom.resolve(node, chain)) };
-  }
-  const probe = derive(token, function (state) { return { arguments: arguments.length, get: typeof state.get }; });
-  assert.equal(realScope().get(probe).arguments, 1);
-  assert.equal(realScope().get(probe).get, 'function');
-  const broken = derive(token, (_argument, { get }) => get(null));
-  assert.throws(() => realScope().get(broken), /Cannot destructure/);
+test('archived Q840.c passes one native context to the derived Dot account atom', () => {
+  const { Q840, createScope } = openNativeAtomFixture();
+  const { scopeAtom, scope } = createScope('DotNativeABITest');
+  const derive = Q840.c;
+  const probe = derive(scopeAtom, function (state) {
+    return { arguments: arguments.length, get: typeof state.get };
+  });
+  assert.equal(scope.get(probe).arguments, 1);
+  assert.equal(scope.get(probe).get, 'function');
+  const broken = derive(scopeAtom, (_argument, { get }) => get(null));
+  assert.throws(() => scope.get(broken), /Cannot destructure/);
   const env = fixture({ bootstrapDefault: false });
   const old = { isLoading: false, isError: false, isCapable: false };
   for (const loading of [true, false]) {
-    const inputs = derive(token, () => ({
+    const inputs = derive(scopeAtom, () => ({
       authenticatedAccountId: 'neutral-site-account', authenticatedUserId: 'neutral-site-user',
       authLoading: loading, accountLoading: false,
     }));
-    const original = { d: derive(token, () => old), b: () => false, j: () => {} };
-    const moduleRequire = id => id === 'Q840' ? { c: derive } : id === 'OWtl' ? { a: token } : id === 'Cslg' ? { n: inputs } : requireOriginal(id);
-    const atoms = env.adapter.adaptCapabilityAtoms(original, moduleRequire);
-    const scope = realScope();
+    const original = { d: derive(scopeAtom, () => old), b: () => false, j: () => {} };
+    const dependencies = { Q840, OWtl: { a: scopeAtom }, Cslg: { n: inputs } };
+    const atoms = env.adapter.adaptCapabilityAtoms(original, id => dependencies[id]);
     assert.equal(scope.get(atoms.d).isLoading, loading);
     assert.equal(scope.get(atoms.d).isCapable, !loading);
     assert.equal(scope.get(atoms.e), !loading);
