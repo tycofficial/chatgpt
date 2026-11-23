@@ -154,8 +154,7 @@ try {
         await page.waitForURL(url => /^\/chatgpt\/dots\/local-dot-[a-f0-9-]+\/?$/.test(url.pathname), { timeout: 30000 });
         const room = page.url();
         await report('entry');
-        const composer = page.locator('main [contenteditable="true"], main textarea, [data-testid*="composer"] [contenteditable="true"]')
-          .filter({ visible: true }).first();
+        const composer = page.getByRole('textbox', { name: '消息', exact: true }).filter({ visible: true }).first();
         await composer.waitFor({ state: 'visible', timeout: 30000 });
         await report('room-ready');
         const newNote = 'DOT-JOURNAL-CREATE-0237';
@@ -181,20 +180,35 @@ try {
         const id = add.match(/^已保存日记 · ([0-9a-f-]{36})$/)?.[1];
         assert.ok(id, 'No saved journal entry ID');
         await report('journal-added');
-        const journalLabel = /日记|日志|Journal/i;
-        const journalButton = page.getByRole('button', { name: journalLabel }).filter({ visible: true }).first()
-          .or(page.getByRole('link', { name: journalLabel }).filter({ visible: true }).first()).first();
+        const button = name => page.getByRole('button', { name }).filter({ visible: true }).first();
+        const panelControl = name => button(name).or(page.getByRole('link', { name }).filter({ visible: true }).first())
+          .or(page.getByRole('menuitem', { name }).filter({ visible: true }).first()).first();
+        const journal = () => panelControl(/日记|日志|Journal/i);
+        async function findDotPanel(label, stage) {
+          if (await label().isVisible()) return label();
+          const actions = button(/^你的 dot 操作$/i);
+          await actions.click({ timeout: 9500 });
+          await label().waitFor({ state: 'visible', timeout: 1900 }).catch(() => {});
+          await report(stage + '-actions-menu');
+          if (await label().isVisible()) return label();
+          await page.keyboard.press('Escape');
+          const profile = button(/打开\s*你的 dot 的个人资料/i);
+          await profile.click({ timeout: 9500 });
+          await label().waitFor({ state: 'visible', timeout: 2400 }).catch(() => {});
+          await report(stage + '-profile');
+          return await label().isVisible() ? label() : null;
+        }
+        const journalButton = await findDotPanel(journal, 'journal');
         let nativeJournalPanel = false;
-        if (await journalButton.isVisible()) {
+        if (journalButton) {
           const triggerLabel = await journalButton.getAttribute('aria-label') ?? (await journalButton.innerText()).trim();
           await journalButton.click();
           await findText(newNote).waitFor({ state: 'visible', timeout: 6500 }).catch(() => {});
           nativeJournalPanel = await findText(newNote).isVisible();
           console.log('Native Dot journal panel ' + JSON.stringify({ triggerLabel, listedEntry: nativeJournalPanel }));
           await report('journal-panel');
-          if (page.url() !== room) await page.goto(room, { waitUntil: 'domcontentloaded', timeout: 45000 });
-          else await page.keyboard.press('Escape');
         }
+        if (page.url() !== room) await page.goto(room, { waitUntil: 'domcontentloaded', timeout: 45000 });
         await reloadRoom();
         await submitDot('/journal list', id + ' · ' + newNote);
         await submitDot('/journal edit ' + id + ' ' + editedNote, '已修改日记 · ' + id);
@@ -207,6 +221,33 @@ try {
         console.log('Native Dot journal CRUD QA ' + JSON.stringify({ release: active.release, room: new URL(room).pathname,
           composerCommands: true, created: true, edited: true, deleted: true, reloads: 3, sameRoom: true,
           nativeJournalPanel, dotModelPosts: 0 }));
+
+        const task = 'Dot manual browser QA 0237';
+        const schedule = await submitDot('/automation add ' + task + ' | 0 | Reply with the automation test marker.',
+          /已创建自动化 · [a-f0-9-]{36}/);
+        const scheduleId = schedule.match(/已创建自动化 · ([a-f0-9-]{36})/)?.[1];
+        assert.ok(scheduleId, 'No saved native Dot automation ID');
+        await reloadRoom();
+        await submitDot('/automation list', scheduleId + ' · ' + task + ' · 启用');
+        const nativeAutomation = () => panelControl(/自动化|定时任务|计划任务|Schedule|Automations/i);
+        const scheduleButton = await findDotPanel(nativeAutomation, 'automation');
+        let schedulePanelListed = false;
+        if (scheduleButton) {
+          const triggerLabel = await scheduleButton.getAttribute('aria-label') ?? (await scheduleButton.innerText()).trim();
+          await scheduleButton.click();
+          await findText(task).waitFor({ state: 'visible', timeout: 6500 }).catch(() => {});
+          schedulePanelListed = await findText(task).isVisible();
+          console.log('Native Dot automation panel ' + JSON.stringify({ triggerLabel, listedEntry: schedulePanelListed }));
+          await report('automation-panel');
+        }
+        if (page.url() !== room) await page.goto(room, { waitUntil: 'domcontentloaded', timeout: 45000 });
+        await reloadRoom();
+        await submitDot('/automation off ' + scheduleId, '已停用自动化。');
+        await reloadRoom();
+        await submitDot('/automation list', scheduleId + ' · ' + task + ' · 停用');
+        assert.equal(modelPosts, 2, 'Automation setup or disable unexpectedly invoked a model');
+        console.log('Native Dot automation persistence QA ' + JSON.stringify({ release: active.release, created: true,
+          browserManual: true, reloads: 3, enabledAfterCreate: true, disabledAfterReload: true, schedulePanelListed }));
       }
       if (process.env.QA_NATIVE_CODEX_ENTRY === '1') {
         const modeLabel = /切换.*模式|切換.*模式|Switch mode/i;
