@@ -183,7 +183,7 @@ try {
         const button = name => page.getByRole('button', { name }).filter({ visible: true }).first();
         const panelControl = name => button(name).or(page.getByRole('link', { name }).filter({ visible: true }).first())
           .or(page.getByRole('menuitem', { name }).filter({ visible: true }).first()).first();
-        const journal = () => panelControl(/日记|日志|Journal/i);
+        const journal = () => panelControl(/^(?:近期活动|Recent activity|日记|日志|Journal)$/i);
         async function findDotPanel(label, stage) {
           if (await label().isVisible()) return label();
           const actions = button(/^你的 dot 操作$/i);
@@ -229,25 +229,32 @@ try {
         assert.ok(scheduleId, 'No saved native Dot automation ID');
         await reloadRoom();
         await submitDot('/automation list', scheduleId + ' · ' + task + ' · 启用');
-        const nativeAutomation = () => panelControl(/自动化|定时任务|计划任务|Schedule|Automations/i);
+        const nativeAutomation = () => page.getByRole('button', { name: task, exact: true }).filter({ visible: true }).first();
         const scheduleButton = await findDotPanel(nativeAutomation, 'automation');
-        let schedulePanelListed = false;
-        if (scheduleButton) {
-          const triggerLabel = await scheduleButton.getAttribute('aria-label') ?? (await scheduleButton.innerText()).trim();
-          await scheduleButton.click();
-          await findText(task).waitFor({ state: 'visible', timeout: 6500 }).catch(() => {});
-          schedulePanelListed = await findText(task).isVisible();
-          console.log('Native Dot automation panel ' + JSON.stringify({ triggerLabel, listedEntry: schedulePanelListed }));
-          await report('automation-panel');
+        assert.ok(scheduleButton, 'The persisted task is missing from the original Dot profile');
+        await scheduleButton.click();
+        await page.waitForTimeout(600);
+        const schedulePanelListed = await findText(task).isVisible();
+        await report('automation-detail');
+        const manualRun = panelControl(/^(?:立即运行|运行|Run now|Run)$/i);
+        const disable = panelControl(/^(?:暂停|停用|禁用|Pause|Disable)(?:自动化|计划任务)?$/i);
+        const runControlVisible = await manualRun.isVisible();
+        const nativeDisable = await disable.isVisible();
+        if (nativeDisable) {
+          await disable.click();
+          const confirm = page.getByRole('dialog').getByRole('button', { name: /^(?:确认|确定|暂停|停用|Pause|Disable|Confirm)$/i })
+            .filter({ visible: true }).first();
+          if (await confirm.isVisible()) await confirm.click();
         }
         if (page.url() !== room) await page.goto(room, { waitUntil: 'domcontentloaded', timeout: 45000 });
         await reloadRoom();
-        await submitDot('/automation off ' + scheduleId, '已停用自动化。');
+        if (!nativeDisable) await submitDot('/automation off ' + scheduleId, '已停用自动化。');
         await reloadRoom();
         await submitDot('/automation list', scheduleId + ' · ' + task + ' · 停用');
         assert.equal(modelPosts, 2, 'Automation setup or disable unexpectedly invoked a model');
         console.log('Native Dot automation persistence QA ' + JSON.stringify({ release: active.release, created: true,
-          browserManual: true, reloads: 3, enabledAfterCreate: true, disabledAfterReload: true, schedulePanelListed }));
+          browserManual: true, reloads: 3, enabledAfterCreate: true, disabledAfterReload: true,
+          schedulePanelListed, nativeDisable, runControlVisible }));
       }
       if (process.env.QA_NATIVE_CODEX_ENTRY === '1') {
         const modeLabel = /切换.*模式|切換.*模式|Switch mode/i;
