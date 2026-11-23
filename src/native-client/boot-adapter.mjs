@@ -469,6 +469,24 @@ overrideExports('majR', {}, { deferred: true }, {
   },
 });
 
+// Personal pricing uses the original Go layout and this site's public reference quote.
+adaptFactory('Mg5i', factory => function (module, exports, require) {
+  let pricingGates;
+  const scopedRequire = new Proxy(require, {
+    apply(target, receiver, args) {
+      const dependency = Reflect.apply(target, receiver, args);
+      if (args[0] !== 'hZax') return dependency;
+      return pricingGates ??= Object.create(dependency, {
+        f: { value: function useLocalPricingGate(name, ...options) {
+          const original = Reflect.apply(dependency.f, this, [name, ...options]);
+          return name === '3600660324' ? true : original;
+        } },
+      });
+    },
+  });
+  return factory.call(this, module, exports, scopedRequire);
+}, { deferred: true });
+
 overrideExports('Y0ov', {}, { deferred: true }, {
   b: Card => createNativeSiteTrialCard(Card, {
     React: requireOriginal('zd8w'), Button: requireOriginal('Sm6l').a,

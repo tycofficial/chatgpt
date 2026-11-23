@@ -135,6 +135,31 @@ try {
         const goto = path => page.goto(home + path,{waitUntil:'domcontentloaded',timeout:20000});
         await inspect('usage', () => goto('settings/usage'), {adminPro: /Pro\s*\$?500/});
         await inspect('personal-pricing', () => goto('#pricing'), {go: /^Go$/, pro: /^Pro$/, dotBenefit: /含站内 Dot/});
+        const personal = surfaces.at(-1);
+        const beforeControls = await page.getByRole('button').filter({visible:true}).allTextContents();
+        const plans = beforeControls.map(t=>t.trim()).filter(t=>/套餐|plan|compare|更多|更少/i.test(t)).slice(-20);
+        console.log('Native Go initial '+JSON.stringify({seen:personal.seen,plans}));
+        let expandedInTest=false;
+        if(!personal.seen.go){
+          const more=page.getByRole('button',{name:/^(?:查看(?:所有|全部|更多|其他).*(?:套餐|方案|计划)|(?:查看)?全部套餐|(?:See|View|Show) (?:all|more).*plans)$/i}).filter({visible:true}).first();
+          if(await more.isVisible()){await more.click();expandedInTest=true;}
+        }
+        await page.getByText('Go',{exact:true}).filter({visible:true}).first().waitFor({state:'visible',timeout:10000});
+        assert.equal(personal.seen.pro,true);
+        assert.equal(personal.seen.dotBenefit,true);
+        const goAction = page.getByRole('button',{name:'查看官方 Go 套餐',exact:true}).filter({visible:true}).first();
+        await goAction.waitFor({state:'visible',timeout:10000});
+        const referenceCard = await goAction.evaluate(button=>{
+          for(let node=button.parentElement;node&&node!==document.body;node=node.parentElement){
+            const text=node.innerText??'';
+            if(text.split('\n').some(line=>line.trim()==='Go')&&text.includes('美元参考价'))return text;
+          }
+          return '';
+        });
+        assert.match(referenceCard, /(?:US\$|\$)\s*8(?:[.,]00)?\b|8(?:[.,]00)?\s*(?:USD|美元)/);
+        const offeredPlans = await page.evaluate(()=>['Free','Go','Plus','Pro'].filter(plan=>
+          [...document.querySelectorAll('h2,h3,h4,[role=heading]')].some(node=>node.textContent.trim()===plan&&node.getClientRects().length)));
+        console.log('Native Go QA '+JSON.stringify({release:active.release,openedWithoutExpanding:!expandedInTest,goReference:true,hasOfficialPriceAction:true,offeredPlans}));
         await inspect('codex', () => goto('codex'), {codex: /^Codex$/, project: /项目|project/i});
         await inspect('dot', async () => {
           await goto('');

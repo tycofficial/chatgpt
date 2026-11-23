@@ -96,7 +96,11 @@ export function createNativeSiteTrialCard(Card, { React, Button, Amount, Frequen
     const tier = props.plan?.lookupType;
     if (tier === 'go') {
       const original = React.Children.toArray(props.actions?.props?.children)[0];
-      return element(Card, { ...props, actions: element(Button, {
+      const price = props.price && {
+        ...props.price,
+        content: element(React.Fragment, null, props.price.content, element(Frequency, null, '美元参考价')),
+      };
+      return element(Card, { ...props, price, actions: element(Button, {
         ...(original?.type === Button ? original.props : { className: 'w-full justify-center', color: 'secondary', size: 'beaconAction', radius: 'full' }),
         onClick(event) {
           event.preventDefault();
