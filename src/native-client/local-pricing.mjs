@@ -107,7 +107,9 @@ export function normalizeLocalMembership(record, now = Date.now()) {
   const expired = validExpiry && expiryMs != null && expiryMs <= now;
   const enabled = record?.enabled !== false && validTrial && validExpiry && !expired;
   const plan = enabled ? requestedPlan : 'free';
-  const pricePlan = enabled && trial ? trial.tier : plan;
+  const administrator = enabled && record?.id === 'site-admin' && record.role === 'administrator' &&
+    record.membershipSource === 'site-administrator' && plan === 'pro';
+  const pricePlan = administrator ? 'promax' : enabled && trial ? trial.tier : plan;
   return {
     plan_type: plan,
     status: !validTrial || !validExpiry || record?.enabled === false ? 'disabled' : expired ? 'expired' : plan === 'free' ? 'free' : 'active',
@@ -206,7 +208,7 @@ function nativeUsage(receipt, membership, identity, currentTime) {
 }
 
 /** Present the verified site receipt in the original settings layout. */
-export function createNativeSiteUsageLayout(Layout, { React, Section, Group, Row, useUsage, getIdentity, isUsageRoute }) {
+export function createNativeSiteUsageLayout(Layout, { React, Section, Group, Row, useUsage, getIdentity, isUsageRoute, getMembership = () => null }) {
   const { createElement } = React;
   function SiteUsageSummary() {
     const { data } = useUsage();
@@ -225,7 +227,13 @@ export function createNativeSiteUsageLayout(Layout, { React, Section, Group, Row
   }
   return function SiteUsageLayout(props) {
     if (props.scrollResetKey !== 'usage' || !isUsageRoute()) return createElement(Layout, props);
-    return createElement(Layout, props, createElement(SiteUsageSummary), props.children);
+    const membership = normalizeLocalMembership(getMembership());
+    const administratorPlan = membership.pro_tier === 500 && membership.managed_by === 'local-administrator' ?
+      createElement(Section, { id: 'site-plan-summary' },
+        createElement(Section.Header, { title: '本站套餐' }),
+        createElement(Section.Content, null, createElement(Group, null,
+          createElement(Row, { label: '管理员套餐', control: createElement('span', null, 'Pro $500') })))) : null;
+    return createElement(Layout, props, administratorPlan, createElement(SiteUsageSummary), props.children);
   };
 }
 

@@ -1,0 +1,71 @@
+name: Check the domestic startup and local administrator candidate
+on:
+  push:
+    branches: [qa/domestic-startup-admin]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-2025
+    timeout-minutes: 14
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - run: npm ci --no-audit --no-fund
+      - name: Build and verify the unchanged original archive with new adapters
+        run: |
+          set -euo pipefail
+          npm run release:prepare
+          npm run native:check
+          git diff --exit-code 3a59867ab3a8be0ef541bc5fd54161c1ca742a49 -- original-client _orbit-renderer src/native-client/entry-library.mjs
+          export GENERATED_PUBLICATION_TEST_TMPDIR="$(node -p "require('node:fs').realpathSync(process.env.RUNNER_TEMP)")"
+          node --test --test-concurrency=2 tests/*.test.mjs
+      - name: Check the current public official build
+        if: always()
+        continue-on-error: true
+        run: npm run reference:check
+  mainland:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 7
+    steps:
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Compare live static frontend and account and inference preflights
+        run: |
+          node --input-type=module <<'NODE'
+          import { setTimeout as delay } from 'node:timers/promises';
+          const probeAPI='https://api.globalping.io/v1/measurements';
+          const site='https://tycofficial.github.io', backend='https://chatgpt-admin-bridge-tyc.hushedtarragon1.chatgpt.site';
+          const headers={Origin:site,'Access-Control-Request-Method':'POST','Access-Control-Request-Headers':'content-type,authorization'};
+          const checks=[
+            {label:'Home',endpoint:site+'/chatgpt/',method:'GET'},
+            {label:'Login page',endpoint:site+'/chatgpt/auth/login/',method:'GET'},
+            {label:'Account preflight',endpoint:backend+'/auth/login',method:'OPTIONS',headers},
+            {label:'Model preflight',endpoint:backend+'/inference/v1/responses',method:'OPTIONS',headers:{...headers,'Access-Control-Request-Headers':'content-type,authorization,x-chat-request-id'}},
+          ];
+          for(const item of checks){
+            try {
+              const {hostname,pathname}=new URL(item.endpoint);
+              const control=await fetch(item.endpoint,{method:item.method,headers:item.headers,signal:AbortSignal.timeout(12000)});
+              console.log('Runner control '+JSON.stringify({label:item.label,http:control.status,cors:control.headers.get('access-control-allow-origin')}));
+              void control.body?.cancel().catch(()=>{});
+              const req=await fetch(probeAPI,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'http',target:hostname,locations:[{country:'CN',limit:3}],limit:3,measurementOptions:{protocol:'HTTPS',request:{method:item.method,path:pathname,headers:item.headers}}}),signal:AbortSignal.timeout(12000)});
+              if(!req.ok){console.log('Mainland service HTTP '+req.status);continue}
+              const {id}=await req.json();
+              let state;
+              for(let round=0;round<19;round++){await delay(750);state=await fetch(probeAPI+'/'+id,{signal:AbortSignal.timeout(8000)}).then(r=>r.json());if(state.status==='finished')break}
+              console.log('Mainland path '+JSON.stringify({label:item.label,id,result:state?.results?.map(({probe,result})=>({city:probe.city,country:probe.country,net:probe.network,code:result.statusCode??null,state:result.status,reportedCors:result.headers?.['access-control-allow-origin']??null}))}));
+            }catch(err){console.log('Measurement unavailable '+JSON.stringify({label:item.label,type:err.name,code:err.cause?.code}));}
+          }
+          NODE

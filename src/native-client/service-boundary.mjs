@@ -30,7 +30,7 @@ import { createNativeFileReferenceComposition } from './native-file-reference-co
 import { createLocalInputPreparer } from './local-input-preparation.mjs';
 import { createPreparedInputStore } from './prepared-input-store.mjs';
 import { createLocalPricingAdapter } from './local-pricing.mjs';
-import { SITE_ACCOUNT_SERVICE, getSiteAccount, getSiteSessionToken, hasModelSelectionAccess, getSitePlanCapabilities, logoutSiteAccount, getSiteHomeUrl, refreshSiteAccount, startSiteGuestSession } from './site-account.mjs';
+import { SITE_ACCOUNT_SERVICE, getSiteAccount, getSiteSessionToken, getAdminModelConnection, hasModelSelectionAccess, getSitePlanCapabilities, logoutSiteAccount, getSiteHomeUrl, refreshSiteAccount, startSiteGuestSession } from './site-account.mjs';
 import { createSiteSignOutController, isNativeSignOutLink, getSiteSignOutPageUrl } from './site-signout.mjs';
 import { isSitePricingPath, nativePricingDestination } from './native-pricing-trials.mjs';
 import { createLocalCodexAdapter } from './local-codex-adapter.mjs';
@@ -81,9 +81,43 @@ export const localPreferredHostTransport = createPreferredHostTransport({ baseUR
   fetchImpl: (...args) => globalThis.fetch(...args), getSiteAccount, getSiteSessionToken,
   onDiagnostic: event => localProtocolDiagnostics.push(event),
 });
+function modelConnectionError(messages, code, checkpoint) {
+  return Object.assign(Error(messages), { code, retryable: false, requiresTransportResume: isSiteInferenceCheckpoint(checkpoint) });
+}
 async function verifiedSiteToken() {
-  if (!getSiteSessionToken() && getSiteAccount() && navigator.onLine !== false) await refreshSiteAccount();
+  const account = getSiteAccount();
+  if (!getSiteSessionToken() && account && account.authenticationMode !== 'offline-administrator' && navigator.onLine !== false) await refreshSiteAccount();
   return getSiteSessionToken();
+}
+const fetchDirectModel = globalThis.fetch.bind(globalThis);
+async function completeWithAdminConnection(options, connection) {
+  const { apiBase, apiKey } = connection;
+  const endpoint = apiBase + (apiBase.endsWith('/v1') ? '/responses' : '/v1/responses');
+  return streamCompletion({
+    ...options,
+    settings: { ...options.settings, apiBase, apiKey, apiTransport: 'responses' },
+    responsesTransport: async (payload, { signal }) => {
+      const context = options.transportContext;
+      if (context?.checkpoint) {
+        context.checkpoint.apiAttempted = true;
+        await context.onCheckpoint?.(context.checkpoint);
+      }
+      signal?.throwIfAborted();
+      try {
+        return await fetchDirectModel(endpoint, {
+          method: 'POST', credentials: 'omit', redirect: 'error', cache: 'no-store',
+          headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiKey },
+          body: JSON.stringify(payload), signal,
+        });
+      } catch (error) {
+        signal?.throwIfAborted();
+        throw modelConnectionError('本机模型服务连接中断。已保留对话，请检查所设置的模型地址和浏览器跨域权限。', 'ADMIN_MODEL_CONNECTION_FAILED');
+      }
+    },
+  }).catch(error => {
+    if (typeof error?.message === 'string') error.message = error.message.replaceAll(apiKey, '[redacted]');
+    throw error;
+  });
 }
 const siteInferenceTransport = createSiteInferenceTransport({
   baseURL: SITE_ACCOUNT_SERVICE,
@@ -96,6 +130,14 @@ function completeWithSiteInference(options) {
     ? { ...options.settings, reasoningMode: 'standard', reasoningEffort: 'max' }
     : options.settings;
   const directSiteResponse = async (payload, { signal }) => {
+    const account = getSiteAccount();
+    const checkpoint = options.transportContext?.checkpoint;
+    if (account && !await verifiedSiteToken()) {
+      const message = account.role === 'administrator'
+        ? '管理员已在本机登录。本站模型服务无法连接。可从 /chatgpt/auth/login/?model_connection=1 设置本机模型连接。'
+        : '本站账号已在本机恢复。当前无法连接本站模型服务，已保留对话。';
+      throw modelConnectionError(message, 'SITE_INFERENCE_CONNECTION_UNAVAILABLE', checkpoint);
+    }
     return siteInferenceTransport.request(payload, { ...options.transportContext, signal, isFreeChat: options.providerRoutingContext?.isFreeChat });
   };
   return streamCompletion({
@@ -108,11 +150,15 @@ function completeWithSiteInference(options) {
 }
 const localHostCompletion = createPreferredCompletion({
   runtimeCompletion: completeWithSiteInference, preferredTransport: localPreferredHostTransport,
-  enabled: () => globalThis.__CHATGPT_REPLICA_ENV__?.preferredHostEnabled === true && getSiteAccount()?.role === 'administrator',
+  enabled: () => globalThis.__CHATGPT_REPLICA_ENV__?.preferredHostEnabled === true &&
+    getSiteAccount()?.role === 'administrator' && getSiteSessionToken() !== null,
 });
 export function localPreferredCompletion(options) {
   if (options.providerRoutingContext?.conversationOrigin === 'dot') return localDotAdapter.complete(options);
-  if (isSiteInferenceCheckpoint(options.transportContext?.checkpoint)) return completeWithSiteInference(options);
+  const checkpoint = options.transportContext?.checkpoint;
+  if (isSiteInferenceCheckpoint(checkpoint)) return completeWithSiteInference(options);
+  const direct = getAdminModelConnection();
+  if (direct && checkpoint?.route !== 'host') return completeWithAdminConnection(options, direct);
   return localHostCompletion(options);
 }
 const localWorkspaceExecutor = createBrowserToolExecutor({ PythonRuntime, PYTHON_TOOL,

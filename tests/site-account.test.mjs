@@ -11,12 +11,12 @@ import { installRestrictedBrowserStorage, isVolatileBrowserStorage } from '../sr
 const identitySource=fs.readFileSync(new URL('../src/native-client/local-identity.mjs',import.meta.url),'utf8');
 const pricingSource=fs.readFileSync(new URL('../src/native-client/local-pricing.mjs',import.meta.url),'utf8');
 const source=fs.readFileSync(new URL('../src/native-client/site-account.mjs',import.meta.url),'utf8');
-const names=['getSiteAccount','hasModelSelectionAccess','getSiteSessionToken','getSiteAccountError','initializeSiteAccount','initializeSiteAccountForDisplay','loginSiteAccount','registerSiteAccount','logoutSiteAccount','getSiteLoginUrl','getSiteRegistrationUrl','safeSiteReturnUrl','getSitePlanCapabilities','refreshSiteAccount','isSiteGuestSession','startSiteGuestSession','claimSiteTrial','getSiteHomeUrl'];
+const names=['getSiteAccount','setAdminModelConnection','getAdminModelConnection','hasModelSelectionAccess','getSiteSessionToken','getSiteAccountError','initializeSiteAccount','initializeSiteAccountForDisplay','loginSiteAccount','registerSiteAccount','logoutSiteAccount','getSiteLoginUrl','getSiteRegistrationUrl','safeSiteReturnUrl','getSitePlanCapabilities','refreshSiteAccount','isSiteGuestSession','startSiteGuestSession','claimSiteTrial','getSiteHomeUrl'];
 // Execute the actual module in an isolated VM with the deployment module URL and URL helpers.
 // No real browser storage, password, token, account service, or network is used.
 const fixtureToken='c'.repeat(64),key='chatgpt-site-admin-session:v1',now=1800000000000;
 const user=()=>({id:'site-admin',username:'TYC',name:'TYC',role:'administrator',planType:'pro',membershipSource:'site-administrator',createdAt:now-10000,officialSubscriptionVerified:false});
-function fixture(cached, { failWrites = false, online = true, receipts = new Map(), tab = new Map(), href = 'https://tycofficial.github.io/chatgpt/', basePath = '/chatgpt/', routerBasename, modulePath = '/chatgpt/native-client/site-account.mjs?v=fixture', verifierPassword, volatileStorage = false, indexedDB = makeIndexedDB(receipts) } = {}) {
+function fixture(cached, { failWrites = false, online = true, receipts = new Map(), tab = new Map(), href = 'https://tycofficial.github.io/chatgpt/', basePath = '/chatgpt/', routerBasename, modulePath = '/chatgpt/native-client/site-account.mjs?v=fixture', verifierPassword, siteAccountService = false, volatileStorage = false, indexedDB = makeIndexedDB(receipts) } = {}) {
   let clock = now;
   let handler = async () => ({ user: user() });
   const calls = [];
@@ -39,7 +39,7 @@ function fixture(cached, { failWrites = false, online = true, receipts = new Map
     crypto: webcrypto, TextEncoder, URL, AbortController, Response, Event, setTimeout, clearTimeout, navigator, document,
     Date: class extends Date { static now() { return clock; } },
     localStorage, sessionStorage, location, indexedDB,
-    __CHATGPT_REPLICA_ENV__: basePath === null ? undefined : { basePath },
+    __CHATGPT_REPLICA_ENV__: basePath === null ? undefined : { basePath, siteAccountService },
     getSiteAuthEntryKind, isHistoricalSitePath, resolveSiteHomeUrl, isVolatileBrowserStorage,
     addEventListener: (...args) => events.addEventListener(...args),
     removeEventListener: (...args) => events.removeEventListener(...args),
@@ -226,6 +226,32 @@ test('an offline administrator authenticated by the local verifier restores with
   assert.equal(fresh.calls.length, 0);
   fresh.api.logoutSiteAccount();
   assertFree(fresh);
+});
+
+test('gateway failure still allows the verified local administrator and a tab-scoped model connection', async () => {
+  const verifierPassword = 'neutral-admin-recovery-fixture';
+  const f = fixture(undefined, { verifierPassword, siteAccountService: true });
+  f.setHandler(() => ({ status: 503, body: { error: { code: 'SERVICE_UNAVAILABLE' } } }));
+  assert.equal((await f.api.loginSiteAccount('TYC', verifierPassword)).authenticationMode, 'offline-administrator');
+  assert.equal(f.api.getSiteSessionToken(), null);
+  assert.equal(f.api.getAdminModelConnection(), null);
+  assert.throws(() => f.api.setAdminModelConnection({ apiBase: 'http://provider.invalid/v1', apiKey: 'test-only' }), /HTTPS/);
+  f.api.setAdminModelConnection({ apiBase: 'https://provider.invalid/v1/', apiKey: 'test-only' });
+  assert.equal(f.api.getAdminModelConnection().apiBase, 'https://provider.invalid/v1');
+  const restored = fixture(f.values.get(key), { receipts: f.receipts, tab: f.tab, verifierPassword });
+  await restored.api.initializeSiteAccount();
+  assert.equal(restored.api.getAdminModelConnection().apiKey, 'test-only');
+  await restored.api.logoutSiteAccount();
+  assert.equal(restored.api.getAdminModelConnection(), null);
+  assert.throws(() => restored.api.setAdminModelConnection({ apiBase: 'https://provider.invalid/', apiKey: 'test-only' }), /管理员/);
+});
+
+test('an authoritative invalid password does not silently replace online verification', async () => {
+  const verifierPassword = 'neutral-local-only-fixture';
+  const f = fixture(undefined, { verifierPassword, siteAccountService: true });
+  f.setHandler(() => ({ status: 401, body: { error: { code: 'INVALID_CREDENTIALS', message: '账户密码不正确。' } } }));
+  await assert.rejects(f.api.loginSiteAccount('TYC', verifierPassword), /账户密码不正确/);
+  assert.equal(f.api.getSiteAccount(), null);
 });
 
 const trialDuration = 30 * 86400000;

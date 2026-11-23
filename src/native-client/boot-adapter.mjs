@@ -483,7 +483,7 @@ overrideExports('jxU8', {}, { deferred: true }, {
     React: requireOriginal('zd8w'), Section: requireOriginal('BSnr').a,
     Group: requireOriginal('ZEx5').a, Row: requireOriginal('AWNZ').d,
     useUsage: () => requireOriginal('Q840').z(requireOriginal('gPv1').c),
-    getIdentity: getPrototypeLocalAuth, isUsageRoute: isSiteUsageRoute,
+    getIdentity: getPrototypeLocalAuth, isUsageRoute: isSiteUsageRoute, getMembership: getSiteAccount,
   }),
 });
 overrideExports('WXto', {}, { deferred: true }, {

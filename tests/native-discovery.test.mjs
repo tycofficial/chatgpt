@@ -464,6 +464,15 @@ function workerUsage(plan = usageOwner, fields = {}) {
   };
 }
 
+test('the administrator grant has the Pro 500 reference while Pro trials keep their enrolled tier', () => {
+  const admin = normalizeLocalMembership({ id: 'site-admin', role: 'administrator', membershipSource: 'site-administrator', planType: 'pro' });
+  assert.equal(admin.plan_type, 'pro');
+  assert.equal(admin.pro_tier, 500);
+  assert.equal(admin.reference_monthly_amount, 500);
+  assert.equal(admin.has_openai_subscription, false);
+  assert.equal(normalizeLocalMembership({ id: 'other', planType: 'pro', role: 'user' }).pro_tier, 200);
+});
+
 test('native usage reports actual site counts and only makes a daily limit from an active Free meter', async () => {
   let membership = usageOwner, receipt = workerUsage();
   const diagnostic = [];

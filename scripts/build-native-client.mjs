@@ -141,7 +141,7 @@ const bootstrap=`import { installBrowserCompatibility, installDirectAssetHost, r
 import { installRestrictedBrowserStorage } from './restricted-browser-storage.mjs?v=${release}';
 try {
 const startup = globalThis.__TYC_PAGE_START__;
-if (startup && !await startup.waitForStyles()) throw Error('The page stylesheet could not be loaded.');
+const stylesReady = startup ? startup.waitForStyles() : Promise.resolve(true);
 const rootURL = new URL('../', import.meta.url);
 document.documentElement.dataset.routerBasename = rootURL.pathname.replace(/\\/$/, '') || '/';
 await installBrowserCompatibility();
@@ -163,6 +163,7 @@ if (authEntry === 'logout') {
  siteAccount.startSiteGuestSession();
  location.replace(signOut.getSiteSignedOutUrl(rootURL));
 } else if(authEntry === 'login' || authEntry === 'signup') {
+ if (siteAccount.isAdminModelConnectionPage()) await siteAccount.initializeSiteAccountForDisplay();
  siteAccount.renderSiteLoginPage();
 }
 else {
@@ -170,8 +171,10 @@ else {
    const pricing = await import('./native-pricing-trials.mjs?v='+${JSON.stringify(release)});
    pricing.normalizeLegacyPricingEntry();
  }
- await siteAccount.initializeSiteAccountForDisplay();
+ const [styleLoaded] = await Promise.all([stylesReady, siteAccount.initializeSiteAccountForDisplay()]);
+ if (!styleLoaded) throw Error('The page stylesheet could not be loaded.');
  await import('./boot-adapter.mjs?v='+${JSON.stringify(release)});
+ startup?.markResourcesReady();
  // The worker is only for private browser-created files. It does not load pages.
  void registerOptionalAssetWorker(workerURL, rootURL.pathname);
 }
@@ -257,7 +260,7 @@ const mainModules = [
  ownModule('native-client/service-boundary.mjs'), ownModule('runtime.js'), ownModule('model-catalog.js'),
  ...Array.from(archivedModules, originalOnSite),
 ];
-const modulePreload = href => `<link rel="modulepreload" href="${href}" crossorigin="anonymous">`;
+const modulePreload = href => `<link rel="modulepreload" href="${href}" crossorigin="anonymous" onload="window.__TYC_PAGE_START__.loadedResource(this.href)">`;
 const importMap = JSON.stringify({imports:{
  '/cdn/': deploymentBase + 'original-client/public/chatgpt.com/cdn/',
  'https://chatgpt.com/cdn/': deploymentBase + 'original-client/public/chatgpt.com/cdn/',
@@ -267,16 +270,18 @@ const entryScript = ownModule('native-client/bootstrap.mjs');
 const errorMessage = '页面未能完成加载。请检查网络连接后重试。';
 const stylesheetURL = deploymentBase + cssAsset;
 const startupProgressStyle = `<style id="site-load-progress-style">
-#site-load-progress{position:fixed;z-index:2147483647;top:50%;left:50%;transform:translate(-50%,-50%);width:144px;max-width:45vw;height:4px;border-radius:999px;overflow:hidden;pointer-events:none;background:#ddd5ee}
-#site-load-progress::before{content:"";display:block;width:28%;height:100%;background:linear-gradient(90deg,#7154b1,#9b84c4);animation:site-load-sweep 1.35s ease-in-out infinite}
-@keyframes site-load-sweep{from{transform:translateX(-100%)}to{transform:translateX(357%)}}
-@media(prefers-reduced-motion:reduce){
- #site-load-progress::before{width:100%;animation:none;background:repeating-linear-gradient(120deg,#7154b1 0 7px,#9b84c4 7px 14px)}
-}
+#site-load-progress{position:fixed;z-index:2147483647;top:50%;left:50%;transform:translate(-50%,-50%);width:220px;max-width:70vw;pointer-events:none;font:14px/1.45 system-ui;color:#5d478c}
+#site-load-progress [role=progressbar]{height:4px;margin:8px 0;border-radius:999px;overflow:hidden;background:#ddd5ee}
+#site-load-progress [role=progressbar]::before{content:"";display:block;width:var(--site-loaded,0%);height:100%;background:#7154b1}
+#site-load-progress span{display:block;text-align:center}
+@media(prefers-color-scheme:dark){#site-load-progress{color:#e5d9ff}}
 </style>`;
-const startupGuard = `<script>(function(){
- var notice,progress,progressStyle,composerObserver,resolveStyles;
+const startupGuard = assets => `<script>(function(entries){
+ var notice,progress,progressStyle,composerObserver,resolveStyles,drawPending=false,watcher,timer;
  var stylesLoaded=false,stylesFailed=false,finished=false,failed=false;
+ var resources=new Map(entries),seen=new Set(),timed=new Set();
+ var total=entries.reduce(function(a,entry){return a+entry[1]},0),received=0,networkWeight=0,networkStart=Infinity,networkEnd=0;
+ var lastProgress=performance.now();
  function hideProgress(){
   progress=progress||document.getElementById('site-load-progress');
   if(progress&&progress.parentNode)progress.parentNode.removeChild(progress);
@@ -287,18 +292,69 @@ const startupGuard = `<script>(function(){
   if(!notice.parentNode)document.body.appendChild(notice);
   notice.hidden=false;
  }
- var timer=setTimeout(function(){
-  var sheet=document.getElementById('site-main-style');
-  if(sheet&&!stylesLoaded){
-   sheet.disabled=true;
-   state.failStyles();
-  }else state.fail();
- },60000);
+ function updateProgress(){
+  if(!progress||finished||failed)return;
+  var portion=Math.floor(100*received/Math.max(1,total));
+  var percent=String(Math.min(99,portion));
+  var gauge=progress.querySelector('[role=progressbar]');
+  gauge.setAttribute('aria-valuenow',percent);
+  gauge.style.setProperty('--site-loaded',percent+'%');
+  progress.querySelector('[data-percent]').textContent=percent+'%';
+  var span=networkEnd-networkStart, detail='正在测量加载速度';
+  if(received>=total) detail='资源已加载，正在打开页面';
+  else if(performance.now()-lastProgress>8000) detail='连接较慢，正在等待资源';
+  else if(timed.size>=2&&span>=600&&networkWeight>0) {
+   var seconds=Math.max(1,Math.ceil((total-received)*span/networkWeight/1000));
+   detail='预计资源还需 '+seconds+' 秒';
+  }
+  progress.querySelector('[data-time]').textContent=detail;
+ }
+ function restartTimeout(){
+  clearTimeout(timer);
+  timer=setTimeout(function(){
+   var sheet=document.getElementById('site-main-style');
+   if(sheet&&!stylesLoaded)state.failStyles();
+   else state.fail();
+  },60000);
+ }
+ function resourceReady(value){
+  if(finished||failed)return;
+  var url;
+  try{url=new URL(value,location.href)}catch(error){return}
+  if(url.origin!==location.origin)return;
+  var key=url.pathname+url.search;
+  if(!resources.has(key)||seen.has(key))return;
+  seen.add(key);
+  received+=resources.get(key);
+  lastProgress=performance.now();
+  restartTimeout();
+  updateProgress();
+ }
+ function timing(entry){
+  if(!entry||entry.responseStatus>=400||(!entry.decodedBodySize&&!entry.transferSize))return;
+  var url;
+  try{url=new URL(entry.name)}catch(error){return}
+  var key=url.pathname+url.search;
+  if(url.origin!==location.origin||!resources.has(key))return;
+  if(entry.transferSize>300&&entry.responseEnd>entry.fetchStart&&entry.fetchStart>=0&&!timed.has(key)){
+   timed.add(key);
+   networkWeight+=resources.get(key);
+   networkStart=Math.min(networkStart,entry.fetchStart);
+   networkEnd=Math.max(networkEnd,entry.responseEnd);
+  }
+  resourceReady(entry.name);
+ }
+ function collect(){
+  performance.getEntriesByType('resource').forEach(timing);
+  updateProgress();
+ }
  var state=window.__TYC_PAGE_START__={
+  loadedResource:resourceReady,
   loadStyles:function(sheet){
    if(stylesFailed)return;
    sheet.media='all';
    stylesLoaded=true;
+   resourceReady(sheet.href);
    if(resolveStyles)resolveStyles(true);
   },
   failStyles:function(){
@@ -315,41 +371,55 @@ const startupGuard = `<script>(function(){
    notice=node;
    progress=document.getElementById('site-load-progress');
    progressStyle=document.getElementById('site-load-progress-style');
-   if(failed&&!finished){
-    hideProgress();
-    showFailure();
-   }
+   if(failed&&!finished){hideProgress();showFailure();return}
+   collect();
+   watcher=setInterval(collect,750);
+  },
+  markResourcesReady:function(){
+   resources.forEach(function(weight,key){resourceReady(key)});
   },
   waitForComposer:function(){
    var selector='main [contenteditable="true"], main textarea, [contenteditable="true"][role="textbox"]';
-   function update(){
-    var visible=Array.prototype.some.call(document.querySelectorAll(selector),function(composer){
-     return composer.getClientRects().length&&getComputedStyle(composer).visibility==='visible';
-    });
-    if(visible){
-     state.ready();
-     return;
-    }
+   function check(){
+    drawPending=false;
     if(failed||finished)return;
+    var writable=Array.prototype.some.call(document.querySelectorAll(selector),function(node){
+     if(node.disabled||node.readOnly||node.closest('[inert],[aria-disabled="true"],[aria-readonly="true"],[hidden]'))return false;
+     if(node.tagName!=='TEXTAREA'&&!node.isContentEditable)return false;
+     return node.getClientRects().length&&getComputedStyle(node).visibility==='visible';
+    });
+    if(writable){state.ready();return}
     if(progressStyle&&!progressStyle.isConnected&&document.head)document.head.appendChild(progressStyle);
     if(progress&&!progress.isConnected&&document.body)document.body.appendChild(progress);
    }
-   composerObserver=new MutationObserver(update);
-   composerObserver.observe(document,{childList:true,subtree:true,attributes:true,attributeFilter:['class','hidden','style','contenteditable']});
-   update();
+   function schedule(){if(!drawPending){drawPending=true;requestAnimationFrame(check)}}
+   composerObserver=new MutationObserver(schedule);
+   composerObserver.observe(document,{childList:true,subtree:true,attributes:true,attributeFilter:['class','hidden','style','contenteditable','disabled','readonly','inert','aria-disabled','aria-readonly']});
+   schedule();
   },
   fail:function(){
    if(finished)return;
    failed=true;
+   if(composerObserver)composerObserver.disconnect();
    clearTimeout(timer);
+   clearInterval(watcher);
    hideProgress();
    showFailure();
   },
   ready:function(){
+   if(finished)return;
    finished=true;
    if(composerObserver)composerObserver.disconnect();
    clearTimeout(timer);
-   hideProgress();
+   clearInterval(watcher);
+   if(progress) {
+    var gauge=progress.querySelector('[role=progressbar]');
+    gauge.setAttribute('aria-valuenow','100');
+    gauge.style.setProperty('--site-loaded','100%');
+    progress.querySelector('[data-percent]').textContent='100%';
+    progress.querySelector('[data-time]').textContent='加载完成';
+   }
+   requestAnimationFrame(hideProgress);
    notice=notice||document.getElementById('site-load-error');
    if(notice&&notice.parentNode)notice.parentNode.removeChild(notice);
   },
@@ -359,12 +429,13 @@ const startupGuard = `<script>(function(){
    location.replace(next.href);
   }
  };
+ restartTimeout();
  document.addEventListener('DOMContentLoaded',function(){
   if(failed&&!finished)showFailure();
  },{once:true});
-})()</script>`;
+})(${JSON.stringify(assets)})</script>`;
 const startupBody = `<body>
-<div id="site-load-progress" role="progressbar" aria-label="页面加载中"></div>
+<div id="site-load-progress"><span data-percent>0%</span><div role="progressbar" aria-label="首屏加载进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div><span data-time>准备加载</span></div>
 <main id="site-load-error" hidden role="alert" style="max-width:36rem;margin:12vh auto;padding:24px;font:16px/1.6 system-ui">
 <h1 style="font-size:22px">ChatGPT</h1><p>${errorMessage}</p><button type="button" onclick="window.__TYC_PAGE_START__.retry()" style="min-height:44px;padding:8px 16px">重新加载</button>
 </main>
@@ -373,13 +444,20 @@ const startupBody = `<body>
 <script nomodule>window.__TYC_PAGE_START__.fail()</script>
 <script type="module" src="${entryScript}" onerror="window.__TYC_PAGE_START__.fail()"></script>
 </body>`;
+async function startupResources(hrefs) {
+ return Promise.all([...new Set(hrefs)].map(async href => [
+  href, Math.max(1, (await fs.stat(path.join(root, href.slice(deploymentBase.length).split('?')[0]))).size),
+ ]));
+}
+const pagesStartupResources = await startupResources([...earlyModules, ...mainModules, stylesheetURL]);
+const authStartupResources = await startupResources(earlyModules);
 const entryHTML = ({ auth = false } = {}) => `<!DOCTYPE html>
 <html class="chatgpt-theme" lang="zh-CN" dir="ltr" data-theme="light" data-appearance-preset="codex" data-ios="false" data-build="${sourceBuild}" data-client-build-revision="${sourceBuild}" data-router-basename="${deploymentBase.replace(/\/$/,'') || '/'}" data-icon-sprite-url="${originalOnSite(upstreamSprite)}" data-codex-cli-version="0.171.0-alpha.2" data-codex-window-type="browser" data-window-type="browser" data-native-client-release="${release}">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ChatGPT</title>
 ${startupProgressStyle}
-${startupGuard}
+${startupGuard(auth ? authStartupResources : pagesStartupResources)}
 <script type="importmap">${importMap}</script>
-${auth ? '' : `<link rel="preload" as="style" href="${stylesheetURL}">
+${auth ? '' : `<link rel="preload" as="style" fetchpriority="high" href="${stylesheetURL}">
 <link id="site-main-style" rel="stylesheet" href="${stylesheetURL}" media="print" onload="window.__TYC_PAGE_START__.loadStyles(this)" onerror="window.__TYC_PAGE_START__.failStyles()">\n`}
 ${earlyModules.map(modulePreload).join('\n')}
 ${auth ? '' : mainModules.map(modulePreload).join('\n')}

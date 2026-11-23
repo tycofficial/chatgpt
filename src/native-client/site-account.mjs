@@ -6,6 +6,8 @@ export const SITE_ACCOUNT_SERVICE = 'https://chatgpt-admin-bridge-tyc.hushedtarr
 
 const offlineAdminVerifier=Object.freeze({"salt":"fc2da60719d1841ba316deee9862fc4f","hash":"671da903ca544ab80c4f6842f97165b94b48f4dd510dae7de91727a8c624a29f","iterations":120000});
 const offlineAdminKind = 'offline-administrator:v1';
+const adminConnectionKey = 'chatgpt-admin-model-connection:v1';
+const adminConnectionTimeoutMs = 3000;
 const storageKey = 'chatgpt-site-admin-session:v1';
 const guestKey = 'chatgpt-site-local-guest:v1';
 const nativeSessionKey = 'original-client-prototype-local-session';
@@ -114,6 +116,7 @@ async function accountReceipt(token, replacement) {
 function forgetAccount(error = null, { removeStored = true, receiptToken = remembered?.token } = {}) {
   const previous = verifiedAccount;
   verifiedAccount = null;
+  if (removeStored) { try { globalThis.sessionStorage.removeItem(adminConnectionKey); } catch {} }
   remembered = null;
   lastError = error;
   if (removeStored) {
@@ -278,6 +281,7 @@ async function api(path, { body, token, keepalive = false, timeoutMs = 10000 } =
     if (response.type === 'opaqueredirect' || (response.status >= 300 && response.status < 400)) throw Error(accountInvalid);
     const result = await response.json().catch(() => null);
     if (!response.ok) {
+      if (response.status >= 500 || (response.status === 403 && !result?.error?.code)) throw new AccountConnectionError();
       throw Object.assign(Error(result?.error?.message || '账户服务暂时不可用。'), {
         status: response.status,
         code: result?.error?.code,
@@ -398,12 +402,12 @@ export function startSiteGuestSession() {
   return guestSession;
 }
 
-async function authenticateSiteAccount(endpoint, username, password, { legacyGuestFallback = true } = {}) {
+async function authenticateSiteAccount(endpoint, username, password, { legacyGuestFallback = true, timeoutMs } = {}) {
   const generation = ++requestGeneration;
   forgetAccount(null, { removeStored: !guestActive });
   setTabGuest(false);
   try {
-    const result = await api(endpoint, { body: { username, password } });
+    const result = await api(endpoint, { body: { username, password }, timeoutMs });
     if (generation !== requestGeneration) throw Error(cancelled);
     if (!isToken(result.token) || !isFutureExpiry(result.expiresAt)) throw Error('账户服务返回了无效的登录结果。');
     const user = accountFromServer(result.user);
@@ -419,6 +423,37 @@ async function authenticateSiteAccount(endpoint, username, password, { legacyGue
     }
     throw error;
   }
+}
+
+
+function parseAdminModelConnection(value) {
+  if (!value || typeof value.apiBase !== 'string' || typeof value.apiKey !== 'string') return null;
+  const apiKey = value.apiKey.trim();
+  if (!apiKey || apiKey.length > 4096 || /[\r\n]/.test(apiKey)) return null;
+  try {
+    const url = new URL(value.apiBase.trim());
+    if (url.protocol !== 'https:' || url.username || url.password || url.hash || url.search) return null;
+    return { apiBase: url.href.replace(/\/+$/, ''), apiKey };
+  } catch { return null; }
+}
+
+export function getAdminModelConnection() {
+  if (currentAccount()?.role !== 'administrator') return null;
+  try {
+    const saved = JSON.parse(globalThis.sessionStorage.getItem(adminConnectionKey) || 'null');
+    return saved?.owner === remembered?.token ? parseAdminModelConnection(saved) : null;
+  } catch { return null; }
+}
+
+export function setAdminModelConnection(value) {
+  if (currentAccount()?.role !== 'administrator') throw Error('请先使用本站管理员账户登录。');
+  if (value === null) {
+    globalThis.sessionStorage.removeItem(adminConnectionKey);
+    return;
+  }
+  const connection = parseAdminModelConnection(value);
+  if (!connection) throw Error('请输入有效的 HTTPS Responses API 地址和密钥。');
+  globalThis.sessionStorage.setItem(adminConnectionKey, JSON.stringify({ ...connection, owner: remembered.token }));
 }
 
 function offlineAdministrator() {
@@ -462,7 +497,7 @@ export function loginSiteAccount(username, password) {
   if (globalThis.__CHATGPT_REPLICA_ENV__?.siteAccountService) {
     if (administrator && isOffline()) return loginOfflineAdministrator(password);
     if (isOffline()) return Promise.reject(Error('请联网登录本站账户。'));
-    return authenticateSiteAccount('/auth/login', username, password, { legacyGuestFallback: false }).catch(error => {
+    return authenticateSiteAccount('/auth/login', username, password, { legacyGuestFallback: false, timeoutMs: administrator ? adminConnectionTimeoutMs : undefined }).catch(error => {
       if (administrator && error instanceof AccountConnectionError && error.message !== cancelled) return loginOfflineAdministrator(password);
       throw error;
     });
@@ -546,8 +581,15 @@ globalThis.addEventListener?.('storage', event => {
   }
 });
 
+export function isAdminModelConnectionPage() {
+  return new URL(location.href).searchParams.get('model_connection') === '1' &&
+    getSiteAuthEntryKind(location.href, getSiteHomeUrl()) === 'login';
+}
+
 export function renderSiteLoginPage(){
  const registration = getSiteAuthEntryKind(location.href, getSiteHomeUrl()) === 'signup';
+ const modelConnectionPage = isAdminModelConnectionPage();
+ const modelConnection = modelConnectionPage && currentAccount()?.role === 'administrator';
  document.documentElement.dataset.siteAuth='true';
  document.body.dataset.siteAuth='true';
  const style=document.createElement('style');style.textContent="html[data-site-auth=true]{color-scheme:light}body[data-site-auth=true]{--auth-bg:#fff;--auth-text:#0d0d0d;--auth-muted:#5d5d5d;--auth-border:#8f8f8f;--auth-button:#0d0d0d;--auth-button-text:#fff;margin:0;min-height:100dvh;height:auto;overflow:auto;background:var(--auth-bg);color:var(--auth-text);font-family:\"OpenAI Sans\",ui-sans-serif,system-ui,-apple-system,\"Segoe UI\",sans-serif}.site-login{min-height:100dvh;display:flex;flex-direction:column;align-items:center;box-sizing:border-box;padding:28px 24px 22px;background:var(--auth-bg);color:var(--auth-text);font-size:16px;line-height:1.5}.site-login *{box-sizing:border-box}.site-login-brand{align-self:flex-start;font-size:22px;font-weight:600;line-height:28px;color:var(--auth-text);text-decoration:none}.site-login-panel{width:100%;max-width:400px;text-align:center;margin:auto 0;padding:44px 0}.site-login h1{color:var(--auth-text);font-size:32px;line-height:40px;letter-spacing:-.6px;margin:0 0 12px;font-weight:600}.site-login p{font-size:14px;line-height:22px;color:var(--auth-muted);margin:0 0 28px}.site-login form{margin:0;color:var(--auth-text)}.site-login label{display:block;text-align:left;font-size:14px;line-height:20px;color:var(--auth-text);margin:20px 0 8px}.site-login input{display:block;width:100%;height:54px;border:1px solid var(--auth-border);border-radius:28px;padding:0 20px;font:inherit;background:var(--auth-bg);color:var(--auth-text);-webkit-text-fill-color:var(--auth-text);caret-color:var(--auth-text);opacity:1;outline:none}.site-login input::placeholder{color:var(--auth-muted);opacity:1}.site-login input:focus-visible{outline:2px solid var(--auth-text);outline-offset:2px}.site-login input:-webkit-autofill{-webkit-text-fill-color:var(--auth-text);box-shadow:0 0 0 1000px var(--auth-bg) inset}.site-login button{display:block;width:100%;height:52px;padding:0 20px;border:0;border-radius:28px;margin-top:28px;background:var(--auth-button);color:var(--auth-button-text);-webkit-text-fill-color:var(--auth-button-text);font:inherit;font-weight:500;cursor:pointer;transition:opacity .15s ease}.site-login button:hover{opacity:.88}.site-login button:focus-visible,.site-login a:focus-visible{outline:2px solid var(--auth-text);outline-offset:3px}.site-login button:disabled{opacity:.55;cursor:wait}.site-login .site-login-error{color:#b42318;min-height:22px;margin:16px 0}.site-login-panel a{color:var(--auth-text);text-decoration:underline;font-size:14px;text-underline-offset:3px}.site-login .site-login-back{display:inline-block;margin-top:4px}.site-login footer{margin-top:auto;color:var(--auth-muted);font-size:12px;line-height:20px}@media (prefers-color-scheme:dark){html[data-site-auth=true]{color-scheme:dark}body[data-site-auth=true]{--auth-bg:#212121;--auth-text:#f3f3f3;--auth-muted:#b4b4b4;--auth-border:#8f8f8f;--auth-button:#f3f3f3;--auth-button-text:#0d0d0d}.site-login .site-login-error{color:#ff9f98}}@media (max-width:480px){.site-login{padding:24px 20px 20px}.site-login-panel{max-width:352px}.site-login h1{font-size:30px;line-height:38px}}@media (prefers-reduced-motion:reduce){.site-login button{transition:none}}";
@@ -555,6 +597,10 @@ export function renderSiteLoginPage(){
   document.head.append(style);
   const main = document.createElement('main');
   main.className = 'site-login';
+  if (modelConnection) {
+    renderAdminModelConnection(main);
+    return;
+  }
   main.innerHTML = [
     '<a class="site-login-brand" aria-label="ChatGPT 首页">ChatGPT</a>',
     '<section class="site-login-panel">',
@@ -596,7 +642,7 @@ export function renderSiteLoginPage(){
       password.value = '';
       message.textContent = session.role === 'guest' ? '账户服务无法连接，正在进入本机访客模式…' :
         registration ? '账户已创建，正在进入…' : '登录成功，正在进入…';
-      location.assign(target.href);
+      location.assign(modelConnectionPage && session.role === 'administrator' ? location.href : target.href);
     } catch (error) {
       password.value = '';
       message.textContent = error.message || (registration ? '注册失败，请重试。' : '登录失败，请重试。');
@@ -606,4 +652,45 @@ export function renderSiteLoginPage(){
   });
   document.body.replaceChildren(main);
   document.title = (registration ? '注册' : '登录') + ' — ChatGPT';
+}
+
+function renderAdminModelConnection(main) {
+  main.innerHTML = [
+    '<a class="site-login-brand" aria-label="ChatGPT 首页">ChatGPT</a>',
+    '<section class="site-login-panel"><h1>本机模型连接</h1>',
+    '<p>用可直连的 Responses API 发起本标签页的管理员对话。密钥随标签页或退出登录清除。</p>',
+    '<form><label for="site-model-url">HTTPS API 地址</label>',
+    '<input id="site-model-url" type="url" name="endpoint" autocomplete="off" autocapitalize="off" spellcheck="false" required>',
+    '<label for="site-model-key">API 密钥</label>',
+    '<input id="site-model-key" type="password" name="credential" autocomplete="off" required>',
+    '<button type="submit">保存连接并返回</button><p class="site-login-error" role="alert"></p></form>',
+    '<button type="button" class="site-login-guest">清除本机连接</button>',
+    '<a class="site-login-back">返回 ChatGPT</a></section>',
+  ].join('');
+  const home = getSiteHomeUrl().href;
+  const form = main.querySelector('form');
+  const input = form.querySelector('[name=endpoint]');
+  const credential = form.querySelector('[name=credential]');
+  input.value = getAdminModelConnection()?.apiBase ?? '';
+  const status = main.querySelector('[role=alert]');
+  form.addEventListener('submit', event => {
+    event.preventDefault();
+    try {
+      setAdminModelConnection({ apiBase: input.value, apiKey: credential.value });
+      credential.value = '';
+      location.assign(home);
+    } catch (error) {
+      credential.value = '';
+      status.textContent = error.message;
+    }
+  });
+  main.querySelector('button[type=button]').addEventListener('click', () => {
+    try {
+      setAdminModelConnection(null);
+      location.assign(home);
+    } catch (error) { status.textContent = error.message; }
+  });
+  for (const link of main.querySelectorAll('a')) link.href = home;
+  document.body.replaceChildren(main);
+  document.title = '本机模型连接 — ChatGPT';
 }
