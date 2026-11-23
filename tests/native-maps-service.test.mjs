@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import * as fs from 'node:fs/promises';
-import { createHash } from 'node:crypto';
 import vm from 'node:vm';
+import { parse } from 'acorn';
+import { capturedChunk, capturedFactory } from './support/captured-original.mjs';
 import { createLocalMapsService, LOCAL_MAPS_WORLD_CENTER } from '../src/native-client/local-maps-service.mjs';
 
 const memory = () => {
@@ -124,14 +124,11 @@ test('a real attached map reader must return the requested identity and cannot c
   assert.equal((await request(switched, '/local/entities/' + knownId)).response.status, 409);
 });
 
-test('the actual original sm3b home/shared query code consumes local service responses and treats unknown entities as 404', async () => {
-  const file = 'async/297551.0d77275a5e.js';
-  const ranges = [
-    {"id":"aL","start":28287,"end":30161,"sha256":"14b39c7862bee3524606557051bab3cdfc8e8bef5b9aabc623041f8688f51b94"},
-    {"id":"aM","start":30163,"end":30635,"sha256":"022e4f36d57ed70f0d491166f7746f24f7c676169238f9f3fa4a5f1881d272cf"},
-    {"id":"cb","start":69705,"end":70352,"sha256":"9623db1b4703ba505d1ce889ac28a583ed2af340913f71a2ba5093716683c1f7"},
-  ];
-  const original = await fs.readFile(new URL('../original-client/public/chatgpt.com/cdn/assets/' + file, import.meta.url), 'utf8');
+test('the actual original maps home/shared query code consumes local service responses and treats unknown entities as 404', async () => {
+  const module = new URL(capturedChunk(297551, 390269).url).pathname;
+  const old = module.includes('/297551.');
+  const source = '(' + capturedFactory(old ? 'sm3b' : 'RfIz', old ? 297551 : 390269) + ')';
+  const { body: [{ expression: factory }] } = parse(source, { ecmaVersion: 'latest' });
   const env = fixture();
   const calls = [];
   class FetchError extends Error {
@@ -152,10 +149,11 @@ test('the actual original sm3b home/shared query code consumes local service res
     } } },
   });
   const queryDefinitions = {};
-  for (const range of ranges) {
-    const source = original.slice(range.start, range.end);
-    assert.equal(createHash('sha256').update(source).digest('hex'), range.sha256);
-    queryDefinitions[range.id] = new vm.Script('(' + source + ')', { filename: file + '#' + range.id }).runInContext(context, { timeout: 1000 });
+  for (const id of ['aL', 'aM', 'cb']) {
+    const matches = factory.body.body.filter(node => node.type === 'FunctionDeclaration' && node.id.name === id);
+    assert.equal(matches.length, 1, 'Original maps query was not found: ' + id);
+    const declaration = matches[0];
+    queryDefinitions[id] = new vm.Script('(' + source.slice(declaration.start, declaration.end) + ')', { filename: module + '#' + id }).runInContext(context, { timeout: 1000 });
   }
   context.aM = queryDefinitions.aM;
   const get = key => ({ account: 'neutral-site-account', user: 'neutral-site-user', authenticated: true, guest: false, locale: { locale: 'zh-CN' } })[key];

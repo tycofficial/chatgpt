@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import { capturedFactory } from './support/captured-original.mjs';
 import vm from 'node:vm';
 import { getSiteAuthEntryKind } from '../src/native-client/site-paths.mjs';
 import {
@@ -13,16 +14,9 @@ const signedOut = home;
 const conversation = home + 'c/neutral-fixture';
 const origin = new URL(home).origin;
 
-function nativeExports(file, id, nextId, dependencies = {}) {
-  const asset = new URL('../original-client/public/chatgpt.com/cdn/assets/' + file, import.meta.url);
-  const source = fs.readFileSync(asset, 'utf8');
-  const marker = id + ':(function';
-  const at = source.indexOf(marker);
-  assert.ok(at >= 0, 'Original factory is available: ' + id);
-  const start = at + id.length + 1;
-  const end = source.indexOf(',' + nextId + ':(function', start);
-  assert.ok(end > start, 'Original factory boundary is available: ' + nextId);
-  const factory = vm.runInNewContext(source.slice(start, end), {}, { filename: file + '#' + id, timeout: 1000 });
+function nativeExports(chunkId, id, dependencies = {}) {
+  const source = capturedFactory(id, chunkId);
+  const factory = vm.runInNewContext('(' + source + ')', {}, { filename: id, timeout: 1000 });
   const module = { exports: {} };
   const require = name => dependencies[name] ?? {};
   require.d = (exports, getters, values) => {
@@ -55,10 +49,10 @@ function nativeConfirmationAdapter(siteSignOut, markBrowserSignedOut) {
 }
 
 test('the original profile logout command enters the native confirmation route and completes inside the application', async () => {
-  const commands = nativeExports('200429.7cb44b876c.js', 'q3HK', 'vnLQ');
+  const commands = nativeExports(200429, 'q3HK');
   const navigations = [];
   const profileLocation = 'fixture-profile-dropdown';
-  const nativeHandler = nativeExports('767086.390bf6c64e.js', 'QtaM', 'zskm', {
+  const nativeHandler = nativeExports(767086, 'QtaM', {
     QosV: { c: length => Array(length).fill(Symbol.for('react.memo_cache_sentinel')) },
     c2QW: { o: { ACCESS_LOGOUT_ACTION_LOCATION_PROFILE_DROP_DOWN: profileLocation } },
     Q840: { y: () => ({}) },

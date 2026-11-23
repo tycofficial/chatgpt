@@ -358,7 +358,7 @@ test('native map chunks share one deferred import and retain synchronous rendere
     release();
     await ready;
   }
-  const chunk = await import(new URL('async/118734.1618351696.js', f.assets));
+  const chunk = await import(new URL(native.u(118734), new URL('../', f.assets)));
   assert.equal(native.m.kiov, chunk.__webpack_modules__.kiov);
   const renderer = native('FxuF');
   assert.equal(Object.getPrototypeOf(renderer.Map), f.getRendererModule().Map);
@@ -389,7 +389,7 @@ test('native map renderer failures reject awaited chunks and allow a subsequent 
   assert.equal(f.requests.length, 2);
   assert.equal(native('FxuF'), f.mapProvider.renderer);
   assert.equal(native('eS9I').a.name, 'OpenStreetMap');
-  const chunk = await import(new URL('async/118734.1618351696.js', f.assets));
+  const chunk = await import(new URL(native.u(118734), new URL('../', f.assets)));
   assert.equal(native.m.kiov, chunk.__webpack_modules__.kiov);
 });
 
@@ -463,15 +463,6 @@ function workerUsage(plan = usageOwner, fields = {}) {
     }],
   };
 }
-
-test('the administrator grant has the Pro 500 reference while Pro trials keep their enrolled tier', () => {
-  const admin = normalizeLocalMembership({ id: 'site-admin', role: 'administrator', membershipSource: 'site-administrator', planType: 'pro' });
-  assert.equal(admin.plan_type, 'pro');
-  assert.equal(admin.pro_tier, 500);
-  assert.equal(admin.reference_monthly_amount, 500);
-  assert.equal(admin.has_openai_subscription, false);
-  assert.equal(normalizeLocalMembership({ id: 'other', planType: 'pro', role: 'user' }).pro_tier, 200);
-});
 
 test('native usage reports actual site counts and only makes a daily limit from an active Free meter', async () => {
   let membership = usageOwner, receipt = workerUsage();

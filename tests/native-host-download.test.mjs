@@ -1,31 +1,22 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import { createHash } from 'node:crypto';
+import { capturedFactory } from './support/captured-original.mjs';
 import { wrapNativeDownloadServices } from '../src/native-client/local-native-download.mjs';
 
 // Execute the exact pinned public factories, without modifying their bodies.
 // No browser or fake RPC implementation is involved in these lifecycle checks.
-function originalFactory(file, hash, id, nextId, imports = {}) {
-  const bytes = fs.readFileSync(new URL('../original-client/public/chatgpt.com/cdn/assets/' + file, import.meta.url));
-  assert.equal(createHash('sha256').update(bytes).digest('hex'), hash);
+function originalFactory(chunkId, id, imports = {}) {
   const exports = {}, require = id => { if (!(id in imports)) throw Error('Unexpected native import ' + id); return imports[id]; };
   require.d = (target, getters = {}, values = {}) => {
     for (const [key, getter] of Object.entries(getters)) Object.defineProperty(target, key, { enumerable: true, get: getter });
     for (const [key, value] of Object.entries(values)) Object.defineProperty(target, key, { enumerable: true, value });
   };
-  const source = bytes.toString('utf8');
-  const marker = source.indexOf(id + ':(function');
-  assert(marker >= 0, 'Missing original factory ' + id);
-  const start = marker + id.length + 1;
-  const end = source.indexOf(',' + nextId + ':(function', start);
-  assert(end > start, 'Missing boundary after ' + id);
-  const factory = Function('return (' + source.slice(start, end) + ')')();
+  const factory = Function('return (' + capturedFactory(id, chunkId) + ')')();
   factory({ exports }, exports, require); return exports;
 }
-const rpc = originalFactory('399565.700e278f2d.js', 'f50ab4416402df1800059525a3db6d96f9b684b6a5e3aa8045e3f7e65aebd95e', 'ZG9f', 'QkCx');
+const rpc = originalFactory(399565, 'ZG9f');
 const basename = value => value.replaceAll('\\', '/').replace(/\/+$/, '').split('/').at(-1) ?? value;
-const temporary = originalFactory('955979.17a59d5e45.js', '8e87e7d34bbcdd3ca24abdd9be485f546a41bb9c2bcadf2e654afd0691d0bf48', 'Afr7', 'JmpW', {
+const temporary = originalFactory(955979, 'Afr7', {
   bnxy: { j: basename },
   Z8fU: { a: '/__codex_browser_temporary_files__/' },
 });

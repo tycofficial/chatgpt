@@ -495,25 +495,68 @@ overrideExports('WXto', {}, { deferred: true }, {
   },
 });
 
-// Preserve the original host class/RpcTarget inheritance and all public setting
-// definitions. Only its browser-storage implementation changes; UI/controller
-// readiness still follows the real readAll result through original ADAj.
-adaptFactory('YCTv', factory => function(module, exports, require) {
-  const scopedRequire = new Proxy(require, {
-    get(target, key, receiver) {
-      if (key !== 'd') return Reflect.get(target, key, receiver);
-      return (destination, getters, values) => {
-        if (destination === exports && values?.b) {
-          const definitions = require('osjx');
-          const settings = { Od: definitions.b, lf: definitions.k, lh: definitions.q, Ij: definitions.x, mh: definitions.r, uh: definitions.s };
-          values = { ...values, b: createLocalHostSettingsClass(values.b, { canSelectModels: hasModelSelectionAccess, settings, browser: require('vOiO'), cookie: require('ZhRn'), cookieValue: require('NGML') }) };
-        }
-        return require.d(destination, getters, values);
-      };
-    },
+// Both public browser host layouts keep the original setting definitions and
+// RPC services. Only the concrete settings service uses this site's storage.
+function localBrowserSettings(NativeSettings, require) {
+  const definitions = require('osjx');
+  const settings = { Od: definitions.b, lf: definitions.k, lh: definitions.q, Ij: definitions.x, mh: definitions.r, uh: definitions.s };
+  return createLocalHostSettingsClass(NativeSettings, {
+    canSelectModels: hasModelSelectionAccess, settings,
+    browser: require('vOiO'), cookie: require('ZhRn'), cookieValue: require('NGML'),
   });
-  return factory.call(this, module, exports, scopedRequire);
-});
+}
+
+if (requireOriginal.m.YCTv) {
+  adaptFactory('YCTv', factory => function(module, exports, require) {
+    const adapted = new Proxy(require, {
+      get(target, key, receiver) {
+        if (key !== 'd') return Reflect.get(target, key, receiver);
+        return (destination, getters, values) => {
+          if (destination === exports && values?.b) values = { ...values, b: localBrowserSettings(values.b, require) };
+          return require.d(destination, getters, values);
+        };
+      },
+    });
+    return factory.call(this, module, exports, adapted);
+  });
+} else {
+  // IKem closes over the native settings class. Its first RPC stub receives
+  // the concrete settings instance before the host publishes any service.
+  adaptFactory('IKem', factory => function(module, exports, require) {
+    let rpcExports;
+    const installed = new WeakSet();
+    const adapted = new Proxy(require, {
+      apply(target, receiver, args) {
+        const original = Reflect.apply(target, receiver, args);
+        if (args[0] !== 'ZG9f') return original;
+        if (rpcExports) return rpcExports;
+        const descriptors = Object.getOwnPropertyDescriptors(original);
+        const NativeRpcStub = original.b;
+        const NativeRpcTarget = original.c;
+        class BrowserSettingsRpcStub extends NativeRpcStub {
+          constructor(root, ...rest) {
+            const services = root && Object.getOwnPropertyDescriptor(root, 'services')?.value;
+            const settings = services && Object.getOwnPropertyDescriptor(services, 'settings')?.value;
+            if (settings && !installed.has(settings)) {
+              if (!(settings instanceof NativeRpcTarget) ||
+                  ['read', 'readAll', 'write', 'subscribe', 'readForAgent', 'writeForAgent'].some(method => typeof settings[method] !== 'function')) {
+                throw Error('The native browser settings RPC contract changed');
+              }
+              const LocalSettings = localBrowserSettings(settings.constructor, require);
+              Object.setPrototypeOf(settings, LocalSettings.prototype);
+              installed.add(settings);
+            }
+            super(root, ...rest);
+          }
+        }
+        descriptors.b = { value: BrowserSettingsRpcStub, enumerable: descriptors.b?.enumerable ?? true };
+        rpcExports = Object.create(Object.getPrototypeOf(original), descriptors);
+        return rpcExports;
+      },
+    });
+    return factory.call(this, module, exports, adapted);
+  });
+}
 
 // Source OFP1 still owns readiness/aggregation. Its pure access-policy seam
 // delegates only the local Free text provider to our actual local transport.

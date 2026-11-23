@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { parseHTML } from 'linkedom/worker';
+import { capturedChunk } from './support/captured-original.mjs';
 import * as catalog from '../model-catalog.js';
 import { streamCompletion } from '../runtime.js';
 import { LocalAppServer, wrapNativeCodexWorkTiming, wrapNativeWorkedDuration } from '../src/native-client/local-app-server.mjs';
@@ -296,7 +297,8 @@ async function loadNativeActivityModules(t) {
   const entry = await fs.readFile(new URL('../src/native-client/entry-library.mjs', import.meta.url), 'utf8');
   const assets = new URL('../original-client/public/chatgpt.com/cdn/assets/', import.meta.url);
   const names = [...entry.matchAll(/import\*as \w+ from"\/cdn\/assets\/([^"]+)"/g)].map(match => match[1]);
-  names.push('923609.c9f1e3da56.js'); // XSEO, the original row for live or finished Work outside a disclosure.
+  // XSEO is the original row for live or finished Work outside a disclosure.
+  names.push(new URL(capturedChunk(923609, 517409).url).pathname.slice('/cdn/assets/'.length));
   const chunks = await Promise.all(names.map(name => import(new URL(name, assets).href)));
   const factories = Object.assign({}, ...chunks.map(chunk => chunk.__webpack_modules__));
   const cache = new Map();

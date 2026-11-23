@@ -1,13 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
 import vm from 'node:vm';
-import { createHash } from 'node:crypto';
+import { capturedFactory } from './support/captured-original.mjs';
 import { createNativeCloudSyncFeedback } from '../src/native-client/native-cloud-sync-feedback.mjs';
 
 function originalNativeServiceFixture() {
-  const source = fs.readFileSync(new URL('../original-client/public/chatgpt.com/cdn/assets/698524.76d0d9fd5b.js', import.meta.url), 'utf8').slice(607336, 610250);
-  assert.equal(createHash('sha256').update(source).digest('hex'), '460d9241e82abe644bdc42a5e34ac9e21d4d4433346f979f17c115596b78bc63');
+  const source = capturedFactory('SGsN', 698524);
   const active = new Map(), submitted = [], dismissed = [];
   const dependencies = {
     QosV: { c() { throw Error('React component render is outside this service ABI test'); } },

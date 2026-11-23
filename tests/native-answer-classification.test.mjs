@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { createHash, webcrypto } from 'node:crypto';
 import vm from 'node:vm';
 import { parse } from 'acorn';
+import { capturedChunk } from './support/captured-original.mjs';
 import { parseHTML } from 'linkedom';
 import {
   ClassicChatAdapter, wrapNativeChatPreamble, wrapNativeClassicChatTiming,
@@ -17,7 +18,7 @@ const manifest = JSON.parse(read('original-client/resource-manifest.json'));
 assert.equal(manifest.sourceBuild, plan.sourceBuild);
 const captures = new Map(manifest.assets.map(asset => [asset.url, asset]));
 // JrPc is in a lazy progress chunk. Read all factory tables without running their entries.
-const progressChunks = ['/cdn/assets/533131.b24809b2cb.js', '/cdn/assets/923609.c9f1e3da56.js'];
+const progressChunks = [capturedChunk(533131, 494082), capturedChunk(923609, 517409)].map(asset => new URL(asset.url).pathname);
 const factorySources = new Map();
 for (const chunk of [...plan.registrationChunks, ...progressChunks]) {
   const captured = captures.get('https://chatgpt.com' + chunk);
