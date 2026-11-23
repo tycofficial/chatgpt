@@ -1,4 +1,4 @@
-name: Diagnose the new build's native ABI and browser startup
+name: Trace the actual startup error and the changed public host settings boundary
 on:
   push:
     branches: [qa/weekly-upstream-0237c4dd]
@@ -35,57 +35,86 @@ jobs:
           mkdir -p "$task_tmp/chatgpt-upstream-capture"
           tar -C "$task_tmp/chatgpt-upstream-capture" -xzf "$task_tmp/chatgpt-candidate-archive/chatgpt-upstream.tar.gz"
           npm ci --no-audit --no-fund
-      - name: Locate original chunks and adapter factories in the captured graph
+      - name: Compare the former and current public host boundaries
         run: |
           node --input-type=module <<'NODE'
-          import { readFile, readdir } from 'node:fs/promises';
+          import { readFile, writeFile } from 'node:fs/promises';
           import { join } from 'node:path';
-          import { createHash } from 'node:crypto';
+          import { parse } from 'acorn';
           import assert from 'node:assert/strict';
-          const capture = join(process.env.RUNNER_TEMP, 'chatgpt-upstream-capture', process.env.UPSTREAM);
-          const bytes=await readFile(join(capture,'capture-manifest.json'));
-          assert.equal(createHash('sha256').update(bytes).digest('hex'), 'b2e4fcf1f0c77059f64aa6b8cca9f11312b14fef4920171d131e02f4a2440e59');
-          const graph=JSON.parse(bytes);
-          assert.equal(graph.status,'complete');
-          const paths=new Map();
-          for(const asset of graph.assets) {
-            const url=new URL(asset.url), chunk=/(?:^|\/)(\d+)\.[a-f\d]{8,}\.js$/.exec(url.pathname);
-            if (chunk) {
-              if (!paths.has(chunk[1])) paths.set(chunk[1],[]);
-              paths.get(chunk[1]).push({path:url.pathname, sha256:asset.sha256});
-            }
-          }
-          const tests=(await readdir('tests')).filter(name=>name.endsWith('.test.mjs'));
-          const fixtureNames=new Set();
-          for(const file of tests) {
-            const content=await readFile(join('tests',file),'utf8');
-            for(const [,chunk] of content.matchAll(/\b(\d+\.[a-f\d]{8,}\.js)\b/g)) fixtureNames.add(chunk);
-          }
-          const mappings=[];
-          for(const fixture of [...fixtureNames].sort()) {
-            const options=paths.get(fixture.split('.')[0]) ?? [];
-            if(!options.some(row=>row.path.endsWith('/'+fixture))) mappings.push({fixture, options});
-          }
-          console.log('Updated fixture chunks ' + JSON.stringify(mappings));
+          const active=join(process.env.RUNNER_TEMP,'chatgpt-upstream-capture',process.env.UPSTREAM);
+          const prior=JSON.parse(await readFile('original-client/resource-manifest.json','utf8'));
+          const next=JSON.parse(await readFile(join(active,'capture-manifest.json'),'utf8'));
+          assert.equal(next.sourceBuild,process.env.UPSTREAM);
+          const selectedIds=['YCTv','PBZ3','ouEa','HkKI','WWxl','sm3b','osjx','OFP1','ADAj'];
           const boot=await readFile('src/native-client/boot-adapter.mjs','utf8');
-          const adapterFactories=[...new Set([...boot.matchAll(/adaptFactory\('([\w$]+)'/g)].map(m=>m[1]))];
-          const probeFactories=['ouEa','HkKI','WWxl','ZG9f','QkCx','Afr7','JmpW','bsEp','CKur','JrPc','XSEO','SGsN','q3HK','vnLQ','QtaM','zskm','sm3b','Q840','PBZ3','ZQvf','khOd'];
-          const names=[...new Set([...adapterFactories,...probeFactories])];
-          const regexp=new RegExp('[,{]\\s*["\\x27]?(' + names.map(name=>name.replaceAll('$','\\$')).join('|') + ')["\\x27]?\\s*(?=:\\s*\\(?function|\\()','g');
-          const files=graph.assets.filter(asset=>asset.path.startsWith('public/chatgpt.com/cdn/assets/')&&asset.path.endsWith('.js'));
-          const positions=new Map(names.map(name=>[name,new Set()]));
-          let cursor=0;
-          await Promise.all(Array.from({length:12},async()=>{
-            while(cursor<files.length){
-              const asset=files[cursor++];
-              const src=await readFile(join(capture,asset.path),'utf8');
-              for(const match of src.matchAll(regexp)) positions.get(match[1]).add(new URL(asset.url).pathname);
-            }
-          }));
-          const absent=names.filter(name=>!positions.get(name).size);
-          const found=Object.fromEntries(probeFactories.map(name=>[name,[...positions.get(name)].slice(0,12)]));
-          const duplicate=names.filter(name=>positions.get(name).size>1).map(name=>[name,positions.get(name).size]);
-          console.log('Original exports ' + JSON.stringify({adapterCount:adapterFactories.length,absent,found,duplicate}));
+          const overrideIds=[...new Set([...boot.matchAll(/\b(?:overrideExports|adaptFactory)\('([\w$]+)'/g)].map(match=>match[1]))];
+          const watched=[...new Set([...selectedIds,...overrideIds])];
+          const token=new RegExp('[,{]\\s*["\\x27]?(' + watched.map(name=>name.replaceAll('$','\\$')).join('|') + ')["\\x27]?\\s*(?=:\\s*\\(?function|\\()');
+          const selector=/(?:readAll|3085093835|\/entities\/home|getLocalBusiness|local_business|cachedBindings|autoDisposeScheduled|WGhj)/;
+          const objectName='__webpack_modules__';
+          const classes = text => [...new Set([...text.matchAll(/(?:^|[^.\w])([A-Za-z_$][\w$]{2,})\([^)]{0,100}\)\{/g)].map(row=>row[1]))].slice(0,32);
+          function tokens(text) {
+            return [...new Set((text.match(/[A-Za-z_$][A-Za-z0-9_$]{4,}/g)??[]).filter(word=>word.length<32))];
+          }
+          function facts(property,source,file) {
+            const { value }=property;
+            const id=String(property.key.name ?? property.key.value);
+            const text=source.slice(value.start,value.end);
+            const third=value.params?.[2]?.name;
+            const deps=third ? [...new Set([...text.matchAll(new RegExp('\\b'+third+'\\(["\\x27]([\\w$]{4})["\\x27]\\)','g'))].map(row=>row[1]))] : [];
+            return { id,file,deps,text,methods:classes(text),words:tokens(text) };
+          }
+          function table(source) {
+            const p=parse(source,{ ecmaVersion:'latest',sourceType:'module' });
+            return p.body.flatMap(s=>(s.declaration??s).declarations??[]).filter(d=>d.id.name===objectName && d.init?.type==='ObjectExpression').flatMap(d=>d.init.properties);
+          }
+          async function collect(root, manifest, old) {
+            const exact=new Map();
+            const likely=[];
+            const scanned=manifest.assets.filter(asset=>/^public\/chatgpt\.com\/cdn\/assets\/[\w/.-]+\.js$/.test(asset.path)&&!asset.path.split('/').includes('..'));
+            let cursor=0;
+            await Promise.all(Array.from({length:12},async()=>{
+              while(cursor<scanned.length){
+                const asset=scanned[cursor++];
+                const text=await readFile(join(root,asset.path),'utf8');
+                if(!text.includes(objectName) || !(token.test(text)||!old&&selector.test(text))) continue;
+                let properties;
+                try { properties=table(text); } catch { continue; }
+                for(const property of properties) {
+                  if(!property.value || !property.key) continue;
+                  const id=String(property.key.name??property.key.value);
+                  const raw=text.slice(property.value.start,property.value.end);
+                  if(watched.includes(id)){
+                    if(!exact.has(id))exact.set(id,[]);
+                    exact.get(id).push(facts(property,text,asset.path));
+                  }
+                  if(!old && selector.test(raw)) likely.push(facts(property,text,asset.path));
+                }
+              }
+            }));
+            return {exact,likely};
+          }
+          const before=await collect('original-client',prior,true);
+          const after=await collect(active,next,false);
+          const report={missing:watched.filter(id=>!after.exact.has(id)),before:{},candidates:{}};
+          for(const id of selectedIds) {
+            const matches=before.exact.get(id)??[];
+            report.before[id]=matches.slice(0,5).map(({file,deps,text,methods})=>({file,deps,methods,size:text.length}));
+            if(after.exact.has(id)||!matches.length) continue;
+            const old=matches[0], keys=new Set(old.words), common=(a,b)=>a.filter(x=>b.includes(x)).length;
+            report.candidates[id]=after.likely
+              .map(candidate=>{
+                const overlap=candidate.words.filter(word=>keys.has(word)).length;
+                const score=overlap/Math.max(1,Math.sqrt(keys.size*candidate.words.length))+
+                  0.035*common(old.deps,candidate.deps)+0.02*common(old.methods,candidate.methods);
+                return {id:candidate.id,file:candidate.file,size:candidate.text.length,
+                  deps:candidate.deps.slice(0,20),methods:candidate.methods.slice(0,16),
+                  score:Number(score.toFixed(3)),hasReadAll:candidate.text.includes('readAll')};
+              })
+              .sort((a,b)=>b.score-a.score).slice(0,7);
+          }
+          console.log('Native boundary comparison ' + JSON.stringify(report));
           NODE
       - name: Build the isolated candidate from the capture
         run: |
@@ -112,10 +141,11 @@ jobs:
           const manifest=await fetch(base+'native-client/active.json').then(r=>r.json());
           assert.equal(manifest.sourceBuild,process.env.UPSTREAM);
           const browser=await chromium.launch({channel:'msedge', headless:true});
-          const errors=[],failedAssets=[];
+          const errors=[],failedAssets=[],consoleErrors=[];
           try {
             const context=await browser.newContext({locale:'zh-CN'});
             const page=await context.newPage();
+            page.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text().slice(0,280));});
             page.on('pageerror',err=>errors.push({name:err.name,message:err.message.slice(0,180)}));
             page.on('response',r=>{
               const url=new URL(r.url());
@@ -125,7 +155,7 @@ jobs:
             });
             try {
               await page.goto(base,{waitUntil:'domcontentloaded',timeout:35000});
-              await page.locator('#prompt-textarea[contenteditable="true"], .ProseMirror[contenteditable="true"]').first().waitFor({state:'visible',timeout:42000});
+              await page.locator('#prompt-textarea[contenteditable="true"], .ProseMirror[contenteditable="true"]').first().waitFor({state:'visible',timeout:27000});
               const flags=await page.evaluate(()=>({sourceBuild:document.documentElement.dataset.build,
                 boot:window.__CHATGPT_REPLICA_ENV__?.release,path:location.pathname,title:document.title,
                 sidebar:!!document.querySelector('[data-testid="profile-button"]'), probe:window.__originalClientProbe?.length ?? null}));
@@ -134,10 +164,10 @@ jobs:
               console.log('Edge loaded the candidate ' + JSON.stringify(flags));
             } finally {
               const state=await page.evaluate(()=>({title:document.title,path:location.pathname,
-                body:document.body?.innerText.replace(/\s+/g,' ').slice(0,270),
+                failure:window.__CHATGPT_STARTUP_ERROR__ ?? null, body:document.body?.innerText.replace(/\s+/g,' ').slice(0,270),
                 controls:[...document.querySelectorAll('button')].filter(btn=>btn.getClientRects().length).slice(0,22).map(btn=>btn.getAttribute('aria-label')??btn.textContent?.trim().slice(0,30)),
               })).catch(()=>null);
-              console.log('Edge candidate state ' + JSON.stringify({state,errors:errors.slice(-15),failedAssets:failedAssets.slice(-30)}));
+              console.log('Edge candidate state ' + JSON.stringify({state,errors:errors.slice(-15),consoleErrors:consoleErrors.slice(-12),failedAssets:failedAssets.slice(-30)}));
             }
           } finally { await browser.close(); }
           NODE
