@@ -47,6 +47,11 @@ try {
     const cors = {'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Methods':'GET, POST, OPTIONS',
       'Access-Control-Allow-Headers':'content-type, authorization, x-chat-request-id'};
     let authPosts=0, modelPosts=0;
+    const codexPrompts = [
+      'Codex browser regression first turn CDX-ENTRY-01',
+      'Codex browser regression follow-up CDX-ENTRY-02',
+    ];
+    const codexRequests = [];
     await context.route(backend+'/**', async route => {
       if(route.request().method()==='OPTIONS') return route.fulfill({status:204,headers:cors});
       if(new URL(route.request().url()).pathname==='/auth/login') authPosts++;
@@ -59,7 +64,21 @@ try {
       assert.equal(req.url(),provider+'/responses');
       assert.equal(req.headers().authorization,'Bearer '+credential);
       const body=req.postDataJSON();
-      assert.match(JSON.stringify(body.input),/Direct fallback validation/);
+      const turn = modelPosts + 1;
+      if (turn <= 2) {
+        assert.match(JSON.stringify(body.input), /Direct fallback validation/);
+      } else {
+        const prompt = codexPrompts[turn - 3];
+        assert.ok(process.env.QA_NATIVE_CODEX_ENTRY === '1' && prompt, 'Unexpected or duplicate inference POST');
+        const currentUser = body.input?.findLast?.(item => item.role === 'user');
+        assert.ok(currentUser && JSON.stringify(currentUser).includes(prompt), 'Wrong Codex turn or duplicate prompt');
+        assert.equal(body.model, 'gpt-6.2-sol');
+        assert.equal(body.reasoning?.effort, 'low');
+        const hasPreviousTurn = JSON.stringify(body.input).includes(codexPrompts[0]) &&
+          JSON.stringify(body.input).includes('ADMIN-DIRECT-QA-3');
+        if (turn === 4) assert.equal(hasPreviousTurn, true, 'The same Codex thread omitted its prior turn');
+        codexRequests.push({ turn: turn - 2, model: body.model, effort: body.reasoning.effort, hasPreviousTurn });
+      }
       assert.equal(body.stream,true);
       modelPosts++;
       const text = 'ADMIN-DIRECT-QA-' + modelPosts;
@@ -133,15 +152,16 @@ try {
                 text: (node.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 50),
                 href: node.getAttribute('href'),
               })).filter(node => node.aria || node.text || node.title);
-            const response = await fetch('/backend-api/statsig/initialize', {
-              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
-            }).catch(() => null);
-            const flags = await response?.json().catch(() => null);
+            let flags;
+            try {
+              const script = document.getElementById('client-bootstrap');
+              flags = JSON.parse(JSON.parse(script.textContent).statsigPayload);
+            } catch {}
             const gates = Object.fromEntries(['3999836663', '4019944087', '515412992', '3085093835']
               .map(key => [key, flags?.feature_gates?.[key]?.value ?? null]));
             const state = history.state?.usr ?? history.state;
             return { path: location.pathname, mode: state?.sidebarProductMode ?? null,
-              gateStatus: response?.status, gates, controls: labels.slice(0, 65) };
+              gates, controls: labels.slice(0, 65) };
           });
           console.log('Native mode ' + stage + ' ' + JSON.stringify(data));
         };
@@ -186,6 +206,30 @@ try {
         const codexMode = await selectedMode();
         assert.equal(codexMode, 'codex');
         await report('codex');
+        const homePath = new URL(page.url()).pathname.replace(/\/+$/, '');
+        const firstCodexReplyMs = await sendMessage(codexPrompts[0], 3);
+        const codexThread = new URL(page.url());
+        assert.equal(codexThread.origin, origin);
+        assert.ok(codexThread.pathname.startsWith('/chatgpt/'));
+        assert.notEqual(codexThread.pathname.replace(/\/+$/, ''), homePath, 'Codex never opened the saved thread');
+        assert.equal(modelPosts, 3);
+        await page.reload({ waitUntil: 'domcontentloaded', timeout: 45000 });
+        await responseText(3).waitFor({ state: 'visible', timeout: 40000 });
+        await editor().waitFor({ state: 'visible', timeout: 30000 });
+        assert.equal(page.url(), codexThread.href, 'Reload reopened a different Codex thread');
+        assert.equal(await selectedMode(), 'codex', 'Reload selected a different product mode');
+        assert.equal(modelPosts, 3, 'Reload replayed the first Codex response request');
+        const secondCodexReplyMs = await sendMessage(codexPrompts[1], 4);
+        assert.equal(page.url(), codexThread.href, 'Codex follow-up opened another thread');
+        assert.equal(modelPosts, 4);
+        assert.equal(codexRequests.length, 2);
+        for (const expected of ['ADMIN-DIRECT-QA-3', 'ADMIN-DIRECT-QA-4', ...codexPrompts]) {
+          const message = page.locator('main').getByText(expected, { exact: true }).filter({ visible: true });
+          assert.equal(await message.count(), 1, 'Missing or duplicate visible Codex message: ' + expected);
+        }
+        console.log('Native Codex two-turn QA ' + JSON.stringify({ release: active.release,
+          threadPath: codexThread.pathname, nativeMain: true, preservedMode: await selectedMode(),
+          firstCodexReplyMs, secondCodexReplyMs, codexRequests, modelPosts, reloadedReply: true, sameThread: true }));
         let workItem = null;
         if (await switcher().isVisible()) {
           await switcher().click();
@@ -249,7 +293,7 @@ try {
         console.log('Native entry QA '+JSON.stringify({engine,release:active.release,surfaces}));
       }
     } finally {
-      const diagnostic=await page.evaluate(()=>({path:location.pathname,startup:window.__CHATGPT_STARTUP_ERROR__,body:document.body.innerText.slice(0,190)})).catch(()=>null);
+      const diagnostic=await page.evaluate(()=>({path:location.pathname,startup:window.__CHATGPT_STARTUP_ERROR__,body:document.body.innerText.slice(0,190),main:document.querySelector('main')?.innerText.slice(-650)})).catch(()=>null);
       console.log('Browser diagnostic '+JSON.stringify({engine,errors:errors.slice(-6),diagnostic}));
     }
   } finally { await browser.close(); }
