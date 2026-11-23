@@ -1,4 +1,4 @@
-name: Trace the actual startup error and the changed public host settings boundary
+name: Inspect the verified candidate's native host settings ABI
 on:
   push:
     branches: [qa/weekly-upstream-0237c4dd]
@@ -35,145 +35,90 @@ jobs:
           mkdir -p "$task_tmp/chatgpt-upstream-capture"
           tar -C "$task_tmp/chatgpt-upstream-capture" -xzf "$task_tmp/chatgpt-candidate-archive/chatgpt-upstream.tar.gz"
           npm ci --no-audit --no-fund
-      - name: Compare the former and current public host boundaries
+      - name: Identify the exact exported browser host and its settings object
         run: |
           node --input-type=module <<'NODE'
-          import { readFile, writeFile } from 'node:fs/promises';
+          import { readFile } from 'node:fs/promises';
           import { join } from 'node:path';
+          import { createHash } from 'node:crypto';
           import { parse } from 'acorn';
           import assert from 'node:assert/strict';
-          const active=join(process.env.RUNNER_TEMP,'chatgpt-upstream-capture',process.env.UPSTREAM);
-          const prior=JSON.parse(await readFile('original-client/resource-manifest.json','utf8'));
-          const next=JSON.parse(await readFile(join(active,'capture-manifest.json'),'utf8'));
-          assert.equal(next.sourceBuild,process.env.UPSTREAM);
-          const selectedIds=['YCTv','PBZ3','ouEa','HkKI','WWxl','sm3b','osjx','OFP1','ADAj'];
-          const boot=await readFile('src/native-client/boot-adapter.mjs','utf8');
-          const overrideIds=[...new Set([...boot.matchAll(/\b(?:overrideExports|adaptFactory)\('([\w$]+)'/g)].map(match=>match[1]))];
-          const watched=[...new Set([...selectedIds,...overrideIds])];
-          const token=new RegExp('[,{]\\s*["\\x27]?(' + watched.map(name=>name.replaceAll('$','\\$')).join('|') + ')["\\x27]?\\s*(?=:\\s*\\(?function|\\()');
-          const selector=/(?:readAll|3085093835|\/entities\/home|getLocalBusiness|local_business|cachedBindings|autoDisposeScheduled|WGhj)/;
-          const objectName='__webpack_modules__';
-          const classes = text => [...new Set([...text.matchAll(/(?:^|[^.\w])([A-Za-z_$][\w$]{2,})\([^)]{0,100}\)\{/g)].map(row=>row[1]))].slice(0,32);
-          function tokens(text) {
-            return [...new Set((text.match(/[A-Za-z_$][A-Za-z0-9_$]{4,}/g)??[]).filter(word=>word.length<32))];
+          const capture=join(process.env.RUNNER_TEMP,'chatgpt-upstream-capture',process.env.UPSTREAM);
+          const graph=JSON.parse(await readFile(join(capture,'capture-manifest.json'),'utf8'));
+          const files=graph.assets.filter(v=>v.path.startsWith('public/chatgpt.com/cdn/assets/')&&v.path.endsWith('.js'));
+          const factoryModule='__webpack_modules__';
+          const sha=value=>createHash('sha256').update(value).digest('hex');
+          const table=src=>parse(src,{ecmaVersion:'latest',sourceType:'module'}).body.flatMap(s=>(s.declaration??s).declarations??[])
+            .filter(d=>d.id.name===factoryModule&&d.init?.type==='ObjectExpression').flatMap(d=>d.init.properties);
+          const key=node=>node?.name??node?.value??null;
+          function walk(node,visit) {
+            if(!node||typeof node!=='object')return;
+            if(Array.isArray(node)){node.forEach(child=>walk(child,visit));return;}
+            if(node.type)visit(node);
+            for(const value of Object.values(node))if(value&&typeof value==='object')walk(value,visit);
           }
-          function facts(property,source,file) {
-            const { value }=property;
-            const id=String(property.key.name ?? property.key.value);
-            const text=source.slice(value.start,value.end);
-            const third=value.params?.[2]?.name;
-            const deps=third ? [...new Set([...text.matchAll(new RegExp('\\b'+third+'\\(["\\x27]([\\w$]{4})["\\x27]\\)','g'))].map(row=>row[1]))] : [];
-            return { id,file,deps,text,methods:classes(text),words:tokens(text) };
-          }
-          function table(source) {
-            const p=parse(source,{ ecmaVersion:'latest',sourceType:'module' });
-            return p.body.flatMap(s=>(s.declaration??s).declarations??[]).filter(d=>d.id.name===objectName && d.init?.type==='ObjectExpression').flatMap(d=>d.init.properties);
-          }
-          async function collect(root, manifest, old) {
-            const exact=new Map();
-            const likely=[];
-            const scanned=manifest.assets.filter(asset=>/^public\/chatgpt\.com\/cdn\/assets\/[\w/.-]+\.js$/.test(asset.path)&&!asset.path.split('/').includes('..'));
-            let cursor=0;
-            await Promise.all(Array.from({length:12},async()=>{
-              while(cursor<scanned.length){
-                const asset=scanned[cursor++];
-                const text=await readFile(join(root,asset.path),'utf8');
-                if(!text.includes(objectName) || !(token.test(text)||!old&&selector.test(text))) continue;
-                let properties;
-                try { properties=table(text); } catch { continue; }
-                for(const property of properties) {
-                  if(!property.value || !property.key) continue;
-                  const id=String(property.key.name??property.key.value);
-                  const raw=text.slice(property.value.start,property.value.end);
-                  if(watched.includes(id)){
-                    if(!exact.has(id))exact.set(id,[]);
-                    exact.get(id).push(facts(property,text,asset.path));
-                  }
-                  if(!old && selector.test(raw)) likely.push(facts(property,text,asset.path));
-                }
+          function inspectFactory(id, property, source, file) {
+            const code=property.value;
+            const requireName=code.params?.[2]?.name;
+            const classes=[], exports=[], settingsRelations=[], refs=[];
+            const snippet=node=>node?source.slice(node.start,node.end):null;
+            walk(code,node=>{
+              if(node.type==='ClassExpression'||node.type==='ClassDeclaration'){
+                const methods=node.body.body.map(m=>({
+                  name:key(m.key),kind:m.kind??null,
+                  ...(m.value?.params?.length ? {arity:m.value.params.length} : {}),
+                }));
+                classes.push({name:node.id?.name??null, superclass:snippet(node.superClass), methods,
+                  assignments:node.body.body.filter(p=>p.type==='PropertyDefinition').map(p=>[key(p.key),snippet(p.value)?.slice(0,120)])});
               }
-            }));
-            return {exact,likely};
-          }
-          const before=await collect('original-client',prior,true);
-          const after=await collect(active,next,false);
-          const report={missing:watched.filter(id=>!after.exact.has(id)),before:{},candidates:{}};
-          for(const id of selectedIds) {
-            const matches=before.exact.get(id)??[];
-            report.before[id]=matches.slice(0,5).map(({file,deps,text,methods})=>({file,deps,methods,size:text.length}));
-            if(after.exact.has(id)||!matches.length) continue;
-            const old=matches[0], keys=new Set(old.words), common=(a,b)=>a.filter(x=>b.includes(x)).length;
-            report.candidates[id]=after.likely
-              .map(candidate=>{
-                const overlap=candidate.words.filter(word=>keys.has(word)).length;
-                const score=overlap/Math.max(1,Math.sqrt(keys.size*candidate.words.length))+
-                  0.035*common(old.deps,candidate.deps)+0.02*common(old.methods,candidate.methods);
-                return {id:candidate.id,file:candidate.file,size:candidate.text.length,
-                  deps:candidate.deps.slice(0,20),methods:candidate.methods.slice(0,16),
-                  score:Number(score.toFixed(3)),hasReadAll:candidate.text.includes('readAll')};
-              })
-              .sort((a,b)=>b.score-a.score).slice(0,7);
-          }
-          console.log('Native boundary comparison ' + JSON.stringify(report));
-          NODE
-      - name: Build the isolated candidate from the capture
-        run: |
-          set -euo pipefail
-          node scripts/adopt-native-upstream.mjs "$RUNNER_TEMP/chatgpt-upstream-capture/$UPSTREAM"
-          node scripts/build-native-client.mjs --activate
-          npm run native:check
-      - id: smoke
-        name: Open the isolated candidate in real Microsoft Edge
-        continue-on-error: true
-        run: |
-          set -euo pipefail
-          npm install --prefix "$RUNNER_TEMP/weekly-browser" --no-audit --no-fund --package-lock=false playwright-core@1.58.2
-          node scripts/serve-native-client.mjs > "$RUNNER_TEMP/weekly-native-preview.log" 2>&1 &
-          site_pid=$!
-          trap 'kill "$site_pid" 2>/dev/null || true' EXIT
-          curl -fSs --retry 9 --retry-connrefused http://127.0.0.1:4400/chatgpt/native-client/active.json > /dev/null
-          node --input-type=module <<'NODE'
-          import assert from 'node:assert/strict';
-          import { join } from 'node:path';
-          import { pathToFileURL } from 'node:url';
-          const {chromium}=await import(pathToFileURL(join(process.env.RUNNER_TEMP,'weekly-browser/node_modules/playwright-core/index.mjs')).href);
-          const base='http://127.0.0.1:4400/chatgpt/';
-          const manifest=await fetch(base+'native-client/active.json').then(r=>r.json());
-          assert.equal(manifest.sourceBuild,process.env.UPSTREAM);
-          const browser=await chromium.launch({channel:'msedge', headless:true});
-          const errors=[],failedAssets=[],consoleErrors=[];
-          try {
-            const context=await browser.newContext({locale:'zh-CN'});
-            const page=await context.newPage();
-            page.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text().slice(0,280));});
-            page.on('pageerror',err=>errors.push({name:err.name,message:err.message.slice(0,180)}));
-            page.on('response',r=>{
-              const url=new URL(r.url());
-              if (r.status()>=400&&url.host==='127.0.0.1:4400'&&url.pathname.includes('/original-client/')) {
-                failedAssets.push({path:url.pathname,status:r.status()});
+              if(node.type==='CallExpression'&&node.callee?.object?.name===requireName&&key(node.callee?.property)==='d') {
+                exports.push(node.arguments.slice(1).map(part=>part.properties?.map(p=>[key(p.key),snippet(p.value)?.slice(0,90)])??null));
+              }
+              if(node.type==='MemberExpression'&&/settings|hostSettings/i.test(String(key(node.property)))) {
+                if(settingsRelations.length<50)settingsRelations.push(snippet(node)?.slice(0,110));
+              }
+              if(node.type==='CallExpression'&&node.callee?.name===requireName&&['IKem','ZG9f','osjx','YCTv'].includes(node.arguments[0]?.value)) {
+                refs.push({require:node.arguments[0].value,firstText:source.slice(node.end,node.end+80).replace(/\s+/g,' ')});
               }
             });
-            try {
-              await page.goto(base,{waitUntil:'domcontentloaded',timeout:35000});
-              await page.locator('#prompt-textarea[contenteditable="true"], .ProseMirror[contenteditable="true"]').first().waitFor({state:'visible',timeout:27000});
-              const flags=await page.evaluate(()=>({sourceBuild:document.documentElement.dataset.build,
-                boot:window.__CHATGPT_REPLICA_ENV__?.release,path:location.pathname,title:document.title,
-                sidebar:!!document.querySelector('[data-testid="profile-button"]'), probe:window.__originalClientProbe?.length ?? null}));
-              assert.equal(flags.sourceBuild, process.env.UPSTREAM);
-              assert.equal(flags.boot,manifest.release);
-              console.log('Edge loaded the candidate ' + JSON.stringify(flags));
-            } finally {
-              const state=await page.evaluate(()=>({title:document.title,path:location.pathname,
-                failure:window.__CHATGPT_STARTUP_ERROR__ ?? null, body:document.body?.innerText.replace(/\s+/g,' ').slice(0,270),
-                controls:[...document.querySelectorAll('button')].filter(btn=>btn.getClientRects().length).slice(0,22).map(btn=>btn.getAttribute('aria-label')??btn.textContent?.trim().slice(0,30)),
-              })).catch(()=>null);
-              console.log('Edge candidate state ' + JSON.stringify({state,errors:errors.slice(-15),consoleErrors:consoleErrors.slice(-12),failedAssets:failedAssets.slice(-30)}));
+            return {id,file,classes,exports,settingsRelations:[...new Set(settingsRelations)],refs};
+          }
+          for(const row of [
+            ['IKem','767086.d600a395f4.js'],
+            ['ADAj','767086.d600a395f4.js'],
+          ]){
+            const [id,name]=row, asset=files.find(r=>r.path=== 'public/chatgpt.com/cdn/assets/'+name);
+            assert(asset);
+            const bytes=await readFile(join(capture,asset.path));
+            assert.equal(sha(bytes),asset.sha256);
+            const source=bytes.toString('utf8');
+            const property=table(source).find(p=>key(p.key)===id);
+            assert(property);
+            console.log('Native host ABI ' + JSON.stringify(inspectFactory(id,property,source,asset.path)));
+          }
+          const nav=[], hostCallers=[];
+          let cursor=0;
+          await Promise.all(Array.from({length:10},async()=>{
+            while(cursor<files.length){
+              const asset=files[cursor++];
+              const source=await readFile(join(capture,asset.path),'utf8');
+              const possibleNavigation=source.includes('ZQvf')&&source.includes('khOd');
+              const possibleHost=source.includes('"IKem"')&&source.includes('hostSettings');
+              if(!source.includes(factoryModule)||!possibleNavigation&&!possibleHost)continue;
+              let list;
+              try{list=table(source);}catch{continue;}
+              for(const property of list){
+                if(!property.value)continue;
+                const text=source.slice(property.value.start,property.value.end);
+                if(possibleNavigation&&text.includes('ZQvf')&&text.includes('khOd')&&text.includes('codex')){
+                  nav.push({id:key(property.key),file:asset.path,size:text.length,codexGate:text.includes('3085093835')});
+                }
+                if(possibleHost&&text.includes('"IKem"')&&text.includes('hostSettings')){
+                  hostCallers.push({id:key(property.key),file:asset.path,refs:inspectFactory(key(property.key),property,source,asset.path).refs});
+                }
+              }
             }
-          } finally { await browser.close(); }
+          }));
+          console.log('Native host callers ' + JSON.stringify(hostCallers.slice(0,15)));
+          console.log('Native navigation candidates ' + JSON.stringify(nav.slice(0,30)));
           NODE
-      - name: Record the candidate browser result
-        if: always()
-        shell: bash
-        env:
-          SMOKE: ${{ steps.smoke.outcome }}
-        run: printf 'Candidate startup in Edge %s\n' "$SMOKE" >> "$GITHUB_STEP_SUMMARY"
