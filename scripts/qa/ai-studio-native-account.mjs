@@ -78,9 +78,28 @@ async function submitAccount(page, kind) {
   const request = nextResponse(page, kind === 'signup' ? '/auth/register' : '/auth/login', 'POST');
   await page.getByRole('button', { name: '继续', exact: true }).click({ timeout: 12000 });
   const result = await readStudio(await request, kind === 'signup' ? 'register' : 'login', 200);
-  assert.equal(result.user?.role, 'user');
-  assert.equal(result.user?.planType, 'free');
-  assert.ok(typeof result.user.id === 'string' && result.user.id.startsWith('site-user:'));
+  phase = kind + '-dto';
+  const user = result.user;
+  const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+  const dto = {
+    opaqueSession: typeof result.token === 'string' && /^[a-f0-9]{64}$/.test(result.token),
+    unexpiredSession: Number.isSafeInteger(result.expiresAt) && result.expiresAt > Date.now(),
+    usernamePresent: typeof user?.username === 'string' && Boolean(user.username.trim()),
+    knownCreationTime: Number.isSafeInteger(user?.createdAt) && user.createdAt >= 0,
+    explicitNoOfficialSubscription: user?.officialSubscriptionVerified === false,
+    registeredRole: user?.role === 'user',
+    freePlan: user?.planType === 'free',
+    registeredMembership: user?.membershipSource === 'site-registration',
+    noTrial: user?.siteTrial == null,
+    uuidAccount: typeof user?.accountId === 'string' && uuid.test(user.accountId),
+    prefixedUserIdMatchesAccount: typeof user?.accountId === 'string' && user.id === 'site-user:' + user.accountId,
+    rawUuidUserId: typeof user?.id === 'string' && uuid.test(user.id),
+    rawUserIdMatchesAccount: typeof user?.id === 'string' && user.id === user.accountId,
+  };
+  mark(kind + '-dto', dto);
+  const { rawUuidUserId, rawUserIdMatchesAccount, ...required } = dto;
+  assert.ok(Object.values(required).every(Boolean), 'Studio account details do not satisfy the original client contract');
+  phase = kind + '-native-navigation';
   await page.waitForURL(home, { timeout: 35000 });
   return result.user.id;
 }
