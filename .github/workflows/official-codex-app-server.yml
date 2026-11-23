@@ -6,7 +6,7 @@ permissions:
   contents: read
 jobs:
   app-server:
-    runs-on: ubuntu-24.04
+    runs-on: macos-15
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v6
