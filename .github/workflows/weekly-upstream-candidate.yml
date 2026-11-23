@@ -1,0 +1,85 @@
+name: Capture and verify the newly observed public ChatGPT build
+on:
+  push:
+    branches: [qa/weekly-upstream-0237c4dd]
+permissions:
+  contents: read
+jobs:
+  candidate:
+    runs-on: windows-2025
+    timeout-minutes: 38
+    defaults:
+      run:
+        shell: bash
+    env:
+      EXPECTED_BUILD: 0237c4dd9e54c7e3a619581b909d792de582fee9
+      PRODUCTION_BASE: 3a59867ab3a8be0ef541bc5fd54161c1ca742a49
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          fetch-depth: 2
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Install the captured graph parser and test dependencies
+        run: npm ci --no-audit --no-fund
+      - id: capture
+        name: Capture one coherent public asset graph
+        run: |
+          set -euo pipefail
+          capture="$RUNNER_TEMP/chatgpt-upstream-capture"
+          node --use-env-proxy scripts/capture-native-upstream.mjs --out "$capture" \
+            --expected-build "$EXPECTED_BUILD" --concurrency 12 --min-free-mb 1600
+          node --input-type=module - "$capture/$EXPECTED_BUILD/capture-manifest.json" <<'NODE'
+          import assert from 'node:assert/strict';
+          import { createHash } from 'node:crypto';
+          import { readFile } from 'node:fs/promises';
+          const bytes = await readFile(process.argv[2]);
+          const graph = JSON.parse(bytes);
+          assert.equal(graph.sourceBuild, process.env.EXPECTED_BUILD);
+          assert.equal(graph.status, 'complete');
+          assert.equal(graph.currentAtCompletion, true);
+          assert.equal(graph.assets.length, graph.discoveredAssets);
+          console.log('Complete upstream graph ' + JSON.stringify({
+            build: graph.sourceBuild, version: graph.sourceVersion, manifest: graph.shell.manifest,
+            runtime: graph.runtime, entry: graph.entry, assets: graph.assets.length, edges: graph.links.length,
+            bytes: graph.capturedBytes, digest: createHash('sha256').update(bytes).digest('hex'),
+          }));
+          NODE
+      - name: Preserve verified raw resources and the capture manifest
+        run: |
+          set -euo pipefail
+          temp_dir="$(cygpath -u "$RUNNER_TEMP")"
+          tar -C "$temp_dir/chatgpt-upstream-capture" -czf "$temp_dir/chatgpt-upstream.tar.gz" "$EXPECTED_BUILD"
+      - name: Save the captured data for review
+        uses: actions/upload-artifact@v4
+        with:
+          name: chatgpt-verified-public-graph-0237c4dd
+          path: ${{ runner.temp }}/chatgpt-upstream.tar.gz
+          if-no-files-found: error
+          retention-days: 3
+          compression-level: 0
+      - name: Build the isolated Pages candidate
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$PRODUCTION_BASE" HEAD
+          node scripts/adopt-native-upstream.mjs "$RUNNER_TEMP/chatgpt-upstream-capture/$EXPECTED_BUILD"
+          node scripts/build-native-client.mjs --activate
+          npm run native:check
+          built="$(node -p "require('./native-client/active.json').sourceBuild + ' ' + require('./native-client/active.json').release")"
+          printf 'Isolated candidate %s\n' "$built"
+      - name: Verify adapter and application regressions
+        run: |
+          set -euo pipefail
+          export GENERATED_PUBLICATION_TEST_TMPDIR="$(node -p "require('node:fs').realpathSync(process.env.RUNNER_TEMP)")"
+          node --test --test-concurrency=2 tests/*.test.mjs
+      - name: Save a graph manifest if the capture did not complete
+        if: failure() && steps.capture.outcome == 'failure'
+        uses: actions/upload-artifact@v4
+        with:
+          name: chatgpt-incomplete-capture-diagnostics-0237c4dd
+          path: ${{ runner.temp }}/chatgpt-upstream-capture/0237c4dd9e54c7e3a619581b909d792de582fee9/capture-manifest.json
+          if-no-files-found: ignore
+          retention-days: 3
