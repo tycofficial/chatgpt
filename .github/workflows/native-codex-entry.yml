@@ -1,0 +1,85 @@
+name: Exercise the original Codex mode selector in Edge
+on:
+  push:
+    branches: [qa/native-codex-entry]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: windows-2025
+    timeout-minutes: 14
+    defaults:
+      run:
+        shell: bash
+    env:
+      UPSTREAM: 0237c4dd9e54c7e3a619581b909d792de582fee9
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: chatgpt-public-interactions-single-graph
+          path: ${{ runner.temp }}/chatgpt-candidate-archive
+          github-token: ${{ github.token }}
+          run-id: 45162484586
+      - name: Unpack the already verified capture on this runner
+        run: |
+          set -euo pipefail
+          task_tmp="$(cygpath -u "$RUNNER_TEMP")"
+          mkdir -p "$task_tmp/chatgpt-upstream-capture"
+          tar -C "$task_tmp/chatgpt-upstream-capture" -xzf "$task_tmp/chatgpt-candidate-archive/chatgpt-public-graph.tar.gz"
+          npm ci --no-audit --no-fund
+      - name: Build the isolated candidate from the capture
+        run: |
+          set -euo pipefail
+          node scripts/adopt-native-upstream.mjs "$RUNNER_TEMP/chatgpt-upstream-capture/$UPSTREAM"
+          node scripts/build-native-client.mjs --activate
+          npm run native:check
+          node -e 'console.log("Combined candidate release " + JSON.stringify(require("./native-client/active.json")))'
+      - name: Inspect selectors and permission factories in the verified archive
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { createHash } from 'node:crypto';
+          import { readFile } from 'node:fs/promises';
+          import { join } from 'node:path';
+          import { parse } from 'acorn';
+          const graph = JSON.parse(await readFile('original-client/resource-manifest.json', 'utf8'));
+          assert.equal(graph.sourceBuild, process.env.UPSTREAM);
+          const tracked = new Set(['pVM9','paCe','ymwH','pasN','khOd','d1ji','ztxE','cKRc','StMt','qixt']);
+          const marker = /sidebarElectron\.productMode\.trigger|codex\.browser\.execution/;
+          const search = /\/(?:767086|955979|807489)\.[a-f0-9]+\.js$/;
+          for (const asset of graph.assets.filter(asset => search.test(asset.url))) {
+            const bytes = await readFile(join('original-client', asset.path));
+            assert.equal(createHash('sha256').update(bytes).digest('hex'), asset.sha256);
+            const source = bytes.toString('utf8');
+            const { body } = parse(source, { ecmaVersion: 'latest', sourceType: 'module' });
+            const table = body.flatMap(statement => (statement.declaration ?? statement).declarations ?? [])
+              .find(declaration => declaration.id.name === '__webpack_modules__')?.init;
+            for (const prop of table?.properties ?? []) {
+              const id = prop.key?.name ?? prop.key?.value;
+              const code = source.slice(prop.value.start, prop.value.end);
+              if (!tracked.has(id) && !marker.test(code)) continue;
+              const gateIds = [...new Set([...code.matchAll(/["']([0-9]{8,10})["']/g)].map(match => match[1]))];
+              console.log('Original mode factory ' + JSON.stringify({ id, asset: asset.url,
+                hash: createHash('sha256').update(code).digest('hex'), gateIds, modeSwitch: /sidebarElectron\.productMode\.trigger/.test(code),
+                codexMenu: /sidebarElectron\.productMode\.codex/.test(code),
+                nativeTransition: /sidebarProductMode/.test(code), providerCheck: /codex\.browser/.test(code),
+                headingOnlyVariant: /onNewChat|codexAvailable/.test(code),
+              }));
+            }
+          }
+          NODE
+      - name: Click the native mode selector in Edge
+        env:
+          QA_BROWSER: edge
+          QA_NATIVE_CODEX_ENTRY: '1'
+        run: |
+          npm install --no-save --package-lock=false --no-audit --no-fund playwright-core@1.58.2
+          node scripts/qa/domestic-startup-admin.mjs

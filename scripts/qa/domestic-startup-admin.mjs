@@ -118,6 +118,69 @@ try {
       assert.equal(authPosts, 1);
       assert.equal(modelPosts, 2);
       console.log('Browser QA '+JSON.stringify({engine,release:active.release,progress,authPosts,modelPosts,reloadedReply:true,sameThread:true,firstReplyMs,secondReplyMs}));
+      if (process.env.QA_NATIVE_CODEX_ENTRY === '1') {
+        const modeLabel = /切换.*模式|切換.*模式|Switch mode/i;
+        const switcher = () => page.getByRole('button', { name: modeLabel }).filter({ visible: true }).first();
+        const selectedMode = () => page.evaluate(() => history.state?.usr?.sidebarProductMode ?? history.state?.sidebarProductMode ?? null);
+        const report = async stage => {
+          const data = await page.evaluate(async () => {
+            const isVisible = node => !!node.getClientRects().length && getComputedStyle(node).visibility === 'visible';
+            const labels = [...document.querySelectorAll('button, a, [role="menuitem"], [role="button"]')]
+              .filter(isVisible).map(node => ({
+                role: node.getAttribute('role') ?? node.tagName.toLowerCase(),
+                aria: node.getAttribute('aria-label'), title: node.getAttribute('title'),
+                testId: node.getAttribute('data-testid'), expanded: node.getAttribute('aria-expanded'),
+                text: (node.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 50),
+                href: node.getAttribute('href'),
+              })).filter(node => node.aria || node.text || node.title);
+            const response = await fetch('/backend-api/statsig/initialize', {
+              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+            }).catch(() => null);
+            const flags = await response?.json().catch(() => null);
+            const gates = Object.fromEntries(['3999836663', '4019944087', '515412992', '3085093835']
+              .map(key => [key, flags?.feature_gates?.[key]?.value ?? null]));
+            const state = history.state?.usr ?? history.state;
+            return { path: location.pathname, mode: state?.sidebarProductMode ?? null,
+              gateStatus: response?.status, gates, controls: labels.slice(0, 65) };
+          });
+          console.log('Native mode ' + stage + ' ' + JSON.stringify(data));
+        };
+        await page.goto(home, { waitUntil: 'domcontentloaded', timeout: 45000 });
+        await editor().waitFor({ state: 'visible', timeout: 35000 });
+        await report('homepage');
+        if (!await switcher().isVisible()) {
+          const openSidebar = page.locator('[data-slate-sidebar-toggle][aria-expanded="false"]').filter({ visible: true }).first();
+          const labeledSidebar = page.getByRole('button', { name: /(?:打开|展开|開啟).*侧[边欄栏]|Open sidebar|Show sidebar/i }).filter({ visible: true }).first();
+          if (await openSidebar.isVisible()) await openSidebar.click();
+          else if (await labeledSidebar.isVisible()) await labeledSidebar.click();
+        }
+        await report('sidebar');
+        await switcher().waitFor({ state: 'visible', timeout: 9500 });
+        const triggerLabel = await switcher().getAttribute('aria-label');
+        await switcher().click();
+        await report('menu');
+        const codex = page.getByRole('menuitem').filter({ hasText: /(?:^|\s)Codex(?:$|\s)/i, visible: true }).first();
+        await codex.waitFor({ state: 'visible', timeout: 9500 });
+        const codexItem = (await codex.innerText()).replace(/\s+/g, ' ').trim();
+        await codex.click();
+        await page.waitForFunction(() => {
+          const state = history.state?.usr ?? history.state;
+          return state?.sidebarProductMode === 'codex';
+        }, { timeout: 15000 });
+        await editor().waitFor({ state: 'visible', timeout: 15000 });
+        const codexMode = await selectedMode();
+        assert.equal(codexMode, 'codex');
+        await report('codex');
+        await switcher().click();
+        const work = page.getByRole('menuitem').filter({ hasText: /ChatGPT(?: Work)?|工作/i, visible: true }).first();
+        await work.waitFor({ state: 'visible', timeout: 9500 });
+        const workItem = (await work.innerText()).replace(/\s+/g, ' ').trim();
+        await work.click();
+        await editor().waitFor({ state: 'visible', timeout: 15000 });
+        await report('work');
+        console.log('Native Codex click QA ' + JSON.stringify({ release: active.release,
+          triggerLabel, codexItem, codexMode, workItem, workMode: await selectedMode(), path: new URL(page.url()).pathname }));
+      }
       if (process.env.QA_INSPECT_ENTRIES === '1') {
         const surfaces = [];
         async function inspect(name, open, labels) {
