@@ -1,4 +1,4 @@
-name: Test the candidate's adapted browser settings
+name: Re-run the candidate's native contracts with the captured bundles
 on:
   push:
     branches: [qa/weekly-upstream-0237c4dd]
@@ -41,79 +41,17 @@ jobs:
           node scripts/adopt-native-upstream.mjs "$RUNNER_TEMP/chatgpt-upstream-capture/$UPSTREAM"
           node scripts/build-native-client.mjs --activate
           npm run native:check
-      - id: smoke
-        name: Open the isolated candidate in real Microsoft Edge
+      - id: contracts
+        name: Run the entire candidate regression suite
         continue-on-error: true
         run: |
           set -euo pipefail
-          npm install --prefix "$RUNNER_TEMP/weekly-browser" --no-audit --no-fund --package-lock=false playwright-core@1.58.2
-          node scripts/serve-native-client.mjs > "$RUNNER_TEMP/weekly-native-preview.log" 2>&1 &
-          site_pid=$!
-          trap 'kill "$site_pid" 2>/dev/null || true' EXIT
-          curl -fSs --retry 9 --retry-connrefused http://127.0.0.1:4400/chatgpt/native-client/active.json > /dev/null
-          node --input-type=module <<'NODE'
-          import assert from 'node:assert/strict';
-          import { join } from 'node:path';
-          import { pathToFileURL } from 'node:url';
-          const {chromium}=await import(pathToFileURL(join(process.env.RUNNER_TEMP,'weekly-browser/node_modules/playwright-core/index.mjs')).href);
-          const base='http://127.0.0.1:4400/chatgpt/';
-          const [manifest, plan]=await Promise.all([fetch(base+'native-client/active.json').then(r=>r.json()),fetch(base+'native-client/entry-plan.json').then(r=>r.json())]);
-          assert.equal(manifest.sourceBuild,process.env.UPSTREAM);
-          const browser=await chromium.launch({channel:'msedge', headless:true});
-          const errors=[],failedAssets=[],consoleErrors=[];
-          try {
-            const context=await browser.newContext({locale:'zh-CN'});
-            const page=await context.newPage();
-            page.on('console',m=>{if(m.type()==='error')consoleErrors.push(m.text().slice(0,280));});
-            page.on('pageerror',err=>errors.push({name:err.name,message:err.message.slice(0,180)}));
-            page.on('response',r=>{
-              const url=new URL(r.url());
-              if (r.status()>=400&&url.host==='127.0.0.1:4400'&&url.pathname.includes('/original-client/')) {
-                failedAssets.push({path:url.pathname,status:r.status()});
-              }
-            });
-            try {
-              await page.goto(base,{waitUntil:'domcontentloaded',timeout:35000});
-              await page.locator('#prompt-textarea[contenteditable="true"], .ProseMirror[contenteditable="true"]').first().waitFor({state:'visible',timeout:27000});
-              const flags=await page.evaluate(()=>({sourceBuild:document.documentElement.dataset.build,
-                boot:window.__CHATGPT_REPLICA_ENV__?.release,path:location.pathname,title:document.title,
-                sidebar:!!document.querySelector('[data-testid="profile-button"]'), probe:window.__originalClientProbe?.length ?? null}));
-              assert.equal(flags.sourceBuild, process.env.UPSTREAM);
-              assert.equal(flags.boot,manifest.release);
-              console.log('Edge loaded the candidate ' + JSON.stringify(flags));
-              const first = await page.evaluate(async ({base, runtime}) => {
-                const {__webpack_require__: original}=await import(new URL(runtime,base).href);
-                const service=original('GaA7').a.settings;
-                const result=await service.readAll();
-                const key='enabled-reasoning-efforts', value=['low','medium'];
-                await service.write(key,value);
-                const read=await service.read(key);
-                const stored=JSON.parse(localStorage.getItem('original-client-prototype-host-settings:v1'));
-                return {settings: Object.keys(result.values).length, configured: read.configured, stored: stored[key]};
-              }, {base,runtime:plan.runtime});
-              assert.deepEqual(first.configured, ['low','medium']);
-              assert.deepEqual(first.stored, ['low','medium']);
-              assert.ok(first.settings>0);
-              await page.reload({waitUntil:'domcontentloaded',timeout:25000});
-              await page.locator('#prompt-textarea[contenteditable="true"], .ProseMirror[contenteditable="true"]').first().waitFor({state:'visible',timeout:23000});
-              const resumed=await page.evaluate(async ({base,runtime})=>{
-                const {__webpack_require__: original}=await import(new URL(runtime,base).href);
-                return (await original('GaA7').a.settings.read('enabled-reasoning-efforts')).configured;
-              },{base,runtime:plan.runtime});
-              assert.deepEqual(resumed, ['low','medium']);
-              console.log('Native browser settings survived reload ' + JSON.stringify({before:first,after:resumed}));
-            } finally {
-              const state=await page.evaluate(()=>({title:document.title,path:location.pathname,
-                failure:window.__CHATGPT_STARTUP_ERROR__ ?? null, body:document.body?.innerText.replace(/\s+/g,' ').slice(0,270),
-                controls:[...document.querySelectorAll('button')].filter(btn=>btn.getClientRects().length).slice(0,22).map(btn=>btn.getAttribute('aria-label')??btn.textContent?.trim().slice(0,30)),
-              })).catch(()=>null);
-              console.log('Edge candidate state ' + JSON.stringify({state,errors:errors.slice(-15),consoleErrors:consoleErrors.slice(-12),failedAssets:failedAssets.slice(-30)}));
-            }
-          } finally { await browser.close(); }
-          NODE
-      - name: Record the candidate browser result
+          export GENERATED_PUBLICATION_TEST_TMPDIR="$(node -p "require('node:fs').realpathSync(process.env.RUNNER_TEMP)")"
+          node --test --test-concurrency=2 tests/*.test.mjs
+      - name: Report the candidate regression gate
         if: always()
-        shell: bash
         env:
-          SMOKE: ${{ steps.smoke.outcome }}
-        run: printf 'Candidate startup in Edge %s\n' "$SMOKE" >> "$GITHUB_STEP_SUMMARY"
+          CONTRACTS: ${{ steps.contracts.outcome }}
+        run: |
+          printf 'Candidate regression gate %s\n' "$CONTRACTS" >> "$GITHUB_STEP_SUMMARY"
+          printf 'Candidate regression gate %s\n' "$CONTRACTS"

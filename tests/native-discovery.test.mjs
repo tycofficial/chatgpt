@@ -358,7 +358,7 @@ test('native map chunks share one deferred import and retain synchronous rendere
     release();
     await ready;
   }
-  const chunk = await import(new URL('async/118734.1618351696.js', f.assets));
+  const chunk = await import(new URL(native.u(118734), new URL('../', f.assets)));
   assert.equal(native.m.kiov, chunk.__webpack_modules__.kiov);
   const renderer = native('FxuF');
   assert.equal(Object.getPrototypeOf(renderer.Map), f.getRendererModule().Map);
@@ -389,7 +389,7 @@ test('native map renderer failures reject awaited chunks and allow a subsequent 
   assert.equal(f.requests.length, 2);
   assert.equal(native('FxuF'), f.mapProvider.renderer);
   assert.equal(native('eS9I').a.name, 'OpenStreetMap');
-  const chunk = await import(new URL('async/118734.1618351696.js', f.assets));
+  const chunk = await import(new URL(native.u(118734), new URL('../', f.assets)));
   assert.equal(native.m.kiov, chunk.__webpack_modules__.kiov);
 });
 
