@@ -87,6 +87,10 @@ try {
         input:[{role:'user',content:[{type:'input_text',text:'Reply with API QA.'}]}]})
     });
     const reply = await makeRequest();
+    if (reply.status === 503) {
+      const data = await reply.json().catch(() => null);
+      console.log('Live inference unavailable '+JSON.stringify({status:reply.status,code:data?.error?.code ?? null}));
+    }
     assert.equal(reply.status,200);
     assert.match(reply.headers.get('content-type'),/^text\/event-stream\b/);
     const stream = await reply.text();
