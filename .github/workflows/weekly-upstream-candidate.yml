@@ -1,4 +1,4 @@
-name: Inspect the verified candidate's native host settings ABI
+name: Trace the candidate's native settings registration
 on:
   push:
     branches: [qa/weekly-upstream-0237c4dd]
@@ -35,7 +35,7 @@ jobs:
           mkdir -p "$task_tmp/chatgpt-upstream-capture"
           tar -C "$task_tmp/chatgpt-upstream-capture" -xzf "$task_tmp/chatgpt-candidate-archive/chatgpt-upstream.tar.gz"
           npm ci --no-audit --no-fund
-      - name: Identify the exact exported browser host and its settings object
+      - name: Trace initialization and the exact settings service registration
         run: |
           node --input-type=module <<'NODE'
           import { readFile } from 'node:fs/promises';
@@ -43,82 +43,33 @@ jobs:
           import { createHash } from 'node:crypto';
           import { parse } from 'acorn';
           import assert from 'node:assert/strict';
-          const capture=join(process.env.RUNNER_TEMP,'chatgpt-upstream-capture',process.env.UPSTREAM);
-          const graph=JSON.parse(await readFile(join(capture,'capture-manifest.json'),'utf8'));
-          const files=graph.assets.filter(v=>v.path.startsWith('public/chatgpt.com/cdn/assets/')&&v.path.endsWith('.js'));
-          const factoryModule='__webpack_modules__';
-          const sha=value=>createHash('sha256').update(value).digest('hex');
-          const table=src=>parse(src,{ecmaVersion:'latest',sourceType:'module'}).body.flatMap(s=>(s.declaration??s).declarations??[])
-            .filter(d=>d.id.name===factoryModule&&d.init?.type==='ObjectExpression').flatMap(d=>d.init.properties);
-          const key=node=>node?.name??node?.value??null;
-          function walk(node,visit) {
+          const root=join(process.env.RUNNER_TEMP,'chatgpt-upstream-capture',process.env.UPSTREAM);
+          const graph=JSON.parse(await readFile(join(root,'capture-manifest.json'),'utf8'));
+          const row=graph.assets.find(a=>a.path==='public/chatgpt.com/cdn/assets/767086.d600a395f4.js');
+          const bytes=await readFile(join(root,row.path));
+          assert.equal(createHash('sha256').update(bytes).digest('hex'),row.sha256);
+          const source=bytes.toString('utf8'), program=parse(source,{ecmaVersion:'latest',sourceType:'module'});
+          const mods=program.body.flatMap(x=>(x.declaration??x).declarations??[])
+            .find(x=>x.id.name==='__webpack_modules__').init.properties;
+          const property=mods.find(p=>(p.key.name??p.key.value)==='IKem');
+          const factory=property.value;
+          function walk(node,visit){
             if(!node||typeof node!=='object')return;
-            if(Array.isArray(node)){node.forEach(child=>walk(child,visit));return;}
+            if(Array.isArray(node)){node.forEach(n=>walk(n,visit));return;}
             if(node.type)visit(node);
-            for(const value of Object.values(node))if(value&&typeof value==='object')walk(value,visit);
+            for(const child of Object.values(node))if(child&&typeof child==='object')walk(child,visit);
           }
-          function inspectFactory(id, property, source, file) {
-            const code=property.value;
-            const requireName=code.params?.[2]?.name;
-            const classes=[], exports=[], settingsRelations=[], refs=[];
-            const snippet=node=>node?source.slice(node.start,node.end):null;
-            walk(code,node=>{
-              if(node.type==='ClassExpression'||node.type==='ClassDeclaration'){
-                const methods=node.body.body.map(m=>({
-                  name:key(m.key),kind:m.kind??null,
-                  ...(m.value?.params?.length ? {arity:m.value.params.length} : {}),
-                }));
-                classes.push({name:node.id?.name??null, superclass:snippet(node.superClass), methods,
-                  assignments:node.body.body.filter(p=>p.type==='PropertyDefinition').map(p=>[key(p.key),snippet(p.value)?.slice(0,120)])});
-              }
-              if(node.type==='CallExpression'&&node.callee?.object?.name===requireName&&key(node.callee?.property)==='d') {
-                exports.push(node.arguments.slice(1).map(part=>part.properties?.map(p=>[key(p.key),snippet(p.value)?.slice(0,90)])??null));
-              }
-              if(node.type==='MemberExpression'&&/settings|hostSettings/i.test(String(key(node.property)))) {
-                if(settingsRelations.length<50)settingsRelations.push(snippet(node)?.slice(0,110));
-              }
-              if(node.type==='CallExpression'&&node.callee?.name===requireName&&['IKem','ZG9f','osjx','YCTv'].includes(node.arguments[0]?.value)) {
-                refs.push({require:node.arguments[0].value,firstText:source.slice(node.end,node.end+80).replace(/\s+/g,' ')});
-              }
-            });
-            return {id,file,classes,exports,settingsRelations:[...new Set(settingsRelations)],refs};
-          }
-          for(const row of [
-            ['IKem','767086.d600a395f4.js'],
-            ['ADAj','767086.d600a395f4.js'],
-          ]){
-            const [id,name]=row, asset=files.find(r=>r.path=== 'public/chatgpt.com/cdn/assets/'+name);
-            assert(asset);
-            const bytes=await readFile(join(capture,asset.path));
-            assert.equal(sha(bytes),asset.sha256);
-            const source=bytes.toString('utf8');
-            const property=table(source).find(p=>key(p.key)===id);
-            assert(property);
-            console.log('Native host ABI ' + JSON.stringify(inspectFactory(id,property,source,asset.path)));
-          }
-          const nav=[], hostCallers=[];
-          let cursor=0;
-          await Promise.all(Array.from({length:10},async()=>{
-            while(cursor<files.length){
-              const asset=files[cursor++];
-              const source=await readFile(join(capture,asset.path),'utf8');
-              const possibleNavigation=source.includes('ZQvf')&&source.includes('khOd');
-              const possibleHost=source.includes('"IKem"')&&source.includes('hostSettings');
-              if(!source.includes(factoryModule)||!possibleNavigation&&!possibleHost)continue;
-              let list;
-              try{list=table(source);}catch{continue;}
-              for(const property of list){
-                if(!property.value)continue;
-                const text=source.slice(property.value.start,property.value.end);
-                if(possibleNavigation&&text.includes('ZQvf')&&text.includes('khOd')&&text.includes('codex')){
-                  nav.push({id:key(property.key),file:asset.path,size:text.length,codexGate:text.includes('3085093835')});
-                }
-                if(possibleHost&&text.includes('"IKem"')&&text.includes('hostSettings')){
-                  hostCallers.push({id:key(property.key),file:asset.path,refs:inspectFactory(key(property.key),property,source,asset.path).refs});
-                }
-              }
+          const src=node=>node?source.slice(node.start,node.end):null;
+          const require=factory.params[2].name;
+          const statements=factory.body.body;
+          const map=[];
+          walk(factory,node=>{
+            if (node.type==='NewExpression'&&node.callee.name==='X') map.push({method:'new X',surround:source.slice(node.start-160,node.end+220)});
+            if (node.type==='CallExpression'&&node.callee.name===require&&['GaA7','ZG9f','vOiO','NGML','ZhRn','osjx'].includes(node.arguments[0]?.value)) {
+              map.push({method:'native import',ref:node.arguments[0].value,context:source.slice(node.start-17,node.end+16)});
             }
-          }));
-          console.log('Native host callers ' + JSON.stringify(hostCallers.slice(0,15)));
-          console.log('Native navigation candidates ' + JSON.stringify(nav.slice(0,30)));
+          });
+          const entry=statements.find(n=>n.type==='FunctionDeclaration'&&n.id.name==='aS');
+          const service=statements.find(n=>n.type==='ClassDeclaration'&&n.id.name==='X');
+          console.log('Candidate settings routing ' + JSON.stringify({map,entryBytes:src(entry)?.length,entryTail:src(entry)?.slice(-1700),settingsClassHead:src(service)?.slice(0,700)}));
           NODE
