@@ -51,9 +51,12 @@ jobs:
           xcrun simctl list devices booted
           xcrun simctl launch "$IPAD_UDID" com.apple.mobilesafari
 
-      - name: Open the anonymous loopback fixture in installed Safari
+      - name: Open and reload the loopback fixture using installed Safari
+        timeout-minutes: 9
         run: |
-          node <<'NODE' > "$RUNNER_TEMP/ipad-refresh-server.log" 2>&1 &
+          fixture="$RUNNER_TEMP/ipad-refresh-fixture.cjs"
+          log="$RUNNER_TEMP/ipad-refresh-server.log"
+          cat > "$fixture" <<'NODE'
           const fs = require('node:fs');
           const http = require('node:http');
           let visits = 0;
@@ -79,16 +82,21 @@ jobs:
           });
           server.listen(0, '127.0.0.1', () => fs.writeFileSync(process.env.RUNNER_TEMP + '/ipad-refresh-port', String(server.address().port)));
           NODE
-          for attempt in {1..30}; do
+          node --check "$fixture"
+          node "$fixture" > "$log" 2>&1 </dev/null &
+          fixture_pid=$!
+          trap 'kill "$fixture_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..60}; do
             [[ -s "$RUNNER_TEMP/ipad-refresh-port" ]] && break
-            sleep 0.2
+            if ! kill -0 "$fixture_pid" 2>/dev/null; then cat "$log"; exit 1; fi
+            sleep 1
           done
+          if [[ ! -s "$RUNNER_TEMP/ipad-refresh-port" ]]; then cat "$log"; exit 1; fi
           port="$(cat "$RUNNER_TEMP/ipad-refresh-port")"
+          ready="$(curl --fail --silent --show-error --max-time 5 "http://127.0.0.1:$port/navigation-count")"
+          [[ "$ready" == 0 ]]
+          echo "Native Safari loopback fixture verified before the first navigation"
           xcrun simctl openurl "$IPAD_UDID" "http://127.0.0.1:$port/chatgpt/"
-
-      - name: Tap Safari's native Reload control and verify the new document
-        timeout-minutes: 7
-        run: |
           # Only the fixed native action markers leave the runner.
           set -o pipefail
           umask 077
