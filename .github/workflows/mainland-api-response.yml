@@ -1,0 +1,102 @@
+name: Diagnose the existing public mainland API entry
+on:
+  push:
+    branches: [qa/mainland-api-response]
+permissions:
+  contents: read
+jobs:
+  mainland:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 4
+    env:
+      RELEASE: 1e427a8d323976e5
+      API_HOST: chatgpt-admin-bridge-tyc.hushedtarragon1.chatgpt.site
+    steps:
+      - name: Verify mainland gateway reachability and report selected response headers
+        run: |
+          node --input-type=module <<'NODE'
+          import { setTimeout as wait } from 'node:timers/promises';
+          const base = 'https://api.globalping.io';
+          const origin = 'https://tycofficial.github.io';
+          const host = new URL(origin).hostname;
+          const apiHost = process.env.API_HOST;
+          const options = {
+            Origin: origin,
+            'Access-Control-Request-Method': 'POST',
+            'Access-Control-Request-Headers': 'content-type',
+          };
+          const headers = { 'User-Agent': 'tycofficial-chatgpt-pages-availability/1.0', accept: 'application/json' };
+          const cases = [
+            ['home', host, { method: 'GET', path: '/chatgpt/' }],
+            ['api-health', apiHost, { method: 'GET', path: '/health' }],
+            ['login-page', host, { method: 'GET', path: '/chatgpt/auth/login/' }],
+            ['release-manifest', host, { method: 'GET', path: '/chatgpt/native-client/active.json', query: 'v=' + process.env.RELEASE }],
+            ['login-api', apiHost, { method: 'OPTIONS', path: '/auth/login', headers: options }],
+            ['inference-api', apiHost, { method: 'OPTIONS', path: '/inference/v1/responses',
+              headers: { ...options, 'Access-Control-Request-Headers': 'authorization,content-type,x-chat-request-id' } }],
+          ];
+          function classify(text) {
+            if (/reset|ECONNRESET/i.test(text)) return 'connection reset';
+            if (/timed? ?out|ETIMEDOUT/i.test(text)) return 'timeout';
+            if (/SSL|TLS|certificate/i.test(text)) return 'TLS failure';
+            if (/ENOTFOUND|EAI_AGAIN|not resolve|DNS/i.test(text)) return 'DNS failure';
+            if (/refused|ECONNREFUSED/i.test(text)) return 'connection refused';
+            return null;
+          }
+          function responseMeta(result) {
+            const headers = result.headers ?? {};
+            const meta = {};
+            for (const [name, value] of Object.entries(headers)) {
+              if (/^(?:access-control-allow-origin|cf-mitigated|server|content-type|via)$/i.test(name))
+                meta[name.toLowerCase()] = String(value).slice(0, 100);
+            }
+            const raw = String(result.rawBody ?? '').slice(0, 500);
+            if (/unsupported country|not available in your country/i.test(raw)) meta.restriction = 'country restriction';
+            else if (/access denied|error 1020|error 1010/i.test(raw)) meta.restriction = 'access denied';
+            else if (/forbidden/i.test(raw)) meta.restriction = 'forbidden';
+            return meta;
+          }
+          async function probe([name, target, request], pinned) {
+            try {
+              const input = { type: 'http', target, locations: [{ ...(pinned ? { magic: pinned } : { country: 'CN' }), limit: 3 }],
+                measurementOptions: { protocol: 'HTTPS', request } };
+              const created = await fetch(base + '/v1/measurements', { method: 'POST', body: JSON.stringify(input),
+                headers: { ...headers, 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(12000) });
+              const token = await created.json();
+              if (created.status !== 202 || !/^[A-Za-z0-9_-]+$/.test(token.id ?? '')) {
+                console.log(JSON.stringify({ name, serviceStatus: created.status, issue: token.error?.type ?? null,
+                  message: JSON.stringify(token.error?.message ?? '').slice(0, 170) }));
+                return null;
+              }
+              let result = {};
+              for (let i = 0; i < 18; i++) {
+                const response = await fetch(base + '/v1/measurements/' + token.id, { headers, signal: AbortSignal.timeout(8000) });
+                result = await response.json();
+                if (result.status === 'finished') break;
+                await wait(1000);
+              }
+              const rows = (result.results ?? []).map(({ probe, result }) => ({
+                country: probe.country, city: probe.city, network: probe.network, asn: probe.asn,
+                http: result.statusCode ?? null, status: result.status, ms: result.timings?.total ?? null,
+                failure: result.statusCode == null ? classify(result.rawOutput ?? '') : null,
+                ...(/api/.test(name) ? { response: responseMeta(result) } : {}),
+                ...(name === 'release-manifest' ? { currentRelease: (result.rawBody ?? '').includes(process.env.RELEASE) } : {}),
+              }));
+              console.log(JSON.stringify({ name, id: token.id, status: result.status, rows }));
+              return rows.some(row => row.country === 'CN') ? token.id : null;
+            } catch (error) {
+              console.log(JSON.stringify({ name, measurementError: error.name, code: error.cause?.code ?? null }));
+              return null;
+            }
+          }
+          const outside = await Promise.all(cases.slice(-2).map(async ([name, host, request]) => {
+            try {
+              const response = await fetch(new URL(request.path, 'https://' + host), { method: request.method,
+                headers: request.headers, signal: AbortSignal.timeout(12000) });
+              return {name, http: response.status, response: responseMeta({headers:Object.fromEntries(response.headers)})};
+            } catch (error) { return {name, failure: error.cause?.code ?? error.name}; }
+          }));
+          console.log('Control from the GitHub runner: ' + JSON.stringify(outside));
+          const first = await probe(cases[0], null);
+          await Promise.all(cases.slice(1).map(test => probe(test, first)));
+          NODE
