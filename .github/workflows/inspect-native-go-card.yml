@@ -1,0 +1,107 @@
+name: Inspect the original personal pricing Go inputs
+on:
+  push:
+    branches: [qa/native-go-card]
+    paths: [.github/workflows/inspect-native-go-card.yml]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: windows-2025
+    timeout-minutes: 12
+    defaults:
+      run:
+        shell: bash
+    env:
+      UPSTREAM: 0237c4dd9e54c7e3a619581b909d792de582fee9
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: chatgpt-public-interactions-single-graph
+          path: ${{ runner.temp }}/chatgpt-candidate-archive
+          github-token: ${{ github.token }}
+          run-id: 45162484586
+      - name: Unpack the already verified capture on this runner
+        run: |
+          set -euo pipefail
+          task_tmp="$(cygpath -u "$RUNNER_TEMP")"
+          mkdir -p "$task_tmp/chatgpt-upstream-capture"
+          tar -C "$task_tmp/chatgpt-upstream-capture" -xzf "$task_tmp/chatgpt-candidate-archive/chatgpt-public-graph.tar.gz"
+          npm ci --no-audit --no-fund
+      - name: Report the personal pricing gate and native list input
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const assert = require('node:assert/strict');
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const {createHash} = require('node:crypto');
+          const {parse} = require('acorn');
+          const root = path.join(process.env.RUNNER_TEMP, 'chatgpt-upstream-capture', process.env.UPSTREAM);
+          const capture = JSON.parse(fs.readFileSync(path.join(root, 'capture-manifest.json'), 'utf8'));
+          assert.equal(capture.sourceBuild, process.env.UPSTREAM);
+          const key = node => node?.name ?? node?.value;
+          const fields = new Set(['isGoEnabled','alwaysVisiblePlans','expanded']);
+          const fn = node => ['FunctionDeclaration','FunctionExpression','ArrowFunctionExpression'].includes(node.type);
+          function walk(node, visit, parents = []) {
+            if (!node || typeof node.type !== 'string') return;
+            if (visit(node, parents) === false) return;
+            const next = [...parents, node];
+            for (const child of Object.values(node)) {
+              if (Array.isArray(child)) for (const item of child) walk(item, visit, next);
+              else walk(child, visit, next);
+            }
+          }
+          for (const name of ['172692.0756eaf57c.js', '863505.f04df9e438.js']) {
+            const assets = capture.assets.filter(asset => new URL(asset.url).pathname.split('/').at(-1) === name);
+            assert.equal(assets.length, 1);
+            const asset = assets[0], url = new URL(asset.url);
+            assert.equal(asset.path, 'public/' + url.hostname + url.pathname);
+            const bytes = fs.readFileSync(path.join(root, asset.path));
+            assert.equal(createHash('sha256').update(bytes).digest('hex'), asset.sha256);
+            const source = bytes.toString('utf8');
+            const ast = parse(source, {ecmaVersion:'latest',sourceType:'module'});
+            const small = (node, max = 220) => node ? source.slice(node.start,Math.min(node.end,node.start+max)) : null;
+            const table = ast.body.flatMap(node => (node.declaration??node).declarations??[])
+              .find(node => node.id.name === '__webpack_modules__').init;
+            for (const {key: id, value: module} of table.properties) {
+              const body = source.slice(module.start,module.end);
+              if (!body.includes('isGoEnabled') && key(id)!=='Y0ov') continue;
+              const aliases = new Map(), exports = [];
+              for (const statement of module.body.body) {
+                for (const init of statement.declarations??[]) {
+                  const call = init.init;
+                  if(call?.type==='CallExpression'&&call.callee.name===module.params[2].name&&typeof call.arguments[0]?.value==='string') aliases.set(init.id.name,call.arguments[0].value);
+                }
+                const call=statement.expression;
+                if(call?.type==='CallExpression'&&call.callee.property?.name==='d'&&call.arguments[0]?.name===module.params[1].name) exports.push(...call.arguments.slice(1).map(arg=>small(arg,240)));
+              }
+              const inputRecords = [];
+              walk(module,(node,parents)=>{
+                const field=key(node.key), immediate=parents.at(-1);
+                if(node.type!=='Property'||!fields.has(field)||!['ObjectPattern','ObjectExpression'].includes(immediate?.type)) return;
+                const scope=parents.filter(fn).at(-1), context=parents.at(-3);
+                if(!scope) return;
+                const bindingNames = new Set();
+                walk(node.value, term => {if(term.type==='Identifier') bindingNames.add(term.name);});
+                const bindings = [];
+                walk(scope, (term, ancestry)=>{
+                  if(term!==scope&&fn(term))return false;
+                  if(term.type==='VariableDeclarator'&&bindingNames.has(term.id.name))bindings.push({id:term.id.name,expr:small(term.init)});
+                  if(term.type==='Property'&&ancestry.at(-1)?.type==='ObjectPattern'&&bindingNames.has(term.value.name))bindings.push({input:key(term.key),as:term.value.name});
+                });
+                const call=parents.findLast(item=>item.type==='CallExpression'), owner=scope.id?.name ?? null;
+                inputRecords.push({field,kind:immediate.type,value:small(node.value,100),owner,ancestors:parents.slice(-5).map(p=>p.type),call:small(call?.callee,100),context:small(context,110),bindings});
+              });
+              console.log('Go AST '+JSON.stringify({asset:url.pathname,module:key(id),exports,aliases:Object.fromEntries(aliases),inputs:inputRecords}));
+            }
+          }
+          NODE
