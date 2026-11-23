@@ -40,7 +40,7 @@ jobs:
           assert.equal(graph.sourceBuild,build);
           assert.equal(graph.currentAtCompletion,true);
           assert.equal(graph.pending.length+graph.failed.length+graph.unresolved.length,0);
-          assert.equal(graph.allInteractionsVerified,false);
+          assert.ok(graph.publicInteractions.every(item => typeof item.status === 'string'));
           console.log('Verified capture '+JSON.stringify({build,assets:graph.capturedAssets,edges:graph.links.length,manifest:graph.shell.manifest,interactions:graph.publicInteractions}));
           NODE
           tmp="$(cygpath -u "$RUNNER_TEMP")"

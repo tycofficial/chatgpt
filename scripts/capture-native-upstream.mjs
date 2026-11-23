@@ -661,19 +661,38 @@ async function observePublicInteractions() {
       });
       const item = { action: action.name, status: 'not-visible', newAssets: 0 };
       const currentBuild = () => page.evaluate(() => document.documentElement?.dataset?.build);
-      const dialogs = () => page.getByRole('dialog').filter({ visible: true }).count();
+      const surface = async () => ({
+        dialogs: await page.getByRole('dialog').filter({ visible: true }).count(),
+        menus: await page.getByRole('menu').filter({ visible: true }).count(),
+        popovers: await page.locator('[popover]:popover-open').count(),
+      });
       try {
-        await page.goto(homepage, { waitUntil: 'domcontentloaded', timeout: 25000 });
-        if (page.url() !== homepage || await currentBuild() !== shell.build) {
-          item.status = 'build-mismatch';
+        const response = await page.goto(homepage, { waitUntil: 'domcontentloaded', timeout: 25000 });
+        const final = new URL(page.url()), official = new URL(homepage);
+        const status = response?.status() ?? null;
+        const challenge = await response?.headerValue('cf-mitigated') === 'challenge';
+        const documentBuild = await currentBuild().catch(() => null);
+        const liveBuild = buildPattern.test(documentBuild ?? '') ? documentBuild : null;
+        const sameHome = final.origin === official.origin && final.pathname === official.pathname;
+        const sameManifest = sameHome && await page.evaluate(manifest =>
+          [...document.querySelectorAll('link[href],script[src],script[type="module"]')].some(element =>
+            element.href === manifest || element.src === manifest || element.textContent?.includes(manifest) ||
+            element.textContent?.includes(new URL(manifest).pathname)), shell.manifest.href).catch(() => false);
+        item.navigation = { status, challenge, sameOrigin: final.origin === official.origin, sameHome, liveBuild, sameManifest,
+          redirected: Boolean(response?.request().redirectedFrom()) };
+        if (challenge || status !== 200 || !sameHome || liveBuild !== shell.build || !sameManifest) {
+          item.status = challenge ? 'browser-challenge' : status !== 200 ? 'http-unavailable' :
+            !sameHome ? 'home-redirected' : !liveBuild ? 'missing-browser-build' :
+              liveBuild !== shell.build ? 'different-browser-build' : 'different-browser-manifest';
           outcomes.push(item);
-          continue;
+          for (const remaining of actions.slice(outcomes.length)) outcomes.push({ action: remaining.name, status: 'initial-page-unavailable', newAssets: 0 });
+          break;
         }
         const visible = action.roles.map(role => page.getByRole(role, { name: action.label }).filter({ visible: true }))
           .reduce((combined, next) => combined.or(next)).first();
         if (!await visible.isVisible()) await visible.waitFor({state:'visible',timeout:2200}).catch(()=>{});
         if (await visible.isVisible()) {
-          const priorDialogs = await dialogs(), priorPath = new URL(page.url()).pathname;
+          const before = await surface(), priorPath = new URL(page.url()).pathname;
           observing = afterClick;
           await visible.click({ timeout: 4500 });
           await page.waitForLoadState('networkidle', { timeout: 3500 }).catch(() => {});
@@ -681,7 +700,11 @@ async function observePublicInteractions() {
           if (next.origin !== new URL(homepage).origin || await currentBuild().catch(() => null) !== shell.build) {
             item.status = 'navigated-outside-build';
           } else {
-            item.status = await dialogs() > priorDialogs ? 'dialog-opened' : next.pathname !== priorPath ? 'route-opened' : 'clicked';
+            const after = await surface();
+            item.surface = { before, after };
+            item.status = after.dialogs > before.dialogs ? 'dialog-opened' :
+              after.menus > before.menus ? 'menu-opened' : after.popovers > before.popovers ? 'popover-opened' :
+                next.pathname !== priorPath ? 'route-opened' : 'clicked';
             for (const href of afterClick) {
               if (initial.has(href)) continue;
               discover(href, homepage, homepage, 'anonymous-' + action.name);
