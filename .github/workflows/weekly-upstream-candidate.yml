@@ -1,4 +1,4 @@
-name: Re-run the candidate's native contracts with the captured bundles
+name: Resolve the candidate's original map, sharing and billing fixtures
 on:
   push:
     branches: [qa/weekly-upstream-0237c4dd]
@@ -41,6 +41,65 @@ jobs:
           node scripts/adopt-native-upstream.mjs "$RUNNER_TEMP/chatgpt-upstream-capture/$UPSTREAM"
           node scripts/build-native-client.mjs --activate
           npm run native:check
+      - id: factory
+        name: Resolve the billing and sharing fixtures in the verified graph
+        continue-on-error: true
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { createHash } from 'node:crypto';
+          import { readFile, writeFile } from 'node:fs/promises';
+          import { join } from 'node:path';
+          import { parse } from 'acorn';
+          const scopes=['native-discovery','native-portable-share'];
+          const fixtures=await Promise.all(scopes.map(name=>readFile('tests/support/'+name+'-factories.json','utf8').then(JSON.parse)));
+          const ids=[...new Set(fixtures.flat().map(row=>row.id))];
+          const root=join(process.env.RUNNER_TEMP,'chatgpt-upstream-capture',process.env.UPSTREAM);
+          const graph=JSON.parse(await readFile(join(root,'capture-manifest.json'),'utf8'));
+          const files=graph.assets.filter(r=>/^public\/chatgpt\.com\/cdn\/assets\/[\w/.-]+\.js$/.test(r.path));
+          const pattern=new RegExp('[,{]\\s*["\\x27]?(' + ids.join('|') + ')["\\x27]?\\s*(?=:\\s*\\(?function|\\()');
+          const found=new Map(ids.map(id=>[id,[]]));
+          const hash=x=>createHash('sha256').update(x).digest('hex');
+          let cursor=0;
+          await Promise.all(Array.from({length:12},async()=>{
+            while(cursor<files.length){
+              const asset=files[cursor++];
+              const bytes=await readFile(join(root,asset.path)), source=bytes.toString('utf8');
+              if(!source.includes('__webpack_modules__')||!pattern.test(source))continue;
+              let parsed;
+              try{parsed=parse(source,{ecmaVersion:'latest',sourceType:'module'});}catch{continue;}
+              for(const statement of parsed.body)for(const decl of (statement.declaration??statement).declarations??[]){
+                if(decl.id.name!=='__webpack_modules__'||decl.init?.type!=='ObjectExpression')continue;
+                for(const prop of decl.init.properties){
+                  const id=prop.key?.name??prop.key?.value;
+                  if(!found.has(id))continue;
+                  assert.equal(hash(bytes),asset.sha256,asset.path);
+                  const value=prop.value, code=source.slice(value.start,value.end);
+                  const local=value.params?.[2]?.name;
+                  const requires=local?[...new Set([...code.matchAll(new RegExp('\\b'+local+'\\(["\\x27]([\\w$]{4})["\\x27]\\)','g'))].map(m=>m[1]))].sort():[];
+                  found.get(id).push({id,file:'original-client/'+asset.path,startUTF16:value.start,endUTF16:value.end,
+                    sha256:hash(code),format:prop.method?'method':'expression',requires});
+                }
+              }
+            }
+          }));
+          const candidatesFor=(rows)=>rows.map(row=>{
+            const candidates=found.get(row.id);
+            if(!candidates.length) throw Error('Candidate is missing native factory '+row.id);
+            const number=(path)=>/\/(\d+)\.[a-f\d]+\.js$/.exec(path)?.[1];
+            const sameDigest=candidates.filter(v=>v.sha256===row.sha256);
+            const sameChunk=candidates.filter(v=>number(v.file)===number(row.file));
+            const pool=sameDigest.length?sameDigest:sameChunk.length?sameChunk:candidates;
+            if(new Set(pool.map(v=>v.sha256)).size!==1) throw Error('Ambiguous native factory '+row.id+' '+JSON.stringify(pool.map(v=>v.file)));
+            return pool.sort((a,b)=>a.file.localeCompare(b.file))[0];
+          });
+          for(let i=0;i<scopes.length;i++){
+            const file='tests/support/'+scopes[i]+'-factories.json';
+            const updated=candidatesFor(fixtures[i]);
+            console.log('Candidate native fixtures ' + JSON.stringify({file,rows:updated}));
+            await writeFile(file, JSON.stringify(updated,null,2)+'\n');
+          }
+          NODE
       - id: contracts
         name: Run the entire candidate regression suite
         continue-on-error: true
