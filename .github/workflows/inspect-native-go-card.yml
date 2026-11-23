@@ -49,7 +49,7 @@ jobs:
           const capture = JSON.parse(fs.readFileSync(path.join(root, 'capture-manifest.json'), 'utf8'));
           assert.equal(capture.sourceBuild, process.env.UPSTREAM);
           const key = node => node?.name ?? node?.value;
-          const fields = new Set(['showGo','isGoEnabled','alwaysVisiblePlans','expanded']);
+          const fields = new Set(['showGo','isGoEnabled','alwaysVisiblePlans','highlightedPlan','expanded']);
           const fn = node => ['FunctionDeclaration','FunctionExpression','ArrowFunctionExpression'].includes(node.type);
           function walk(node, visit, parents = []) {
             if (!node || typeof node.type !== 'string') return;
@@ -99,7 +99,8 @@ jobs:
                   if(term.type==='Property'&&ancestry.at(-1)?.type==='ObjectPattern'&&bindingNames.has(term.value.name))bindings.push({input:key(term.key),as:term.value.name});
                 });
                 const call=parents.findLast(item=>item.type==='CallExpression'), owner=scope.id?.name ?? null;
-                inputRecords.push({field,kind:immediate.type,value:small(node.value,410),owner,ancestors:parents.slice(-5).map(p=>p.type),call:small(call?.callee,100),context:small(context,110),bindings});
+                const passedKeys = field === 'showGo' && immediate.type === 'ObjectExpression' ? immediate.properties.map(prop=>key(prop.key)??'spread') : undefined;
+                inputRecords.push({field,kind:immediate.type,value:small(node.value,410),owner,ancestors:parents.slice(-5).map(p=>p.type),call:small(call?.callee,100),passedKeys,context:small(context,110),bindings});
               });
               walk(module,(term,ancestry)=>{
                 if(term!==module&&fn(term))return false;
@@ -115,15 +116,6 @@ jobs:
         run: |
           set -euo pipefail
           node scripts/adopt-native-upstream.mjs "$RUNNER_TEMP/chatgpt-upstream-capture/$UPSTREAM"
-          node <<'NODE'
-          const fs = require('node:fs');
-          const file = 'src/native-client/boot-adapter.mjs';
-          const text = fs.readFileSync(file,'utf8');
-          const mark = "return name === '3600660324' ? true : original;";
-          if(text.split(mark).length!==2)throw Error('Missing verified Go gate');
-          fs.writeFileSync(file,text.replace(mark,
-            "if (name === '3600660324') (globalThis.__siteGoTrace ??= []).push(Boolean(original)); " + mark));
-          NODE
           node scripts/build-native-client.mjs --activate
           npm run native:check
       - name: Open native personal pricing in synthetic Edge
@@ -143,8 +135,7 @@ jobs:
             "        const personal = surfaces.at(-1);",
             "        const beforeControls = await page.getByRole('button').filter({visible:true}).allTextContents();",
             "        const plans = beforeControls.map(t=>t.trim()).filter(t=>/套餐|plan|compare|更多|更少/i.test(t)).slice(-20);",
-            "        const flags = await page.evaluate(()=>window.__siteGoTrace??[]);",
-            "        console.log('Native Go initial '+JSON.stringify({seen:personal.seen,plans,flags}));",
+            "        console.log('Native Go initial '+JSON.stringify({seen:personal.seen,plans}));",
             "        let expandedInTest=false;",
             "        if(!personal.seen.go){",
             "          const more=page.getByRole('button',{name:/^(?:查看(?:所有|全部|更多|其他).*(?:套餐|方案|计划)|(?:查看)?全部套餐|(?:See|View|Show) (?:all|more).*plans)$/i}).filter({visible:true}).first();",
