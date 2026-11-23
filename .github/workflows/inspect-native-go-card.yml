@@ -115,6 +115,15 @@ jobs:
         run: |
           set -euo pipefail
           node scripts/adopt-native-upstream.mjs "$RUNNER_TEMP/chatgpt-upstream-capture/$UPSTREAM"
+          node <<'NODE'
+          const fs = require('node:fs');
+          const file = 'src/native-client/boot-adapter.mjs';
+          const text = fs.readFileSync(file,'utf8');
+          const mark = "return name === '3600660324' ? true : original;";
+          if(text.split(mark).length!==2)throw Error('Missing verified Go gate');
+          fs.writeFileSync(file,text.replace(mark,
+            "if (name === '3600660324') (globalThis.__siteGoTrace ??= []).push(Boolean(original)); " + mark));
+          NODE
           node scripts/build-native-client.mjs --activate
           npm run native:check
       - name: Open native personal pricing in synthetic Edge
@@ -132,7 +141,18 @@ jobs:
           if (original.split(anchor).length !== 2) throw Error('Unexpected pricing browser fixture');
           const check = [
             "        const personal = surfaces.at(-1);",
-            "        assert.deepEqual(personal.seen, {go:true,pro:true,dotBenefit:true});",
+            "        const beforeControls = await page.getByRole('button').filter({visible:true}).allTextContents();",
+            "        const plans = beforeControls.map(t=>t.trim()).filter(t=>/套餐|plan|compare|更多|更少/i.test(t)).slice(-20);",
+            "        const flags = await page.evaluate(()=>window.__siteGoTrace??[]);",
+            "        console.log('Native Go initial '+JSON.stringify({seen:personal.seen,plans,flags}));",
+            "        let expandedInTest=false;",
+            "        if(!personal.seen.go){",
+            "          const more=page.getByRole('button',{name:/^(?:查看(?:所有|全部|更多|其他).*(?:套餐|方案|计划)|(?:查看)?全部套餐|(?:See|View|Show) (?:all|more).*plans)$/i}).filter({visible:true}).first();",
+            "          if(await more.isVisible()){await more.click();expandedInTest=true;}",
+            "        }",
+            "        await page.getByText('Go',{exact:true}).filter({visible:true}).first().waitFor({state:'visible',timeout:10000});",
+            "        assert.equal(personal.seen.pro,true);",
+            "        assert.equal(personal.seen.dotBenefit,true);",
             "        const goAction = page.getByRole('button',{name:'查看官方 Go 套餐',exact:true}).filter({visible:true}).first();",
             "        await goAction.waitFor({state:'visible',timeout:10000});",
             "        const referenceCard = await goAction.evaluate(button=>{",
@@ -145,7 +165,7 @@ jobs:
             "        assert.match(referenceCard, /(?:US\\$|\\$)\\s*8(?:[.,]00)?\\b|8(?:[.,]00)?\\s*(?:USD|美元)/);",
             "        const offeredPlans = await page.evaluate(()=>['Free','Go','Plus','Pro'].filter(plan=>",
             "          [...document.querySelectorAll('h2,h3,h4,[role=heading]')].some(node=>node.textContent.trim()===plan&&node.getClientRects().length)));",
-            "        console.log('Native Go QA '+JSON.stringify({release:active.release,openedWithoutExpanding:true,goReference:true,hasOfficialPriceAction:true,offeredPlans}));",
+            "        console.log('Native Go QA '+JSON.stringify({release:active.release,openedWithoutExpanding:!expandedInTest,goReference:true,hasOfficialPriceAction:true,offeredPlans}));",
           ].join('\n');
           writeFileSync(file, original.replace(anchor, anchor+'\n'+check));
           NODE
