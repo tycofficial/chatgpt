@@ -6,7 +6,9 @@ permissions:
   contents: read
 jobs:
   app-server:
-    runs-on: macos-15
+    runs-on: ubuntu-24.04
+    env:
+      QA_CODEX_LINUX_NETWORK: '1'
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v6

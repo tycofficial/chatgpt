@@ -60,7 +60,14 @@ async function runTurn(client, threadId, text) {
       });
     });
     const [start, done] = await Promise.all([
-      client.request('turn/start', { threadId, input: [{ type: 'text', text, text_elements: [] }] }),
+      client.request('turn/start', {
+        threadId, input: [{ type: 'text', text, textElements: [] }],
+        // GitHub-hosted Ubuntu cannot set up an isolated loopback interface in bwrap.
+        // Only this deterministic test uses the runner's network namespace.
+        ...(process.env.QA_CODEX_LINUX_NETWORK === '1' ? {
+          sandboxPolicy: { type: 'workspaceWrite', writableRoots: [workspace], networkAccess: true },
+        } : {}),
+      }),
       terminal,
     ]);
     assert.equal(start.turn.id, done.id);
