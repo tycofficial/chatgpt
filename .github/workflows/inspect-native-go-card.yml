@@ -9,7 +9,7 @@ permissions:
 jobs:
   inspect:
     runs-on: windows-2025
-    timeout-minutes: 12
+    timeout-minutes: 17
     defaults:
       run:
         shell: bash
@@ -111,3 +111,42 @@ jobs:
             }
           }
           NODE
+      - name: Build the isolated verification candidate
+        run: |
+          set -euo pipefail
+          node scripts/adopt-native-upstream.mjs "$RUNNER_TEMP/chatgpt-upstream-capture/$UPSTREAM"
+          node scripts/build-native-client.mjs --activate
+          npm run native:check
+      - name: Open native personal pricing in synthetic Edge
+        env:
+          QA_BROWSER: edge
+          QA_INSPECT_ENTRIES: '1'
+        run: |
+          set -euo pipefail
+          npm install --no-save --package-lock=false --no-audit --no-fund playwright-core@1.58.2
+          node <<'NODE'
+          const { readFileSync, writeFileSync } = require('node:fs');
+          const file = 'scripts/qa/domestic-startup-admin.mjs';
+          const original = readFileSync(file, 'utf8');
+          const anchor = "        await inspect('personal-pricing', () => goto('#pricing'), {go: /^Go$/, pro: /^Pro$/, dotBenefit: /含站内 Dot/});";
+          if (original.split(anchor).length !== 2) throw Error('Unexpected pricing browser fixture');
+          const check = [
+            "        const personal = surfaces.at(-1);",
+            "        assert.deepEqual(personal.seen, {go:true,pro:true,dotBenefit:true});",
+            "        const goAction = page.getByRole('button',{name:'查看官方 Go 套餐',exact:true}).filter({visible:true}).first();",
+            "        await goAction.waitFor({state:'visible',timeout:10000});",
+            "        const referenceCard = await goAction.evaluate(button=>{",
+            "          for(let node=button.parentElement;node&&node!==document.body;node=node.parentElement){",
+            "            const text=node.innerText??'';",
+            "            if(text.split('\\n').some(line=>line.trim()==='Go')&&text.includes('美元参考价'))return text;",
+            "          }",
+            "          return '';",
+            "        });",
+            "        assert.match(referenceCard, /(?:US\\$|\\$)\\s*8(?:[.,]00)?\\b|8(?:[.,]00)?\\s*(?:USD|美元)/);",
+            "        const offeredPlans = await page.evaluate(()=>['Free','Go','Plus','Pro'].filter(plan=>",
+            "          [...document.querySelectorAll('h2,h3,h4,[role=heading]')].some(node=>node.textContent.trim()===plan&&node.getClientRects().length)));",
+            "        console.log('Native Go QA '+JSON.stringify({release:active.release,openedWithoutExpanding:true,goReference:true,hasOfficialPriceAction:true,offeredPlans}));",
+          ].join('\n');
+          writeFileSync(file, original.replace(anchor, anchor+'\n'+check));
+          NODE
+          node scripts/qa/domestic-startup-admin.mjs
