@@ -253,7 +253,7 @@ export function getSitePlansUrl(next) {
 }
 
 class AccountConnectionError extends Error {
-  constructor() { super(networkUnavailable); }
+  constructor(gateway = false) { super(networkUnavailable); this.gateway = gateway; }
 }
 
 async function api(path, { body, token, keepalive = false, timeoutMs = 10000 } = {}) {
@@ -281,7 +281,7 @@ async function api(path, { body, token, keepalive = false, timeoutMs = 10000 } =
     if (response.type === 'opaqueredirect' || (response.status >= 300 && response.status < 400)) throw Error(accountInvalid);
     const result = await response.json().catch(() => null);
     if (!response.ok) {
-      if (response.status >= 500 || (response.status === 403 && !result?.error?.code)) throw new AccountConnectionError();
+      if (response.status >= 500 || (response.status === 403 && !result?.error?.code)) throw new AccountConnectionError(true);
       throw Object.assign(Error(result?.error?.message || '账户服务暂时不可用。'), {
         status: response.status,
         code: result?.error?.code,
@@ -418,7 +418,7 @@ async function authenticateSiteAccount(endpoint, username, password, { legacyGue
     return verified;
   } catch (error) {
     if (generation === requestGeneration) {
-      if (legacyGuestFallback && endpoint === '/auth/login' && error instanceof AccountConnectionError) return startSiteGuestSession();
+      if (legacyGuestFallback && endpoint === '/auth/login' && error instanceof AccountConnectionError && !error.gateway) return startSiteGuestSession();
       forgetAccount(error.message || '登录失败，请重试。');
     }
     throw error;

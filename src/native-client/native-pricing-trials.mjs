@@ -73,6 +73,7 @@ export function createNativeSiteTrialCard(Card, { React, Button, Amount, Frequen
       finally { pending = null; notify(); }
     };
     const expiry = action.expiresAt ? new Date(action.expiresAt).toLocaleDateString('zh-CN') : '';
+    const includesDot = ['prolite', 'pro', 'promax'].includes(tier);
     const caption = message || (expiry ? '本站试用至 ' + expiry : '本站试用 · 30 天，可续期');
     const existing = React.Children.toArray(original.actions?.props?.children)[0];
     const activeButton = existing?.type === Button;
@@ -86,12 +87,24 @@ export function createNativeSiteTrialCard(Card, { React, Button, Amount, Frequen
       ...original, actions: button,
       price: { ...original.price, content: element(React.Fragment, null,
         element(Amount, { amount: '免费试用', currency: '', screenReaderText: '本站免费试用 30 天' }),
-        element(Frequency, null, element('span', { role: 'status', 'aria-live': 'polite' }, caption)),
+        element(Frequency, null, element('span', { role: 'status', 'aria-live': 'polite' }, caption),
+          includesDot ? element('span', { className: 'block' }, '含站内 Dot') : null),
       ) },
     });
   }
   return function PersonalPlanCard(props) {
     const tier = props.plan?.lookupType;
+    if (tier === 'go') {
+      const original = React.Children.toArray(props.actions?.props?.children)[0];
+      return element(Card, { ...props, actions: element(Button, {
+        ...(original?.type === Button ? original.props : { className: 'w-full justify-center', color: 'secondary', size: 'beaconAction', radius: 'full' }),
+        onClick(event) {
+          event.preventDefault();
+          location.assign('https://chatgpt.com/pricing/');
+        },
+        type: 'button',
+      }, '查看官方 Go 套餐') });
+    }
     return getSiteTrialAction(tier) ? element(TrialCard, { key: tier, original: props, tier }) : element(Card, props);
   };
 }

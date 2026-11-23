@@ -47,7 +47,8 @@ test('the browser discovers the entry modules and stylesheet directly, with a li
   for (const shell of [html, auth]) {
     assert.doesNotMatch(shell, /正在打开|site-start-status/);
     assert.match(shell, /<title>ChatGPT<\/title>/);
-    assert.match(shell, /<div id="site-load-progress" role="progressbar" aria-label="页面加载中"/);
+    assert.match(shell, /<div id="site-load-progress">/);
+    assert.match(shell, /role="progressbar"[^>]+aria-valuenow="0"/);
     assert.match(shell, /<main id="site-load-error" hidden role="alert"/);
   }
   const originals = [plan.runtime, ...plan.registrationChunks, plan.manifest, ...Object.values(plan.initialRoutes)];
@@ -79,6 +80,9 @@ function startupFixture({ stylesheet } = {}) {
   const notice = { hidden: true };
   const connectedNode = () => ({ get isConnected() { return this.parentNode != null; } });
   const progress = connectedNode(), progressStyle = connectedNode();
+  const percent = {}, time = {}, gauge = { value: null, setAttribute(_key, value) { this.value = value; }, style: { setProperty() {} } };
+  progress.querySelector = key => key === '[role=progressbar]' ? gauge : key === '[data-percent]' ? percent : time;
+  const resources = [...html.matchAll(/<link rel="modulepreload" href="([^"]+)"/g)].map(match => match[1]);
   const body = {
     appendChild(node) { node.parentNode = body; },
     removeChild(node) { node.parentNode = null; },
@@ -87,10 +91,15 @@ function startupFixture({ stylesheet } = {}) {
   body.appendChild(notice);
   body.appendChild(progress);
   head.appendChild(progressStyle);
-  let callback, replaced, timeout, onMutation, composer;
+  let callback, replaced, timeout, onMutation, composer, observeTiming;
+  const entries = [];
   const window = {};
   vm.runInNewContext(guard, {
     window, URL,
+    performance: { now: () => 2000, getEntriesByType: () => entries },
+    setInterval: fn => { observeTiming = fn; return 1; },
+    clearInterval: () => { observeTiming = undefined; },
+    requestAnimationFrame: fn => fn(),
     MutationObserver: class {
       constructor(listener) { onMutation = listener; }
       observe() {}
@@ -109,13 +118,14 @@ function startupFixture({ stylesheet } = {}) {
         'site-main-style': stylesheet,
       })[id],
     },
-    location: { href: 'https://fixture.test/chatgpt/c/abc?keep=1#turn', replace: value => { replaced = new URL(value); } },
+    location: { origin: 'https://fixture.test', href: 'https://fixture.test/chatgpt/c/abc?keep=1#turn', replace: value => { replaced = new URL(value); } },
   });
   return {
-    notice, progress, progressStyle, timeout, state: window.__TYC_PAGE_START__,
+    notice, progress, progressStyle, timeout, resources, gauge, time, state: window.__TYC_PAGE_START__,
+    recordTiming(...samples) { entries.push(...samples); observeTiming?.(); },
     triggerTimeout: () => callback?.(), replacement: () => replaced,
     mutate(nextComposer) {
-      composer = nextComposer;
+      composer = nextComposer && { tagName: 'TEXTAREA', closest: () => null, ...nextComposer };
       onMutation?.();
     },
   };
@@ -178,8 +188,33 @@ test('the homepage keeps its progress across a document mount until the composer
   assert.equal(fixture.progress.isConnected, true);
   assert.equal(fixture.progressStyle.isConnected, true);
 
+  fixture.mutate({ getClientRects: () => [{}], visibility: 'visible', readOnly: true });
+  assert.equal(fixture.progress.isConnected, true);
+  fixture.mutate({ getClientRects: () => [{}], visibility: 'visible', closest: () => ({ inert: true }) });
+  assert.equal(fixture.progress.isConnected, true);
   fixture.mutate({ getClientRects: () => [{}], visibility: 'visible' });
   assert.equal(fixture.progress.isConnected, false);
   fixture.mutate(null);
   assert.equal(fixture.progress.isConnected, false);
+});
+
+test('startup tracks completed resources once and estimates the time only after network samples', () => {
+  const f = startupFixture();
+  f.state.attach(f.notice);
+  assert.equal(f.gauge.value, '0');
+  const [a, b] = f.resources;
+  f.state.loadedResource(a);
+  const first = Number(f.gauge.value);
+  assert.equal(f.time.textContent, '正在测量加载速度');
+  f.state.loadedResource(a);
+  assert.equal(Number(f.gauge.value), first);
+  f.recordTiming(...[a, b].map((path, index) => ({
+    name: new URL(path, 'https://fixture.test').href,
+    transferSize: 1200, decodedBodySize: 2400, fetchStart: 100 + index, responseEnd: 1100 + index,
+  })));
+  assert.match(f.time.textContent, /预计资源还需/);
+  f.state.markResourcesReady();
+  assert.equal(f.gauge.value, '99');
+  f.state.ready();
+  assert.equal(f.gauge.value, '100');
 });

@@ -301,7 +301,7 @@ const startupGuard = assets => `<script>(function(entries){
   gauge.style.setProperty('--site-loaded',percent+'%');
   progress.querySelector('[data-percent]').textContent=percent+'%';
   var span=networkEnd-networkStart, detail='正在测量加载速度';
-  if(received>=total) detail='资源已加载，正在打开页面';
+  if(received>=total) detail='资源已加载，正在初始化页面';
   else if(performance.now()-lastProgress>8000) detail='连接较慢，正在等待资源';
   else if(timed.size>=2&&span>=600&&networkWeight>0) {
    var seconds=Math.max(1,Math.ceil((total-received)*span/networkWeight/1000));
@@ -313,7 +313,7 @@ const startupGuard = assets => `<script>(function(entries){
   clearTimeout(timer);
   timer=setTimeout(function(){
    var sheet=document.getElementById('site-main-style');
-   if(sheet&&!stylesLoaded)state.failStyles();
+   if(sheet&&!stylesLoaded){sheet.disabled=true;state.failStyles()}
    else state.fail();
   },60000);
  }
