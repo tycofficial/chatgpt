@@ -49,7 +49,7 @@ jobs:
           const capture = JSON.parse(fs.readFileSync(path.join(root, 'capture-manifest.json'), 'utf8'));
           assert.equal(capture.sourceBuild, process.env.UPSTREAM);
           const key = node => node?.name ?? node?.value;
-          const fields = new Set(['isGoEnabled','alwaysVisiblePlans','expanded']);
+          const fields = new Set(['showGo','isGoEnabled','alwaysVisiblePlans','expanded']);
           const fn = node => ['FunctionDeclaration','FunctionExpression','ArrowFunctionExpression'].includes(node.type);
           function walk(node, visit, parents = []) {
             if (!node || typeof node.type !== 'string') return;
@@ -99,7 +99,13 @@ jobs:
                   if(term.type==='Property'&&ancestry.at(-1)?.type==='ObjectPattern'&&bindingNames.has(term.value.name))bindings.push({input:key(term.key),as:term.value.name});
                 });
                 const call=parents.findLast(item=>item.type==='CallExpression'), owner=scope.id?.name ?? null;
-                inputRecords.push({field,kind:immediate.type,value:small(node.value,100),owner,ancestors:parents.slice(-5).map(p=>p.type),call:small(call?.callee,100),context:small(context,110),bindings});
+                inputRecords.push({field,kind:immediate.type,value:small(node.value,410),owner,ancestors:parents.slice(-5).map(p=>p.type),call:small(call?.callee,100),context:small(context,110),bindings});
+              });
+              walk(module,(term,ancestry)=>{
+                if(term!==module&&fn(term))return false;
+                if(term.type==='CallExpression'&&term.callee.property?.name==='d'&&term.arguments[0]?.name===module.params[1].name) {
+                  for(const schema of term.arguments.slice(1)) if(!exports.includes(small(schema,240))) exports.push(small(schema,240));
+                }
               });
               console.log('Go AST '+JSON.stringify({asset:url.pathname,module:key(id),exports,aliases:Object.fromEntries(aliases),inputs:inputRecords}));
             }
