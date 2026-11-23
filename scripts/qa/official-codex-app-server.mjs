@@ -84,7 +84,7 @@ try {
     'model = "fixture-codex"', 'approval_policy = "never"', 'model_provider = "fixture"',
     '[model_providers.fixture]', 'name = "Local integration test"', 'base_url = "' + url + '"',
     'wire_api = "responses"', 'request_max_retries = 0', 'stream_max_retries = 0',
-    '[features]', 'enable_request_compression = false', '',
+    '[features]', 'enable_request_compression = false', 'unified_exec = true', 'shell_snapshot = false', '',
   ].join('\n'), { mode: 0o600 });
   const env = { ...process.env, CODEX_HOME: state };
   delete env.OPENAI_API_KEY;
@@ -94,7 +94,11 @@ try {
   const { thread } = await client.request('thread/start', { model: 'fixture-codex', cwd: workspace, sandbox: 'workspace-write', approvalPolicy: 'never' });
   const direct = await runTurn(client, thread.id, 'Use Python to calculate 17 times 13.');
   const done = direct.find(event => event.method === 'item/completed' && event.params.item.type === 'commandExecution')?.params.item;
-  assert.ok(done, 'The real Codex process did not emit a command item');
+  assert.ok(done, 'The real Codex process did not emit a command item: ' + JSON.stringify({
+    events: direct.map(event => [event.method, event.params?.item?.type]),
+    requests: requested.map(payload => (payload.tools ?? []).map(tool => tool.name ?? tool.type)),
+    fixtureErrors,
+  }));
   assert.equal(done.exitCode, 0, JSON.stringify(done));
   assert.match(done.aggregatedOutput, /221/);
   assert.ok(direct.some(event => event.method === 'item/completed' && event.params.item.type === 'agentMessage' && /221/.test(event.params.item.text)));
