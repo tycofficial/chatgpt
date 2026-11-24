@@ -19,18 +19,20 @@ export function createAccountHistoryCoordinator({
   if (!appServer?.threads || typeof appServer.applyHistorySnapshot !== 'function' || typeof createSync !== 'function' ||
       typeof getIdentity !== 'function' || typeof projectThread !== 'function') throw new TypeError('Native history coordinator requires its real server and verified account callbacks.');
   const initialIdentity = clone(getIdentity()), bootScope = scope(initialIdentity), ownerId = initialIdentity?.ownerId;
+  const documentTarget = eventTarget?.document;
   const setTimer = timers.setTimeout ?? ((callback, delay) => globalThis.setTimeout(callback, delay));
   const clearTimer = timers.clearTimeout ?? (handle => globalThis.clearTimeout(handle));
   const debounceDelay = Number.isFinite(debounceMs) ? Math.min(10000, Math.max(0, debounceMs)) : 750;
   const pollDelay = Number.isFinite(pollMs) ? Math.min(300000, Math.max(5000, pollMs)) : 30000;
   let engine = null, chain = Promise.resolve(), disposed = false, ready = false, restartNeeded = false;
+  let cachedPage = false;
   let debounceTimer = null, pollTimer = null, startPromise = null, synchronizePromise = null, activeOperation = null;
   let sequence = 0, queuedCount = 0, conflictCount = 0, lastErrorCode = null, deferred = false;
   const captures = new Map(), notices = new Set(), copiedConflicts = new Map();
 
   const diagnostic = (type, code) => { try { onDiagnostic({ type, ...(typeof code === 'string' ? { code } : {}) }); } catch {} };
   const currentThreads = () => clone([...appServer.threads.values()].filter(thread => !thread.ephemeral));
-  const visible = () => eventTarget?.document?.visibilityState !== 'hidden' && eventTarget?.visibilityState !== 'hidden';
+  const visible = () => !cachedPage && documentTarget?.visibilityState !== 'hidden' && eventTarget?.visibilityState !== 'hidden';
   const notify = event => { try { onFeedback({ ownerId, ...event }); } catch { diagnostic('account-history-feedback-error'); } };
   const clearNotice = event => { try { onClearFeedback({ ownerId, ...event }); } catch { diagnostic('account-history-feedback-error'); } };
   function status() { return Object.freeze({ ready, disposed, restartNeeded, queuedCount, conflictCount, pendingCaptures: captures.size, pending: queuedCount > 0 || captures.size > 0 || deferred || restartNeeded || conflictCount > 0, deferred, lastErrorCode }); }
@@ -43,7 +45,9 @@ export function createAccountHistoryCoordinator({
     disposed = true; ready = false;
     stopTimer('debounce'); stopTimer('poll');
     activeOperation?.abort(); engine?.dispose(); captures.clear();
-    eventTarget?.removeEventListener?.('pagehide', dispose);
+    eventTarget?.removeEventListener?.('pagehide', pageHide);
+    eventTarget?.removeEventListener?.('pageshow', pageShow);
+    documentTarget?.removeEventListener?.('visibilitychange', foreground);
     eventTarget?.removeEventListener?.('online', foreground);
     eventTarget?.removeEventListener?.('focus', foreground);
     clearNotice({ kind: 'failure' });
@@ -75,16 +79,30 @@ export function createAccountHistoryCoordinator({
     return { ok: false, ...status() };
   }
   function schedule() {
-    if (disposed || debounceTimer !== null) return;
+    if (disposed || cachedPage || debounceTimer !== null) return;
     debounceTimer = setTimer(() => { debounceTimer = null; if (visible()) void synchronize(); }, debounceDelay);
     debounceTimer?.unref?.();
   }
   function schedulePoll() {
-    if (disposed || pollTimer !== null) return;
+    if (disposed || cachedPage || pollTimer !== null) return;
     pollTimer = setTimer(() => { pollTimer = null; if (visible()) void synchronize(); schedulePoll(); }, pollDelay);
     pollTimer?.unref?.();
   }
   function foreground() { if (!disposed && visible()) void synchronize(); }
+  function pageHide(event) {
+    if (!event.persisted) { dispose(); return; }
+    cachedPage = true;
+    stopTimer('debounce'); stopTimer('poll');
+  }
+  function pageShow(event) {
+    if (!event.persisted || !cachedPage || disposed) return;
+    cachedPage = false;
+    if (ready) schedulePoll();
+    // If the browser paused an in-flight save, wait for its durable receipt
+    // before running a fresh pass against the current native conversation.
+    if (synchronizePromise) void synchronizePromise.then(foreground);
+    else foreground();
+  }
   function refresh(snapshot) {
     queuedCount = snapshot.queuedCount ?? 0;
     const conflicts = snapshot.conflicts ?? [], ids = new Set(conflicts.map(value => value.id));
@@ -256,7 +274,9 @@ export function createAccountHistoryCoordinator({
   function resolveConflict(id, decision) { return enqueue(() => resolveInside(id, decision)); }
   async function whenIdle() { for (;;) { const pending = chain; await pending; if (pending === chain) return status(); } }
 
-  eventTarget?.addEventListener?.('pagehide', dispose, { once: true });
+  eventTarget?.addEventListener?.('pagehide', pageHide);
+  eventTarget?.addEventListener?.('pageshow', pageShow);
+  documentTarget?.addEventListener?.('visibilitychange', foreground);
   eventTarget?.addEventListener?.('online', foreground);
   eventTarget?.addEventListener?.('focus', foreground);
   return Object.freeze({ start, synchronize, capture, whenIdle, resolveConflict, dispose, status, get sync() { return engine; } });

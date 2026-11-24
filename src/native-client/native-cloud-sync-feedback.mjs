@@ -56,7 +56,7 @@ export function createNativeCloudSyncFeedback({
     if (disposed) return;
     disposed = true;
     cancelTimer();
-    eventTarget?.removeEventListener?.('pagehide', dispose);
+    eventTarget?.removeEventListener?.('pagehide', pageHide);
     for (const entry of entries.values()) release(entry);
     entries.clear();
   }
@@ -168,6 +168,7 @@ export function createNativeCloudSyncFeedback({
       notifiedCount: values.filter(entry => entry.notified).length,
       retryingCount: values.filter(entry => entry.retryController !== null).length });
   }
-  eventTarget?.addEventListener?.('pagehide', dispose, { once: true });
+  function pageHide(event) { if (!event.persisted) dispose(); }
+  eventTarget?.addEventListener?.('pagehide', pageHide);
   return Object.freeze({ report, flush, clear, dispose, getState });
 }

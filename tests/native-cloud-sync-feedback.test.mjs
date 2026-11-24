@@ -101,6 +101,17 @@ test('pagehide disposes owned native notifications, cancels queued work and abor
   assert.equal(f.helper.getState().disposed, true);
 });
 
+test('a cached page keeps its sync feedback and still tears down on a later real departure', async () => {
+  const f = fixture(); f.setReady(); f.report();
+  f.target.dispatchEvent(Object.assign(new Event('pagehide'), { persisted: true }));
+  assert.equal(f.helper.getState().disposed, false);
+  await f.calls[0].options.primaryAction.onClick();
+  assert.equal(f.retries.length, 1);
+  f.target.dispatchEvent(new Event('pagehide'));
+  assert.equal(f.helper.getState().disposed, true);
+  assert.equal(f.closed.length, 1);
+});
+
 test('explicit logout disposal is idempotent and a late retry completion cannot act on a new account', async () => {
   let done; const result = new Promise(resolve => { done = resolve; }); let actionCalls = 0;
   const f = fixture({ onRetry: async () => { ++actionCalls; await result; } }); f.setReady(); f.report();

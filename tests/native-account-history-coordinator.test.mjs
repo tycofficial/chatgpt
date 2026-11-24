@@ -19,7 +19,7 @@ async function fixture(t, documents = [], stateStore = store()) {
   const backend = await syncFixture(); t.after(() => backend.DB.raw.close());
   const disk = storage(documents), calls = [], events = [], clear = [], applied = [], trace = [], timers = new Map();
   let identity = { ownerId: backend.alice.user.id, accountId: backend.alice.user.accountId, namespace: 'neutral-history-a' }, nextTimer = 0, coordinator;
-  const network = { online: true, before: null, after: null }, eventTarget = new EventTarget(); eventTarget.document = { visibilityState: 'visible' };
+  const network = { online: true, before: null, after: null }, eventTarget = new EventTarget(); eventTarget.document = Object.assign(new EventTarget(), { visibilityState: 'visible' });
   const app = new LocalAppServer({ storage: disk, streamCompletion: () => { throw Error('No model execution allowed'); }, readSettings: () => ({}), models: {}, catalog: {} });
   const createSync = () => {
     const engine = createChatHistorySync({ baseURL: 'https://neutral-sync.test', getIdentity: () => identity, getSessionToken: () => backend.alice.token, store: stateStore,
@@ -201,6 +201,52 @@ test('polling skips hidden documents; foreground and online enqueue work, pagehi
   const poll = [...f.timers.entries()].find(([, task]) => task.delay === 30000); f.timers.delete(poll[0]); poll[1].callback(); await f.coordinator.whenIdle(); assert.equal(f.calls.length, before);
   f.eventTarget.document.visibilityState = 'visible'; f.eventTarget.dispatchEvent(new Event('online')); await f.coordinator.whenIdle(); assert.ok(f.calls.length > before);
   f.eventTarget.dispatchEvent(new Event('pagehide')); assert.equal(f.timers.size, 0); assert.equal(f.coordinator.status().disposed, true);
+});
+
+test('a hidden tab flushes the already durable edit when its document becomes visible', async t => {
+  const f = await fixture(t, [nativeDocument('visibility-recovery')]);
+  await f.coordinator.start();
+  const previous = (await cloud(f, 'visibility-recovery')).document.name;
+  f.eventTarget.document.visibilityState = 'hidden';
+  f.edit('visibility-recovery', 'SAVED WHILE BACKGROUNDED');
+  await f.coordinator.whenIdle();
+
+  const timer = [...f.timers.entries()].find(([, task]) => task.delay === 750);
+  assert.ok(timer);
+  f.timers.delete(timer[0]);
+  timer[1].callback();
+  await f.coordinator.whenIdle();
+  assert.equal((await cloud(f, 'visibility-recovery')).document.name, previous);
+
+  f.eventTarget.document.visibilityState = 'visible';
+  f.eventTarget.document.dispatchEvent(new Event('visibilitychange'));
+  await f.coordinator.whenIdle();
+  assert.equal((await cloud(f, 'visibility-recovery')).document.name, 'SAVED WHILE BACKGROUNDED');
+  assert.equal(f.coordinator.status().pending, false);
+});
+
+test('restoring a cached page saves the existing outbox once and keeps new edits synchronized', async t => {
+  const f = await fixture(t, [nativeDocument('cached-page')]);
+  await f.coordinator.start();
+  f.edit('cached-page', 'BEFORE NAVIGATING AWAY');
+  await f.coordinator.whenIdle();
+  f.eventTarget.document.visibilityState = 'hidden';
+  f.eventTarget.dispatchEvent(Object.assign(new Event('pagehide'), { persisted: true }));
+  assert.equal(f.timers.size, 0);
+  assert.equal(f.coordinator.status().disposed, false);
+
+  f.eventTarget.document.visibilityState = 'visible';
+  f.eventTarget.dispatchEvent(Object.assign(new Event('pageshow'), { persisted: true }));
+  await f.coordinator.whenIdle();
+  const restored = await cloud(f, 'cached-page');
+  assert.equal(restored.document.name, 'BEFORE NAVIGATING AWAY');
+  assert.equal(restored.revision, 2);
+
+  f.edit('cached-page', 'AFTER RETURNING');
+  await f.coordinator.synchronize();
+  const changed = await cloud(f, 'cached-page');
+  assert.equal(changed.document.name, 'AFTER RETURNING');
+  assert.equal(changed.revision, 3);
 });
 
 test('logout signal bounds an in-flight network wait while local pending captures and outbox stay durable', async t => {
