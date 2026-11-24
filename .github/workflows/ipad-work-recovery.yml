@@ -1,0 +1,134 @@
+name: Verify integrated iPad MobileSafari recovery
+on:
+  push:
+    branches: [qa/ipad-work-recovery-06e467f]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  safari:
+    runs-on: macos-26
+    timeout-minutes: 35
+    env:
+      CANDIDATE_SOURCE: 06e467f7591b87a48b4d4bcd93cd7d13a3445b4d
+      UPSTREAM: 0237c4dd9e54c7e3a619581b909d792de582fee9
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: chatgpt-public-interactions-single-graph
+          path: ${{ runner.temp }}/ipad-candidate-archive
+          github-token: ${{ github.token }}
+          run-id: 45162484586
+      - name: Build the exact integrated candidate with its captured graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          source_commit="$(git cat-file -p HEAD | sed -n 's/^parent //p')"
+          test "$source_commit" = "$CANDIDATE_SOURCE"
+          qa_root="$RUNNER_TEMP/tyc-ipad-work"
+          mkdir -p "$qa_root/capture"
+          tar -C "$qa_root/capture" -xzf "$RUNNER_TEMP/ipad-candidate-archive/chatgpt-public-graph.tar.gz"
+          npm ci --no-audit --no-fund
+          node scripts/adopt-native-upstream.mjs "$qa_root/capture/$UPSTREAM"
+          node scripts/build-native-client.mjs --activate
+          npm run native:check
+          node -e 'const a=require("./native-client/active.json"); if (a.active !== true || a.sourceBuild !== process.env.UPSTREAM || !/^[a-f0-9]{16}$/.test(a.release) || a.release === "1e427a8d323976e5") process.exit(1); console.log("iPad integrated candidate " + JSON.stringify(a));'
+          cp native-client/active.json "$qa_root/candidate-release.json"
+      - name: Build the isolated iPad XCTest harness
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin d1c9ca2aa55d2a32c624317c276d4204905dfc8b
+          qa_root="$RUNNER_TEMP/tyc-ipad-work"
+          mkdir -p "$qa_root"
+          git archive FETCH_HEAD scripts/qa/ipad-xcuitest | tar -x -C "$qa_root"
+          qa_project="$qa_root/scripts/qa/ipad-xcuitest"
+          cp scripts/qa/ipad-work/SafariPublicSiteTests.swift "$qa_project/SafariQAUITests/SafariPublicSiteTests.swift"
+          xcodebuild -version
+          xcrun simctl list devices available -j | node "$qa_project/select-device.mjs" > "$qa_root/device"
+          cat "$qa_root/device"
+          IPAD_UDID="$(sed -n 's/^IPAD_UDID=//p' "$qa_root/device")"
+          [[ "$IPAD_UDID" =~ ^[a-fA-F0-9-]{36}$ ]]
+          xcodebuild build-for-testing -project "$qa_project/SafariQA.xcodeproj" -scheme SafariQA \
+            -destination "platform=iOS Simulator,id=$IPAD_UDID" \
+            -derivedDataPath "$qa_root/build" -parallel-testing-enabled NO -quiet
+
+      - id: work-safari
+        name: Test Work against the runner-local fixture in MobileSafari
+        shell: bash
+        run: |
+          set -euo pipefail
+          qa_root="$RUNNER_TEMP/tyc-ipad-work"
+          IPAD_UDID="$(sed -n 's/^IPAD_UDID=//p' "$qa_root/device")"
+          [[ "$IPAD_UDID" =~ ^[a-fA-F0-9-]{36}$ ]]
+          qa_project="$qa_root/scripts/qa/ipad-xcuitest"
+          bash scripts/qa/ipad-work/create-loopback-tls.sh "$qa_root/tls"
+          TYC_IPAD_TLS_KEY="$qa_root/tls/leaf.key" TYC_IPAD_TLS_CERT="$qa_root/tls/leaf.crt" \
+            node scripts/qa/ipad-work/serve-ipad-fixture.mjs "$GITHUB_WORKSPACE" > "$qa_root/fixture.log" 2>&1 &
+          fixture_pid=$!
+          report_fixture() {
+            curl --cacert "$qa_root/tls/ca.crt" --max-time 4 --fail --silent --show-error \
+              https://127.0.0.1:4400/__ipad_qa/metrics > "$qa_root/safari-metrics.json" || true
+            cat "$qa_root/safari-metrics.json" || true
+            printf '\n'
+            xcrun simctl io "$IPAD_UDID" screenshot "$qa_root/safari-after.png" || true
+            kill "$fixture_pid" 2>/dev/null || true
+          }
+          trap report_fixture EXIT
+          curl --cacert "$qa_root/tls/ca.crt" --fail --silent --show-error --retry 8 --retry-connrefused --max-time 5 \
+            https://127.0.0.1:4400/__ipad_qa/metrics
+          defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool NO
+          if ! xcrun simctl bootstatus "$IPAD_UDID" -b; then
+            xcrun simctl bootstatus "$IPAD_UDID"
+          fi
+          xcrun simctl listapps "$IPAD_UDID" > "$qa_root/installed-apps.plist"
+          grep -F 'com.apple.mobilesafari' "$qa_root/installed-apps.plist"
+          xcrun simctl keychain "$IPAD_UDID" add-root-cert "$qa_root/tls/ca.crt"
+          printf 'Launching MobileSafari on %s\n' "$IPAD_UDID"
+          xcrun simctl launch "$IPAD_UDID" com.apple.mobilesafari
+          xcrun simctl openurl "$IPAD_UDID" https://127.0.0.1:4400/__ipad_qa/seed
+          xcodebuild test-without-building -project "$qa_project/SafariQA.xcodeproj" -scheme SafariQA \
+            -destination "platform=iOS Simulator,id=$IPAD_UDID" -derivedDataPath "$qa_root/build" \
+            -resultBundlePath "$qa_root/work-recovery.xcresult" \
+            -only-testing:SafariQAUITests/SafariPublicSiteTests/testWorkTogglesAndBrowserChromeReload \
+            -parallel-testing-enabled NO -disable-concurrent-destination-testing \
+            -test-timeouts-enabled YES -default-test-execution-time-allowance 360
+          result="$(curl --cacert "$qa_root/tls/ca.crt" --fail --silent --show-error https://127.0.0.1:4400/__ipad_qa/metrics)"
+          echo "$result"
+          printf '%s\n' "$result" | jq -e '
+            .documentLoads >= 2 and .inferencePosts == 1 and .inferenceCalls == 1
+            and (.inferenceRequestIds | length) == 1 and .planType == "plus"
+            and .request.model == "gpt-6.2-sol" and .request.effort == "low"
+            and .request.expectedPrompt and .request.stream
+            and (.savedWorkThreads | length) == 1 and .savedWorkThreads[0].replyItems == 1
+            and (.documentLocations[-1] | startswith("/chatgpt/c/"))'
+
+      - name: Record the simulator verification result
+        if: always()
+        shell: bash
+        env:
+          IPAD_RESULT: ${{ steps.work-safari.outcome }}
+        run: |
+          printf 'Native Safari fixture check: %s\n' "$IPAD_RESULT" >> "$GITHUB_STEP_SUMMARY"
+          printf 'Native Safari fixture check: %s\n' "$IPAD_RESULT"
+
+      - name: Attach simulator evidence
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: integrated-ipad-work-0237-evidence
+          path: |
+            ${{ runner.temp }}/tyc-ipad-work/safari-after.png
+            ${{ runner.temp }}/tyc-ipad-work/safari-metrics.json
+            ${{ runner.temp }}/tyc-ipad-work/device
+            ${{ runner.temp }}/tyc-ipad-work/candidate-release.json
+          if-no-files-found: ignore
