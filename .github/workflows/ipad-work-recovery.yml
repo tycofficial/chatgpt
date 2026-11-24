@@ -76,7 +76,12 @@ jobs:
             -test-timeouts-enabled YES -default-test-execution-time-allowance 360
           result="$(curl --cacert "$qa_root/tls/ca.crt" --fail --silent --show-error https://127.0.0.1:4400/__ipad_qa/metrics)"
           echo "$result"
-          printf '%s\n' "$result" | jq -e '.documentLoads >= 2 and .inferenceCalls == 0 and .planType == "plus"'
+          printf '%s\n' "$result" | jq -e '
+            .documentLoads >= 2 and .inferencePosts == 1 and .inferenceCalls == 1
+            and (.inferenceRequestIds | length) == 1 and .planType == "plus"
+            and .request.model == "gpt-6.2-sol" and .request.effort == "low"
+            and .request.expectedPrompt and .request.stream
+            and .documentLocations[-1] == .clientLocation'
 
       - name: Record the simulator verification result
         if: always()
