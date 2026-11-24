@@ -141,7 +141,17 @@ try {
         const button = name => page.getByRole('button', { name }).filter({ visible: true }).first();
         const noteText = entry => page.getByText(entry, { exact: true }).filter({ visible: true }).first();
         const activity = button(/^近期活动$/);
-        const profile = button(/打开\s*你的 dot 的个人资料/i);
+        const avatar = page.locator('[data-orbit-profile-trigger]:not([data-thread-summary-panel-toggle])').filter({ visible: true }).first();
+        const profile = page.locator('[data-thread-summary-panel-toggle][data-orbit-profile-trigger]').filter({ visible: true }).first();
+        const activityName = /活动|动态|activity/i;
+        async function inspectControls(stage) {
+          const controls = await page.evaluate(() => [...document.querySelectorAll('button, [role="menuitem"]')]
+            .filter(node => node.getClientRects().length && getComputedStyle(node).visibility === 'visible')
+            .map(node => ({ name: node.getAttribute('aria-label') ?? node.textContent?.trim().replace(/\s+/g, ' ').slice(0, 62),
+              orbit: node.hasAttribute('data-orbit-profile-trigger'), summary: node.hasAttribute('data-thread-summary-panel-toggle') }))
+            .filter(row => row.name && (row.orbit || /活动|动态|资料|呼叫|语音|电脑|自定义|个性|外观|你的 dot 操作|activity|profile|call|computer|customize/i.test(row.name))));
+          console.log('Native Dot controls ' + JSON.stringify({ stage, controls }));
+        }
         const newNote = 'DOT-NATIVE-JOURNAL-ACTIVITY-A';
         const editedNote = 'DOT-NATIVE-JOURNAL-ACTIVITY-B';
         await page.goto(home, { waitUntil: 'domcontentloaded', timeout: 45000 });
@@ -177,9 +187,18 @@ try {
               return response;
             };
           });
-          if (!await activity.isVisible()) await profile.click({ timeout: 15000 });
-          await activity.waitFor({ state: 'visible', timeout: 10000 });
-          if (await activity.getAttribute('aria-expanded') !== 'true') await activity.click();
+          await inspectControls('on-entry');
+          if (await profile.isVisible() && await profile.isEnabled()) {
+            if (await profile.getAttribute('aria-pressed') !== 'true') await profile.click();
+            await activity.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+            await inspectControls('summary-open');
+            if (await activity.isVisible() && await activity.getAttribute('aria-expanded') !== 'true') await activity.click();
+            if (await profile.getAttribute('aria-pressed') === 'true' &&
+              activityName.test(await avatar.getAttribute('aria-label') ?? '')) await profile.click();
+          }
+          if (await avatar.isVisible() && activityName.test(await avatar.getAttribute('aria-label') ?? '') &&
+            await avatar.getAttribute('aria-expanded') !== 'true') await avatar.click();
+          await inspectControls('activity-open');
         }
         async function verifyListed(entry) {
           try {
@@ -199,10 +218,12 @@ try {
         const id = added.match(/[a-f0-9-]{36}$/)[0];
         await openActivity();
         await verifyListed(newNote);
+        await page.keyboard.press('Escape');
         await submit('/journal edit ' + id + ' ' + editedNote, '已修改日记 · ' + id);
         await openActivity();
         await verifyListed(editedNote);
         await noteText(newNote).waitFor({ state: 'hidden', timeout: 10000 });
+        await page.keyboard.press('Escape');
         await submit('/journal delete ' + id, '已删除日记 · ' + id);
         await openActivity();
         await noteText(editedNote).waitFor({ state: 'hidden', timeout: 10000 });
