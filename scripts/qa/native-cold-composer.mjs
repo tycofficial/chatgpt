@@ -45,7 +45,8 @@ function traceSource(relative, source) {
   return source;
 }
 
-let trace = false, delayCss = 0;
+let trace = false, delayCss = 0, hashedCache = false;
+const hits = new Map();
 const issues = [];
 const server = createServer(async (request, response) => {
   try {
@@ -54,13 +55,18 @@ const server = createServer(async (request, response) => {
     const relative = decodeURIComponent(url.pathname.slice(base.length)) || 'native-client-shell.html';
     const target = resolve(root, relative);
     if (!target.startsWith(root + sep) || relative.split('/').some(segment => segment.startsWith('.'))) return response.writeHead(404).end();
+    if (/\/cdn\/assets\/(?:zh-CN\.[a-f0-9]+\.json|8c892297a50f\.css)$/.test(relative)) {
+      const key = relative.split('/').at(-1);
+      if (!hits.has(key)) hits.set(key, []);
+      hits.get(key).push([request.headers['sec-fetch-dest'] ?? null, request.headers['sec-fetch-mode'] ?? null, request.headers['sec-purpose'] ?? null]);
+    }
     let bytes;
     try { bytes = await readFile(target); }
     catch { return response.writeHead(404).end(); }
     if (trace && /^native-client\/(?:bootstrap|boot-adapter)\.mjs$/.test(relative)) bytes = traceSource(relative, bytes.toString('utf8'));
     if (delayCss && /\.css$/.test(relative)) await wait(delayCss);
     response.writeHead(200, { 'Content-Type': extTypes.get(extname(target)) || 'application/octet-stream',
-      'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' });
+      'Cache-Control': hashedCache && relative.includes('/cdn/assets/') ? 'public, max-age=600' : 'no-store', 'X-Content-Type-Options': 'nosniff' });
     response.end(bytes);
   } catch (cause) {
     issues.push(cause.message);
@@ -73,15 +79,29 @@ const origin = 'http://127.0.0.1:' + server.address().port;
 const selector = '#prompt-textarea[contenteditable="true"], .ProseMirror[contenteditable="true"]';
 
 async function sample(kind) {
-  const browser = await chromium.launch({ channel: 'msedge', headless: true });
+  hits.clear();
+  const browser = await chromium.launch({ channel: 'msedge', headless: true, args: ['--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1'] });
   try {
     const context = await browser.newContext({ locale: 'zh-CN', viewport: { width: 1280, height: 900 } });
-    await context.route(url => url.origin !== origin && /^https?:/.test(url.protocol), route => route.abort());
     await context.addInitScript(() => {
       sessionStorage.setItem('chatgpt-site-local-guest:v1', '1');
       sessionStorage.setItem('original-client-prototype-local-session', '1');
       performance.setResourceTimingBufferSize(3500);
       window.qaLongTasks = [];
+      window.qaStartupLinks = [];
+      const capture = (link, state) => {
+        if (link.tagName !== 'LINK' || !/zh-CN\.|8c892297a50f/.test(link.href)) return;
+        window.qaStartupLinks.push([Math.round(performance.now()), state, link.rel, new URL(link.href).pathname.split('/').at(-1),
+          link.id || null, link.getAttribute('as'), link.getAttribute('crossorigin'), link.getAttribute('media'), link.getAttribute('data-precedence')]);
+      };
+      new MutationObserver(rows => {
+        for (const row of rows) for (const [state, nodes] of [['add', row.addedNodes], ['remove', row.removedNodes]]) {
+          for (const node of nodes) {
+            capture(node, state);
+            for (const link of node.querySelectorAll?.('link') ?? []) capture(link, state);
+          }
+        }
+      }).observe(document, { childList: true, subtree: true });
       new PerformanceObserver(list => { for (const entry of list.getEntries()) window.qaLongTasks.push([entry.startTime, entry.duration]); })
         .observe({ type: 'longtask', buffered: true });
     });
@@ -109,7 +129,7 @@ async function sample(kind) {
       const entries = performance.getEntriesByType('resource').filter(row => row.responseEnd <= ready && row.decodedBodySize > 0);
       const keys = row => {
         const url = new URL(row.name);
-        return [url.pathname.split('/').at(-1), rounded(row.fetchStart), rounded(row.responseEnd), row.decodedBodySize, row.initiatorType];
+        return [url.pathname.split('/').at(-1), rounded(row.fetchStart), rounded(row.responseEnd), row.decodedBodySize, row.initiatorType, row.transferSize, row.encodedBodySize];
       };
       const nav = performance.getEntriesByType('navigation')[0];
       return {
@@ -121,6 +141,17 @@ async function sample(kind) {
         bytesBeforeComposer: entries.reduce((n, row) => n + row.decodedBodySize, 0),
         maxLongTaskMs: rounded(Math.max(0, ...window.qaLongTasks.filter(row => row[0] <= ready).map(row => row[1]))),
         phases: Object.fromEntries(performance.getEntriesByType('mark').filter(x => x.name.startsWith('tyc:')).map(x => [x.name.slice(4), rounded(x.startTime)])),
+        links: window.qaStartupLinks,
+        duplicateTimings: entries.filter(row => /zh-CN\.|8c892297a50f/.test(row.name)).map(keys),
+        routeLinkExports: Object.entries(window.__reactRouterRouteModules ?? {}).map(([id, module]) => {
+          const links = Object.getOwnPropertyDescriptor(module, 'links')?.value;
+          let urls = [];
+          try { urls = typeof links === 'function' ? (links() ?? []).filter(x => /zh-CN\.|8c892297a50f/.test(x.href)).map(x => ({ rel: x.rel, as: x.as, crossOrigin: x.crossOrigin, href: new URL(x.href, location.origin).pathname.split('/').at(-1) })) : []; }
+          catch {}
+          return [id, typeof links, urls];
+        }),
+        duplicateManifest: [window.__reactRouterManifest?.entry, ...Object.values(window.__reactRouterManifest?.routes ?? {})]
+          .filter(row => row?.css?.some(href => href.includes('8c892297a50f'))).map(row => row.id ?? 'entry'),
         biggest: [...entries].sort((a, b) => b.decodedBodySize - a.decodedBodySize).slice(0, 5).map(keys),
         latest: [...entries].sort((a, b) => b.responseEnd - a.responseEnd).slice(0, 8).map(keys),
       };
@@ -130,7 +161,7 @@ async function sample(kind) {
       .filter(row => ['TaskDuration', 'ScriptDuration', 'LayoutDuration', 'RecalcStyleDuration'].includes(row.name))
       .map(row => [row.name, Math.round((row.value - (start.get(row.name) || 0)) * 1000)]));
     console.log('Native cold composer ' + JSON.stringify({
-      kind, trace, delayCss, browser: browser.version(), cpu, ...stats,
+      kind, trace, delayCss, hashedCache, serverHits: Object.fromEntries(hits), browser: browser.version(), cpu, ...stats,
     }));
     return stats.composerMs;
   } finally {
@@ -140,14 +171,11 @@ async function sample(kind) {
 
 try {
   console.log('Native composer environment ' + JSON.stringify({ cpu: cpus()[0].model, logical: cpus().length, active, route: base }));
-  const cold = [];
-  for (let i = 0; i < 3; i++) cold.push(await sample('cold'));
   trace = true;
-  await sample('trace');
-  delayCss = 900;
-  await sample('trace-delayed-stylesheet');
+  await sample('duplicate-uncached');
+  hashedCache = true;
+  await sample('duplicate-production-like-cache');
   assert.deepEqual(issues, []);
-  console.log('Native cold composer summary ' + JSON.stringify({ exactRelease: wanted, rawMs: cold, medianMs: cold.sort((a,b) => a - b)[1] }));
 } finally {
   await new Promise(resolve => server.close(resolve));
 }
