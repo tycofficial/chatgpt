@@ -7,18 +7,39 @@ const delay = (ms, signal) => new Promise((resolve, reject) => { const abort = (
 export class PreferredHostError extends Error { constructor(code, message, details = {}) { super(message); this.name = 'PreferredHostError'; this.code = code; this.retryable = false; Object.assign(this, details); } }
 async function digest(text) { return [...new Uint8Array(await crypto.subtle.digest('SHA-256', encoder.encode(text)))].map(byte => byte.toString(16).padStart(2, '0')).join(''); }
 const abortError = message => new DOMException(message, 'AbortError');
+function caughtUpToText(old, value) {
+  if (!old.startsWith(value) && !value.startsWith(old)) {
+    throw new PreferredHostError('HOST_REPLAY_DIVERGED', 'Saved output does not match the durable relay stream; it was not silently replaced.');
+  }
+  return value.length >= old.length;
+}
+
+const partKey = part => part.index + ':' + (part.summaryIndex ?? '');
+
 /** Gate a fresh parser's replay against already persisted output. It never repeats a delta. */
 export function createReplayDeltaGate(saved, onDelta) {
-  const baseline = { content: String(saved?.content || ''), reasoning: String(saved?.reasoning || '') };
-  let emittedContent = baseline.content;
+  const fields = [
+    ['content', 'output_messages'],
+    ['reasoning', 'reasoning_parts'],
+  ];
+  let emittedContent = String(saved?.content || '');
   return (_delta, assembled) => {
-    for (const key of ['content', 'reasoning']) {
-      const value = String(assembled[key] || ''), old = baseline[key];
-      if (!old.startsWith(value) && !value.startsWith(old)) throw new PreferredHostError('HOST_REPLAY_DIVERGED', 'Saved output does not match the durable relay stream; it was not silently replaced.');
+    let caughtUp = true;
+    for (const [field, list] of fields) {
+      const savedParts = saved?.[list];
+      if (savedParts?.length) {
+        const parts = new Map((assembled[list] ?? []).map(part => [partKey(part), part.text]));
+        for (const part of savedParts) {
+          if (!caughtUpToText(part.text, parts.get(partKey(part)) ?? '')) caughtUp = false;
+        }
+      } else if (!caughtUpToText(String(saved?.[field] || ''), String(assembled[field] || ''))) {
+        caughtUp = false;
+      }
     }
-    if (String(assembled.content || '').length < baseline.content.length || String(assembled.reasoning || '').length < baseline.reasoning.length) return;
+    if (!caughtUp) return;
     const content = String(assembled.content || '');
-    onDelta(content.startsWith(emittedContent) ? content.slice(emittedContent.length) : '', assembled); emittedContent = content;
+    onDelta(content.startsWith(emittedContent) ? content.slice(emittedContent.length) : '', assembled);
+    emittedContent = content;
   };
 }
 

@@ -11,6 +11,23 @@ const compactUsage = usage => Object.fromEntries(['input_tokens', 'output_tokens
 const toolError = message => ({ isError: true, content: [{ type: 'text', text: message }], structuredContent: { error: message } });
 const retiredTaskStatus = () => toolError('The task_status tool has been retired. This call performed no work. Continue the user task with the available tools.');
 const durableResponse = transport => isHostCheckpoint(transport) || isSiteInferenceCheckpoint(transport);
+
+function journalReplayBaseline(saved, frame, running) {
+  if (!saved) return saved;
+  // Journal events can extend an earlier item after a later item has started.
+  // Rebuild the per-item baseline from the transcript already on disk.
+  const outputMessages = Object.entries(frame.assistantItemIds ?? {}).flatMap(([index, id]) => {
+    const item = running.turn.items.find(value => value.id === id);
+    return item?.text ? [{ index: Number(index), text: item.text }] : [];
+  });
+  const reasoningParts = (frame.reasoningPartKeys ?? []).flatMap((key, slot) => {
+    const text = running.reasoning?.summary?.[slot];
+    const [index, summaryIndex] = key.split(':').map(Number);
+    return text ? [{ index, summaryIndex, text }] : [];
+  });
+  return { ...saved, output_messages: outputMessages, reasoning_parts: reasoningParts };
+}
+
 export const hasUncertainPlainResponse = frame => Boolean(frame && !frame.result && !durableResponse(frame.transport) && (frame.transport?.apiProviderId || frame.transport?.apiAttempted));
 export const plainInterruptionMessage = '连接中断，无法确认上一次请求的结果。已保存收到的回复，可在此对话中发送新消息继续。';
 const plainInterruption = () => Object.assign(Error(plainInterruptionMessage), { code: 'PLAIN_INFERENCE_INTERRUPTED', retryable: false });
@@ -296,12 +313,13 @@ export async function runAgentTurn(server, running) {
         server.append(running, assembled.content || '', assembled.reasoning || '', assembled.phase, assembled.output_messages, assembled.reasoning_parts);
         frame.assistantItemId = running.assistant?.id ?? frame.assistantItemId; frame.reasoningItemId = running.reasoning?.id ?? frame.reasoningItemId; frame.reasoningComplete = running.reasoningComplete === true;
       };
-      const onDelta = siteReplay ? createReplayDeltaGate(cp.partialResponse, applyDelta) : applyDelta;
+      const savedPartial = durableResponse(frame.transport) ? journalReplayBaseline(cp.partialResponse, frame, running) : cp.partialResponse;
+      const onDelta = siteReplay ? createReplayDeltaGate(savedPartial, applyDelta) : applyDelta;
       let result;
       try {
         result = frame.result ? clone(frame.result) : await server.streamCompletion({ settings, messages, tools, toolChoice: searchRequest.toolChoice, signal,
           providerRoutingContext: { threadId: thread.id, conversationOrigin: thread.adapterMetadata?.conversationOrigin, isFreeChat: turn.executionSurface === 'chat' && !server.executionPolicy().modelSelection },
-          transportContext: { checkpoint: frame.transport, requestId: turn.id + ':' + metric.sequence, onCheckpoint: save, reattach: durableResponse(frame.transport), savedPartial: cp.partialResponse, ephemeral: thread.ephemeral === true, requiredConcurrency: turn.reasoningEffort === 'ultra' ? 3 : 1, getAbortMode: () => running.interruptReason === 'pagehide' ? 'pagehide' : signal.reason?.requiresTransportResume ? 'transport' : 'user' },
+          transportContext: { checkpoint: frame.transport, requestId: turn.id + ':' + metric.sequence, onCheckpoint: save, reattach: durableResponse(frame.transport), savedPartial, ephemeral: thread.ephemeral === true, requiredConcurrency: turn.reasoningEffort === 'ultra' ? 3 : 1, getAbortMode: () => running.interruptReason === 'pagehide' ? 'pagehide' : signal.reason?.requiresTransportResume ? 'transport' : 'user' },
           onActivity: () => { if (!siteReplay && metric.firstOutputAt == null) metric.firstOutputAt = server.now(); }, onDelta });
         metric.responseReceivedAt ??= observeReceipt(frame, metric, running, server.now());
         if (!['stop', 'tool_calls', 'length'].includes(result.finish_reason)) throw Object.assign(Error('The provider stream did not confirm a complete or explicitly truncated response; no tool was executed and no commentary continuation was submitted.'), { code: 'INCOMPLETE_RESPONSE_STREAM', retryable: false });

@@ -59,6 +59,23 @@ test('replay delta gate suppresses persisted prefix, emits only new suffix and r
  const seen=[],gate=createReplayDeltaGate({content:'Saved partial',reasoning:''},(delta,assembled)=>seen.push([delta,assembled.content]));gate('',{content:'Saved',reasoning:''});assert.equal(seen.length,0);gate('',{content:'Saved partial',reasoning:''});gate('',{content:'Saved partial continued',reasoning:''});assert.equal(seen.at(-1)[0],' continued');assert.throws(()=>gate('',{content:'Different response',reasoning:''}),{code:'HOST_REPLAY_DIVERGED'});
 });
 
+
+test('structured replay checks each saved part even when an earlier item is still catching up', () => {
+ const saved = {
+   content: 'Earlier body.Latest body.',
+   output_messages: [{ index: 1, text: 'Earlier body.' }, { index: 2, text: 'Latest body.' }],
+   reasoning_parts: [{ index: 0, summaryIndex: 1, text: 'Public summary.' }],
+ };
+ const gate = createReplayDeltaGate(saved, () => assert.fail('A divergent frame must not be emitted'));
+ assert.throws(() => gate('', {
+   output_messages: [{ index: 1, text: 'Earlier ' }, { index: 2, text: 'Different body.' }],
+ }), { code: 'HOST_REPLAY_DIVERGED' });
+ assert.throws(() => gate('', {
+   output_messages: saved.output_messages,
+   reasoning_parts: [{ index: 0, summaryIndex: 1, text: 'Unrelated summary.' }],
+ }), { code: 'HOST_REPLAY_DIVERGED' });
+});
+
 test('permanently ambiguous admission persists exact payload and later resumes the same job without API billing',async()=>{
  const f=fixture({alwaysDropAdmission:true}),cp={};await assert.rejects(f.router.request(payload(),{checkpoint:cp}),{code:'HOST_ADMISSION_UNCERTAIN'});assert.equal(f.state.jobs.size,1);assert.equal(f.state.api,0);assert.deepEqual(cp.admissionPayload,payload());
  f.state.alwaysDropAdmission=false;const response=await f.router.resume(cp);assert.match(await response.text(),/fixture complete/);assert.equal(f.state.jobs.size,1);assert.equal(f.state.api,0);assert.equal(cp.jobId,uuid);

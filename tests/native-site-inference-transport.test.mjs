@@ -280,6 +280,76 @@ test('close after a real tool and saved public text, then restore the same leg w
   assert.equal(after.items.filter(item => item.type === 'reasoning').at(-1).durationMs, 85);
 });
 
+
+test('interleaved public summaries and assistant messages can replay the same saved stream across refresh', { timeout: 4000 }, async () => {
+  const storage = memory(), visible = deferred();
+  const summary = (summary_index, delta) => sse('response.reasoning_summary_text.delta', {
+    output_index: 0, summary_index, delta,
+  });
+  const initial = [
+    summary(1, 'Second public summary.'),
+    summary(0, 'First public'),
+    sse('response.output_item.added', { output_index: 1, item: textItem('preamble', '', 'commentary') }),
+    sse('response.output_text.delta', { output_index: 1, delta: 'Earlier body' }),
+    sse('response.output_item.added', { output_index: 2, item: textItem('final', '') }),
+    sse('response.output_text.delta', { output_index: 2, delta: 'Final body' }),
+    summary(0, ' summary.'),
+    sse('response.output_text.delta', { output_index: 1, delta: ' has more.' }),
+  ].join('');
+  const output = finish([
+    { id: 'reasoning', type: 'reasoning', summary: [
+      { type: 'summary_text', text: 'First public summary.' },
+      { type: 'summary_text', text: 'Second public summary.' },
+    ] },
+    textItem('preamble', 'Earlier body has more.', 'commentary'),
+    textItem('final', 'Final body after reconnect.'),
+  ]);
+  let posts = 0;
+  const client = transport(async (url, options) => {
+    if (options.method === 'POST') {
+      posts++;
+      return streamResponse(new ReadableStream({ start(stream) {
+        stream.enqueue(new TextEncoder().encode(initial));
+        options.signal.addEventListener('abort', () => stream.error(options.signal.reason), { once: true });
+      } }));
+    }
+    assert.equal(url.pathname, route + '/' + uuid(1));
+    return receipt(uuid(1), { data: [initial, output] });
+  });
+  const complete = options => streamCompletion({ ...options,
+    responsesTransport: (data, wire) => client.request(data, { ...options.transportContext, signal: wire.signal }),
+  });
+  const server = createServer(storage, complete);
+  server.subscribe(event => {
+    if (event.method === 'item/agentMessage/delta' && event.params.delta === ' has more.') visible.resolve();
+  });
+  const first = launch(server);
+  await visible.promise;
+  server.interrupt(first.threadId, { reason: 'pagehide' });
+  assert.equal((await first.done).status, 'interrupted');
+
+  const restored = createServer(storage, complete);
+  const before = restored.getThread(first.threadId).turns[0];
+  const bodies = turn => turn.items.filter(item => item.type === 'agentMessage');
+  assert.deepEqual(bodies(before).map(item => item.text), ['Earlier body has more.', 'Final body']);
+  const append = [];
+  restored.subscribe(({ method, params }) => {
+    if (method === 'item/agentMessage/delta') append.push(params.delta);
+  });
+  const done = terminal(restored, first.threadId);
+  restored.dispatch('turn/resume', { threadId: first.threadId, turnId: first.turn.id }).afterReply();
+  const result = await done;
+  assert.equal(result.status, 'completed', result.adapterMetadata.lastFailure?.message);
+  assert.deepEqual(bodies(result).map(item => item.id), bodies(before).map(item => item.id));
+  assert.deepEqual(bodies(result).map(item => [item.phase, item.text]), [
+    ['commentary', 'Earlier body has more.'], ['final_answer', 'Final body after reconnect.'],
+  ]);
+  assert.deepEqual(result.items.find(item => item.type === 'reasoning').summary,
+    ['Second public summary.', 'First public summary.']);
+  assert.deepEqual(append, [' after reconnect.']);
+  assert.equal(posts, 1);
+});
+
 test('a confirmed interrupted receipt keeps its saved text and rejects stale resume', { timeout: 4000 }, async () => {
   const storage = memory();
   const savedText = 'Saved text before the interruption.';
