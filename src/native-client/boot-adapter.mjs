@@ -704,7 +704,8 @@ overrideExports('okWI', {}, { deferred: true }, {
 await import(plan.manifest);
 if (globalThis.__CHATGPT_REPLICA_ENV__?.directAssetHost) {
   const siteRoot = new URL(globalThis.__CHATGPT_REPLICA_ENV__.basePath, location.origin);
-  localizeRouterAssets(window.__reactRouterManifest, siteRoot, new URL(plan.registrationEntry, import.meta.url).href);
+  localizeRouterAssets(window.__reactRouterManifest, siteRoot, new URL(plan.registrationEntry, import.meta.url).href,
+    document.getElementById('site-main-style'));
 }
 const routeModules = Object.fromEntries(await Promise.all(Object.entries(plan.initialRoutes).map(async ([id, file]) => [id, await import(file)])));
 window.__reactRouterRouteModules = routeModules;

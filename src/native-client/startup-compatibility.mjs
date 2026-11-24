@@ -59,8 +59,15 @@ export function originalAssetURL(value, rootURL) {
   return value;
 }
 
-export function localizeRouterAssets(manifest, rootURL, registrationURL) {
+function loadedSiteStylesheet(link) {
+  return link?.rel === 'stylesheet' && link.media === 'all' && !link.disabled && typeof link.href === 'string';
+}
+
+export function localizeRouterAssets(manifest, rootURL, registrationURL, siteStylesheet) {
   if (!manifest?.entry || !manifest.routes) return;
+  // The generated shell has already loaded this exact stylesheet before native mount.
+  const sharedCSS = loadedSiteStylesheet(siteStylesheet) && siteStylesheet.isConnected && siteStylesheet.sheet
+    ? originalAssetURL(siteStylesheet.href, rootURL) : null;
   const mapped = new Map();
   const resource = value => {
     if (typeof value !== 'string') return value;
@@ -71,7 +78,8 @@ export function localizeRouterAssets(manifest, rootURL, registrationURL) {
   for (const record of [manifest.entry, ...Object.values(manifest.routes)]) {
     for (const key of Object.keys(record)) {
       if (key === 'module' || key.endsWith('Module')) record[key] = resource(record[key]);
-      else if (key === 'imports' || key === 'css') record[key] = record[key]?.map(resource);
+      else if (key === 'imports') record[key] = record[key]?.map(resource);
+      else if (key === 'css') record[key] = record[key]?.map(resource).filter(href => href !== sharedCSS);
     }
   }
   // The host already starts this entry. React's modulepreload should share its module instance.
@@ -101,6 +109,7 @@ export function installDirectAssetHost(rootURL, { document = globalThis.document
   rewrite(document.documentElement);
   for (const node of document.querySelectorAll('[src], [href], [data-icon-sprite-url]')) rewrite(node);
   const rebaseStyle = document.querySelector('style[data-native-asset-rebase]');
+  const siteStylesheet = document.getElementById?.('site-main-style');
   const observer = new MutationObserver(records => {
     for (const record of records) {
       if (record.type === 'attributes') rewrite(record.target);
@@ -110,6 +119,7 @@ export function installDirectAssetHost(rootURL, { document = globalThis.document
         for (const child of node.querySelectorAll?.('[src], [href]') ?? []) rewrite(child);
       }
     }
+    if (loadedSiteStylesheet(siteStylesheet) && !siteStylesheet.isConnected && document.head) document.head.prepend(siteStylesheet);
     if (rebaseStyle && !rebaseStyle.isConnected && document.head) document.head.append(rebaseStyle);
   });
   observer.observe(document, { subtree: true, childList: true, attributes: true, attributeFilter: ['src', 'href', 'data-icon-sprite-url'] });
