@@ -137,6 +137,83 @@ try {
       assert.equal(authPosts, 1);
       assert.equal(modelPosts, 2);
       console.log('Browser QA '+JSON.stringify({engine,release:active.release,progress,authPosts,modelPosts,reloadedReply:true,sameThread:true,firstReplyMs,secondReplyMs}));
+      if (process.env.QA_NATIVE_DOT_JOURNAL_ACTIVITY === '1') {
+        const button = name => page.getByRole('button', { name }).filter({ visible: true }).first();
+        const noteText = entry => page.getByText(entry, { exact: true }).filter({ visible: true }).first();
+        const activity = button(/^近期活动$/);
+        const profile = button(/打开\s*你的 dot 的个人资料/i);
+        const newNote = 'DOT-NATIVE-JOURNAL-ACTIVITY-A';
+        const editedNote = 'DOT-NATIVE-JOURNAL-ACTIVITY-B';
+        await page.goto(home, { waitUntil: 'domcontentloaded', timeout: 45000 });
+        await button(/^Dot$/).click({ timeout: 30000 });
+        await page.waitForURL(url => /^\/chatgpt\/dots\/local-dot-[a-f0-9-]+\/?$/.test(url.pathname), { timeout: 30000 });
+        const room = page.url();
+        const composer = page.getByRole('textbox', { name: '消息', exact: true }).filter({ visible: true }).first();
+        async function submit(command, receipt) {
+          await composer.fill(command);
+          const send = button(/^(?:发送|发送消息|Send|Send message)$/i);
+          if (await send.isVisible() && await send.isEnabled()) await send.click();
+          else await composer.press('Enter');
+          const message = noteText(receipt);
+          await message.waitFor({ state: 'visible', timeout: 18000 });
+          return (await message.innerText()).trim();
+        }
+        async function openActivity() {
+          await page.reload({ waitUntil: 'domcontentloaded', timeout: 45000 });
+          await composer.waitFor({ state: 'visible', timeout: 30000 });
+          assert.equal(page.url(), room);
+          await page.evaluate(() => {
+            const request = window.fetch.bind(window);
+            window.__testDotJournalReceipts = [];
+            window.fetch = async (input, options) => {
+              const response = await request(input, options);
+              const uri = new URL(typeof input === 'object' && 'url' in input ? input.url : String(input), location.href);
+              if (/\/messaging\/rooms\/[^/]+\/journal(?:\/|$)/.test(uri.pathname)) {
+                void response.clone().json().then(body => window.__testDotJournalReceipts.push({
+                  path: uri.pathname.replace(/\/rooms\/[^/]+/, '/rooms/<room>'),
+                  view: uri.searchParams.get('view'), status: response.status,
+                  taskCount: body.tasks?.length, itemCount: body.items?.length,
+                })).catch(() => {});
+              }
+              return response;
+            };
+          });
+          if (!await activity.isVisible()) await profile.click({ timeout: 15000 });
+          await activity.waitFor({ state: 'visible', timeout: 10000 });
+          if (await activity.getAttribute('aria-expanded') !== 'true') await activity.click();
+        }
+        async function verifyListed(entry) {
+          try {
+            await noteText(entry).waitFor({ state: 'visible', timeout: 10000 });
+          } finally {
+            const observed = await page.evaluate(() => ({
+              receipts: window.__testDotJournalReceipts,
+              routePaths: window.__originalClientProbe?.filter(row => /\/journal(?:\/|$)/.test(row.path ?? '')).slice(-8)
+                .map(row => ({ path: row.path.replace(/\/rooms\/[^/]+/, '/rooms/<room>'), type: row.event })),
+              labels: [...document.querySelectorAll('[aria-expanded="true"]')].filter(node => node.getClientRects().length)
+                .map(node => node.textContent?.trim().slice(0, 50)).slice(-12),
+            }));
+            console.log('Native Dot journal receipts ' + JSON.stringify(observed));
+          }
+        }
+        const added = await submit('/journal add ' + newNote, /^已保存日记 · [a-f0-9-]{36}$/);
+        const id = added.match(/[a-f0-9-]{36}$/)[0];
+        await openActivity();
+        await verifyListed(newNote);
+        await submit('/journal edit ' + id + ' ' + editedNote, '已修改日记 · ' + id);
+        await openActivity();
+        await verifyListed(editedNote);
+        await noteText(newNote).waitFor({ state: 'hidden', timeout: 10000 });
+        await submit('/journal delete ' + id, '已删除日记 · ' + id);
+        await openActivity();
+        await noteText(editedNote).waitFor({ state: 'hidden', timeout: 10000 });
+        await submit('/journal list', '日记里还没有条目。');
+        assert.equal(modelPosts, 2, 'Journal changes triggered unexpected model inference');
+        console.log('Native Dot journal activity QA ' + JSON.stringify({
+          release: active.release, sameRoom: page.url() === room, createdNoteListed: true, editListedAfterReload: true,
+          deletedAfterReload: true, dotInferencePosts: modelPosts - 2,
+        }));
+      }
       if (process.env.QA_NATIVE_CODEX_ENTRY === '1') {
         const modeLabel = /切换.*模式|切換.*模式|Switch mode/i;
         const switcher = () => page.getByRole('button', { name: modeLabel }).filter({ visible: true }).first();
