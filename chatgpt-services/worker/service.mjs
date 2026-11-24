@@ -1,5 +1,6 @@
 import {handleChatSync} from './chat-sync.mjs';
 import {handleDotComputer} from './dot-computer.mjs';
+import {getPaidSiteSubscription, handleSiteBilling, paidSubscriptionColumns, paidSubscriptionJoin, siteBillingMode} from './site-billing.mjs';
 import {proxyDocodeResponses} from './site-inference.mjs';
 import {readJournaledInference, readSiteInferenceUsage, startJournaledInference} from './inference-recovery.mjs';
 /** Username/password auth is local to this site; no original account token is used. */
@@ -30,10 +31,11 @@ async function session(request,env){
  if(admin)return admin;
  return query(env,`
   SELECT u.id,u.username,u.display_name,u.created_at,s.expires_at AS sessionExpiresAt,'user' AS role,
-         t.tier AS site_trial_tier,t.expires_at AS site_trial_expires_at
+         t.tier AS site_trial_tier,t.expires_at AS site_trial_expires_at, ${paidSubscriptionColumns}
   FROM user_sessions s JOIN users u ON u.id=s.user_id
   LEFT JOIN site_trials t ON t.user_id=u.id
-  WHERE s.token_hash=? AND s.expires_at>?`,tokenHash,Date.now()).first();
+  ${paidSubscriptionJoin}
+  WHERE s.token_hash=? AND s.expires_at>?`,siteBillingMode(env),Date.now(),tokenHash,Date.now()).first();
 }
 function account(record){
  if(record.role!=='user'){
@@ -41,13 +43,14 @@ function account(record){
   return {id:'site-admin',username:name,name,role:'administrator',planType:'pro',membershipSource:'site-administrator',createdAt:record.created_at,officialSubscriptionVerified:false};
  }
  const name=record.display_name||record.username;
- const siteTrial=hasActiveSiteTrial(record)
+ const siteSubscription=getPaidSiteSubscription(record);
+ const siteTrial=!siteSubscription&&hasActiveSiteTrial(record)
   ? {tier:record.site_trial_tier,expiresAt:record.site_trial_expires_at}
   : null;
  return {
   id:'site-user:'+record.id,accountId:record.id,username:name,name,role:'user',
-  planType:siteTrial?siteTrialPlanTypes.get(siteTrial.tier):'free',
-  membershipSource:'site-registration',createdAt:record.created_at,officialSubscriptionVerified:false,siteTrial,
+  planType:siteTrialPlanTypes.get((siteSubscription??siteTrial)?.tier)??'free',
+  membershipSource:'site-registration',createdAt:record.created_at,officialSubscriptionVerified:false,siteTrial,siteSubscription,
  };
 }
 const hasActiveSiteTrial=record=>record.site_trial_expires_at>Date.now()&&siteTrialPlanTypes.has(record.site_trial_tier);
@@ -61,6 +64,7 @@ async function claimSiteTrial(request,env,actor){
  if(request.method!=='POST')return postRequired('请使用 POST 申请站内试用。');
  if(!actor)return fail(401,'SITE_AUTH_REQUIRED','请先登录本站账户。');
  if(actor.role!=='user')return fail(403,'SITE_TRIAL_USER_REQUIRED','站内试用仅面向本站注册用户。');
+ if(getPaidSiteSubscription(actor))return fail(409,'SITE_BILLING_ACTIVE','账号已有付费订阅，请在管理订阅中查看。');
  const data=await readBody(request).catch(()=>null);
  const tier=data?.tier;
  if(!siteTrialPlanTypes.has(tier))return fail(400,'INVALID_SITE_TRIAL_TIER','请选择有效的站内试用方案。');
@@ -78,7 +82,7 @@ async function claimSiteTrial(request,env,actor){
 async function siteInference(request,env,ctx,actor){
  if(request.method!=='POST')return postRequired('请使用 POST 发送模型请求。');
  if(!actor)return fail(401,'SITE_AUTH_REQUIRED','请先登录本站账户。');
- const free=actor.role!=='administrator'&&!hasActiveSiteTrial(actor);
+ const free=actor.role!=='administrator'&&!hasActiveSiteTrial(actor)&&!getPaidSiteSubscription(actor);
  const requestId=request.headers.get('x-chat-request-id');
  if(requestId)return startJournaledInference(request,env,ctx,actor,requestId,free);
  if(free)return fail(403,'SITE_INFERENCE_PLAN_REQUIRED','请更新至支持标准聊天的本站版本，或开通站内试用。');
@@ -164,8 +168,8 @@ async function route(request,env,ctx){const path=new URL(request.url).pathname;
   const admin=await query(env,'SELECT * FROM administrators WHERE id=1 AND username=?',username).first();
   if(!admin){
    const user=await query(env,`
-    SELECT u.*,t.tier AS site_trial_tier,t.expires_at AS site_trial_expires_at
-    FROM users u LEFT JOIN site_trials t ON t.user_id=u.id WHERE u.username=?`,username).first();
+    SELECT u.*,t.tier AS site_trial_tier,t.expires_at AS site_trial_expires_at, ${paidSubscriptionColumns}
+    FROM users u LEFT JOIN site_trials t ON t.user_id=u.id ${paidSubscriptionJoin} WHERE u.username=?`,siteBillingMode(env),Date.now(),username).first();
    if(!user||!equal(await userPasswordHash(data.password,user.password_salt),user.password_hash))return fail(401,'INVALID_CREDENTIALS','用户名或密码不正确。');
    return issueUserSession(env,user);
   }
@@ -175,6 +179,8 @@ async function route(request,env,ctx){const path=new URL(request.url).pathname;
  }
  if(path.startsWith('/bridge/')&&!['/bridge/pair','/bridge/status','/bridge/revoke'].includes(path))return bridgeRoute(request,env,path);
  if(path.startsWith('/sync/'))return handleChatSync(request,env,await session(request,env));
+ if(path.startsWith('/billing/v1/'))return handleSiteBilling(request,env,
+  path==='/billing/v1/options'||path==='/billing/v1/webhook'?null:await session(request,env));
  const actor=await session(request,env);
  if(path.startsWith('/dot-computer/v1/'))return handleDotComputer(request,env,ctx,actor,actor&&account(actor).planType==='pro');
  if(path==='/auth/site-trial')return claimSiteTrial(request,env,actor);

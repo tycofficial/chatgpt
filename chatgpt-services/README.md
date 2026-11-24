@@ -26,3 +26,11 @@ Meaningful Node/SQLite tests include concurrent claims, lease recovery, cancella
 Cloud computer execution is available to Pro site sessions when the Worker has a trusted Linux desktop provider. Apply migration `0006_dot_computer` and set `DOT_COMPUTER_PROVIDER_ORIGIN` plus the runtime secret `DOT_COMPUTER_PROVIDER_TOKEN`. The browser uses only its site session. Provider credentials stay in the Worker.
 
 A desktop belongs to one account and one Dot conversation. The Worker admits one live desktop per account and keeps each Python task's outcome by request ID so a reconnect can read it without executing it again. The provider must run each desktop in an isolated Linux environment and return 1024×720 PNG frames.
+
+## Site subscriptions
+
+Apply migration `0007_site_billing`. The service can create authenticated Stripe Checkout and Customer Portal sessions for the site's own Plus and Pro products. Configure the Stripe recurring Price IDs as a JSON map in `SITE_STRIPE_PRICES`, keyed by `plus`, `prolite`, `pro`, or `promax`. Store `SITE_STRIPE_SECRET_KEY` and `SITE_STRIPE_WEBHOOK_SECRET` as runtime secrets. Keep the keys and price mapping in the same Stripe mode.
+
+Register a Stripe webhook at `/billing/v1/webhook` on the account Worker. Subscribe to `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `checkout.session.expired`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `customer.subscription.paused`, `customer.subscription.resumed`, `invoice.paid`, and `invoice.payment_failed`. Enable Customer Portal on the merchant account for the site's prices. The Worker verifies each notification and checks the matching customer's subscription and paid invoice before extending entitlement. A return from checkout triggers session refresh. Test-mode payments are stored separately from live entitlements.
+
+The Cloudflare Pages Direct Upload worker under `ingress/public` forwards browser requests to the existing account and model Worker. It retains the original site's allowed origin and passes through its streaming records. The signed payment webhook uses the account Worker URL. Files uploaded as static GitHub Pages assets remain on GitHub Pages.
