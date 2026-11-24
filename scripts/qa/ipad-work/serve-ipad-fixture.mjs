@@ -34,7 +34,7 @@ const actor = { role: 'user', id: accountId };
 const workContext = { waitUntil(task) { void task.catch(error => console.error('Fixture journal:', error.message)); } };
 const metrics = {
   seedLoads: 0, accountRequests: 0, sessionChecks: 0, documentLoads: 0, inferencePosts: 0, inferenceCalls: 0,
-  documentLocations: [], clientLocation: null, inferenceRequestIds: [], request: null,
+  documentLocations: [], clientLocation: null, inferenceRequestIds: [], request: null, visibleReplyCount: 0,
 };
 
 globalThis.fetch = async (url, init) => {
@@ -72,15 +72,33 @@ globalThis.fetch = async (url, init) => {
 
 // Observe the candidate router's actual path without replacing navigation or application handlers.
 const observeLocation = `<script>
-let reportedFixtureLocation;
-function reportFixtureLocation() {
-  const current = location.pathname + location.search;
-  if (current === reportedFixtureLocation) return;
-  reportedFixtureLocation = current;
-  void fetch('/__ipad_qa/location', { method: 'POST', body: current }).catch(() => {});
-}
-reportFixtureLocation();
-setInterval(reportFixtureLocation, 250);
+(() => {
+  let previous;
+  const expectedAnswer = ${JSON.stringify(reply)};
+  function visibleReplies() {
+    const walker = document.createTreeWalker(document.querySelector('main') || document.body, NodeFilter.SHOW_TEXT);
+    let count = 0;
+    while (walker.nextNode()) {
+      const node = walker.currentNode;
+      if (node.textContent.trim() !== expectedAnswer) continue;
+      const style = getComputedStyle(node.parentElement);
+      if (style.visibility !== 'visible' || style.display === 'none') continue;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      if ([...range.getClientRects()].some(rect => rect.width > 0 && rect.height > 0)) count++;
+    }
+    return count;
+  }
+  function report() {
+    const locationValue = location.pathname + location.search;
+    const value = JSON.stringify({ location: locationValue, visibleReplyCount: visibleReplies() });
+    if (value === previous) return;
+    previous = value;
+    void fetch('/__ipad_qa/location', { method: 'POST', body: value }).catch(() => {});
+  }
+  report();
+  setInterval(report, 300);
+})();
 </script>`;
 const headers = {
   'Cache-Control': 'no-store',
@@ -105,7 +123,9 @@ function savedWorkThreads() {
     const document = JSON.parse(row.document_json);
     const turn = document.turns.find(turn => turn.executionSurface === 'work' && turn.status === 'completed' &&
       turn.items.some(item => item.type === 'agentMessage' && item.text?.trim() === reply));
-    return turn ? [{ id: row.conversation_id, title: document.name, model: turn.model, effort: turn.reasoningEffort }] : [];
+    if (!turn) return [];
+    const replyItems = turn.items.filter(item => item.type === 'agentMessage' && item.text?.trim() === reply).length;
+    return [{ id: row.conversation_id, title: document.name, model: turn.model, effort: turn.reasoningEffort, replyItems }];
   });
 }
 
@@ -116,7 +136,9 @@ async function readLocation(req) {
     path += chunk;
     if (path.length > 512) return null;
   }
-  return path.startsWith(base) ? path : null;
+  const observation = JSON.parse(path);
+  return typeof observation.location === 'string' && observation.location.startsWith(base) &&
+    Number.isSafeInteger(observation.visibleReplyCount) && observation.visibleReplyCount >= 0 ? observation : null;
 }
 
 function sendWorkerResponse(res, response) {
@@ -165,9 +187,10 @@ createServer(tls, async (req, res) => {
     const url = new URL(req.url, origin);
     if (url.pathname === fixtureBase + 'metrics') return json(res, 200, { ...metrics, release, planType, savedWorkThreads: savedWorkThreads() });
     if (url.pathname === fixtureBase + 'location' && req.method === 'POST') {
-      const path = await readLocation(req);
-      if (path === null) return json(res, 400, {});
-      metrics.clientLocation = path;
+      const observation = await readLocation(req);
+      if (observation === null) return json(res, 400, {});
+      metrics.clientLocation = observation.location;
+      metrics.visibleReplyCount = observation.visibleReplyCount;
       return send(res, 204, contentTypes.json, '');
     }
     if (/^\/(?:auth|sync|inference)\//.test(url.pathname)) return await respondAccount(req, res, url);

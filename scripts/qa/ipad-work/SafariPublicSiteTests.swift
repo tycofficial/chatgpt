@@ -21,6 +21,7 @@ final class SafariPublicSiteTests: XCTestCase {
         let title: String
         let model: String
         let effort: String
+        let replyItems: Int
     }
 
     private struct FixtureMetrics: Decodable {
@@ -32,6 +33,7 @@ final class SafariPublicSiteTests: XCTestCase {
         let inferenceRequestIds: [String]
         let request: RequestMetrics?
         let savedWorkThreads: [SavedThread]
+        let visibleReplyCount: Int
     }
 
     @MainActor
@@ -63,11 +65,12 @@ final class SafariPublicSiteTests: XCTestCase {
 
         let replies = web.staticTexts.matching(NSPredicate(format: "label == %@ OR value == %@", answer, answer))
         XCTAssertTrue(replies.firstMatch.waitForExistence(timeout: 60), "The deterministic Work reply was not visible")
-        XCTAssertEqual(replies.count, 1, "The Work reply was duplicated before reload")
-        let before = try await waitForMetrics { $0.clientLocation != nil && !$0.savedWorkThreads.isEmpty }
+        print("IPAD_QA pre-reload matching accessibility nodes: \(replies.count)")
+        let before = try await waitForMetrics { $0.visibleReplyCount > 0 && !$0.savedWorkThreads.isEmpty }
         let restoredThread = try XCTUnwrap(before.savedWorkThreads.first)
         XCTAssertEqual(before.savedWorkThreads.count, 1)
-        let conversationLocation = try XCTUnwrap(before.clientLocation)
+        XCTAssertEqual(before.visibleReplyCount, 1, "The rendered Work reply was duplicated before reload")
+        XCTAssertEqual(restoredThread.replyItems, 1, "The saved Work reply was duplicated before reload")
         XCTAssertEqual(restoredThread.model, "gpt-6.2-sol")
         XCTAssertEqual(restoredThread.effort, "low")
         XCTAssertEqual(before.inferencePosts, 1)
@@ -85,7 +88,9 @@ final class SafariPublicSiteTests: XCTestCase {
         print("IPAD_QA browser-toolbar-reload-tapped")
 
         _ = try await waitForMetrics { metrics in
-            metrics.documentLoads > before.documentLoads && metrics.documentLocations.last == conversationLocation
+            metrics.documentLoads > before.documentLoads && metrics.documentLocations.dropFirst(before.documentLoads).contains { location in
+                location.split(separator: "?", maxSplits: 1).first?.hasSuffix("/c/" + restoredThread.id) == true
+            }
         }
         if !replies.firstMatch.waitForExistence(timeout: 10) {
             // The Work composer can stay on the home URL after sending; reopen the exact saved title.
@@ -99,10 +104,11 @@ final class SafariPublicSiteTests: XCTestCase {
             print("IPAD_QA reopened-the-saved-work-chat-from-history")
         }
         XCTAssertTrue(replies.firstMatch.waitForExistence(timeout: 55), "The original Work reply was not restored after Safari reload")
-        XCTAssertEqual(replies.count, 1, "The Work reply was duplicated after reload")
+        print("IPAD_QA post-reload matching accessibility nodes: \(replies.count)")
         let prompts = web.staticTexts.matching(NSPredicate(format: "label == %@ OR value == %@", prompt, prompt))
         XCTAssertTrue(prompts.firstMatch.waitForExistence(timeout: 10), "The original Work prompt was not restored")
-        let after = try await fixtureMetrics()
+        let after = try await waitForMetrics { $0.visibleReplyCount > 0 }
+        XCTAssertEqual(after.visibleReplyCount, 1, "The rendered Work reply was duplicated after reload")
         XCTAssertEqual(after.savedWorkThreads, [restoredThread], "The original saved Work ID, model and effort changed")
         XCTAssertEqual(after.inferenceRequestIds, before.inferenceRequestIds)
         XCTAssertEqual(after.inferencePosts, 1)
