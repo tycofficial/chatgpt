@@ -2,6 +2,7 @@ import XCTest
 
 final class SafariPublicSiteTests: XCTestCase {
     private let workNames = ["Work", "工作"]
+    private let modelNames = ["Choose ChatGPT model", "Choose model", "Select model", "选择 ChatGPT 模型", "选择模型"]
     private let sendNames = ["send-button", "Send", "Send message", "Send prompt", "发送", "发送消息", "发送提示"]
     private let editorNames = ["prompt-textarea", "使用 ChatGPT Work", "Use ChatGPT Work", "Ask anything", "Message", "发消息", "询问任何问题", "想要了解什么？"]
     private let reloadNames = ["Reload", "Reload Page", "Reload This Page", "reloadButton", "重新载入", "重新載入", "重新加载", "重新整理", "刷新"]
@@ -44,35 +45,35 @@ final class SafariPublicSiteTests: XCTestCase {
             print("IPAD_QA web-view hierarchy: \(sample)")
             throw error
         }
-        let initialAXState = work.value.map { String(describing: $0) } ?? "unavailable"
-        print("IPAD_QA Work switch before interaction, AX value=\(initialAXState), selected=\(work.isSelected)")
-        let curated = web.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", "6.2 Sol"))
-        let selectedValues = ["1", "true", "on", "yes", "selected", "打开", "已打开", "开启", "已开启"]
-        if !work.isSelected && !selectedValues.contains(initialAXState.lowercased()) && !curated.firstMatch.exists {
+        print("IPAD_QA Work switch before interaction, AX value=\(workState(work))")
+        if !isWorkEnabled(work) {
             work.tap()
         }
+        let expiry = Date().addingTimeInterval(32)
+        while !isWorkEnabled(work) && Date() < expiry {
+            RunLoop.current.run(until: Date().addingTimeInterval(0.25))
+        }
+        XCTAssertTrue(isWorkEnabled(work), "Work switch AX value did not indicate activation")
+        print("IPAD_QA native-work-mode-selected, AX value=\(workState(work))")
 
-        // Require the native Work composer to expose its curated model after the tap.
-        // MobileSafari's accessibility Switch can expose a value independently of isSelected.
+        let modelByLabel = named(modelNames, in: web.descendants(matching: .any))
+        let modelByDisplay = web.buttons.matching(NSPredicate(format: "label CONTAINS[c] %@", "6.2 Sol"))
         let picker: XCUIElement
         do {
-            picker = try waitForHittable(curated, seconds: 32)
+            picker = try waitForHittable([modelByLabel, modelByDisplay], seconds: 30)
         } catch {
-            if work.exists {
-                let after = work.value.map { String(describing: $0) } ?? "unavailable"
-                print("IPAD_QA Work switch after interaction, AX value=\(after), selected=\(work.isSelected)")
-            }
-            print("IPAD_QA Work hierarchy: \(web.debugDescription.prefix(6500))")
-            let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
-            attachment.name = "Safari Work model controls"
-            attachment.lifetime = .keepAlways
-            add(attachment)
+            captureWorkControls(web)
             throw error
         }
-        print("IPAD_QA native-work-curated-model-visible: \(picker.label)")
+        print("IPAD_QA native-work-model-control-visible: \(picker.label)")
         picker.tap()
         let effort = named(["轻度", "Light", "Low", "提高思考力", "Thinking effort"], in: web.descendants(matching: .any))
-        _ = try waitForHittable(effort, seconds: 12)
+        do {
+            _ = try waitForHittable(effort, seconds: 15)
+        } catch {
+            captureWorkControls(web)
+            throw error
+        }
         picker.tap()
         print("IPAD_QA native-work-model-options-visible")
 
@@ -95,6 +96,27 @@ final class SafariPublicSiteTests: XCTestCase {
         if hideKeyboard.exists && hideKeyboard.isHittable {
             hideKeyboard.tap()
         }
+    }
+
+    private func workState(_ element: XCUIElement) -> String {
+        guard element.exists else { return "missing" }
+        return element.value.map { String(describing: $0) } ?? "unavailable"
+    }
+
+    private func isWorkEnabled(_ element: XCUIElement) -> Bool {
+        ["1", "true", "on", "yes", "selected", "打开", "已打开", "开启", "已开启"].contains(workState(element).lowercased())
+    }
+
+    private func captureWorkControls(_ web: XCUIElement) {
+        let names = ["Work", "工作", "模型", "Model", "轻度", "6.2 Sol", "Send", "发送", "TextView", "TextField", "ComboBox", "prompt"]
+        let controls = web.debugDescription.split(separator: "\n").filter { line in
+            names.contains { line.localizedCaseInsensitiveContains($0) }
+        }.prefix(65).joined(separator: "\n")
+        print("IPAD_QA Work controls: \(controls)")
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = "Safari Work model controls"
+        attachment.lifetime = .keepAlways
+        add(attachment)
     }
 
     private func named(_ names: [String], in query: XCUIElementQuery) -> XCUIElementQuery {
