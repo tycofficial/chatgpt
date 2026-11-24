@@ -59,7 +59,15 @@ const fixture = createServer(async (req, res) => {
 
 async function hostBrowserBridge() {
   const env = { PATH: process.env.PATH, HOME: state, CODEX_HOME: state };
-  const appServer = await openCodexAppServer({ workspace, env });
+  const appServer = await openCodexAppServer({ workspace, env, experimentalApi: true });
+  const request = appServer.request;
+  appServer.request = async (method, params) => {
+    try { return await request(method, params); }
+    catch (error) {
+      console.log('Fixture App Server RPC rejection ' + JSON.stringify({ method, code: error.rpcCode, message: error.message.slice(0, 500) }));
+      throw error;
+    }
+  };
   const record = new Map();
   const local = createLocalUi({
     codex: createCodexBrowserSession({ workspace, appServer }),
@@ -122,10 +130,12 @@ try {
   await once(fixture, 'listening');
   const url = 'http://127.0.0.1:' + fixture.address().port + '/v1';
   await writeFile(join(state, 'config.toml'), [
-    'model = "fixture-codex"', 'approval_policy = "never"', 'model_provider = "fixture"',
+    'model = "fixture-codex"', 'approval_policy = "never"', 'model_provider = "fixture"', 'default_permissions = "site-browser-codex"',
     '[model_providers.fixture]', 'name = "Local integration test"', 'base_url = "' + url + '"',
     'wire_api = "responses"', 'request_max_retries = 0', 'stream_max_retries = 0',
     '[features]', 'enable_request_compression = false', 'unified_exec = true', 'shell_snapshot = false',
+    '[permissions.site-browser-codex.filesystem]', '":minimal" = "read"', '":workspace_roots" = "write"',
+    '[permissions.site-browser-codex.network]', 'enabled = false',
     '[shell_environment_policy]', 'inherit = "core"', 'include_only = ["PATH"]', '',
   ].join('\n'), { mode: 0o600 });
 
@@ -135,7 +145,8 @@ try {
   const models = await browser.request('model/list');
   assert.ok(Array.isArray(models.data));
   const mutation = () => ({ requestId: randomUUID() });
-  const { thread } = await browser.request('thread/start', { model: 'fixture-codex' }, mutation());
+  const { thread, activePermissionProfile } = await browser.request('thread/start', { model: 'fixture-codex' }, mutation());
+  assert.equal(activePermissionProfile.id, 'site-browser-codex');
   const input = text => [{ type: 'text', text }];
   const prompt = 'Use Python to calculate 17 times 13.';
   const startParams = { threadId: thread.id, input: input(prompt) };

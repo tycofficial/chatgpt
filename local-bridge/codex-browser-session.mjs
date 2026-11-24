@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { isAbsolute as absolutePath } from 'node:path';
 import { BridgeError } from './constants.mjs';
 
+const permissionProfile = 'site-browser-codex';
 const idPattern = /^[a-zA-Z0-9_-]{1,80}$/;
 const requestIdPattern = /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i;
 const modelPattern = /^[a-zA-Z0-9._-]{1,80}$/;
@@ -64,8 +65,9 @@ export function createCodexBrowserSession({ appServer, workspace }) {
         model !== undefined && (typeof model !== 'string' || !modelPattern.test(model)) ||
         effort !== undefined && !efforts.has(effort)) throw badRequest();
     if (method === 'model/list') return { includeHidden: false, limit: 100 };
-    if (method === 'thread/start') return { cwd: workspace, sandbox: 'read-only', approvalPolicy: 'never', ...(model ? { model } : {}) };
-    if (method === 'thread/resume') return { threadId, cwd: workspace, sandbox: 'read-only', approvalPolicy: 'never', excludeTurns: false };
+    const workspacePolicy = { cwd: workspace, runtimeWorkspaceRoots: [workspace], permissions: permissionProfile, approvalPolicy: 'never' };
+    if (method === 'thread/start') return { ...workspacePolicy, ...(model ? { model } : {}) };
+    if (method === 'thread/resume') return { ...workspacePolicy, threadId, excludeTurns: false };
     if (!threads.has(threadId)) throw new BridgeError('CODEX_THREAD_NOT_OPEN', 'Reopen this Codex thread before continuing.', { status: 404 });
     if (method === 'thread/read') return { threadId, includeTurns: true };
     if (method === 'turn/interrupt') return { threadId, turnId };
@@ -73,11 +75,7 @@ export function createCodexBrowserSession({ appServer, workspace }) {
         typeof input[0]?.text !== 'string' || !input[0].text.trim() || input[0].text.length > 24_000) throw badRequest();
     return {
       threadId, input: [{ type: 'text', text: input[0].text, textElements: [] }],
-      cwd: workspace, approvalPolicy: 'never', sandboxPolicy: {
-        type: 'workspaceWrite', writableRoots: [workspace],
-        readOnlyAccess: { type: 'restricted', includePlatformDefaults: true, readableRoots: [workspace] },
-        networkAccess: false, excludeTmpdirEnvVar: true, excludeSlashTmp: true,
-      },
+      ...workspacePolicy,
       ...(model ? { model } : {}), ...(effort ? { effort } : {}),
     };
   }
@@ -95,6 +93,10 @@ export function createCodexBrowserSession({ appServer, workspace }) {
     if (method === 'thread/start' || method === 'thread/resume') {
       const threadId = result?.thread?.id;
       if (!validId(threadId) || method === 'thread/resume' && threadId !== params.threadId) throw new BridgeError('CODEX_INVALID_REPLY', 'Codex did not return the expected thread.', { status: 502 });
+      if (result.activePermissionProfile?.id !== permissionProfile || result.approvalPolicy !== 'never' ||
+          result.runtimeWorkspaceRoots?.length !== 1 || result.runtimeWorkspaceRoots[0] !== workspace) {
+        throw new BridgeError('CODEX_SANDBOX_UNCONFIRMED', 'Codex did not confirm the configured restricted workspace.', { status: 502 });
+      }
       threads.add(threadId);
     }
     return publicProjection(result);

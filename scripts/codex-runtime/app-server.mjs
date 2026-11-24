@@ -5,7 +5,7 @@ import { createInterface } from 'node:readline';
 
 const timeoutMs = 30_000;
 
-export async function openCodexAppServer({ binary = 'codex', workspace, env }) {
+export async function openCodexAppServer({ binary = 'codex', workspace, env, experimentalApi = false }) {
   if (!isAbsolute(workspace) || !env?.CODEX_HOME || !isAbsolute(env.CODEX_HOME)) {
     throw new TypeError('Codex App Server needs absolute workspace and private state directories');
   }
@@ -90,6 +90,7 @@ export async function openCodexAppServer({ binary = 'codex', workspace, env }) {
   try {
     const server = await request('initialize', {
       clientInfo: { name: 'tyc_chatgpt_site', title: 'ChatGPT site integration', version: '0.1.0' },
+      ...(experimentalApi ? { capabilities: { experimentalApi: true } } : {}),
     });
     write({ method: 'initialized' });
     function onDisconnect(listener) {
