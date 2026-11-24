@@ -37,6 +37,7 @@ import { createLocalCodexAdapter } from './local-codex-adapter.mjs';
 import { isOpenStreetMapTileRequest, fetchOpenStreetMapTile } from './local-map-provider.mjs';
 import { createLocalDiscoveryAdapter } from './local-discovery.mjs';
 import { createLocalDotAdapter, createLocalDotCompletion } from './local-dot-adapter.mjs';
+import { createSiteDotComputer, isSiteDotComputerRequest } from './dot-cloud-computer.mjs';
 import { createLocalMapsService } from './local-maps-service.mjs';
 import { createPreferredHostTransport, createPreferredCompletion, turnHostCheckpoints, cancelTurnHostRequests } from './preferred-host-transport.mjs';
 import { createChatHistorySync, projectChatHistoryThread } from './chat-history-sync.mjs';
@@ -89,6 +90,7 @@ async function verifiedSiteToken() {
   if (!getSiteSessionToken() && account && account.authenticationMode !== 'offline-administrator' && navigator.onLine !== false) await refreshSiteAccount();
   return getSiteSessionToken();
 }
+const siteDotComputer = createSiteDotComputer({ baseURL: SITE_ACCOUNT_SERVICE, getSessionToken: verifiedSiteToken });
 const fetchDirectModel = globalThis.fetch.bind(globalThis);
 async function completeWithAdminConnection(options, connection) {
   const { apiBase, apiKey } = connection;
@@ -280,7 +282,10 @@ export const localAppServer = new LocalAppServer({
   toolExecutor: localToolExecutor,
   prepareUserInput: createLocalInputPreparer({ files: localFilesService }),
   preparedInputStore: createPreparedInputStore({ namespace: preparedInputsNamespace }),
-  agentOptions: { toolTransport: 'responses', requestPriority: true, ultraOrchestration: true },
+  agentOptions: {
+    toolTransport: 'responses', requestPriority: true, ultraOrchestration: true,
+    prepareToolExecutor: context => localDotAdapter.prepareCloudTaskExecutor(context),
+  },
   getExecutionPolicy: () => ({ modelSelection: hasModelSelectionAccess(), freeChatModel: DEFAULT_SETTINGS.freeChatModel, freeChatEffort: 'medium' }),
   onPersist: threads => localAccountHistory?.capture(threads),
 });
@@ -446,7 +451,7 @@ export const localDotAdapter = createLocalDotAdapter({
   storage: { getItem: key => globalThis.localStorage.getItem(key), setItem: (key, value) => globalThis.localStorage.setItem(key, value) },
   appServer: localAppServer, getIdentity: getPrototypeLocalAuth, isLocalSession: isPrototypeLocalSession,
   hasDotAccess: () => getSitePlanCapabilities().dot, siteAccountsOnly: true,
-  files: localFilesService, backgroundRoomPump: true,
+  files: localFilesService, cloudComputer: siteDotComputer, backgroundRoomPump: true,
   getFileRecord: async (id, options) => (await localFilesService.readFile(id, options)).record,
   readSettings: () => ({ ...DEFAULT_SETTINGS }), getCapabilities: getLocalExecutionCapabilities, diagnostics: localProtocolDiagnostics,
 });
@@ -543,6 +548,9 @@ export function installNetworkBoundary() {
     if (url.origin === SITE_ACCOUNT_SERVICE && /^\/(?:auth\/(?:login|register|session|logout|site-trial)|inference\/v1\/(?:usage|responses(?:\/[a-f0-9-]{36})?)|bridge\/status|usage|jobs(?:\/[^/]+(?:\/events)?)?|sync\/(?:conversations(?:\/[^/]+)?|changes|batch))$/.test(url.pathname)) return originalFetch(new Request(request, {
       credentials: 'omit', redirect: url.pathname.startsWith('/auth/') ? 'manual' : 'error',
     }));
+    if (url.origin === SITE_ACCOUNT_SERVICE && isSiteDotComputerRequest(url.pathname, request.method)) {
+      return originalFetch(new Request(request, { credentials: 'omit', redirect: 'error' }));
+    }
     // Consume analytics locally; never forward captured telemetry to its vendor.
     if (isTelemetry(url)) return response({ success: true });
     if (local && (/^\/cdn\//.test(url.pathname) || /^\/__prototype\//.test(url.pathname))) {

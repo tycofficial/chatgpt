@@ -1,6 +1,6 @@
 /**
  * Site-local provider for the original Dot /tbo profile and appearance contracts.
- * No captured profiles, account entitlement, cloud computer or private endpoint.
+ * Accounts and profiles are site-owned. The computer uses only the configured site service.
  *
  * Locked source: 731863.bbf914bfbc.js imTH/TYK1/kzhd/oz6U/tsre/Yt5Q;
  * async/569087.5c1de81bf5.js o6Sz (PNG upload -> profile PATCH -> GET confirm).
@@ -8,6 +8,7 @@
  */
 import { createProviderCompletionRouter } from './provider-routing.mjs';
 import { hasUncertainPlainResponse } from './agent-turn-runner.mjs';
+import { createDotCloudTaskExecutor, describeNativeDotComputer, isDotCloudEnvironmentId, wantsDotCloudTask } from './dot-cloud-computer.mjs';
 
 export const LOCAL_DOT_SOURCE = 'site-local-dot-provider';
 export const LOCAL_DOT_DEFAULT_APPEARANCE = Object.freeze({ avatar: 'sunglasses', color: 'pink' });
@@ -194,6 +195,7 @@ export function createLocalDotAdapter({
   makeAssetURL,
   getFileRecord,
   files: fileService,
+  cloudComputer,
   backgroundRoomPump = false,
   isOnline = () => globalThis.navigator?.onLine !== false,
 } = {}) {
@@ -222,6 +224,14 @@ export function createLocalDotAdapter({
   function assertIdentity(initial) {
     const current = identity();
     if (current.accountId !== initial.accountId || current.userId !== initial.userId) throw error('The active site account changed during this operation', 409, 'LOCAL_DOT_ACCOUNT_CHANGED');
+  }
+  function cloudThreadOptions(session, dotId, threadId, signal) {
+    return { signal, assertCurrent() {
+      assertIdentity(session);
+      if (profileForThread(session, threadId)?.id !== dotId || appServer?.threads?.get(threadId)?.adapterMetadata?.conversationOrigin !== 'dot') {
+        throw error('No local Dot owns this thread', 404, 'LOCAL_DOT_NOT_FOUND');
+      }
+    } };
   }
   const stateKey = session => PREFIX + encodeURIComponent(session.accountId) + ':' + encodeURIComponent(session.userId);
   const imageKey = (session, id) => ASSET_PREFIX + encodeURIComponent(session.accountId) + ':' + encodeURIComponent(session.userId) + ':' + id;
@@ -1279,14 +1289,30 @@ export function createLocalDotAdapter({
           return json(pagination(rows, url));
         }
         if (parts.length === 4 && method === 'GET' && parts[3] === 'computers') return json({ thread_id: row.active_root_thread_id, computers: [] });
-        if (parts.length === 5 && method === 'GET' && parts[3] === 'environment' && parts[4] === 'status') {
-          const threadId = url.searchParams.get('thread_id');
-          if (threadId !== null && !row.thread_ids.includes(threadId)) {
-            throw error('No local Dot owns this thread', 404, 'LOCAL_DOT_NOT_FOUND');
+        if (parts.length === 5 && parts[3] === 'environment') {
+          const threadId = url.searchParams.get('thread_id') ?? row.active_root_thread_id;
+          const options = cloudThreadOptions(session, row.id, threadId, request.signal);
+          options.assertCurrent();
+          const action = parts[4];
+          if (action === 'status' && method === 'GET') {
+            try { return json(describeNativeDotComputer(await cloudComputer?.status(threadId, options))); }
+            catch (cause) {
+              if (cause.code === 'LOCAL_DOT_COMPUTER_SIGN_IN') return json(describeNativeDotComputer());
+              throw cause;
+            }
           }
-          return json({ environmentId: null, status: 'unknown', capabilities: [] });
+          if (method === 'POST' && ['wake', 'recreate'].includes(action)) {
+            if (!cloudComputer) throw error('本站尚未配置云电脑执行服务。', 501, 'LOCAL_DOT_COMPUTER_UNCONFIGURED');
+            if (action === 'recreate') {
+              const current = await cloudComputer.status(threadId, options);
+              if (current.environmentId) await cloudComputer.stop(current.environmentId, options);
+            }
+            const result = await cloudComputer.wake(threadId, options);
+            if (result.status === 'unconfigured') throw error('本站尚未配置云电脑执行服务。', 501, 'LOCAL_DOT_COMPUTER_UNCONFIGURED');
+            if (!['starting', 'ready'].includes(result.status)) throw error('Dot 云电脑未能启动，请重试。', 503, 'LOCAL_DOT_COMPUTER_START_FAILED');
+            return json({ root_thread_id: threadId });
+          }
         }
-        if (parts[3] === 'environment' && parts[4] === 'wake') throw error('本站尚未配置云电脑执行服务。', 501, 'LOCAL_DOT_COMPUTER_UNCONFIGURED');
         if (parts[3] === 'voice') throw error('本站尚未配置 Dot 实时语音服务。', 501, 'LOCAL_DOT_REALTIME_UNCONFIGURED');
       }
       throw error('This Dot operation needs a service that is not provided locally', 501, 'LOCAL_DOT_SERVICE_UNAVAILABLE');
@@ -1298,6 +1324,42 @@ export function createLocalDotAdapter({
   }
   function profileForThread(session, threadId) {
     return typeof threadId === 'string' ? state(session).profiles.find(profile => profile.thread_ids.includes(threadId)) : undefined;
+  }
+  function cloudComputerContext(connectionKey) {
+    if (!cloudComputer || typeof connectionKey !== 'string' || connectionKey.length > 512) return null;
+    let key;
+    try { key = JSON.parse(connectionKey); } catch { return null; }
+    // Original Dot keys contain user, Dot, connection thread, prepared Dot and generation.
+    if (!Array.isArray(key) || key.length !== 5 || typeof key[1] !== 'string' || !key[1].startsWith('local-dot-')) return null;
+    const [userId, dotId, threadId, preparedDotId] = key;
+    const session = identity(false);
+    return { computer: cloudComputer, threadId, assertCurrent() {
+      if (!session || session.userId !== userId || (preparedDotId != null && preparedDotId !== dotId)) {
+        throw error('This Dot cloud view does not belong to the active account', 403, 'LOCAL_DOT_NOT_FOUND');
+      }
+      cloudThreadOptions(session, dotId, threadId).assertCurrent();
+    } };
+  }
+  async function prepareCloudTaskExecutor({ baseExecutor, thread, turn, signal }) {
+    const metadata = turn.adapterMetadata;
+    if (thread?.adapterMetadata?.conversationOrigin !== 'dot' || (!metadata.dotCloudEnvironmentId && !wantsDotCloudTask(turn))) return baseExecutor;
+    const session = identity();
+    const profile = profileForThread(session, thread.id);
+    if (!profile) throw error('当前账户无法运行此 Dot 会话。', 403, 'LOCAL_DOT_THREAD_FORBIDDEN');
+    if (!cloudComputer) throw error('本站尚未配置云电脑执行服务。', 501, 'LOCAL_DOT_COMPUTER_UNCONFIGURED');
+    const options = cloudThreadOptions(session, profile.id, thread.id, signal);
+    if (!metadata.dotCloudEnvironmentId) {
+      const ready = await cloudComputer.status(thread.id, options);
+      if (ready.status !== 'ready' || ready.kind !== 'linux-desktop' || !isDotCloudEnvironmentId(ready.environmentId)) {
+        throw error('请先打开你的 Dot 电脑并启动，等到就绪后再运行此任务。', 409, 'LOCAL_DOT_COMPUTER_NOT_READY');
+      }
+      metadata.dotCloudEnvironmentId = ready.environmentId;
+    } else if (!isDotCloudEnvironmentId(metadata.dotCloudEnvironmentId)) {
+      throw error('此 Dot 云电脑任务的保存状态无效。', 409, 'LOCAL_DOT_COMPUTER_INVALID_CHECKPOINT');
+    }
+    // A stopped sandbox can still return an admitted task's recorded result.
+    return createDotCloudTaskExecutor(baseExecutor, { computer: cloudComputer, threadId: thread.id,
+      turnId: turn.id, environmentId: metadata.dotCloudEnvironmentId, assertCurrent: options.assertCurrent });
   }
   function browserVoiceContext(threadId) {
     const session = identity(false);
@@ -1448,5 +1510,6 @@ export function createLocalDotAdapter({
     };
   }
   return { handle, createRpcFacade, subscribeRoomMessages, complete, getLocalDotPolicy, adaptCapabilityAtoms, browserVoiceContext, submitBrowserVoice,
+    cloudComputerContext, prepareCloudTaskExecutor,
     provenance: Object.freeze({ provider: LOCAL_DOT_SOURCE, profileNamespace: '/tbo', cloudComputer: false, defaultAppearance: LOCAL_DOT_DEFAULT_APPEARANCE }) };
 }
