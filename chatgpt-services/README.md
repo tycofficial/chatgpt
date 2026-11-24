@@ -34,3 +34,19 @@ Apply migration `0007_site_billing`. The service can create authenticated Stripe
 Register a Stripe webhook at `/billing/v1/webhook` on the account Worker. Subscribe to `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `checkout.session.expired`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `customer.subscription.paused`, `customer.subscription.resumed`, `invoice.paid`, and `invoice.payment_failed`. Enable Customer Portal on the merchant account for the site's prices. The Worker verifies each notification and checks the matching customer's subscription and paid invoice before extending entitlement. A return from checkout triggers session refresh. Test-mode payments are stored separately from live entitlements.
 
 The Cloudflare Pages Direct Upload worker under `ingress/public` forwards browser requests to the existing account and model Worker. It retains the original site's allowed origin and passes through its streaming records. The signed payment webhook uses the account Worker URL. Files uploaded as static GitHub Pages assets remain on GitHub Pages.
+
+## Google AI Studio account gateway
+
+The existing AI Studio Node server can use the same account authority as the GitHub Pages app. Keep `ingress/ai-studio.mjs` and `ingress/public/_worker.js` in their relative locations in a Node ESM package. Mount the gateway before the current JSON parser and account endpoints.
+
+```js
+import { createAiStudioAccountGateway } from './chatgpt-services/ingress/ai-studio.mjs';
+
+app.use(createAiStudioAccountGateway());
+```
+
+The gateway forwards the site API to the fixed account Worker. It passes response streams through the Node server and closes the client stream when the downstream connection ends. The account Worker remains responsible for session revocation, granting trial or subscription entitlements, and journaled inference. The gateway's authentication depends on the site session. It needs no database password or model provider key in the AI Studio app.
+
+In an AI Studio preview, check that the Node runtime can reach the Worker: `GET /health` should report `storage: "D1"`. Verify an existing account and a separate test account, then check logout and one model reply with the same account. The current published AI Studio app has a separate SQLite store. Identify which accounts belong to that store before switching the existing application's public routes.
+
+The account Worker must include the corresponding schema and runtime features for billing and Dot routes. Publishing the existing AI Studio project and changing the Pages API origin are independent deployment steps.
