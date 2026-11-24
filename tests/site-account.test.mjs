@@ -11,7 +11,7 @@ import { installRestrictedBrowserStorage, isVolatileBrowserStorage } from '../sr
 const identitySource=fs.readFileSync(new URL('../src/native-client/local-identity.mjs',import.meta.url),'utf8');
 const pricingSource=fs.readFileSync(new URL('../src/native-client/local-pricing.mjs',import.meta.url),'utf8');
 const source=fs.readFileSync(new URL('../src/native-client/site-account.mjs',import.meta.url),'utf8');
-const names=['getSiteAccount','setAdminModelConnection','getAdminModelConnection','hasModelSelectionAccess','getSiteSessionToken','getSiteAccountError','initializeSiteAccount','initializeSiteAccountForDisplay','loginSiteAccount','registerSiteAccount','logoutSiteAccount','getSiteLoginUrl','getSiteRegistrationUrl','safeSiteReturnUrl','getSitePlanCapabilities','refreshSiteAccount','isSiteGuestSession','startSiteGuestSession','claimSiteTrial','getSiteHomeUrl'];
+const names=['getSiteAccount','setAdminModelConnection','getAdminModelConnection','hasModelSelectionAccess','getSiteSessionToken','getSiteAccountError','initializeSiteAccount','initializeSiteAccountForDisplay','loginSiteAccount','registerSiteAccount','logoutSiteAccount','getSiteLoginUrl','getSiteRegistrationUrl','safeSiteReturnUrl','getSitePlanCapabilities','refreshSiteAccount','isSiteGuestSession','startSiteGuestSession','claimSiteTrial','getSiteHomeUrl','readSiteBillingOptions','createSiteCheckout','createSiteBillingPortal','refreshSiteBillingReturn'];
 // Execute the actual module in an isolated VM with the deployment module URL and URL helpers.
 // No real browser storage, password, token, account service, or network is used.
 const fixtureToken='c'.repeat(64),key='chatgpt-site-admin-session:v1',now=1800000000000;
@@ -47,7 +47,7 @@ function fixture(cached, { failWrites = false, online = true, receipts = new Map
     fetch: async (url, options) => {
       const path = new URL(url).pathname;
       const call = { path, method: options.method, authorizationPresent: typeof options.headers.Authorization === 'string', keepalive: options.keepalive };
-      if (path === '/auth/site-trial') call.tier = JSON.parse(options.body).tier;
+      if (path === '/auth/site-trial' || path === '/billing/v1/checkout') call.tier = JSON.parse(options.body).tier;
       calls.push(call);
       const result = await handler(url, options);
       if (result instanceof Response) return result;
@@ -81,7 +81,7 @@ function fixture(cached, { failWrites = false, online = true, receipts = new Map
     },
     loadPricing() {
       const code = pricingSource.replace(/^import .*;\r?$/gm, '').replace(/^export\s+/gm, '');
-      const names = 'getSiteTrialAction,submitSiteTrial,SITE_TRIAL_TERMS';
+      const names = 'getSiteBillingAction,getSiteTrialAction,normalizeLocalMembership,submitSiteTrial,SITE_TRIAL_TERMS';
       new vm.Script(code + '\nglobalThis.pricingExports={' + names + '};', { filename: 'local-pricing.mjs (isolated fixture)' }).runInContext(context);
       return context.pricingExports;
     },
@@ -730,4 +730,125 @@ test('first display waits for server verification when the remembered profile la
   }
   assert.equal(await firstDisplay, null);
   assert.equal(f.values.has(key), false);
+});
+
+const billingPeriodEnd = now + 2 * 86400000;
+const subscriptionUser = (tier = 'plus') => ({
+  ...freeAccount(), planType: trialPlansByTier[tier], siteTrial: null,
+  siteSubscription: { tier, expiresAt: billingPeriodEnd, cancelAtPeriodEnd: true },
+});
+
+test('verified paid membership preserves the exact tier offline until its real billing expiry', async () => {
+  const f = fixture();
+  f.setHandler(() => serverLogin(subscriptionUser('promax')));
+  const paid = await f.api.loginSiteAccount('Fixture Free', 'fixture-password');
+  assert.equal(paid.planType, 'pro');
+  assert.equal(paid.siteTrial, null);
+  assert.equal(paid.siteSubscription.tier, 'promax');
+  assert.equal(Object.isFrozen(paid.siteSubscription), true);
+  assert.equal(f.api.getSitePlanCapabilities().dot, true);
+  await assert.rejects(f.api.claimSiteTrial('plus'), /管理当前订阅/);
+  assert.equal(f.calls.some(call => call.path === '/auth/site-trial'), false);
+
+  const restored = fixture(f.values.get(key), { online: false, receipts: f.receipts, tab: f.tab });
+  await restored.api.initializeSiteAccountForDisplay();
+  assert.equal(restored.api.getSiteAccount().siteSubscription.tier, 'promax');
+  assert.equal(restored.api.getSiteSessionToken(), null);
+  const pricing = restored.loadPricing();
+  const membership = pricing.normalizeLocalMembership(restored.api.getSiteAccount());
+  assert.equal(membership.managed_by, 'site-subscription');
+  assert.equal(membership.cancel_at_period_end, true);
+  assert.equal(membership.has_openai_subscription, false);
+  assert.equal(pricing.getSiteBillingAction('promax', null).disabled, true);
+  restored.setClock(billingPeriodEnd + 1);
+  assert.equal(restored.api.getSiteAccount().planType, 'free');
+  assert.equal(restored.api.getSiteAccount().siteSubscription, null);
+  assert.equal(restored.api.getSitePlanCapabilities().dot, false);
+});
+
+test('invalid paid receipts cannot grant access', async t => {
+  for (const [name, invalid] of [
+    ['unknown tier', { planType: undefined, siteSubscription: { tier: 'unknown', expiresAt: billingPeriodEnd, cancelAtPeriodEnd: false } }],
+    ['mismatched plan', { planType: 'pro' }],
+    ['simultaneous trial', { siteTrial: { tier: 'plus', expiresAt: billingPeriodEnd } }],
+    ['nonboolean cancellation', { siteSubscription: { ...subscriptionUser().siteSubscription, cancelAtPeriodEnd: 'false' } }],
+    ['official subscription impersonation', { officialSubscriptionVerified: true }],
+    ['wrong account ID', { id: 'site-user:wrong-account' }],
+  ]) await t.test(name, async () => {
+    const f = fixture();
+    f.setHandler(() => serverLogin({ ...subscriptionUser(), ...invalid }));
+    await assert.rejects(f.api.loginSiteAccount('Fixture Free', 'fixture-password'), /权限验证失败/);
+    assert.equal(f.api.hasModelSelectionAccess(), false);
+  });
+});
+
+test('only server-configured tiers show checkout and the eligible trial remains available', async () => {
+  const f = fixture();
+  const pricing = f.loadPricing();
+  f.setHandler(() => ({ tiers: [], checkoutAvailable: false }));
+  assert.equal(pricing.getSiteBillingAction('plus', await f.api.readSiteBillingOptions()), null);
+  assert.equal(f.calls.at(-1).authorizationPresent, false);
+  assert.equal(f.calls.at(-1).method, 'GET');
+  assert.equal(pricing.getSiteTrialAction('plus').status, 'login');
+
+  f.setHandler(() => ({ tiers: ['plus'], checkoutAvailable: true }));
+  const options = await f.api.readSiteBillingOptions();
+  assert.equal(pricing.getSiteBillingAction('plus', options).status, 'login');
+  assert.equal(pricing.getSiteBillingAction('pro', options), null);
+  assert.equal(pricing.getSiteBillingAction('go', options), null);
+  assert.throws(() => f.api.createSiteCheckout('go'), /有效的本站订阅方案/);
+  await assert.rejects(f.api.createSiteCheckout('plus'), /先登录本站注册账户/);
+
+  f.setHandler(() => serverLogin(freeAccount()));
+  await f.api.loginSiteAccount('Fixture Free', 'fixture-password');
+  assert.equal(pricing.getSiteBillingAction('plus', options).kind, 'checkout');
+  assert.equal(pricing.getSiteTrialAction('plus').status, 'start');
+  f.setHandler(() => ({ tiers: ['go'], checkoutAvailable: true }));
+  await assert.rejects(f.api.readSiteBillingOptions(), /无法核实/);
+});
+
+test('checkout and portal require site auth and only return their exact trusted HTTPS destinations', async () => {
+  const f = fixture();
+  f.setHandler(() => serverLogin(freeAccount()));
+  await f.api.loginSiteAccount('Fixture Free', 'fixture-password');
+  const address = 'https://checkout.stripe.com/c/pay/cs_test_neutral#fixture';
+  f.setHandler(() => ({ url: address }));
+  assert.equal(await f.api.createSiteCheckout('plus'), address);
+  assert.deepEqual(f.calls.at(-1), { path: '/billing/v1/checkout', method: 'POST', authorizationPresent: true, keepalive: false, tier: 'plus' });
+  const portal = 'https://billing.stripe.com/p/session/bps_neutral';
+  f.setHandler(() => ({ url: portal }));
+  assert.equal(await f.api.createSiteBillingPortal(), portal);
+  assert.equal(f.calls.at(-1).path, '/billing/v1/portal');
+  assert.equal(f.calls.at(-1).authorizationPresent, true);
+  for (const url of [
+    'http://checkout.stripe.com/c/pay/cs_test_neutral', 'https://checkout.stripe.com.example.invalid/',
+    'https://name@checkout.stripe.com/', 'https://billing.stripe.com/p/session/unexpected', '//checkout.stripe.com/',
+  ]) {
+    f.setHandler(() => ({ url }));
+    await assert.rejects(f.api.createSiteCheckout('plus'), /无法验证的支付页面/);
+  }
+});
+
+test('a pending checkout is single-flight and logout invalidates its delayed redirect', async () => {
+  const f = fixture();
+  f.setHandler(() => serverLogin(freeAccount()));
+  await f.api.loginSiteAccount('Fixture Free', 'fixture-password');
+  const hold = Promise.withResolvers();
+  f.setHandler(url => new URL(url).pathname === '/billing/v1/checkout' ? hold.promise : { ok: true });
+  const firstFailure = assert.rejects(f.api.createSiteCheckout('plus'), /账户操作已取消/);
+  await assert.rejects(f.api.createSiteCheckout('plus'), /正在打开本站账单/);
+  await f.api.logoutSiteAccount();
+  hold.resolve({ url: 'https://checkout.stripe.com/c/pay/cs_test_neutral' });
+  await firstFailure;
+  assert.equal(f.calls.filter(call => call.path === '/billing/v1/checkout').length, 1);
+});
+
+test('an explicit return refreshes the account using its server receipt and never creates another checkout', async () => {
+  const f = fixture(undefined, { href: 'https://tycofficial.github.io/chatgpt/?site_billing=return#pricing' });
+  f.setHandler(() => serverLogin(freeAccount()));
+  await f.api.loginSiteAccount('Fixture Free', 'fixture-password');
+  f.setHandler(() => ({ user: subscriptionUser() }));
+  await f.api.refreshSiteBillingReturn();
+  assert.equal(f.api.getSiteAccount().siteSubscription.tier, 'plus');
+  assert.deepEqual(f.calls.slice(1).map(call => call.path), ['/auth/session']);
 });

@@ -548,6 +548,10 @@ export function installNetworkBoundary() {
     if (url.origin === SITE_ACCOUNT_SERVICE && /^\/(?:auth\/(?:login|register|session|logout|site-trial)|inference\/v1\/(?:usage|responses(?:\/[a-f0-9-]{36})?)|bridge\/status|usage|jobs(?:\/[^/]+(?:\/events)?)?|sync\/(?:conversations(?:\/[^/]+)?|changes|batch))$/.test(url.pathname)) return originalFetch(new Request(request, {
       credentials: 'omit', redirect: url.pathname.startsWith('/auth/') ? 'manual' : 'error',
     }));
+    if (url.origin === SITE_ACCOUNT_SERVICE && (
+      request.method === 'GET' && url.pathname === '/billing/v1/options' ||
+      request.method === 'POST' && /^\/billing\/v1\/(?:checkout|portal)$/.test(url.pathname)
+    )) return originalFetch(new Request(request, { credentials: 'omit', redirect: 'error' }));
     if (url.origin === SITE_ACCOUNT_SERVICE && isSiteDotComputerRequest(url.pathname, request.method)) {
       return originalFetch(new Request(request, { credentials: 'omit', redirect: 'error' }));
     }
