@@ -97,6 +97,18 @@ function send(res, status, mime, body) {
 function json(res, status, body) {
   send(res, status, contentTypes.json, JSON.stringify(body));
 }
+function savedWorkThreads() {
+  const rows = runtime.DB.raw.prepare(
+    'SELECT conversation_id, document_json FROM chat_sync_conversations WHERE owner_key = ? AND deleted = 0'
+  ).all('user:' + accountId);
+  return rows.flatMap(row => {
+    const document = JSON.parse(row.document_json);
+    const turn = document.turns.find(turn => turn.executionSurface === 'work' && turn.status === 'completed' &&
+      turn.items.some(item => item.type === 'agentMessage' && item.text?.trim() === reply));
+    return turn ? [{ id: row.conversation_id, title: document.name, model: turn.model, effort: turn.reasoningEffort }] : [];
+  });
+}
+
 async function readLocation(req) {
   req.setEncoding('utf8');
   let path = '';
@@ -151,7 +163,7 @@ const tls = {
 createServer(tls, async (req, res) => {
   try {
     const url = new URL(req.url, origin);
-    if (url.pathname === fixtureBase + 'metrics') return json(res, 200, { ...metrics, release, planType });
+    if (url.pathname === fixtureBase + 'metrics') return json(res, 200, { ...metrics, release, planType, savedWorkThreads: savedWorkThreads() });
     if (url.pathname === fixtureBase + 'location' && req.method === 'POST') {
       const path = await readLocation(req);
       if (path === null) return json(res, 400, {});

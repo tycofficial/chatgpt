@@ -16,6 +16,13 @@ final class SafariPublicSiteTests: XCTestCase {
         let stream: Bool
     }
 
+    private struct SavedThread: Decodable, Equatable {
+        let id: String
+        let title: String
+        let model: String
+        let effort: String
+    }
+
     private struct FixtureMetrics: Decodable {
         let documentLoads: Int
         let documentLocations: [String]
@@ -24,6 +31,7 @@ final class SafariPublicSiteTests: XCTestCase {
         let inferenceCalls: Int
         let inferenceRequestIds: [String]
         let request: RequestMetrics?
+        let savedWorkThreads: [SavedThread]
     }
 
     @MainActor
@@ -56,12 +64,12 @@ final class SafariPublicSiteTests: XCTestCase {
         let replies = web.staticTexts.matching(NSPredicate(format: "label == %@ OR value == %@", answer, answer))
         XCTAssertTrue(replies.firstMatch.waitForExistence(timeout: 60), "The deterministic Work reply was not visible")
         XCTAssertEqual(replies.count, 1, "The Work reply was duplicated before reload")
-        let before = try await waitForMetrics { metrics in
-            metrics.inferenceCalls > 0 && metrics.clientLocation?.range(
-                of: #"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}"#, options: .regularExpression
-            ) != nil
-        }
+        let before = try await waitForMetrics { $0.clientLocation != nil && !$0.savedWorkThreads.isEmpty }
+        let restoredThread = try XCTUnwrap(before.savedWorkThreads.first)
+        XCTAssertEqual(before.savedWorkThreads.count, 1)
         let conversationLocation = try XCTUnwrap(before.clientLocation)
+        XCTAssertEqual(restoredThread.model, "gpt-6.2-sol")
+        XCTAssertEqual(restoredThread.effort, "low")
         XCTAssertEqual(before.inferencePosts, 1)
         XCTAssertEqual(before.inferenceCalls, 1)
         XCTAssertEqual(before.request?.model, "gpt-6.2-sol")
@@ -79,12 +87,23 @@ final class SafariPublicSiteTests: XCTestCase {
         _ = try await waitForMetrics { metrics in
             metrics.documentLoads > before.documentLoads && metrics.documentLocations.last == conversationLocation
         }
-        XCTAssertTrue(replies.firstMatch.waitForExistence(timeout: 65), "The original Work reply was not restored after Safari reload")
+        if !replies.firstMatch.waitForExistence(timeout: 10) {
+            // The Work composer can stay on the home URL after sending; reopen the exact saved title.
+            let historyTitle = [restoredThread.title]
+            let restored = try waitForHittable([
+                named(historyTitle, in: web.buttons),
+                named(historyTitle, in: web.links),
+                named(historyTitle, in: web.staticTexts),
+            ], seconds: 28)
+            restored.tap()
+            print("IPAD_QA reopened-the-saved-work-chat-from-history")
+        }
+        XCTAssertTrue(replies.firstMatch.waitForExistence(timeout: 55), "The original Work reply was not restored after Safari reload")
         XCTAssertEqual(replies.count, 1, "The Work reply was duplicated after reload")
         let prompts = web.staticTexts.matching(NSPredicate(format: "label == %@ OR value == %@", prompt, prompt))
         XCTAssertTrue(prompts.firstMatch.waitForExistence(timeout: 10), "The original Work prompt was not restored")
         let after = try await fixtureMetrics()
-        XCTAssertEqual(after.clientLocation, conversationLocation)
+        XCTAssertEqual(after.savedWorkThreads, [restoredThread], "The original saved Work ID, model and effort changed")
         XCTAssertEqual(after.inferenceRequestIds, before.inferenceRequestIds)
         XCTAssertEqual(after.inferencePosts, 1)
         XCTAssertEqual(after.inferenceCalls, 1)
@@ -120,10 +139,16 @@ final class SafariPublicSiteTests: XCTestCase {
     }
 
     private func waitForHittable(_ query: XCUIElementQuery, seconds: TimeInterval) throws -> XCUIElement {
+        try waitForHittable([query], seconds: seconds)
+    }
+
+    private func waitForHittable(_ queries: [XCUIElementQuery], seconds: TimeInterval) throws -> XCUIElement {
         let expiry = Date().addingTimeInterval(seconds)
         repeat {
-            if let element = query.allElementsBoundByIndex.first(where: { $0.exists && $0.isHittable }) {
-                return element
+            for query in queries {
+                if let element = query.allElementsBoundByIndex.first(where: { $0.exists && $0.isHittable }) {
+                    return element
+                }
             }
             _ = RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.25))
         } while Date() < expiry

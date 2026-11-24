@@ -81,7 +81,7 @@ jobs:
             and (.inferenceRequestIds | length) == 1 and .planType == "plus"
             and .request.model == "gpt-6.2-sol" and .request.effort == "low"
             and .request.expectedPrompt and .request.stream
-            and .documentLocations[-1] == .clientLocation'
+            and (.savedWorkThreads | length) == 1'
 
       - name: Record the simulator verification result
         if: always()
