@@ -24,6 +24,15 @@ for(const helper of provenance.helpers){
  helperInputs.push(original);
 }
 const releaseHash=crypto.createHash('sha256').update(helperInputs.join('\n')).update(builderBytes).update(planInput).update(provenance.deploymentBase);
+if (provenance.siteAccountOrigin !== undefined) {
+ const url = new URL(provenance.siteAccountOrigin);
+ if (url.protocol !== 'https:' || url.origin !== provenance.siteAccountOrigin) throw Error('Invalid packaged site account origin');
+ const siteAccount=await fs.readFile(path.join(directory,'site-account.mjs'),'utf8');
+ if (!siteAccount.includes('export const SITE_ACCOUNT_SERVICE = '+JSON.stringify(url.origin)+';')) {
+  throw Error('The configured account origin differs from the browser module');
+ }
+ releaseHash.update('\0site-account-origin:').update(url.origin);
+}
 if (provenance.preservedRegistrationEntry) {
  if (!/^\.\/entry-library\.mjs\?v=[a-f0-9]{16}$/.test(provenance.preservedRegistrationEntry)) throw Error('Invalid retained module entry');
  releaseHash.update('\0preserved-registration:').update(provenance.preservedRegistrationEntry);

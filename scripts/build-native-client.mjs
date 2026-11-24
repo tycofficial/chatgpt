@@ -8,6 +8,16 @@ const referenceInput=path.join(root,'.test-output/original-client-prototype');
 const input=path.join(root,'src/native-client');
 const output=path.join(root,'native-client');
 const servicesOnly = process.argv.includes('--services-only');
+const requestedAccountOrigin = process.env.CHATGPT_SITE_API_ORIGIN?.trim();
+let siteAccountOrigin;
+if (requestedAccountOrigin) {
+ let url;
+ try { url = new URL(requestedAccountOrigin); } catch {}
+ if (!url || url.protocol !== 'https:' || ![url.origin, url.origin + '/'].includes(requestedAccountOrigin)) {
+  throw Error('CHATGPT_SITE_API_ORIGIN must be an HTTPS origin without credentials, a path or a query.');
+ }
+ siteAccountOrigin = url.origin;
+}
 const sha256 = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const helpers=['boot-adapter.mjs','startup-compatibility.mjs','image-input-compression.mjs','service-boundary.mjs','provider-routing.mjs','local-native-read-aloud.mjs','local-web-search.mjs','preferred-host-transport.mjs','synthetic-bootstrap.mjs','public-auth-envelope.mjs','local-identity.mjs','local-token-identity.mjs','site-account.mjs','chat-history-sync.mjs','account-history-coordinator.mjs','native-cloud-sync-feedback.mjs','local-model-selection-policy.mjs','local-configuration.mjs','local-user-preferences.mjs','local-personalization-service.mjs','local-personalization-context.mjs','local-host-settings.mjs','local-work-policy.mjs','local-codex-adapter.mjs','local-dot-adapter.mjs','local-map-provider.mjs','local-maps-service.mjs','local-discovery.mjs','public-plugin-catalog.mjs','local-pubsub.mjs','model-catalog-adapter.mjs','local-app-server.mjs','classic-chat-adapter.mjs','portable-conversation-share.mjs','classic-response-branches.mjs','classic-input-messages.mjs','agent-turn-runner.mjs','site-ultra-orchestrator.mjs','browser-tool-executor.mjs','local-document-extraction.mjs','document-text-worker.mjs','local-ooxml-container.mjs','local-office-xml.mjs','local-xlsx-extraction.mjs','local-pptx-extraction.mjs','local-files-service.mjs','local-library-service.mjs','local-library-publisher.mjs','published-resource-rehydration.mjs','native-library-refresh.mjs','native-publication-references.mjs','native-workspace-references.mjs','native-file-reference-composition.mjs','local-native-upload.mjs','local-native-download.mjs','local-workspace-download-source.mjs','local-workspace-download-service.mjs','owned-download-transport.mjs','local-input-preparation.mjs','local-pricing.mjs','entry-library.mjs'];
 helpers.push('native-pricing-trials.mjs', 'site-signout.mjs', 'native-site-login.mjs', 'site-paths.mjs', 'prepared-input-store.mjs', 'site-inference-transport.mjs', 'local-dot-browser-voice.mjs');
@@ -60,6 +70,7 @@ const builderBytes=await fs.readFile(fileURLToPath(import.meta.url));
 const sharedAssetInputs=['config.js','model-catalog.js','runtime.js','python-worker.js','release-updater.js'].map(file=>({file,...(['python-worker.js','model-catalog.js'].includes(file)?{inputFile:'src/native-client/'+file}:{})}));
 const sharedAssets=await Promise.all(sharedAssetInputs.map(async asset=>({...asset,bytes:await fs.readFile(path.join(root,asset.inputFile??asset.file))})));
 const releaseHash=crypto.createHash('sha256').update([...raw.values()].join('\n')).update(builderBytes).update(entryPlanInput).update(deploymentBase);
+if (siteAccountOrigin) releaseHash.update('\0site-account-origin:').update(siteAccountOrigin);
 if (priorPlan) releaseHash.update('\0preserved-registration:').update(priorPlan.registrationEntry);
 for(const asset of sharedAssets)releaseHash.update(asset.file).update(asset.bytes);
 for(const asset of publicAssets)releaseHash.update(asset.relative).update(asset.bytes);
@@ -103,6 +114,11 @@ for(const [name,original]of raw){
   continue;
  }
  let text=original;
+ if(name==='site-account.mjs' && siteAccountOrigin){
+  const declaration = /^export const SITE_ACCOUNT_SERVICE = '[^'\r\n]+';/m.exec(original)?.[0];
+  if (!declaration) throw Error('Missing canonical site account origin');
+  text=replace(text,declaration,'export const SITE_ACCOUNT_SERVICE = '+JSON.stringify(siteAccountOrigin)+';');
+ }
  if(name==='boot-adapter.mjs'){
   const initialRoutes = Object.fromEntries(Object.entries(plan.initialRoutes).map(([id, url]) => [id, originalOnSite(url)]));
   const bootPlan = {
@@ -469,7 +485,7 @@ ${startupBody}
 const html = entryHTML();
 const authHTML = entryHTML({ auth: true });
 await write(path.join(root,'native-client-shell.html'),html);
-await write(path.join(output,'adapter-provenance.json'),JSON.stringify({sourceBuild,release,deploymentBase,...(priorPlan?{preservedRegistrationEntry:registrationEntry}:{}),builderSha256:sha256(builderBytes),entryPlanInputSha256:sha256(entryPlanInput),sourceEntry:plan.sourceEntrySha256,runtime:plan.runtime,manifest:plan.manifest,componentFactoriesModified:false,legacyUiImported:false,serviceAdapter:'Browser-local account/storage and the explicitly configured API; no original private backend or Google authentication is claimed.',sharedAssets:sharedAssets.map(({file,bytes,inputFile})=>({file,...(inputFile?{inputFile,inputSha256:sha256(bytes)}:{}),sha256:sha256(bytes)})),resources:publicAssets.map(({relative,bytes})=>({file:relative,sha256:sha256(bytes)})),siteResourceAliases,supplementalManifest:{file:supplementalManifestFile,sha256:sha256(supplementalManifestBytes)},supplementalResources:supplementalAssets.map(({file,bytes})=>({file,sha256:sha256(bytes)})),helpers:provenance},null,2)+'\n');
+await write(path.join(output,'adapter-provenance.json'),JSON.stringify({sourceBuild,release,deploymentBase,...(siteAccountOrigin?{siteAccountOrigin}:{}),...(priorPlan?{preservedRegistrationEntry:registrationEntry}:{}),builderSha256:sha256(builderBytes),entryPlanInputSha256:sha256(entryPlanInput),sourceEntry:plan.sourceEntrySha256,runtime:plan.runtime,manifest:plan.manifest,componentFactoriesModified:false,legacyUiImported:false,serviceAdapter:'Browser-local account/storage and the explicitly configured API; no original private backend or Google authentication is claimed.',sharedAssets:sharedAssets.map(({file,bytes,inputFile})=>({file,...(inputFile?{inputFile,inputSha256:sha256(bytes)}:{}),sha256:sha256(bytes)})),resources:publicAssets.map(({relative,bytes})=>({file:relative,sha256:sha256(bytes)})),siteResourceAliases,supplementalManifest:{file:supplementalManifestFile,sha256:sha256(supplementalManifestBytes)},supplementalResources:supplementalAssets.map(({file,bytes})=>({file,sha256:sha256(bytes)})),helpers:provenance},null,2)+'\n');
 if(process.argv.includes('--activate')){
  const backup=path.join(root,'.test-output/index-before-native-client.html');
  await fs.mkdir(path.dirname(backup),{recursive:true});

@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { localizeRouterAssets } from '../src/native-client/startup-compatibility.mjs';
 
 test('browser preloads and dynamic navigation resolve inside the Pages project for every archived route', () => {
@@ -217,4 +219,21 @@ test('startup tracks completed resources once and estimates the time only after 
   assert.equal(f.gauge.value, '99');
   f.state.ready();
   assert.equal(f.gauge.value, '100');
+});
+
+test('only a trusted HTTPS origin can be selected as the packaged account service', () => {
+  const builder = fileURLToPath(new URL('../scripts/build-native-client.mjs', import.meta.url));
+  for (const origin of ['http://fixture.example', 'https://user:secret@fixture.example',
+    'https://fixture.example/account', 'https://fixture.example?a=1', 'https://fixture.example#login']) {
+    const run = spawnSync(process.execPath, [builder], {
+      env: { ...process.env, CHATGPT_SITE_API_ORIGIN: origin }, encoding: 'utf8',
+    });
+    assert.equal(run.status, 1);
+    assert.match(run.stderr, /CHATGPT_SITE_API_ORIGIN must be an HTTPS origin/);
+  }
+  const packaged = JSON.parse(fs.readFileSync(new URL('../native-client/adapter-provenance.json', import.meta.url), 'utf8'));
+  if (packaged.siteAccountOrigin) {
+    const account = fs.readFileSync(new URL('../native-client/site-account.mjs', import.meta.url), 'utf8');
+    assert.ok(account.includes('export const SITE_ACCOUNT_SERVICE = ' + JSON.stringify(packaged.siteAccountOrigin) + ';'));
+  }
 });
