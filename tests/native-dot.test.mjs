@@ -699,26 +699,46 @@ test('native Dot composer can write, edit and delete journal notes shown in the 
   const reopened = fixture({ storage: env.storage });
   const native = (await request(reopened.adapter, `${journal}?view=tasks`)).data;
   assert.equal(native.tasks[0].description, 'Native journal fixture');
+  assert.deepEqual(native.items, []);
   const entryId = native.tasks[0].id;
-  const stored = (await request(reopened.adapter, journal + '/' + entryId)).data;
-  assert.equal(native.items.length, 1);
-  assert.deepEqual(native.items[0], {
-    id: entryId, topic_id: entryId, title: 'Native journal fixture', status: 'complete',
-    description: 'Native journal fixture', completed_at: Date.parse(stored.updated_at) / 1000,
-    message_refs: [], outputs: [],
-  });
   assert.equal((await send(reopened.adapter, 'entry-edit', `/journal edit ${entryId} Updated native fixture`)).response.status, 200);
-  const reloaded = fixture({ storage: env.storage });
-  const edited = (await request(reloaded.adapter, `${journal}?view=tasks`)).data.items;
-  assert.deepEqual(edited.map(({ id, title, description }) => ({ id, title, description })), [
-    { id: entryId, title: 'Updated native fixture', description: 'Updated native fixture' },
-  ]);
-  const details = (await request(reloaded.adapter, `${journal}?view=tasks&task_id=${entryId}`)).data;
+  const details = (await request(reopened.adapter, `${journal}?view=tasks&task_id=${entryId}`)).data;
   assert.equal(details.turns[0].messages[0].text, 'Updated native fixture');
   assert.equal((await send(reopened.adapter, 'entry-delete', `/journal delete ${entryId}`)).response.status, 200);
-  const afterDelete = (await request(fixture({ storage: env.storage }).adapter, `${journal}?view=tasks`)).data;
-  assert.deepEqual(afterDelete.tasks, []);
-  assert.deepEqual(afterDelete.items, []);
+  assert.deepEqual((await request(fixture({ storage: env.storage }).adapter, `${journal}?view=tasks`)).data.tasks, []);
+});
+
+test('the original Dot activity route lists, opens and deletes saved journal notes for their owner', async () => {
+  let time = 1700000000000;
+  const env = fixture({ now: () => time });
+  const profile = (await request(env.adapter, '/tbo')).data.items[0];
+  await request(env.adapter, '/tbo/' + profile.id + '/messaging-room', 'POST');
+  const journal = '/messaging/rooms/' + profile.root_thread_id + '/journal';
+  const topics = '/tbo/' + profile.id + '/activity/topics';
+  const { data: note } = await request(env.adapter, journal, 'POST', { content: 'Native note\nDetails' });
+  assert.deepEqual((await request(env.adapter, topics + '?limit=25')).data, { data: [{
+    id: note.id, title: 'Native note', description: 'Native note\nDetails', status: 'complete',
+    created_at: note.created_at, last_meaningful_update_time: note.updated_at,
+  }], next_cursor: null });
+  time += 1500;
+  const edited = (await request(env.adapter, journal + '/' + note.id, 'PATCH', {
+    content: 'Updated note', revision: 1,
+  })).data;
+  const reopened = fixture({ storage: env.storage });
+  const entry = topics + '/' + note.id;
+  assert.deepEqual((await request(reopened.adapter, entry + '/items')).data, { data: [{
+    id: note.id, title: 'Updated note', description: 'Updated note', status: 'complete',
+    created_at: note.created_at, updated_at: edited.updated_at, completed_at: edited.updated_at,
+    attachments: [], source_message_ids: [],
+  }], next_cursor: null });
+  const differentOwner = fixture({ storage: env.storage });
+  differentOwner.setIdentity({ accountId: 'another-account', userId: 'another-user' });
+  assert.equal((await request(differentOwner.adapter, entry, 'DELETE')).response.status, 404);
+  assert.equal((await request(reopened.adapter, entry, 'DELETE')).response.status, 204);
+  const afterDelete = fixture({ storage: env.storage });
+  assert.deepEqual((await request(afterDelete.adapter, journal)).data.items, []);
+  assert.deepEqual((await request(afterDelete.adapter, topics)).data, { data: [], next_cursor: null });
+  assert.equal((await request(afterDelete.adapter, entry + '/items')).response.status, 404);
 });
 
 test('queued Dot messages recover after reload and admit a repeated request ID once', async () => {

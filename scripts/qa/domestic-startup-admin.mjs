@@ -168,11 +168,10 @@ try {
             window.fetch = async (input, options) => {
               const response = await request(input, options);
               const uri = new URL(typeof input === 'object' && 'url' in input ? input.url : String(input), location.href);
-              if (/\/messaging\/rooms\/[^/]+\/journal(?:\/|$)/.test(uri.pathname)) {
+              if (/\/tbo\/[^/]+\/activity\/topics(?:\/|$)/.test(uri.pathname)) {
                 void response.clone().json().then(body => window.__testDotJournalReceipts.push({
-                  path: uri.pathname.replace(/\/rooms\/[^/]+/, '/rooms/<room>'),
-                  view: uri.searchParams.get('view'), status: response.status,
-                  taskCount: body.tasks?.length, itemCount: body.items?.length,
+                  path: uri.pathname.replace(/\/tbo\/[^/]+/, '/tbo/<dot>'), status: response.status,
+                  entryCount: body.data?.length, hasNextPage: Boolean(body.next_cursor),
                 })).catch(() => {});
               }
               return response;
@@ -188,8 +187,8 @@ try {
           } finally {
             const observed = await page.evaluate(() => ({
               receipts: window.__testDotJournalReceipts,
-              routePaths: window.__originalClientProbe?.filter(row => /\/journal(?:\/|$)/.test(row.path ?? '')).slice(-8)
-                .map(row => ({ path: row.path.replace(/\/rooms\/[^/]+/, '/rooms/<room>'), type: row.event })),
+              routePaths: window.__originalClientProbe?.filter(row => /\/activity\/topics(?:\/|$)/.test(row.path ?? '')).slice(-8)
+                .map(row => ({ path: row.path.replace(/\/tbo\/[^/]+/, '/tbo/<dot>'), type: row.event })),
               labels: [...document.querySelectorAll('[aria-expanded="true"]')].filter(node => node.getClientRects().length)
                 .map(node => node.textContent?.trim().slice(0, 50)).slice(-12),
             }));
