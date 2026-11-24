@@ -129,7 +129,7 @@ export function createLinuxDesktopRuntime({ python = '/usr/bin/python3', xvfb = 
 
   async function runSandbox(config, workspace, session, code, signal) {
     const args = [
-      '--unshare-all', '--disable-userns', '--as-pid-1', '--die-with-parent', '--new-session', '--cap-drop', 'ALL', '--clearenv',
+      '--unshare-all', '--unshare-user', '--disable-userns', '--as-pid-1', '--die-with-parent', '--new-session', '--cap-drop', 'ALL', '--clearenv',
       '--setenv', 'PATH', '/usr/bin', '--setenv', 'HOME', '/workspace', '--setenv', 'LANG', 'C.UTF-8',
       ...config.binds, '--proc', '/proc', '--dev', '/dev', '--size', '16777216', '--tmpfs', '/tmp',
       '--ro-bind', workspace, '/workspace', '--chdir', '/workspace',
