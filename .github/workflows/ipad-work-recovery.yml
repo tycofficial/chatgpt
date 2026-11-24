@@ -25,7 +25,9 @@ jobs:
           git archive FETCH_HEAD scripts/qa/ipad-xcuitest | tar -x -C "$qa_root"
           qa_project="$qa_root/scripts/qa/ipad-xcuitest"
           cp scripts/qa/ipad-work/SafariPublicSiteTests.swift "$qa_project/SafariQAUITests/SafariPublicSiteTests.swift"
+          xcodebuild -version
           xcrun simctl list devices available -j | node "$qa_project/select-device.mjs" > "$qa_root/device"
+          cat "$qa_root/device"
           IPAD_UDID="$(sed -n 's/^IPAD_UDID=//p' "$qa_root/device")"
           [[ "$IPAD_UDID" =~ ^[a-fA-F0-9-]{36}$ ]]
           xcodebuild build-for-testing -project "$qa_project/SafariQA.xcodeproj" -scheme SafariQA \
@@ -34,7 +36,6 @@ jobs:
 
       - id: work-safari
         name: Test Work against the runner-local fixture in MobileSafari
-        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
@@ -61,7 +62,10 @@ jobs:
           if ! xcrun simctl bootstatus "$IPAD_UDID" -b; then
             xcrun simctl bootstatus "$IPAD_UDID"
           fi
+          xcrun simctl listapps "$IPAD_UDID" > "$qa_root/installed-apps.plist"
+          grep -F 'com.apple.mobilesafari' "$qa_root/installed-apps.plist"
           xcrun simctl keychain "$IPAD_UDID" add-root-cert "$qa_root/tls/ca.crt"
+          printf 'Launching MobileSafari on %s\n' "$IPAD_UDID"
           xcrun simctl launch "$IPAD_UDID" com.apple.mobilesafari
           xcrun simctl openurl "$IPAD_UDID" https://127.0.0.1:4400/__ipad_qa/seed
           xcodebuild test-without-building -project "$qa_project/SafariQA.xcodeproj" -scheme SafariQA \
@@ -91,4 +95,5 @@ jobs:
           path: |
             ${{ runner.temp }}/tyc-ipad-work/safari-after.png
             ${{ runner.temp }}/tyc-ipad-work/safari-metrics.json
+            ${{ runner.temp }}/tyc-ipad-work/device
           if-no-files-found: ignore
