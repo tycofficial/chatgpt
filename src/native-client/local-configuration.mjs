@@ -21,6 +21,7 @@ export function getPrototypeConfiguration(user = getPrototypeStatsigUser()) {
   const localWork = { name: '1625797156', value: isPrototypeLocalSession() && getSitePlanCapabilities().work, rule_id: 'local-text-provider', secondary_exposures: [], adapter_source: 'local-app-server-not-openai-cloud' };
   const localDots = { name: '1202965598', value: isPrototypeLocalSession() && getSitePlanCapabilities().dot, rule_id: 'site-local-dot-provider', secondary_exposures: [], adapter_source: 'public-original-dot-ui-with-local-profile-service' };
   const localDotNavigation = { ...localDots, name: '3406878059' };
+  const localDotActivity = { ...localDots, name: '2072018207', adapter_source: 'site-local-dot-journal' };
   const localDotVoice = { name: '548063743', value: localDots.value && hasLocalDotBrowserVoice(), rule_id: 'site-local-dot-voice', secondary_exposures: [], adapter_source: 'browser-speech' };
   const localLibrary = { name: '224248639', value: isPrototypeLocalSession() && readLibraryAvailability() === true, rule_id: 'site-local-library-provider', secondary_exposures: [], adapter_source: 'original-library-ui-with-browser-origin-files' };
   // User-selected source layout: keep Chat and Work as separate native modes.
@@ -40,6 +41,7 @@ export function getPrototypeConfiguration(user = getPrototypeStatsigUser()) {
       '1625797156': localWork, [hash('1625797156')]: localWork,
       '1202965598': localDots, [hash('1202965598')]: localDots,
       '3406878059': localDotNavigation, [hash('3406878059')]: localDotNavigation,
+      '2072018207': localDotActivity, [hash('2072018207')]: localDotActivity,
       '548063743': localDotVoice, [hash('548063743')]: localDotVoice,
       '224248639': localLibrary, [hash('224248639')]: localLibrary,
       '536305374': ultraSelection, [hash('536305374')]: ultraSelection,

@@ -37,6 +37,28 @@ test('browser preloads and dynamic navigation resolve inside the Pages project f
   assert.equal(new URL(manifest.url).pathname, '/chatgpt/' + archivedHost + plan.manifest);
 });
 
+test('the router shares the active site stylesheet, keeping route-specific CSS and valid fallbacks', () => {
+  const home = new URL('https://example.test/chatgpt/');
+  const entry = home.href + 'native-client/entry-library.mjs';
+  const loaded = { rel: 'stylesheet', media: 'all', isConnected: true, sheet: {},
+    href: home.href + 'original-client/public/chatgpt.com/cdn/assets/site.css' };
+  const manifest = () => ({ entry: { module: '/cdn/assets/entry.js', css: ['/cdn/assets/site.css'] },
+    routes: { home: { css: ['/cdn/assets/site.css', '/cdn/assets/home.css'], imports: ['/cdn/assets/module.js'] } } });
+
+  const reused = manifest();
+  localizeRouterAssets(reused, home, entry, loaded);
+  assert.deepEqual(reused.entry.css, []);
+  assert.deepEqual(reused.routes.home.css, [home.href + 'original-client/public/chatgpt.com/cdn/assets/home.css']);
+  assert.deepEqual(reused.routes.home.imports, [home.href + 'original-client/public/chatgpt.com/cdn/assets/module.js']);
+
+  for (const stylesheet of [undefined, { ...loaded, media: 'print' }, { ...loaded, disabled: true },
+    { ...loaded, sheet: null }, { ...loaded, isConnected: false }]) {
+    const independent = manifest();
+    localizeRouterAssets(independent, home, entry, stylesheet);
+    assert.deepEqual(independent.entry.css, [loaded.href]);
+  }
+});
+
 test('the browser discovers the entry modules and stylesheet directly, with a lighter sign-in document', () => {
   const read = path => fs.readFileSync(new URL(path, import.meta.url), 'utf8');
   const html = read('../native-client-shell.html'), auth = read('../auth/login/index.html');
@@ -215,8 +237,11 @@ test('startup tracks completed resources once and estimates the time only after 
     transferSize: 1200, decodedBodySize: 2400, fetchStart: 100 + index, responseEnd: 1100 + index,
   })));
   assert.match(f.time.textContent, /预计资源还需/);
-  f.state.markResourcesReady();
-  assert.equal(f.gauge.value, '99');
+  const measured = f.gauge.value;
+  assert.ok(Number(measured) < 99);
+  f.state.waitForComposer();
+  assert.equal(f.gauge.value, measured);
+  assert.equal(f.time.textContent, '正在初始化页面');
   f.state.ready();
   assert.equal(f.gauge.value, '100');
 });

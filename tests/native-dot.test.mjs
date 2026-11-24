@@ -708,6 +708,50 @@ test('native Dot composer can write, edit and delete journal notes shown in the 
   assert.deepEqual((await request(fixture({ storage: env.storage }).adapter, `${journal}?view=tasks`)).data.tasks, []);
 });
 
+test('the original Dot activity route lists, opens and deletes saved journal notes for their owner', async () => {
+  let time = 1700000000000;
+  const env = fixture({ now: () => time });
+  const profile = (await request(env.adapter, '/tbo')).data.items[0];
+  await request(env.adapter, '/tbo/' + profile.id + '/messaging-room', 'POST');
+  const journal = '/messaging/rooms/' + profile.root_thread_id + '/journal';
+  const topics = '/tbo/' + profile.id + '/activity/topics';
+  const { data: note } = await request(env.adapter, journal, 'POST', { content: 'Native note\nDetails' });
+  assert.deepEqual((await request(env.adapter, topics + '?limit=25')).data, { data: [{
+    id: note.id, title: 'Native note', description: 'Native note\nDetails', status: 'complete',
+    created_at: note.created_at, last_meaningful_update_time: note.updated_at,
+  }], next_cursor: null });
+  time += 1500;
+  const edited = (await request(env.adapter, journal + '/' + note.id, 'PATCH', {
+    content: 'Updated note', revision: 1,
+  })).data;
+  const reopened = fixture({ storage: env.storage });
+  const entry = topics + '/' + note.id;
+  assert.deepEqual((await request(reopened.adapter, entry + '/items')).data, { data: [{
+    id: note.id, title: 'Updated note', description: 'Updated note', status: 'complete',
+    created_at: note.created_at, updated_at: edited.updated_at, completed_at: edited.updated_at,
+    attachments: [], source_message_ids: [],
+  }], next_cursor: null });
+  const differentOwner = fixture({ storage: env.storage });
+  differentOwner.setIdentity({ accountId: 'another-account', userId: 'another-user' });
+  assert.equal((await request(differentOwner.adapter, entry, 'DELETE')).response.status, 404);
+  assert.equal((await request(reopened.adapter, entry, 'DELETE')).response.status, 204);
+  const afterDelete = fixture({ storage: env.storage });
+  assert.deepEqual((await request(afterDelete.adapter, journal)).data.items, []);
+  assert.deepEqual((await request(afterDelete.adapter, topics)).data, { data: [], next_cursor: null });
+  assert.equal((await request(afterDelete.adapter, entry + '/items')).response.status, 404);
+});
+
+test('a superseded native Dot journal request is cancelled without a server error', async () => {
+  const env = fixture();
+  const profile = (await request(env.adapter, '/tbo')).data.items[0];
+  const topics = '/tbo/' + profile.id + '/activity/topics';
+  const cancellation = new AbortController();
+  const query = new Request('https://site.invalid/backend-api' + topics, { signal: cancellation.signal });
+  cancellation.abort();
+  await assert.rejects(env.adapter.handle(query, topics), error => error === query.signal.reason && error.name === 'AbortError');
+  assert.deepEqual((await request(env.adapter, topics)).data, { data: [], next_cursor: null });
+});
+
 test('queued Dot messages recover after reload and admit a repeated request ID once', async () => {
   const first = Promise.withResolvers();
   const env = fixture({ streamCompletion: async () => first.promise });

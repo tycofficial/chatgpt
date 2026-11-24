@@ -629,6 +629,40 @@ export function createLocalDotAdapter({
     else entries.unshift(entry);
     return entry;
   }
+  const activityTitle = text => text.trim().split('\n')[0]?.slice(0, 80) || 'Dot';
+
+  // The original Dot activity list uses topics and items rather than the legacy room journal.
+  function journalActivity(session, profileId, topicId, wantItems, method, url) {
+    assertIdentity(session);
+    const data = state(session), row = findProfile(data, profileId);
+    const entries = row.room_journal ?? [];
+    if (method === 'GET' && !topicId) {
+      const topics = [...entries].sort((a, b) => b.updated_at.localeCompare(a.updated_at) || b.id.localeCompare(a.id)).map(entry => ({
+        id: entry.id, title: activityTitle(entry.content), description: entry.content, status: 'complete',
+        created_at: entry.created_at, last_meaningful_update_time: entry.updated_at,
+      }));
+      const page = pagination(topics, url);
+      return json({ data: page.items, next_cursor: page.cursor });
+    }
+    if (method === 'GET' && wantItems) {
+      const entry = entries.find(value => value.id === topicId);
+      if (!entry) throw error('这条日记已不存在。', 404, 'LOCAL_DOT_JOURNAL_NOT_FOUND');
+      const item = {
+        id: entry.id, title: activityTitle(entry.content), description: entry.content, status: 'complete',
+        created_at: entry.created_at, updated_at: entry.updated_at, completed_at: entry.updated_at,
+        attachments: [], source_message_ids: [],
+      };
+      const page = pagination([item], url);
+      return json({ data: page.items, next_cursor: page.cursor });
+    }
+    if (method === 'DELETE' && topicId && !wantItems) {
+      changeJournal(entries, topicId, 'DELETE', null);
+      save(session, data);
+      return new Response(null, { status: 204 });
+    }
+    throw error('此日记操作不可用。', 405);
+  }
+
   function nativeJournal(session, thread, row, url) {
     const view = url.searchParams.get('view');
     const taskId = url.searchParams.get('task_id');
@@ -655,15 +689,14 @@ export function createLocalDotAdapter({
         id: message.id, at: Date.parse(message.created_at) / 1000, speaker: message.role === 'user' ? 'owner' : 'dot', text: messageText(message),
       })) }] });
     }
-    const title = text => text.trim().split('\n')[0]?.slice(0, 80) || 'Dot';
-    const tasks = notes.map(note => ({ id: note.id, title: title(note.content), outcome_state: 'reached', description: note.content,
+    const tasks = notes.map(note => ({ id: note.id, title: activityTitle(note.content), outcome_state: 'reached', description: note.content,
       progress: null, input_needed: null, resume_message_id: null,
     }));
     const items = [];
     for (const turn of [...thread.turns].reverse()) {
       const messages = messageByTurn.get(turn.id);
       if (!messages.length) continue;
-      const label = title(messageText(messages[0]));
+      const label = activityTitle(messageText(messages[0]));
       const status = turn.status === 'completed' ? 'complete' : turn.status === 'failed' ? 'failed' : turn.status === 'interrupted' ? 'cancelled' : 'in_progress';
       const output = messages.findLast(message => message.role === 'assistant');
       tasks.push({ id: turn.id, title: label, outcome_state: status === 'complete' ? 'reached' : 'ongoing', description: messageText(messages[0]),
@@ -1163,6 +1196,12 @@ export function createLocalDotAdapter({
         return json(publicProfile(row));
       }
       if (parts[1] === 'tbo' && parts.length >= 3) {
+        if (parts[3] === 'activity' && parts[4] === 'topics' && (parts.length < 7 || parts.length === 7 && parts[6] === 'items')) {
+          return await roomLock(session, () => {
+            request.signal?.throwIfAborted();
+            return journalActivity(session, parts[2], parts[5], parts[6] === 'items', method, url);
+          });
+        }
         if (parts[3] === 'automations' && parts.length <= 6) {
           const supplied = method === 'GET' ? null : await body(request);
           request.signal?.throwIfAborted();
@@ -1252,6 +1291,7 @@ export function createLocalDotAdapter({
       }
       throw error('This Dot operation needs a service that is not provided locally', 501, 'LOCAL_DOT_SERVICE_UNAVAILABLE');
     } catch (cause) {
+      if (request.signal?.aborted && cause === request.signal.reason) throw cause;
       diagnostic('request-error', { path: requestPath, code: cause?.code ?? 'LOCAL_DOT_ERROR', status: cause?.status ?? 500 });
       return fail(cause);
     }

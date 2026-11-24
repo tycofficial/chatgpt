@@ -190,7 +190,6 @@ else {
  const [styleLoaded] = await Promise.all([stylesReady, siteAccount.initializeSiteAccountForDisplay()]);
  if (!styleLoaded) throw Error('The page stylesheet could not be loaded.');
  await import('./boot-adapter.mjs?v='+${JSON.stringify(release)});
- startup?.markResourcesReady();
  // The worker is only for private browser-created files. It does not load pages.
  void registerOptionalAssetWorker(workerURL, rootURL.pathname);
 }
@@ -294,7 +293,7 @@ const startupProgressStyle = `<style id="site-load-progress-style">
 </style>`;
 const startupGuard = assets => `<script>(function(entries){
  var notice,progress,progressStyle,composerObserver,resolveStyles,drawPending=false,watcher,timer;
- var stylesLoaded=false,stylesFailed=false,finished=false,failed=false;
+ var stylesLoaded=false,stylesFailed=false,finished=false,failed=false,waitingForComposer=false;
  var resources=new Map(entries),seen=new Set(),timed=new Set();
  var total=entries.reduce(function(a,entry){return a+entry[1]},0),received=0,networkWeight=0,networkStart=Infinity,networkEnd=0;
  var lastProgress=performance.now();
@@ -317,7 +316,7 @@ const startupGuard = assets => `<script>(function(entries){
   gauge.style.setProperty('--site-loaded',percent+'%');
   progress.querySelector('[data-percent]').textContent=percent+'%';
   var span=networkEnd-networkStart, detail='正在测量加载速度';
-  if(received>=total) detail='资源已加载，正在初始化页面';
+  if(waitingForComposer||received>=total) detail='正在初始化页面';
   else if(performance.now()-lastProgress>8000) detail='连接较慢，正在等待资源';
   else if(timed.size>=2&&span>=600&&networkWeight>0) {
    var seconds=Math.max(1,Math.ceil((total-received)*span/networkWeight/1000));
@@ -391,10 +390,9 @@ const startupGuard = assets => `<script>(function(entries){
    collect();
    watcher=setInterval(collect,750);
   },
-  markResourcesReady:function(){
-   resources.forEach(function(weight,key){resourceReady(key)});
-  },
   waitForComposer:function(){
+   waitingForComposer=true;
+   collect();
    var selector='main [contenteditable="true"], main textarea, [contenteditable="true"][role="textbox"]';
    function check(){
     drawPending=false;
