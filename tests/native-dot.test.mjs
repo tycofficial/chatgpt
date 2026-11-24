@@ -26,6 +26,7 @@ function fixture(options = {}) {
     storage, models, catalog, readSettings,
     streamCompletion: options.streamCompletion ?? (() => { throw Error('The Dot protocol fixtures have no inference transport'); }),
     prepareUserInput: options.prepareUserInput,
+    agentOptions: options.cloudComputer ? { prepareToolExecutor: request => adapter.prepareCloudTaskExecutor(request) } : undefined,
     getExecutionPolicy: () => ({ modelSelection: true }),
     uuid: randomUUID,
   });
@@ -35,8 +36,9 @@ function fixture(options = {}) {
     isLocalSession: () => local, getCapabilities: () => ({ filesystem: true, pythonExecution: true }),
     uuid: randomUUID, ...extra,
   });
+  const adapter = create(options);
   return {
-    storage, appServer, create, adapter: create(options),
+    storage, appServer, create, adapter,
     setIdentity: value => { identity = value; }, setLocal: value => { local = value; },
   };
 }
@@ -658,6 +660,86 @@ test('Dot overview exposes disconnected computer and an empty schedule list for 
   assert.equal((await request(env.adapter, computer)).response.status, 404);
   assert.equal((await request(env.adapter, schedules)).response.status, 404);
   assert.deepEqual(env.storage.values, stored);
+});
+
+test('the original Dot environment and composer use the owned Linux desktop and its recorded Python result', async () => {
+  const environmentId = 'dd6eba95-28e2-4ecb-bcdc-168c8c69a552';
+  const ready = { environmentId, status: 'ready', kind: 'linux-desktop', width: 1024, height: 720 };
+  const recorded = { status: 'complete', stdout: '899\n', stderr: '', exitCode: 0 };
+  const code = 'print(29 * 31)';
+  const call = { id: 'linux-fixture-tool-call', type: 'function', function: { name: 'run_dot_cloud_python', arguments: JSON.stringify({ code }) } };
+  const lifecycle = [], taskRequests = [], modelRequests = [];
+  let remote = { ...ready, environmentId: null, status: 'stopped' };
+  const cloudComputer = {
+    async status(id, options) {
+      options.assertCurrent(); lifecycle.push(['status', id]); return remote;
+    },
+    async wake(id, options) {
+      options.assertCurrent(); lifecycle.push(['wake', id]); return remote = ready;
+    },
+    async stop(id, options) {
+      options.assertCurrent(); lifecycle.push(['stop', id]); remote = { ...ready, status: 'stopped' };
+    },
+    async task(id, input, options) {
+      options.assertCurrent(); taskRequests.push({ id, ...input }); return recorded;
+    },
+  };
+  const options = { cloudComputer, streamCompletion: async ({ tools, messages }) => {
+    modelRequests.push(tools?.map(tool => tool.function.name) ?? []);
+    const tool = messages.findLast(row => row.role === 'tool');
+    if (tool) {
+      assert.deepEqual(JSON.parse(tool.content).structuredContent, recorded);
+      return { content: 'The remote Python result is 899.', finish_reason: 'stop' };
+    }
+    if (tools?.length) return { content: '', tool_calls: [call], finish_reason: 'tool_calls' };
+    return { content: 'An ordinary Dot reply.', finish_reason: 'stop' };
+  } };
+  const env = fixture(options);
+  const profile = (await request(env.adapter, '/tbo')).data.items[0];
+  const threadId = profile.root_thread_id;
+  const endpoint = '/tbo/' + profile.id;
+  const environment = endpoint + '/environment/';
+  assert.equal((await request(env.adapter, environment + 'status')).data.status, 'offline');
+  assert.equal((await request(env.adapter, environment + 'status?thread_id=foreign')).response.status, 404);
+  assert.deepEqual((await request(env.adapter, environment + 'wake', 'POST')).data, { root_thread_id: threadId });
+  assert.deepEqual((await request(env.adapter, environment + 'status')).data, {
+    environmentId, status: 'ready', capabilities: [{ type: 'remote_desktop', status: 'ready' }],
+  });
+  const connectionKey = JSON.stringify(['neutral-site-user', profile.id, threadId, null, 0]);
+  const viewer = env.adapter.cloudComputerContext(connectionKey);
+  assert.equal(viewer.threadId, threadId);
+  assert.equal(viewer.computer, cloudComputer);
+  viewer.assertCurrent();
+  await request(env.adapter, endpoint + '/messaging-room', 'POST');
+  const send = (request_id, text) => request(env.adapter, '/messaging/rooms/' + threadId + '/messages', 'POST', { request_id, content: { text } });
+  const ordinary = waitDotTurn(env.appServer, threadId);
+  await send('ordinary-dot-thread', 'Hello Dot');
+  assert.equal((await ordinary).status, 'completed');
+  const cloud = waitDotTurn(env.appServer, threadId);
+  await send('cloud-dot-thread', 'Use the cloud computer to calculate 29*31.');
+  const turn = await cloud;
+  assert.equal(turn.status, 'completed');
+  assert.deepEqual(modelRequests, [[], ['run_dot_cloud_python'], ['run_dot_cloud_python']]);
+  assert.equal(taskRequests.length, 1);
+  const mcp = turn.items.find(item => item.type === 'mcpToolCall');
+  assert.equal(mcp.server, 'dot_cloud_computer');
+  assert.deepEqual(mcp.result.structuredContent, recorded);
+  assert.match(turn.items.at(-1).text, /remote Python result is 899/);
+  assert.deepEqual((await request(env.adapter, environment + 'recreate', 'POST')).data, { root_thread_id: threadId });
+  assert.deepEqual(lifecycle.slice(-3), [['status', threadId], ['stop', environmentId], ['wake', threadId]]);
+  env.setIdentity({ accountId: 'different-site-account', userId: 'different-site-user' });
+  assert.throws(() => viewer.assertCurrent(), { code: 'LOCAL_DOT_ACCOUNT_CHANGED' });
+  assert.equal((await request(env.adapter, environment + 'wake', 'POST')).response.status, 404);
+  const reopened = fixture({ ...options, storage: env.storage });
+  const restoredThread = reopened.appServer.getThread(threadId);
+  const restoredTurn = restoredThread.turns.at(-1);
+  assert.equal(restoredTurn.adapterMetadata.dotCloudEnvironmentId, environmentId);
+  const observedRequests = lifecycle.length;
+  const resumed = await reopened.adapter.prepareCloudTaskExecutor({ thread: restoredThread, turn: restoredTurn });
+  const replay = await resumed.recoverCall(call, { threadId, turnId: turn.id });
+  assert.deepEqual(replay.structuredContent, recorded);
+  assert.equal(lifecycle.length, observedRequests, 'Recovery must keep the previously bound desktop');
+  assert.deepEqual(taskRequests[1], taskRequests[0]);
 });
 
 test('journal create, edit and delete persist with revisions and account isolation', async () => {

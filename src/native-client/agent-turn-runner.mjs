@@ -189,6 +189,10 @@ export async function runAgentTurn(server, running) {
       }
     }
     const preparedInputs = await server.restoreHistoryInputs(thread, turn, signal);
+    if (thread.adapterMetadata?.conversationOrigin === 'dot' && server.agentOptions.prepareToolExecutor) {
+      const boundExecutor = await server.agentOptions.prepareToolExecutor({ baseExecutor: executor, thread, turn, signal });
+      if (boundExecutor !== executor) { executor = boundExecutor; await save(); }
+    }
     const providerContext = () => deduplicateProviderImages([
       ...server.messages(thread, turn, { omitCurrent: true, preparedInputs }), ...modelTranscript(),
     ]);
@@ -231,7 +235,7 @@ export async function runAgentTurn(server, running) {
           continue;
         }
         if (!item) {
-          item = { type: 'mcpToolCall', id: record.itemId ?? server.uuid(), server: 'browser_workspace', tool: record.call.function.name, arguments: {}, status: 'inProgress', result: null, error: null, durationMs: null };
+          item = { type: 'mcpToolCall', id: record.itemId ?? server.uuid(), server: executor?.serverForTool?.(record.call.function.name) ?? 'browser_workspace', tool: record.call.function.name, arguments: {}, status: 'inProgress', result: null, error: null, durationMs: null };
           record.itemId = item.id; try { item.arguments = JSON.parse(record.call.function.arguments || '{}'); } catch { item.arguments = { raw: record.call.function.arguments }; }
           turn.items.push(item);
         }
@@ -279,7 +283,7 @@ export async function runAgentTurn(server, running) {
       if (++roundsThisRun > maxRounds) { cp.state = 'yielded'; meta.resumable = true; meta.resumePolicy = 'automatic'; await save(); server.finish(running, 'interrupted', { message: 'Execution checkpoint saved; continue this task to run the next batch.', codexErrorInfo: null, additionalDetails: null, misalignment: null }); return; }
       const settings = executionSettings();
       const searchRequest = webSearchRequest(meta.webSearchIntent, turn.items, executor?.tools || []);
-      const tools = searchRequest.tools, instruction = (executor?.tools?.length || 0) ? [{ role: 'system', content: 'Execute requested work using the available real tools instead of only announcing a plan. Continue correcting actual tool errors and give a final answer after the work is complete or an actual limitation has been identified. Python runs in a browser Pyodide environment, not a hosted shell; only workspace files persist after reload. Never claim unexecuted shell, network or file operations. Return real artifact download URLs supplied by tools.' }] : [];
+      const tools = searchRequest.tools, instruction = (executor?.tools?.length || 0) ? [{ role: 'system', content: executor.systemInstruction ?? 'Execute requested work using the available real tools instead of only announcing a plan. Continue correcting actual tool errors and give a final answer after the work is complete or an actual limitation has been identified. Python runs in a browser Pyodide environment, not a hosted shell; only workspace files persist after reload. Never claim unexecuted shell, network or file operations. Return real artifact download URLs supplied by tools.' }] : [];
       if (turn.reasoningEffort === 'ultra') instruction.push({ role: 'system', content: 'This is the site-provided Ultra execution mode. Use delegate_tasks for independent analysis when it benefits the task; it runs1–3 real parallel workers from the same selected family at API max effort. Inspect their actual results and reconcile differences. You own the real file/Python tools and final synthesis. This is application orchestration, not OpenAI private Ultra infrastructure. Never claim a worker or tool succeeded when its result reports failure.' });
       const messages = [...instruction, ...providerContext()];
       let frame = cp.inFlight, metric;

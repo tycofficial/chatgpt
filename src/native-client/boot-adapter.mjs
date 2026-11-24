@@ -27,6 +27,7 @@ import { createLocalHostClaimsReader } from './local-token-identity.mjs';
 import { wrapNativeFileUploadClass } from './local-native-upload.mjs';
 import { wrapNativeDownloadServices } from './local-native-download.mjs';
 import { createLocalDotVoiceTargetWrapper, createLocalDotVoiceWrappers } from './local-dot-browser-voice.mjs';
+import { wrapNativeDotComputerViewer } from './dot-cloud-computer.mjs';
 
 const boundary = installNetworkBoundary();
 globalThis.__originalClientProbe = boundary.diagnostics;
@@ -399,6 +400,11 @@ const { o: voicePhase, q: voiceFailure, r: voiceBlock, v: startVoice, ...voiceCo
   createLocalDotVoiceWrappers({ adapter: localDotAdapter, requireOriginal });
 overrideExports('Sd1s', {}, { deferred: true }, { ...voiceControls, n: voicePhase, p: voiceFailure, q: voiceBlock, u: startVoice });
 overrideExports('AXK1', {}, { deferred: true }, { b: createLocalDotVoiceTargetWrapper({ adapter: localDotAdapter, requireOriginal }) });
+overrideExports('Dzb3', {}, { deferred: true }, {
+  a: NativeViewer => wrapNativeDotComputerViewer(NativeViewer, {
+    React: requireOriginal('zd8w'), resolveContext: localDotAdapter.cloudComputerContext,
+  }),
+});
 const siteLoginRoute = () => createNativeSiteLoginRoute({
   useLocation: requireOriginal('rEML').Z, useEffect: requireOriginal('zd8w').useEffect,
 });
