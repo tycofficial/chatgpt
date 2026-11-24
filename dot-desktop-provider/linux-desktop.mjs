@@ -15,6 +15,13 @@ const failure = (status, code, message) => Object.assign(Error(message), { statu
 const sandboxError = () => failure(503, 'SANDBOX_UNAVAILABLE', 'The configured Linux task sandbox is unavailable.');
 const displayError = () => failure(503, 'DISPLAY_UNAVAILABLE', 'The isolated X11 desktop is unavailable.');
 const readyMarker = 'TYC_DOT_PYTHON_READY\n';
+const xvfbLaunch = [
+  'import ctypes, os, signal, sys',
+  'parent, binary, *args = sys.argv[1:]',
+  // PR_SET_PDEATHSIG makes Xvfb clean up even when the Node service crashes.
+  'if ctypes.CDLL(None).prctl(1, signal.SIGTERM, 0, 0, 0) != 0 or os.getppid() != int(parent): raise SystemExit(1)',
+  'os.execv(binary, [binary, *args])',
+].join('\n');
 const launchCode = [
   'import resource, sys',
   'for name, value in (("CPU", 3), ("AS", 268435456), ("FSIZE", 1048576), ("NOFILE", 32), ("NPROC", 12), ("CORE", 0)):',
@@ -31,7 +38,14 @@ function launch(binary, args, options = {}) {
   const closed = new Promise(resolve => child.once('close', (code, signal) => resolve({ code, signal })));
   child.on('error', () => {});
   child.stdin?.on('error', () => {});
-  return { child, closed, stop: async () => { child.kill('SIGKILL'); await closed; } };
+  async function stop() {
+    if (!child.pid || child.exitCode !== null || child.signalCode !== null) return closed;
+    child.kill('SIGTERM');
+    const deadline = setTimeout(() => child.kill('SIGKILL'), 750);
+    try { await closed; }
+    finally { clearTimeout(deadline); }
+  }
+  return { child, closed, stop };
 }
 
 async function collect(binary, args, { signal, input = '', timeout = 8000, outputLimit = 32_768 } = {}) {
@@ -205,7 +219,7 @@ export function createLinuxDesktopRuntime({ python = '/usr/bin/python3', xvfb = 
       await writeFile(authority, makeAuthority(number), { mode: 0o600, flag: 'wx' });
       const env = { DISPLAY: ':' + number, XAUTHORITY: authority, HOME: workspace };
       const session = { socket, authority, env };
-      x = launch(xvfb, [env.DISPLAY, '-screen', '0', screenWidth + 'x' + screenHeight + 'x24',
+      x = launch(python, ['-I', '-B', '-S', '-c', xvfbLaunch, String(process.pid), xvfb, env.DISPLAY, '-screen', '0', screenWidth + 'x' + screenHeight + 'x24',
         '-nolisten', 'tcp', '-auth', authority, '-noreset', '-dpi', '96'], { env: { ...cleanEnv, ...env }, stdio: ['ignore', 'ignore', 'ignore'] });
       const started = Date.now();
       while (!(await lstat(socket).then(entry => entry.isSocket(), () => false))) {

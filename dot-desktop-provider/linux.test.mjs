@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { lstat, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -79,6 +79,11 @@ test('real Linux HTTP provider draws pixels with confined Python and preserves r
   const slow = await task('import time; time.sleep(30)');
   assert.equal(slow.exitCode, 124);
   assert.match(slow.stderr, /wall-clock limit/);
+  const location = (await task('import os; print(os.environ["DISPLAY"])')).stdout.trim();
+  assert.match(location, /^:\d+$/);
+  const socket = '/tmp/.X11-unix/X' + location.slice(1);
+  assert.ok((await lstat(socket)).isSocket());
   assert.equal((await request(path, 'DELETE')).status, 204);
   assert.equal((await request(path + '/frame')).status, 410);
+  await assert.rejects(lstat(socket), { code: 'ENOENT' });
 });
