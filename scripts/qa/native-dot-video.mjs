@@ -260,7 +260,7 @@ try {
   await connecting.waitFor({state:'hidden',timeout:12000});
   const options = await page.getByRole('button').filter({visible:true}).evaluateAll(nodes=>nodes.map(b=>b.getAttribute('aria-label')||b.textContent.trim()).slice(-24));
   log('native-video-controls',{options});
-  const takeover = button(/接管|接手|Take over/i);
+  const takeover = button(/获取控制权|取得控制權|接管|接手|Take over/i);
   await takeover.click({timeout:12000});
   await button(/归还|释放|交还|Return control/i).waitFor({state:'visible',timeout:12000});
   const target=await video.evaluate(media=>{
