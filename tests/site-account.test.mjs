@@ -246,6 +246,51 @@ test('gateway failure still allows the verified local administrator and a tab-sc
   assert.throws(() => restored.api.setAdminModelConnection({ apiBase: 'https://provider.invalid/', apiKey: 'test-only' }), /管理员/);
 });
 
+test('account gateways preserve a verified administrator and local model selection across revalidation', async t => {
+  const responses = [
+    ['transport reset', () => { throw new TypeError('Fixture network reset'); }],
+    ['manual redirect', () => new Response(null, { status: 302 })],
+    ['filtered redirect', () => Object.defineProperty(Response.error(), 'type', { value: 'opaqueredirect' })],
+    ['HTML success page', () => new Response('<h1>Gateway</h1>', { headers: { 'Content-Type': 'text/html' } })],
+    ['untyped HTML unauthorized', () => new Response('<h1>Gateway</h1>', { status: 401 })],
+    ['typed origin denial', () => ({ status: 403, body: { error: { code: 'ORIGIN_NOT_ALLOWED' } } })],
+    ['other gateway denial', () => ({ status: 403, body: { error: { code: 'FORBIDDEN' } } })],
+    ['request timeout', () => ({ status: 408, body: { error: { code: 'REQUEST_TIMEOUT' } } })],
+    ['service throttling', () => ({ status: 429, body: { error: { code: 'RATE_LIMITED' } } })],
+    ['service unavailable', () => ({ status: 503, body: { error: { code: 'SERVICE_UNAVAILABLE' } } })],
+  ];
+  for (const [name, response] of responses) {
+    await t.test(name, async () => {
+      const f = fixture(undefined, { siteAccountService: true });
+      f.setHandler(() => ({ user: user(), token: fixtureToken, expiresAt: now + 60000 }));
+      await f.api.loginSiteAccount('TYC', 'neutral-site-account-fixture');
+      const connection = { apiBase: 'https://provider.invalid/v1', apiKey: 'neutral-local-key' };
+      f.api.setAdminModelConnection(connection);
+      const remembered = f.values.get(key);
+
+      f.setHandler(response);
+      const cached = await f.api.refreshSiteAccount();
+      assert.equal(cached?.id, 'site-admin');
+      assert.equal(cached.authenticationMode, 'site-offline-cache');
+      assert.equal(cached.cloudSessionVerified, false);
+      assert.equal(f.api.getSiteSessionToken(), null);
+      assert.equal(f.values.get(key), remembered);
+      assert.equal(f.receipts.has(fixtureToken), true);
+      assert.equal(f.api.getAdminModelConnection()?.apiBase, connection.apiBase);
+
+      f.setHandler(() => ({ user: user() }));
+      assert.equal((await f.api.refreshSiteAccount())?.cloudSessionVerified, true);
+      assert.equal(f.api.getSiteSessionToken(), fixtureToken);
+      assert.equal(f.api.getAdminModelConnection()?.apiKey, connection.apiKey);
+
+      f.setHandler(() => ({ status: 401, body: { error: { code: 'ADMIN_AUTH_REQUIRED' } } }));
+      assert.equal(await f.api.refreshSiteAccount(), null);
+      assert.equal(f.values.has(key), false);
+      assert.equal(f.api.getAdminModelConnection(), null);
+    });
+  }
+});
+
 test('an authoritative invalid password does not silently replace online verification', async () => {
   const verifierPassword = 'neutral-local-only-fixture';
   const f = fixture(undefined, { verifierPassword, siteAccountService: true });

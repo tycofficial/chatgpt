@@ -256,6 +256,19 @@ class AccountConnectionError extends Error {
   constructor(gateway = false) { super(networkUnavailable); this.gateway = gateway; }
 }
 
+const sessionRejectionCodes = new Set([
+  'ADMIN_AUTH_REQUIRED', 'SITE_AUTH_REQUIRED', 'UNAUTHORIZED',
+  'INVALID_SESSION', 'SESSION_EXPIRED', 'SESSION_REVOKED',
+]);
+
+function isAccountGatewayFailure(path, status, code) {
+  if (status >= 500 || (status === 403 && (!code || code === 'ORIGIN_NOT_ALLOWED'))) return true;
+  if (path !== '/auth/session' && path !== '/auth/site-trial') return false;
+  // Distinguish a site session rejection from a gateway response.
+  if (status === 401 || status === 403) return !sessionRejectionCodes.has(code);
+  return status === 408 || status === 429;
+}
+
 async function api(path, { body, token, keepalive = false, timeoutMs = 10000 } = {}) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -278,14 +291,18 @@ async function api(path, { body, token, keepalive = false, timeoutMs = 10000 } =
     } catch {
       throw new AccountConnectionError();
     }
-    if (response.type === 'opaqueredirect' || (response.status >= 300 && response.status < 400)) throw Error(accountInvalid);
-    const result = await response.json().catch(() => null);
+    const { status } = response;
+    if (status === 0 || (status >= 300 && status < 400)) throw new AccountConnectionError(true);
+    let result;
+    try { result = await response.json(); }
+    catch {
+      if (response.ok) throw new AccountConnectionError(true);
+      result = null;
+    }
     if (!response.ok) {
-      if (response.status >= 500 || (response.status === 403 && !result?.error?.code)) throw new AccountConnectionError(true);
-      throw Object.assign(Error(result?.error?.message || '账户服务暂时不可用。'), {
-        status: response.status,
-        code: result?.error?.code,
-      });
+      const code = result?.error?.code;
+      if (isAccountGatewayFailure(path, status, code)) throw new AccountConnectionError(true);
+      throw Object.assign(Error(result?.error?.message || '账户服务暂时不可用。'), { status, code });
     }
     if (result === null) throw Error(accountInvalid);
     return result;
