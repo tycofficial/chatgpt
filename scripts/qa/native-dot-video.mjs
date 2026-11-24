@@ -207,14 +207,23 @@ try {
   assert.equal((await created).status(),200);
   await page.waitForURL(home,{timeout:45000});
   await page.goto(home+'site-plans/',{waitUntil:'domcontentloaded'});
-  const plans = button(/查看所有套餐|所有套餐|See all plans/i);
-  if (await plans.isVisible()) await plans.click();
+  const trialButtons = page.getByRole('button',{name:'免费试用',exact:true}).filter({visible:true});
+  await trialButtons.first().waitFor({timeout:35000});
+  const plans = button(/查看所有套餐|See all plans/i);
+  if (await plans.isVisible()) {
+    await plans.click();
+    await trialButtons.nth(1).waitFor({timeout:15000});
+  }
   const trial = responseFor('/auth/site-trial');
-  await page.getByRole('button',{name:'免费试用',exact:true}).filter({visible:true}).last().click({timeout:25000});
+  await trialButtons.last().click({timeout:25000});
   const trialReceipt = await trial;
   assert.equal(trialReceipt.status(),200);
-  assert.equal((await trialReceipt.json()).user.planType,'pro');
-  await page.goto(home,{waitUntil:'domcontentloaded'});
+  const account = await trialReceipt.json();
+  assert.equal(account.account?.planType ?? account.user?.planType,'pro');
+  log('native-dot-test-account',{planType:'pro'});
+  await button('关闭定价页面').click();
+  await page.reload({waitUntil:'domcontentloaded'});
+  await page.keyboard.press('Escape');
   await button(/^Dot$/).click({timeout:35000});
   await page.waitForURL(url=>/^\/chatgpt\/dots\/local-dot-[a-f0-9-]+\/?$/.test(url.pathname),{timeout:26000});
   await page.locator('[data-thread-summary-panel-toggle][data-orbit-profile-trigger]').filter({visible:true}).first().click({timeout:18000});
