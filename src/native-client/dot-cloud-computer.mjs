@@ -202,7 +202,7 @@ export function describeNativeDotComputer(workerStatus) {
     capabilities: ['ready', 'starting', 'failed'].includes(status) ? [{ type: 'remote_desktop', status }] : [] };
 }
 
-export function decodeNativeDotComputerInput(data, width, height) {
+export function decodeNativeDotComputerInput(data, width, height, readVideoSize = () => ({ width, height })) {
   if (typeof data === 'string') {
     if (data.length > 24_000) return null;
     let value;
@@ -214,8 +214,15 @@ export function decodeNativeDotComputerInput(data, width, height) {
   const bytes = new DataView(data);
   const kind = bytes.getUint8(0);
   if (bytes.byteLength === 7 && bytes.getUint16(1, true) === 4) {
-    if (kind === 1) return { type: 'move', x: Math.min(width - 1, bytes.getUint16(3, true)),
-      y: Math.min(height - 1, bytes.getUint16(5, true)) };
+    if (kind === 1) {
+      const size = readVideoSize();
+      if (!Number.isInteger(size?.width) || size.width < 1 || !Number.isInteger(size?.height) || size.height < 1) return null;
+      return {
+        type: 'move',
+        x: Math.min(width - 1, Math.round(bytes.getUint16(3, true) * width / size.width)),
+        y: Math.min(height - 1, Math.round(bytes.getUint16(5, true) * height / size.height)),
+      };
+    }
     if (kind === 2) return { type: 'wheel', dx: Math.max(-10, Math.min(10, bytes.getInt16(3, true))),
       dy: Math.max(-10, Math.min(10, bytes.getInt16(5, true))) };
   }
@@ -288,7 +295,15 @@ export async function connectSiteDotComputer(offer, { computer, threadId, assert
   const queue = [];
   const held = new Map();
   let pointer = { x: Math.floor(width / 2), y: Math.floor(height / 2) };
-  let timer, channel, ownsControl = false, draining = false, failedFrames = 0;
+  let timer, channel, viewer, ownsControl = false, draining = false, failedFrames = 0;
+
+  // Native pointer packets use the decoded size of the viewer for this stream.
+  function readVideoSize() {
+    if (!viewer?.isConnected || viewer.srcObject?.id !== stream.id) {
+      viewer = Array.from(document.getElementsByTagName('video')).find(video => video.srcObject?.id === stream.id);
+    }
+    return viewer ? { width: viewer.videoWidth, height: viewer.videoHeight } : null;
+  }
 
   const pointerInput = input => ['move', 'button', 'wheel'].includes(input.type) ? { ...input, ...pointer } : input;
 
@@ -368,7 +383,7 @@ export async function connectSiteDotComputer(offer, { computer, threadId, assert
     channel.addEventListener('close', close);
     channel.addEventListener('message', ({ data }) => {
       if (controller.signal.aborted) return;
-      let action = decodeNativeDotComputerInput(data, width, height);
+      let action = decodeNativeDotComputerInput(data, width, height, readVideoSize);
       if (!action && typeof data === 'string' && data.length <= 512) {
         let message;
         try { message = JSON.parse(data); } catch { return; }
