@@ -1,4 +1,4 @@
-name: Profile the native cold composer in Edge
+name: Compare duplicate stylesheet removal on one Edge runner
 on:
   push:
     branches: [qa/native-cold-composer]
@@ -18,6 +18,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
+          fetch-depth: 6
       - uses: actions/setup-node@v7
         with:
           node-version: 24
@@ -35,11 +36,21 @@ jobs:
           mkdir -p "$task_tmp/chatgpt-upstream-capture"
           tar -C "$task_tmp/chatgpt-upstream-capture" -xzf "$task_tmp/chatgpt-candidate-archive/chatgpt-public-graph.tar.gz"
           npm ci --no-audit --no-fund
-      - name: Build the exact original-source baseline
+      - name: Build baseline and candidate against the same capture
         run: |
           node scripts/adopt-native-upstream.mjs "$RUNNER_TEMP/chatgpt-upstream-capture/$UPSTREAM"
+          git checkout 52ebd6308d2d05731fb3efe04835ae1a7ef20411 -- src/native-client/{startup-compatibility,boot-adapter}.mjs
           node scripts/build-native-client.mjs --activate
+          qa_base="$(cygpath -u "$RUNNER_TEMP")/native-baseline"
+          mkdir -p "$qa_base/native-client"
+          cp native-client/*.{mjs,json} "$qa_base/native-client/"
+          cp native-client-shell.html native-client-worker.js "$qa_base/"
+          git checkout "$GITHUB_SHA" -- src/native-client/{startup-compatibility,boot-adapter}.mjs
+          node scripts/build-native-client.mjs --activate
+          npm run native:check
+          node --test tests/native-router-assets.test.mjs
       - name: Measure first actual composer input in Edge
         run: |
           npm install --no-save --package-lock=false --no-audit --no-fund playwright-core@1.58.2
+          export QA_BASELINE_ROOT="$RUNNER_TEMP/native-baseline"
           node scripts/qa/native-cold-composer.mjs
