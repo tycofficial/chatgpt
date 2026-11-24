@@ -140,10 +140,8 @@ try {
       if (process.env.QA_NATIVE_DOT_JOURNAL_ACTIVITY === '1') {
         const button = name => page.getByRole('button', { name }).filter({ visible: true }).first();
         const noteText = entry => page.getByText(entry, { exact: true }).filter({ visible: true }).first();
-        const activity = button(/^近期活动$/);
-        const avatar = page.locator('[data-orbit-profile-trigger]:not([data-thread-summary-panel-toggle])').filter({ visible: true }).first();
+        const activity = button(/^(?:显示活动|Show activity)$/i);
         const profile = page.locator('[data-thread-summary-panel-toggle][data-orbit-profile-trigger]').filter({ visible: true }).first();
-        const activityName = /活动|动态|activity/i;
         async function inspectControls(stage) {
           const controls = await page.evaluate(() => [...document.querySelectorAll('button, [role="menuitem"]')]
             .filter(node => node.getClientRects().length && getComputedStyle(node).visibility === 'visible')
@@ -188,16 +186,14 @@ try {
             };
           });
           await inspectControls('on-entry');
-          if (await profile.isVisible() && await profile.isEnabled()) {
-            if (await profile.getAttribute('aria-pressed') !== 'true') await profile.click();
-            await activity.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
-            await inspectControls('summary-open');
-            if (await activity.isVisible() && await activity.getAttribute('aria-expanded') !== 'true') await activity.click();
-            if (await profile.getAttribute('aria-pressed') === 'true' &&
-              activityName.test(await avatar.getAttribute('aria-label') ?? '')) await profile.click();
-          }
-          if (await avatar.isVisible() && activityName.test(await avatar.getAttribute('aria-label') ?? '') &&
-            await avatar.getAttribute('aria-expanded') !== 'true') await avatar.click();
+          await profile.waitFor({ state: 'visible', timeout: 12000 });
+          if (await profile.getAttribute('aria-pressed') !== 'true') await profile.click();
+          await activity.waitFor({ state: 'visible', timeout: 10000 });
+          await inspectControls('summary-open');
+          await noteText('呼叫').waitFor({ state: 'visible', timeout: 12000 });
+          await button(/更改你的 dot 外观/i).waitFor({ state: 'visible', timeout: 8000 });
+          await button(/你的 dot 的电脑/i).waitFor({ state: 'visible', timeout: 8000 });
+          await activity.click();
           await inspectControls('activity-open');
         }
         async function verifyListed(entry) {
@@ -231,7 +227,8 @@ try {
         assert.equal(modelPosts, 2, 'Journal changes triggered unexpected model inference');
         console.log('Native Dot journal activity QA ' + JSON.stringify({
           release: active.release, sameRoom: page.url() === room, createdNoteListed: true, editListedAfterReload: true,
-          deletedAfterReload: true, dotInferencePosts: modelPosts - 2,
+          deletedAfterReload: true, profileVoiceVisible: true, profileAppearanceVisible: true,
+          profileComputerVisible: true, dotInferencePosts: modelPosts - 2,
         }));
       }
       if (process.env.QA_NATIVE_CODEX_ENTRY === '1') {
