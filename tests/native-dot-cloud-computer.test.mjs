@@ -81,6 +81,16 @@ test('keyboard, wheel, pointer and clipboard DTOs decode the native peer represe
   }
   const decode = data => decodeNativeDotComputerInput(data, 640, 480);
   assert.deepEqual(decode(frame(1, [900, 380])), { type: 'move', x: 639, y: 380 });
+  let videoSize = { width: 256, height: 180 };
+  const decodeMove = (x, y) => decodeNativeDotComputerInput(frame(1, [x, y]), 1024, 720, () => videoSize);
+  assert.deepEqual(decodeMove(133, 108), { type: 'move', x: 532, y: 432 });
+  videoSize = { width: 512, height: 360 };
+  assert.deepEqual(decodeMove(266, 216), { type: 'move', x: 532, y: 432 });
+  assert.deepEqual(decodeMove(512, 360), { type: 'move', x: 1023, y: 719 });
+  videoSize = { width: 0, height: 0 };
+  assert.equal(decodeMove(133, 108), null);
+  videoSize = null;
+  assert.equal(decodeMove(133, 108), null);
   assert.deepEqual(decode(frame(2, [-12, 8])), { type: 'wheel', dx: -10, dy: 8 });
   assert.deepEqual(decode(frame(3, 1n)), { type: 'button', button: 'left', down: true });
   assert.deepEqual(decode(frame(4, 2n)), { type: 'button', button: 'middle', down: false });
