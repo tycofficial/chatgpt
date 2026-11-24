@@ -1,0 +1,52 @@
+name: Verify interleaved stream recovery
+on:
+  push:
+    branches: [qa/interleaved-stream-recovery]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  inspect:
+    runs-on: windows-2025
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+    env:
+      UPSTREAM: 0237c4dd9e54c7e3a619581b909d792de582fee9
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: chatgpt-public-interactions-single-graph
+          path: ${{ runner.temp }}/chatgpt-candidate-archive
+          github-token: ${{ github.token }}
+          run-id: 45162484586
+      - name: Unpack the already verified capture on this runner
+        run: |
+          set -euo pipefail
+          task_tmp="$(cygpath -u "$RUNNER_TEMP")"
+          mkdir -p "$task_tmp/chatgpt-upstream-capture"
+          tar -C "$task_tmp/chatgpt-upstream-capture" -xzf "$task_tmp/chatgpt-candidate-archive/chatgpt-public-graph.tar.gz"
+          npm ci --no-audit --no-fund
+      - name: Verify journal replay and durable host transport
+        run: node --test tests/native-site-inference-transport.test.mjs tests/native-preferred-host.test.mjs tests/native-preferred-chain.test.mjs
+      - name: Build the isolated candidate from the capture
+        run: |
+          set -euo pipefail
+          node scripts/adopt-native-upstream.mjs "$RUNNER_TEMP/chatgpt-upstream-capture/$UPSTREAM"
+          node scripts/build-native-client.mjs --activate
+          npm run native:check
+          node -e 'console.log("Interleaved stream recovery candidate release " + JSON.stringify(require("./native-client/active.json")))'
+      - id: contracts
+        name: Run the entire candidate regression suite
+        run: |
+          set -euo pipefail
+          export GENERATED_PUBLICATION_TEST_TMPDIR="$(node -p "require('node:fs').realpathSync(process.env.RUNNER_TEMP)")"
+          node --test --test-concurrency=2 tests/*.test.mjs
