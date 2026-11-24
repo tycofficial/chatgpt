@@ -6,10 +6,10 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { openCodexAppServer } from '../codex-runtime/app-server.mjs';
 import { createLocalUi } from '../../local-bridge/server.mjs';
 import { createCodexBrowserSession } from '../../local-bridge/codex-browser-session.mjs';
-import { connectLocalCodex } from '../../local-bridge/codex-browser-client.mjs';
 
 const root = await realpath(await mkdtemp(join(tmpdir(), 'tyc-test-codex-')));
 const workspace = join(root, 'workspace');
@@ -57,7 +57,7 @@ const fixture = createServer(async (req, res) => {
   }
 });
 
-async function hostBrowserBridge() {
+async function hostBrowserBridge(context) {
   const env = { PATH: process.env.PATH, HOME: state, CODEX_HOME: state };
   const appServer = await openCodexAppServer({ workspace, env, experimentalApi: true });
   const request = appServer.request;
@@ -76,29 +76,56 @@ async function hostBrowserBridge() {
     bridge: { status: async () => ({ paired: false }), stop: async () => {} },
     port: 0,
   });
+  let page = await context.newPage();
   try {
     const { origin } = await local.start();
     const unauthenticated = await fetch(origin + '/local/codex/v1/status');
     assert.equal(unauthenticated.status, 403);
-    const launch = await fetch(record.get('ui.json').launchUrl, { redirect: 'manual' });
-    assert.equal(launch.status, 303);
-    const cookie = launch.headers.get('set-cookie')?.split(';')[0];
-    assert.ok(cookie);
-    async function browserFetch(path, options = {}) {
-      const headers = new Headers(options.headers);
-      headers.set('Cookie', cookie);
-      if (options.method === 'POST') headers.set('Origin', origin);
-      return fetch(origin + path, { ...options, headers });
+    const launch = await page.goto(record.get('ui.json').launchUrl);
+    assert.equal(launch.status(), 200);
+    assert.equal(page.url(), origin + '/');
+    assert.equal((await page.evaluate(async () => (await fetch('/local/codex/v1/rpc', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+    })).status)), 403);
+    async function connect({ dropReply = false, reload = false, reopen = false } = {}) {
+      if (reload) assert.equal((await page.reload()).status(), 200);
+      if (reopen) {
+        await page.close();
+        page = await context.newPage();
+        assert.equal((await page.goto(origin + '/')).status(), 200);
+      }
+      const status = await page.evaluate(async ({ dropReply }) => {
+        const { csrf } = await fetch('/local/status').then(response => response.json());
+        const { connectLocalCodex } = await import('/local/codex/v1/client.mjs');
+        const fetchImpl = async (path, options) => {
+          const response = await fetch(path, options);
+          if (dropReply && path.endsWith('/rpc') && response.ok) {
+            await response.text();
+            throw new TypeError('Reader lost its HTTP response');
+          }
+          return response;
+        };
+        window.qaCodex = await connectLocalCodex({ csrf, fetchImpl });
+        return window.qaCodex.status;
+      }, { dropReply });
+      async function call(name, args) {
+        const reply = await page.evaluate(async ({ name, args }) => {
+          try { return { result: await window.qaCodex[name](...args) }; }
+          catch (cause) { return { error: { message: cause.message, code: cause.code, status: cause.status } }; }
+        }, { name, args });
+        if (reply.error) throw Object.assign(Error(reply.error.message), reply.error);
+        return reply.result;
+      }
+      return {
+        status, request: (...args) => call('request', args),
+        readReceipt: (...args) => call('readReceipt', args),
+        readEvents: (...args) => call('readEvents', args),
+      };
     }
-    const setup = await browserFetch('/local/status').then(response => response.json());
-    const module = await browserFetch('/local/codex/v1/client.mjs');
-    assert.match(module.headers.get('content-type'), /javascript/);
-    await module.text();
-    return {
-      connect: fetchImpl => connectLocalCodex({ csrf: setup.csrf, fetchImpl: fetchImpl ?? browserFetch }),
-      browserFetch, close: local.close, server: appServer.server,
-    };
+    return { connect, close: async () => { await page.close(); await local.close(); }, server: appServer.server };
+
   } catch (error) {
+    await page.close();
     await local.close();
     throw error;
   }
@@ -124,7 +151,7 @@ async function collectTurn(client, threadId, turnId, after = 0) {
   }));
 }
 
-let host;
+let host, browser;
 try {
   fixture.listen(0, '127.0.0.1');
   await once(fixture, 'listening');
@@ -139,40 +166,30 @@ try {
     '[shell_environment_policy]', 'inherit = "core"', 'include_only = ["PATH"]', '',
   ].join('\n'), { mode: 0o600 });
 
-  host = await hostBrowserBridge();
-  const browser = await host.connect();
-  const oldInstanceId = browser.status.instanceId;
-  const models = await browser.request('model/list');
+  const { chromium } = await import(pathToFileURL(process.env.QA_PLAYWRIGHT_MODULE).href);
+  browser = await chromium.launch({ headless: true });
+  const context = await browser.newContext();
+  host = await hostBrowserBridge(context);
+  const nativeClient = await host.connect();
+  const oldInstanceId = nativeClient.status.instanceId;
+  const models = await nativeClient.request('model/list');
   assert.ok(Array.isArray(models.data));
   const mutation = () => ({ requestId: randomUUID() });
-  const { thread, activePermissionProfile } = await browser.request('thread/start', { model: 'fixture-codex' }, mutation());
+  const { thread, activePermissionProfile } = await nativeClient.request('thread/start', { model: 'fixture-codex' }, mutation());
   assert.equal(activePermissionProfile.id, 'site-browser-codex');
   const input = text => [{ type: 'text', text }];
   const prompt = 'Use Python to calculate 17 times 13.';
   const startParams = { threadId: thread.id, input: input(prompt) };
-  await assert.rejects(browser.request('command/exec', {}, mutation()), { status: 400, code: 'CODEX_INVALID_REQUEST' });
-  await assert.rejects(browser.request('turn/start', { ...startParams, sandbox: 'danger-full-access' }, mutation()), { status: 400, code: 'CODEX_INVALID_REQUEST' });
-  await assert.rejects(browser.request('turn/start', { ...startParams, input: [{ type: 'localImage', path: 'example' }] }, mutation()), { status: 400, code: 'CODEX_INVALID_REQUEST' });
-  const noCsrf = await host.browserFetch('/local/codex/v1/rpc', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}),
-  });
-  assert.equal(noCsrf.status, 403);
+  await assert.rejects(nativeClient.request('command/exec', {}, mutation()), { status: 400, code: 'CODEX_INVALID_REQUEST' });
+  await assert.rejects(nativeClient.request('turn/start', { ...startParams, sandbox: 'danger-full-access' }, mutation()), { status: 400, code: 'CODEX_INVALID_REQUEST' });
+  await assert.rejects(nativeClient.request('turn/start', { ...startParams, input: [{ type: 'localImage', path: 'example' }] }, mutation()), { status: 400, code: 'CODEX_INVALID_REQUEST' });
   assert.equal(requested.length, 0);
-
-  const flaky = await host.connect(async (path, options) => {
-    const response = await host.browserFetch(path, options);
-    if (path.endsWith('/rpc')) {
-      assert.equal(response.status, 200);
-      await response.text();
-      throw new TypeError('Reader lost its HTTP response');
-    }
-    return response;
-  });
+  const flaky = await host.connect({ dropReply: true });
   const firstId = randomUUID();
   await assert.rejects(flaky.request('turn/start', startParams, { requestId: firstId }), /Reader lost its HTTP response/);
 
   // A fresh browser reader sees the original admission without another dispatch.
-  const reopened = await host.connect();
+  const reopened = await host.connect({ reload: true });
   const receipt = await reopened.readReceipt(firstId, { instanceId: oldInstanceId });
   assert.equal(receipt.state, 'acknowledged');
   assert.ok(Number.isSafeInteger(receipt.admittedAt));
@@ -180,8 +197,12 @@ try {
   assert.equal((await reopened.request('turn/start', startParams, { requestId: firstId })).turn.id, firstTurnId);
   await assert.rejects(reopened.request('turn/start', { ...startParams, input: input('A changed request.') }, { requestId: firstId }),
     { status: 409, code: 'CODEX_REQUEST_ID_CONFLICT' });
+  const freshTab = await host.connect({ reopen: true });
+  assert.equal((await freshTab.readReceipt(firstId)).result.turn.id, firstTurnId);
+  const started = await freshTab.readEvents(thread.id);
+  assert.ok(started.events.some(event => event.message.method === 'turn/started' && event.message.params.turn.id === firstTurnId));
   releaseFirst();
-  const { events } = await collectTurn(reopened, thread.id, firstTurnId);
+  const { events } = await collectTurn(freshTab, thread.id, firstTurnId);
   const done = events.find(event => event.method === 'item/completed' && event.params.item.type === 'commandExecution')?.params.item;
   if (includeTool) {
     assert.ok(done, 'No command result: ' + JSON.stringify({
@@ -199,7 +220,7 @@ try {
   assert.equal(requested.length, firstStageRequestCount);
 
   await host.close();
-  host = await hostBrowserBridge();
+  host = await hostBrowserBridge(context);
   const resumed = await host.connect();
   await assert.rejects(resumed.readReceipt(firstId, { instanceId: oldInstanceId }), { status: 409, code: 'CODEX_CONNECTION_CHANGED' });
   const reopenedThread = await resumed.request('thread/resume', { threadId: thread.id });
@@ -216,7 +237,7 @@ try {
   assert.equal(requested[firstStageRequestCount].reasoning?.effort, 'medium');
 
   console.log('Real Codex browser relay QA ' + JSON.stringify({
-    codex: host.server.userAgent, upstream: 'loopback Responses fixture', openaiAccountUsed: false,
+    codex: host.server.userAgent, browser: 'Chromium ' + browser.version(), refreshedPage: true, reopenedTab: true, upstream: 'loopback Responses fixture', openaiAccountUsed: false,
     actualCommand: done?.type ?? null, commandExitCode: done?.exitCode ?? null, output: done ? '221' : null,
     unauthorizedRejected: true, sandboxOverrideRejected: true, lostReceiptRecovered: true, duplicateDispatch: false,
     hostRestartDetected: true, sameThreadContinued: true, manualModelAndEffortForwarded: true, upstreamRequests: requested.length,
@@ -224,6 +245,7 @@ try {
 } finally {
   releaseFirst();
   await host?.close();
+  await browser?.close();
   if (fixture.listening) {
     const closed = once(fixture, 'close');
     fixture.close();
