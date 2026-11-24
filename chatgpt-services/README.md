@@ -22,3 +22,7 @@ POST /bridge/jobs/:id/heartbeat renews a current process claim and reports cance
 Events retain the original seq0 headers/data/end shape. Gaps and conflicting duplicates are rejected; terminal publication requires an end event. Structured failures remain available as errorDetails while error preserves a human-readable message. The browser never receives official OAuth tokens. Protocol/host capacity is a local execution capability, not proof of an official subscription, plan name or remaining quota.
 
 Meaningful Node/SQLite tests include concurrent claims, lease recovery, cancellation before admission, token revocation, sequence idempotency, structured errors and compatibility with the earlier relay client. The local-bridge tests also exercise real per-job AbortSignals and three simultaneously pending fixture transports against this SQL-backed worker, without real OAuth or subscription inference.
+
+Cloud computer execution is available to Pro site sessions when the Worker has a trusted Linux desktop provider. Apply migration `0006_dot_computer` and set `DOT_COMPUTER_PROVIDER_ORIGIN` plus the runtime secret `DOT_COMPUTER_PROVIDER_TOKEN`. The browser uses only its site session. Provider credentials stay in the Worker.
+
+A desktop belongs to one account and one Dot conversation. The Worker admits one live desktop per account and keeps each Python task's outcome by request ID so a reconnect can read it without executing it again. The provider must run each desktop in an isolated Linux environment and return 1024×720 PNG frames.

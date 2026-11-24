@@ -1,4 +1,5 @@
 import {handleChatSync} from './chat-sync.mjs';
+import {handleDotComputer} from './dot-computer.mjs';
 import {proxyDocodeResponses} from './site-inference.mjs';
 import {readJournaledInference, readSiteInferenceUsage, startJournaledInference} from './inference-recovery.mjs';
 /** Username/password auth is local to this site; no original account token is used. */
@@ -175,6 +176,7 @@ async function route(request,env,ctx){const path=new URL(request.url).pathname;
  if(path.startsWith('/bridge/')&&!['/bridge/pair','/bridge/status','/bridge/revoke'].includes(path))return bridgeRoute(request,env,path);
  if(path.startsWith('/sync/'))return handleChatSync(request,env,await session(request,env));
  const actor=await session(request,env);
+ if(path.startsWith('/dot-computer/v1/'))return handleDotComputer(request,env,ctx,actor,actor&&account(actor).planType==='pro');
  if(path==='/auth/site-trial')return claimSiteTrial(request,env,actor);
  if(path==='/inference/v1/responses')return siteInference(request,env,ctx,actor);
  const recoveryPath=/^\/inference\/v1\/responses\/([^/]+)$/.exec(path);
