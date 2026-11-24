@@ -1197,7 +1197,10 @@ export function createLocalDotAdapter({
       }
       if (parts[1] === 'tbo' && parts.length >= 3) {
         if (parts[3] === 'activity' && parts[4] === 'topics' && (parts.length < 7 || parts.length === 7 && parts[6] === 'items')) {
-          return await roomLock(session, () => journalActivity(session, parts[2], parts[5], parts[6] === 'items', method, url));
+          return await roomLock(session, () => {
+            request.signal?.throwIfAborted();
+            return journalActivity(session, parts[2], parts[5], parts[6] === 'items', method, url);
+          });
         }
         if (parts[3] === 'automations' && parts.length <= 6) {
           const supplied = method === 'GET' ? null : await body(request);
@@ -1288,6 +1291,7 @@ export function createLocalDotAdapter({
       }
       throw error('This Dot operation needs a service that is not provided locally', 501, 'LOCAL_DOT_SERVICE_UNAVAILABLE');
     } catch (cause) {
+      if (request.signal?.aborted && cause === request.signal.reason) throw cause;
       diagnostic('request-error', { path: requestPath, code: cause?.code ?? 'LOCAL_DOT_ERROR', status: cause?.status ?? 500 });
       return fail(cause);
     }

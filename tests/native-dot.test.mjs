@@ -741,6 +741,17 @@ test('the original Dot activity route lists, opens and deletes saved journal not
   assert.equal((await request(afterDelete.adapter, entry + '/items')).response.status, 404);
 });
 
+test('a superseded native Dot journal request is cancelled without a server error', async () => {
+  const env = fixture();
+  const profile = (await request(env.adapter, '/tbo')).data.items[0];
+  const topics = '/tbo/' + profile.id + '/activity/topics';
+  const cancellation = new AbortController();
+  const query = new Request('https://site.invalid/backend-api' + topics, { signal: cancellation.signal });
+  cancellation.abort();
+  await assert.rejects(env.adapter.handle(query, topics), error => error === query.signal.reason && error.name === 'AbortError');
+  assert.deepEqual((await request(env.adapter, topics)).data, { data: [], next_cursor: null });
+});
+
 test('queued Dot messages recover after reload and admit a repeated request ID once', async () => {
   const first = Promise.withResolvers();
   const env = fixture({ streamCompletion: async () => first.promise });

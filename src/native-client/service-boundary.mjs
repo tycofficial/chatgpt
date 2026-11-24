@@ -619,6 +619,7 @@ export function installNetworkBoundary() {
       const classic = await localClassicChatAdapter.handle(request, adapterPath);
       if (classic) return classic;
     } catch (error) {
+      if (request.signal.aborted && error === request.signal.reason) throw error;
       return response({ error: { message: error.message, code: 'LOCAL_ADAPTER_ERROR' } }, error.code === -32601 ? 501 : error.code === -32001 ? 404 : 400);
     }
     return response({ error: { code: 'LOCAL_ADAPTER_UNIMPLEMENTED', message: `Local adapter is not implemented for ${request.method} ${url.pathname}` } }, 501);
