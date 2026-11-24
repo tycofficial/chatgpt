@@ -174,15 +174,21 @@ try {
             const request = window.fetch.bind(window);
             window.__testDotJournalReceipts = [];
             window.fetch = async (input, options) => {
-              const response = await request(input, options);
-              const uri = new URL(typeof input === 'object' && 'url' in input ? input.url : String(input), location.href);
-              if (/\/tbo\/[^/]+\/activity\/topics(?:\/|$)/.test(uri.pathname)) {
+              const uri = new URL(input instanceof Request ? input.url : String(input), location.href);
+              if (!/\/tbo\/[^/]+\/activity\/topics(?:\/|$)/.test(uri.pathname)) return request(input, options);
+              const signal = options?.signal ?? (input instanceof Request ? input.signal : null);
+              const path = uri.pathname.replace(/\/tbo\/[^/]+/, '/tbo/<dot>');
+              try {
+                const response = await request(input, options);
                 void response.clone().json().then(body => window.__testDotJournalReceipts.push({
-                  path: uri.pathname.replace(/\/tbo\/[^/]+/, '/tbo/<dot>'), status: response.status,
-                  entryCount: body.data?.length, hasNextPage: Boolean(body.next_cursor),
+                  path, status: response.status, aborted: signal?.aborted === true,
+                  entryCount: body.data?.length, errorCode: body.error?.code,
                 })).catch(() => {});
+                return response;
+              } catch (cause) {
+                window.__testDotJournalReceipts.push({ path, aborted: signal?.aborted === true, errorName: cause?.name });
+                throw cause;
               }
-              return response;
             };
           });
           await inspectControls('on-entry');
@@ -208,6 +214,9 @@ try {
                 .map(node => node.textContent?.trim().slice(0, 50)).slice(-12),
             }));
             console.log('Native Dot journal receipts ' + JSON.stringify(observed));
+            assert.ok(observed.receipts.some(row => row.status === 200 && row.entryCount === 1));
+            assert.ok(observed.receipts.every(row => row.status === 200 || row.aborted && row.errorName === 'AbortError'),
+              'The journal should only return data or propagate a cancelled fetch');
           }
         }
         const added = await submit('/journal add ' + newNote, /^已保存日记 · [a-f0-9-]{36}$/);
@@ -222,6 +231,8 @@ try {
         await page.keyboard.press('Escape');
         await submit('/journal delete ' + id, '已删除日记 · ' + id);
         await openActivity();
+        await page.waitForFunction(() => window.__testDotJournalReceipts?.some(row => row.status === 200 && row.entryCount === 0),
+          undefined, { timeout: 10000 });
         await noteText(editedNote).waitFor({ state: 'hidden', timeout: 10000 });
         await submit('/journal list', '日记里还没有条目。');
         assert.equal(modelPosts, 2, 'Journal changes triggered unexpected model inference');
