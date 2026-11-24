@@ -1,0 +1,41 @@
+name: Verify the authenticated browser relay against official Codex
+on:
+  push:
+    branches: [qa/official-codex-browser-relay]
+permissions:
+  contents: read
+jobs:
+  app-server:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            scenario: conversation
+          - os: macos-15
+            scenario: sandboxed-command
+    runs-on: ${{ matrix.os }}
+    env:
+      QA_CODEX_TEST_MODE: ${{ matrix.scenario }}
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Install the pinned official Codex distribution
+        run: |
+          npm install --prefix "$RUNNER_TEMP/tyc-codex-cli" --no-save --no-package-lock --ignore-scripts --no-audit --no-fund @openai/codex@0.171.0
+          echo "$RUNNER_TEMP/tyc-codex-cli/node_modules/.bin" >> "$GITHUB_PATH"
+      - name: Verify the existing local bridge tests
+        if: matrix.scenario == 'conversation'
+        run: |
+          npm install --prefix local-bridge --no-package-lock --ignore-scripts --no-audit --no-fund
+          node --test local-bridge/test/*.test.mjs
+      - name: Run real Codex behind the authenticated browser relay
+        run: |
+          codex --version
+          node scripts/qa/official-codex-browser-relay.mjs

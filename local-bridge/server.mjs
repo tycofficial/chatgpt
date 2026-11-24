@@ -12,7 +12,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const same = (a, b) => typeof a === 'string' && typeof b === 'string' && Buffer.byteLength(a) === Buffer.byteLength(b) && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
 const escape = value => String(value).replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 async function jsonBody(request) { let bytes = 0, value = ''; for await (const chunk of request) { bytes += chunk.length; if (bytes > 32768) throw new BridgeError('BODY_TOO_LARGE', 'Local setup request exceeds its size limit'); value += chunk; } return value ? JSON.parse(value) : {}; }
-export function createLocalUi({ store, sessions, official, bridge, port = 1455 }) {
+export function createLocalUi({ store, sessions, official, bridge, codex = null, port = 1455 }) {
   const launch = crypto.randomBytes(32).toString('base64url'), cookie = crypto.randomBytes(32).toString('base64url'), csrf = crypto.randomBytes(32).toString('base64url');
   let origin, server;
   const headers = { 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'" };
@@ -34,6 +34,19 @@ export function createLocalUi({ store, sessions, official, bridge, port = 1455 }
       if (request.method === 'GET' && ['/', '/client.js', '/style.css'].includes(url.pathname)) {
         const file = url.pathname === '/' ? 'ui.html' : url.pathname.slice(1); response.writeHead(200, { ...headers, 'Content-Type': file.endsWith('.js') ? 'text/javascript; charset=utf-8' : file.endsWith('.css') ? 'text/css; charset=utf-8' : 'text/html; charset=utf-8' }); response.end(await fs.readFile(path.join(here, file))); return;
       }
+      if (codex && request.method === 'GET' && url.pathname === '/local/codex/v1/status') return send(response, codex.status());
+      if (codex && request.method === 'GET' && url.pathname === '/local/codex/v1/receipt') {
+        const { instanceId, requestId } = Object.fromEntries(url.searchParams);
+        return send(response, codex.readReceipt({ instanceId, requestId }));
+      }
+      if (codex && request.method === 'GET' && url.pathname === '/local/codex/v1/events') {
+        const { instanceId, threadId, after } = Object.fromEntries(url.searchParams);
+        return send(response, codex.readEvents({ instanceId, threadId, after: after === undefined ? 0 : Number(after) }));
+      }
+      if (codex && request.method === 'GET' && url.pathname === '/local/codex/v1/client.mjs') {
+        response.writeHead(200, { ...headers, 'Content-Type': 'text/javascript; charset=utf-8' });
+        response.end(await fs.readFile(path.join(here, 'codex-browser-client.mjs'))); return;
+      }
       if (request.method === 'GET' && url.pathname === '/local/status') {
         const accounts = await sessions.accounts(), registrations = [];
         for (const account of accounts.registrations) { const credential = account.verified ? await sessions.credential(account.id) : null; registrations.push({ id: account.id, label: account.label + ' · ' + account.clientId.slice(-6), email: account.email || null, verified: account.verified, active: accounts.activeId === account.id, planUseEnabled: Boolean(credential?.planUseEnabled && credential?.access_token), renewable: Boolean(credential?.refresh_token), expiresAt: credential?.expiresAt || null }); }
@@ -43,6 +56,7 @@ export function createLocalUi({ store, sessions, official, bridge, port = 1455 }
       if (request.method !== 'POST') return send(response, { error: { code: 'NOT_FOUND', message: 'Local endpoint not found' } }, 404);
       if (request.headers.origin !== origin || !same(request.headers['x-bridge-csrf'], csrf) || !String(request.headers['content-type']).startsWith('application/json')) return send(response, { error: { code: 'CSRF_REJECTED', message: 'Local setup request could not be verified' } }, 403);
       const body = await jsonBody(request);
+      if (codex && url.pathname === '/local/codex/v1/rpc') return send(response, await codex.request(body));
       if (url.pathname === '/local/pair') { const result = await bridge.pair(body.username, body.password); body.password = null; send(response, result); }
       else if (url.pathname === '/local/oauth/start') { if (!(await bridge.status()).paired) throw new BridgeError('PAIR_FIRST', '先使用本站管理员账号配对本机桥接程序'); const attempt = await sessions.start({ redirectUri: origin + '/auth/callback', selectedId: body.selectedId || null, enablePlan: body.enablePlan === true }); send(response, { launchPath: '/local/oauth/launch/' + attempt.launchId, expiresAt: attempt.expiresAt }); }
       else if (url.pathname === '/local/account/select') { await bridge.stop(); await sessions.select(body.id); bridge.start(); send(response, { ok: true }); }
@@ -51,7 +65,11 @@ export function createLocalUi({ store, sessions, official, bridge, port = 1455 }
       else if (url.pathname === '/local/stop') { await bridge.stop(); send(response, { running: false }); }
       else if (url.pathname === '/local/usage/retry') { await official.clearUsagePause(); send(response, { ok: true }); }
       else send(response, { error: { code: 'NOT_FOUND', message: 'Local endpoint not found' } }, 404);
-    } catch (error) { send(response, { error: diagnostic(error) }, 400); }
+    } catch (error) {
+      const status = codex && request.url?.startsWith('/local/codex/v1/') &&
+        error instanceof BridgeError && Number.isInteger(error.status) ? error.status : 400;
+      send(response, { error: diagnostic(error) }, status);
+    }
   };
   return {
     async start() {
@@ -62,7 +80,10 @@ export function createLocalUi({ store, sessions, official, bridge, port = 1455 }
       await store.write('ui.json', { pid: process.pid, origin, launchUrl: origin + '/?launch=' + launch, startedAt: Date.now() });
       return { origin };
     },
-    async close() { await bridge.stop(); if (server) await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve())); },
+    async close() {
+      await Promise.all([bridge.stop(), codex?.close()]);
+      if (server) await new Promise((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    },
   };
 }
 export async function main() {
