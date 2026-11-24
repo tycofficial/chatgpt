@@ -1,5 +1,5 @@
-import { getSiteTrialAction, submitSiteTrial } from './local-pricing.mjs';
-import { getSiteHomeUrl, getSiteLoginUrl, safeSiteReturnUrl } from './site-account.mjs';
+import { getSiteBillingAction, getSiteTrialAction, submitSiteTrial } from './local-pricing.mjs';
+import { createSiteBillingPortal, createSiteCheckout, getSiteAccount, getSiteHomeUrl, getSiteLoginUrl, readSiteBillingOptions, safeSiteReturnUrl } from './site-account.mjs';
 
 const oldPlanPath = /^\/(?:site-plans(?:\/index\.html)?|plans|pricing-plan|(?:codex\/)?purchase\/(?:plus|pro5x|prolite|pro|promax))\/?$/;
 
@@ -39,28 +39,40 @@ export function normalizeLegacyPricingEntry() {
 
 /** The existing pricing card owns its plan details, Pro selector, animation and responsive layout. */
 export function createNativeSiteTrialCard(Card, { React, Button, Amount, Frequency }) {
-  let pending = null;
+  let pending = null, options = null, readingOptions;
   const listeners = new Set();
   const notify = () => { for (const listener of listeners) listener(); };
   const element = React.createElement;
 
-  function TrialCard({ original, tier }) {
+  function refreshBillingOptions() {
+    if (readingOptions || globalThis.navigator?.onLine === false) return;
+    readingOptions = readSiteBillingOptions().then(value => { options = value; }, () => { options = null; })
+      .finally(() => { readingOptions = null; notify(); });
+  }
+
+  function SitePlanCard({ original, tier }) {
     const [, redraw] = React.useReducer(value => value + 1, 0);
     const [message, setMessage] = React.useState('');
     React.useEffect(() => {
       listeners.add(redraw);
-      const events = ['codex-site-account-changed', 'online', 'offline'];
+      const events = ['codex-site-account-changed', 'offline'];
+      const reconnect = () => { redraw(); refreshBillingOptions(); };
       for (const event of events) globalThis.addEventListener(event, redraw);
+      globalThis.addEventListener('online', reconnect);
+      refreshBillingOptions();
       return () => {
         listeners.delete(redraw);
+        globalThis.removeEventListener('online', reconnect);
         for (const event of events) globalThis.removeEventListener(event, redraw);
       };
     }, []);
-    const action = getSiteTrialAction(tier);
-    const submit = async event => {
+    const trial = { ...getSiteTrialAction(tier), kind: 'trial' };
+    const billing = getSiteBillingAction(tier, options);
+    const action = billing ?? trial;
+    const submit = async (event, selected) => {
       event?.preventDefault();
-      if (pending || action.disabled) return;
-      if (action.status === 'login') {
+      if (pending || selected.disabled) return;
+      if (selected.status === 'login') {
         const { url } = nativePricingDestination(location.href, location.href);
         location.assign(getSiteLoginUrl(url.href).href);
         return;
@@ -68,26 +80,38 @@ export function createNativeSiteTrialCard(Card, { React, Button, Amount, Frequen
       pending = tier;
       setMessage('');
       notify();
-      try { await submitSiteTrial(tier); }
-      catch (error) { setMessage(error.message || '暂时无法保存，请重试。'); }
+      try {
+        if (selected.kind === 'checkout') location.assign(await createSiteCheckout(tier));
+        else if (selected.kind === 'portal') location.assign(await createSiteBillingPortal());
+        else await submitSiteTrial(tier);
+      } catch (error) { setMessage(error.message || '暂时无法完成套餐操作，请重试。'); }
       finally { pending = null; notify(); }
     };
-    const expiry = action.expiresAt ? new Date(action.expiresAt).toLocaleDateString('zh-CN') : '';
+
+    const subscription = getSiteAccount()?.siteSubscription;
+    const subscriptionExpiry = subscription?.tier === tier ? subscription.expiresAt : null;
     const includesDot = ['prolite', 'pro', 'promax'].includes(tier);
-    const caption = message || (expiry ? '本站试用至 ' + expiry : '本站试用 · 30 天，可续期');
+    const date = expiration => new Date(expiration).toLocaleDateString('zh-CN');
+    let caption = trial.expiresAt ? '本站试用至 ' + date(trial.expiresAt) : '本站试用 · 30 天，可续期';
+    if (billing) caption = subscriptionExpiry ? '本站订阅至 ' + date(subscriptionExpiry) : '美元参考价 · 实付金额以支付页为准';
     const existing = React.Children.toArray(original.actions?.props?.children)[0];
     const activeButton = existing?.type === Button;
     const icon = activeButton && Array.isArray(existing.props.children) ? existing.props.children[0] : null;
+    const fallback = { className: 'w-full justify-center', color: 'secondary', size: 'beaconAction', radius: 'full' };
     const button = element(Button, {
-      ...(activeButton ? existing.props : { className: 'w-full justify-center', color: 'secondary', size: 'beaconAction', radius: 'full' }),
+      ...(activeButton ? existing.props : fallback),
       'aria-describedby': undefined, disabled: Boolean(pending) || action.disabled, loading: pending === tier,
-      onClick: submit, type: 'button',
+      onClick: event => submit(event, action), type: 'button',
     }, icon, action.label);
+    const trialButton = billing?.kind === 'checkout' ? element(Button, {
+      ...fallback, disabled: Boolean(pending) || trial.disabled, onClick: event => submit(event, trial), type: 'button',
+    }, trial.label) : null;
+    const quotedPrice = subscriptionExpiry ? element(Amount, { amount: '本站订阅', currency: '' }) :
+      billing ? original.price?.content : element(Amount, { amount: '免费试用', currency: '', screenReaderText: '本站免费试用 30 天' });
     return element(Card, {
-      ...original, actions: button,
-      price: { ...original.price, content: element(React.Fragment, null,
-        element(Amount, { amount: '免费试用', currency: '', screenReaderText: '本站免费试用 30 天' }),
-        element(Frequency, null, element('span', { role: 'status', 'aria-live': 'polite' }, caption),
+      ...original, actions: trialButton ? element(React.Fragment, null, button, trialButton) : button,
+      price: { ...original.price, content: element(React.Fragment, null, quotedPrice,
+        element(Frequency, null, element('span', { role: 'status', 'aria-live': 'polite' }, message || caption),
           includesDot ? element('span', { className: 'block' }, '含站内 Dot') : null),
       ) },
     });
@@ -109,6 +133,6 @@ export function createNativeSiteTrialCard(Card, { React, Button, Amount, Frequen
         type: 'button',
       }, '查看官方 Go 套餐') });
     }
-    return getSiteTrialAction(tier) ? element(TrialCard, { key: tier, original: props, tier }) : element(Card, props);
+    return getSiteTrialAction(tier) ? element(SitePlanCard, { key: tier, original: props, tier }) : element(Card, props);
   };
 }

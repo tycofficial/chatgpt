@@ -142,9 +142,10 @@ function currentAccount() {
     requestGeneration++;
     forgetAccount(sessionExpired);
   }
-  if (verifiedAccount?.siteTrial && verifiedAccount.siteTrial.expiresAt <= Date.now()) {
+  const term = verifiedAccount?.siteSubscription ?? verifiedAccount?.siteTrial;
+  if (term && term.expiresAt <= Date.now()) {
     const { authenticationMode } = verifiedAccount;
-    setAccount({ ...verifiedAccount, planType: 'free', siteTrial: null }, authenticationMode, lastError);
+    setAccount({ ...verifiedAccount, planType: 'free', siteTrial: null, siteSubscription: null }, authenticationMode, lastError);
   }
   return verifiedAccount;
 }
@@ -156,6 +157,14 @@ function validatedTrial(trial, planType) {
       trial.expiresAt > Date.now() + maxTrialTerm) throw Error(accountInvalid);
   if (trial.expiresAt <= Date.now()) return null;
   return Object.freeze({ tier: trial.tier, expiresAt: trial.expiresAt });
+}
+
+function validatedSubscription(subscription, planType) {
+  if (subscription == null) return null;
+  const { tier, expiresAt, cancelAtPeriodEnd } = subscription;
+  if (!trialPlans.has(tier) || trialPlans.get(tier) !== planType || !Number.isSafeInteger(expiresAt) ||
+      expiresAt <= 0 || expiresAt > 8640000000000000 || typeof cancelAtPeriodEnd !== 'boolean') throw Error(accountInvalid);
+  return expiresAt > Date.now() ? Object.freeze({ tier, expiresAt, cancelAtPeriodEnd }) : null;
 }
 
 function accountFromServer(user) {
@@ -170,20 +179,23 @@ function accountFromServer(user) {
     officialSubscriptionVerified: false,
   };
   if (user.id === 'site-admin' && user.role === 'administrator' && user.planType === 'pro' &&
-      user.membershipSource === 'site-administrator' && user.siteTrial == null) {
+      user.membershipSource === 'site-administrator' && user.siteTrial == null && user.siteSubscription == null) {
     return { ...common, role: 'administrator', planType: 'pro', membershipSource: 'site-administrator', siteTrial: null };
   }
   if (user.role !== 'user' || user.membershipSource !== 'site-registration' ||
       typeof user.accountId !== 'string' || !accountIdPattern.test(user.accountId) ||
       user.id !== 'site-user:' + user.accountId) throw Error(accountInvalid);
-  const siteTrial = validatedTrial(user.siteTrial, user.planType);
+  const subscriptionReceipt = user.siteSubscription != null;
+  if (subscriptionReceipt && user.siteTrial != null) throw Error(accountInvalid);
+  const siteSubscription = validatedSubscription(user.siteSubscription, user.planType);
+  const siteTrial = subscriptionReceipt ? null : validatedTrial(user.siteTrial, user.planType);
   return {
     ...common,
     accountId: user.accountId,
     role: 'user',
-    planType: siteTrial ? user.planType : 'free',
+    planType: siteSubscription || siteTrial ? user.planType : 'free',
     membershipSource: 'site-registration',
-    siteTrial,
+    siteTrial, siteSubscription,
   };
 }
 
@@ -547,6 +559,7 @@ export async function claimSiteTrial(tier) {
   if (!trialPlans.has(tier)) throw Error('请选择有效的本站试用方案。');
   const account = currentAccount();
   if (account?.role !== 'user' || account.membershipSource !== 'site-registration') throw Error('请先登录本站注册账户。');
+  if (account.siteSubscription) throw Error('请在本站账单中管理当前订阅。');
   const token = getSiteSessionToken();
   if (!token) throw Error('请联网验证账户后再开启试用。');
   if (claiming?.generation === requestGeneration) throw Error('正在保存试用方案，请稍候。');
@@ -576,6 +589,66 @@ export async function claimSiteTrial(tier) {
   claiming = { generation, operation };
   try { return await operation; }
   finally { if (claiming?.operation === operation) claiming = null; }
+}
+
+export async function refreshSiteBillingReturn() {
+  const destination = new URL(location.href);
+  const account = currentAccount();
+  if (destination.searchParams.get('site_billing') !== 'return' || account?.role !== 'user' || isOffline()) return;
+  const generation = requestGeneration;
+  const before = account.siteSubscription;
+  for (const delay of [0, 1000, 3000]) {
+    if (delay) await new Promise(resolve => setTimeout(resolve, delay));
+    if (generation !== requestGeneration || currentAccount()?.id !== account.id || isOffline()) return;
+    const verified = await refreshSiteAccount();
+    if (!verified?.cloudSessionVerified) return;
+    const after = verified.siteSubscription;
+    if (after?.tier !== before?.tier || after?.expiresAt !== before?.expiresAt ||
+        after?.cancelAtPeriodEnd !== before?.cancelAtPeriodEnd) return;
+  }
+}
+
+export async function readSiteBillingOptions() {
+  const result = await api('/billing/v1/options');
+  if (typeof result?.checkoutAvailable !== 'boolean' || !Array.isArray(result.tiers) ||
+      result.tiers.some(tier => !trialPlans.has(tier))) throw Error('无法核实本站订阅选项。');
+  const tiers = Object.freeze([...new Set(result.tiers)]);
+  return Object.freeze({ tiers, checkoutAvailable: result.checkoutAvailable && tiers.length > 0 });
+}
+
+let openingBilling = null;
+async function requestSiteBillingUrl(path, body, allowedOrigin) {
+  const account = currentAccount();
+  if (account?.role !== 'user' || account.membershipSource !== 'site-registration') throw Error('请先登录本站注册账户。');
+  const generation = requestGeneration;
+  if (openingBilling?.generation === generation) throw Error('正在打开本站账单，请稍候。');
+
+  const operation = (async () => {
+    if (!getSiteSessionToken() && !isOffline()) await refreshSiteAccount();
+    if (generation !== requestGeneration || currentAccount()?.id !== account.id) throw Error(cancelled);
+    const token = getSiteSessionToken();
+    if (!token) throw Error('请联网验证账户后再打开本站账单。');
+    const result = await api(path, { body, token });
+    if (generation !== requestGeneration || currentAccount()?.id !== account.id || getSiteSessionToken() !== token) throw Error(cancelled);
+    let url;
+    try { if (typeof result?.url === 'string') url = new URL(result.url); } catch {}
+    if (!url || url.origin !== allowedOrigin || url.username || url.password || url.protocol !== 'https:') {
+      throw Error('本站账单返回了无法验证的支付页面。');
+    }
+    return url.href;
+  })();
+  openingBilling = { generation, operation };
+  try { return await operation; }
+  finally { if (openingBilling?.operation === operation) openingBilling = null; }
+}
+
+export function createSiteCheckout(tier) {
+  if (!trialPlans.has(tier)) throw Error('请选择有效的本站订阅方案。');
+  return requestSiteBillingUrl('/billing/v1/checkout', { tier }, 'https://checkout.stripe.com');
+}
+
+export function createSiteBillingPortal() {
+  return requestSiteBillingUrl('/billing/v1/portal', {}, 'https://billing.stripe.com');
 }
 
 globalThis.addEventListener?.('offline', () => {

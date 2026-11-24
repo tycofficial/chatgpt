@@ -11,7 +11,7 @@
  * p3vI, 396705.00162c6ea9.js:564237-564553 (payment methods).
  * wbWw/Bhuf/YoTg/JGV6, async/899311.9233e1594e.js (billing read shapes).
  */
-import { claimSiteTrial, getSiteAccount, getSiteSessionToken, getSiteTrialPlan, refreshSiteAccount } from './site-account.mjs';
+import { claimSiteTrial, createSiteBillingPortal, getSiteAccount, getSiteSessionToken, getSiteTrialPlan, refreshSiteAccount } from './site-account.mjs';
 
 export const LOCAL_PRICING_REFERENCE = Object.freeze({
   source: 'https://learn.chatgpt.com/docs/pricing',
@@ -98,24 +98,31 @@ export function getLocalReferencePricingConfig(scope = 'US') {
 export function normalizeLocalMembership(record, now = Date.now()) {
   const requestedPlan = PLANS.has(record?.planType) ? record.planType : 'free';
   const trial = record?.siteTrial;
-  const trialPlan = getSiteTrialPlan(trial?.tier);
-  const validTrial = trial == null ? record?.membershipSource !== 'site-registration' || requestedPlan === 'free' :
-    trialPlan !== null && trialPlan === requestedPlan && Number.isSafeInteger(trial.expiresAt) && trial.expiresAt > 0;
-  const rawExpiry = trial ? trial.expiresAt : record?.expiresAt;
+  const subscription = record?.siteSubscription;
+  const term = subscription ?? trial;
+  const termPlan = getSiteTrialPlan(term?.tier);
+  const validTerm = term == null ? record?.membershipSource !== 'site-registration' || requestedPlan === 'free' :
+    termPlan !== null && termPlan === requestedPlan && Number.isSafeInteger(term.expiresAt) && term.expiresAt > 0 &&
+      (!subscription || !trial && record.role === 'user' && record.membershipSource === 'site-registration' && typeof term.cancelAtPeriodEnd === 'boolean');
+  const rawExpiry = term ? term.expiresAt : record?.expiresAt;
   const expiryMs = rawExpiry == null ? null : typeof rawExpiry === 'number' ? rawExpiry : Date.parse(rawExpiry);
   const validExpiry = expiryMs == null || Number.isFinite(expiryMs) && Math.abs(expiryMs) <= 8640000000000000;
   const expired = validExpiry && expiryMs != null && expiryMs <= now;
-  const enabled = record?.enabled !== false && validTrial && validExpiry && !expired;
+  const enabled = record?.enabled !== false && validTerm && validExpiry && !expired;
   const plan = enabled ? requestedPlan : 'free';
   const administrator = enabled && record?.id === 'site-admin' && record.role === 'administrator' &&
     record.membershipSource === 'site-administrator' && plan === 'pro';
-  const pricePlan = administrator ? 'promax' : enabled && trial ? trial.tier : plan;
+  const pricePlan = administrator ? 'promax' : enabled && term ? term.tier : plan;
   return {
     plan_type: plan,
-    status: !validTrial || !validExpiry || record?.enabled === false ? 'disabled' : expired ? 'expired' : plan === 'free' ? 'free' : 'active',
+    status: !validTerm || !validExpiry || record?.enabled === false ? 'disabled' : expired ? 'expired' : plan === 'free' ? 'free' : 'active',
     local_only: true,
-    managed_by: trial && validTrial ? 'site-trial' : 'local-administrator',
+    managed_by: validTerm && subscription ? 'site-subscription' : validTerm && trial ? 'site-trial' : 'local-administrator',
     site_trial_tier: enabled && trial ? trial.tier : null,
+    ...(validTerm && subscription ? {
+      site_subscription_tier: enabled ? subscription.tier : null,
+      cancel_at_period_end: enabled && subscription.cancelAtPeriodEnd,
+    } : {}),
     expires_at: validExpiry && expiryMs != null ? new Date(expiryMs).toISOString() : null,
     pro_tier: PRO_TIER_USD[pricePlan] ?? null,
     reference_monthly_amount: MONTHLY_USD[pricePlan],
@@ -208,7 +215,10 @@ function nativeUsage(receipt, membership, identity, currentTime) {
 }
 
 /** Present the verified site receipt in the original settings layout. */
-export function createNativeSiteUsageLayout(Layout, { React, Section, Group, Row, useUsage, getIdentity, isUsageRoute, getMembership = () => null }) {
+export function createNativeSiteUsageLayout(Layout, {
+  React, Section, Group, Row, useUsage, getIdentity, isUsageRoute, getMembership = () => null,
+  BillingButton, isBillingRoute = () => false,
+}) {
   const { createElement } = React;
   function SiteUsageSummary() {
     const { data } = useUsage();
@@ -225,7 +235,44 @@ export function createNativeSiteUsageLayout(Layout, { React, Section, Group, Row
       ))),
     );
   }
+  function SiteBillingSummary() {
+    const [, redraw] = React.useReducer(value => value + 1, 0);
+    const [pending, setPending] = React.useState(false);
+    const [message, setMessage] = React.useState('');
+    React.useEffect(() => {
+      const events = ['codex-site-account-changed', 'online', 'offline'];
+      for (const event of events) globalThis.addEventListener(event, redraw);
+      return () => { for (const event of events) globalThis.removeEventListener(event, redraw); };
+    }, []);
+    const membership = normalizeLocalMembership(getMembership());
+    const tier = membership.site_subscription_tier;
+    if (!tier) return null;
+    const plan = { plus: 'Plus', prolite: 'Pro Lite', pro: 'Pro', promax: 'Pro Max' }[tier];
+    const offline = globalThis.navigator?.onLine === false;
+    async function manage() {
+      setMessage('');
+      setPending(true);
+      try { location.assign(await createSiteBillingPortal()); }
+      catch (error) { setMessage(error.message || '暂时无法打开本站账单。'); }
+      finally { setPending(false); }
+    }
+    return createElement(Section, { id: 'site-subscription-summary' },
+      createElement(Section.Header, { title: '本站订阅' }),
+      createElement(Section.Content, null, createElement(Group, null,
+        createElement(Row, { label: '本站套餐', control: plan }),
+        createElement(Row, {
+          label: membership.cancel_at_period_end ? '权益截止' : '当前账期结束',
+          control: createElement('time', { dateTime: membership.expires_at }, new Date(membership.expires_at).toLocaleDateString('zh-CN')),
+        }),
+        createElement(Row, { label: '账单', control: createElement(BillingButton, {
+          type: 'button', onClick: manage, disabled: pending || offline, loading: pending,
+        }, offline ? '联网后管理订阅' : '管理订阅') }),
+        message ? createElement('p', { role: 'status' }, message) : null,
+      )),
+    );
+  }
   return function SiteUsageLayout(props) {
+    if (BillingButton && isBillingRoute()) return createElement(Layout, props, createElement(SiteBillingSummary), props.children);
     if (props.scrollResetKey !== 'usage' || !isUsageRoute()) return createElement(Layout, props);
     const membership = normalizeLocalMembership(getMembership());
     const administratorPlan = membership.pro_tier === 500 && membership.managed_by === 'local-administrator' ?
@@ -242,11 +289,9 @@ export function createNativeSiteUsageLayout(Layout, { React, Section, Group, Row
  * -> {handle(Request, canonicalPath?), getMembershipView()}.
  *
  * handle returns Response|null. Canonical paths omit /backend-api or
- * /__codex-api. The native subscription read is null: this local account
- * has no Stripe/OpenAI subscription. Local grants are reported separately
- * through getMembershipView, for the host's authenticated account adapter.
- * No synthetic customer, invoice, mandate, checkout URL/client_secret or
- * payment-success response is ever issued.
+ * /__codex-api. The original subscription read represents OpenAI billing.
+ * The verified site's subscription and trial receipts are projected separately.
+ * Checkout and portal sessions use the verified site's authenticated API.
  */
 export function createLocalPricingAdapter({
   readMembership = () => null,
@@ -339,6 +384,21 @@ export function getSiteTrialAction(tier) {
   if (expiresAt !== null) return { status: 'renew', label: '续期 30 天', disabled: false, expiresAt };
   if (trial) return { status: 'switch', label: '切换试用', disabled: false, expiresAt };
   return { status: 'start', label: '免费试用', disabled: false, expiresAt };
+}
+
+export function getSiteBillingAction(tier, options) {
+  if (!getSiteTrialPlan(tier)) return null;
+  const account = getSiteAccount();
+  if (account?.role === 'administrator') return null;
+  const offline = globalThis.navigator?.onLine === false;
+  if (account?.siteSubscription) {
+    return { kind: 'portal', status: 'manage', label: offline ? '联网后管理订阅' : '管理订阅', disabled: offline };
+  }
+  if (!options?.checkoutAvailable || !options.tiers.includes(tier)) return null;
+  return {
+    kind: 'checkout', status: account ? 'purchase' : 'login',
+    label: offline ? '联网后订购' : account ? '订购本站套餐' : '登录后订购', disabled: offline,
+  };
 }
 
 export async function submitSiteTrial(tier) {

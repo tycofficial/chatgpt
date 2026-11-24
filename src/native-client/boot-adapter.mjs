@@ -11,7 +11,7 @@ import { installSyntheticDocumentState } from './synthetic-bootstrap.mjs';
 import { getPrototypeLocalSession, getPrototypeLocalAuth, isPrototypeLocalSession, getPrototypeLocalAuthGeneration, clearPrototypeLocalSession } from './local-identity.mjs';
 import { createLocalHostSettingsClass } from './local-host-settings.mjs';
 import { createLocalWorkPolicy } from './local-work-policy.mjs';
-import { hasModelSelectionAccess, getSiteAccount, getSiteLoginUrl, getSiteHomeUrl } from './site-account.mjs';
+import { hasModelSelectionAccess, getSiteAccount, getSiteLoginUrl, getSiteHomeUrl, refreshSiteBillingReturn } from './site-account.mjs';
 import { createNativeSiteTrialCard } from './native-pricing-trials.mjs';
 import { createNativeSiteUsageLayout } from './local-pricing.mjs';
 import { createNativeSiteSignOut, isSiteSignOutPage } from './site-signout.mjs';
@@ -30,6 +30,7 @@ import { createLocalDotVoiceTargetWrapper, createLocalDotVoiceWrappers } from '.
 import { wrapNativeDotComputerViewer } from './dot-cloud-computer.mjs';
 
 const boundary = installNetworkBoundary();
+void refreshSiteBillingReturn().catch(() => {});
 globalThis.__originalClientProbe = boundary.diagnostics;
 // A fresh-device deep link needs its conversation before the router reads it.
 // A home page can render while the same owner-scoped sync and attachment restore run.
@@ -502,12 +503,15 @@ overrideExports('Y0ov', {}, { deferred: true }, {
 
 const isSiteUsageRoute = () => Boolean(getSiteAccount()) &&
   location.pathname.replace(/\/$/, '') === new URL('settings/usage', getSiteHomeUrl()).pathname;
+const isSiteBillingRoute = () => Boolean(getSiteAccount()) &&
+  location.pathname.replace(/\/$/, '') === new URL('settings/account', getSiteHomeUrl()).pathname;
 overrideExports('jxU8', {}, { deferred: true }, {
   a: Layout => createNativeSiteUsageLayout(Layout, {
     React: requireOriginal('zd8w'), Section: requireOriginal('BSnr').a,
     Group: requireOriginal('ZEx5').a, Row: requireOriginal('AWNZ').d,
     useUsage: () => requireOriginal('Q840').z(requireOriginal('gPv1').c),
     getIdentity: getPrototypeLocalAuth, isUsageRoute: isSiteUsageRoute, getMembership: getSiteAccount,
+    BillingButton: requireOriginal('Sm6l').a, isBillingRoute: isSiteBillingRoute,
   }),
 });
 overrideExports('WXto', {}, { deferred: true }, {
