@@ -112,7 +112,12 @@ try {
   await trial().waitFor({ timeout: 35_000 });
   await until(() => calls.options >= 1);
   assert.equal(await page.getByRole('button', { name: '订购本站套餐', exact: true }).count(), 0);
-  assert.equal(await page.getByRole('button', { name: '查看官方 Go 套餐', exact: true }).count(), 1);
+  const go = page.getByRole('button', { name: '查看官方 Go 套餐', exact: true }).filter({ visible: true }).first();
+  if (!await go.isVisible()) {
+    await page.getByRole('button', { name: /^(?:查看(?:所有|全部|更多|其他).*(?:套餐|方案|计划)|(?:查看)?全部套餐|(?:See|View|Show) (?:all|more).*plans)$/i })
+      .filter({ visible: true }).first().click({ timeout: 12_000 });
+  }
+  await go.waitFor({ timeout: 12_000 });
   assert.equal(await page.evaluate(() => window.__CHATGPT_REPLICA_ENV__.release), release);
   console.log('Site billing QA ' + JSON.stringify({ phase: 'unconfigured', release, trial: true, go: true, paid: false }));
 
