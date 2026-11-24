@@ -24,6 +24,8 @@ const release = JSON.parse(await readFile(resolve(workspace, 'native-client/acti
 if (!/^[a-f0-9]{16}$/.test(release || '')) throw Error('Could not find a built Pages release');
 const prompt = 'Verify the saved Work conversation with a short acknowledgment.';
 const reply = 'iPad Work recovery fixture response.';
+const followPrompt = 'Give a second short acknowledgment in this same saved Work conversation.';
+const followReply = 'iPad Work saved conversation follow-up response.';
 const inferencePath = '/inference/v1/responses';
 const workerSource = path => pathToFileURL(resolve(workspace, 'chatgpt-services', path)).href;
 const { createSqliteD1 } = await import(workerSource('tests/chat-sync-fixture.mjs'));
@@ -34,24 +36,33 @@ const actor = { role: 'user', id: accountId };
 const workContext = { waitUntil(task) { void task.catch(error => console.error('Fixture journal:', error.message)); } };
 const metrics = {
   seedLoads: 0, accountRequests: 0, sessionChecks: 0, documentLoads: 0, inferencePosts: 0, inferenceCalls: 0,
-  documentLocations: [], inferenceRequestIds: [], request: null,
+  documentLocations: [], inferenceRequestIds: [], requests: [], disconnectedStreams: 0, unavailableReceiptReads: 0, recoveredReceiptReads: 0,
 };
+let followupRequestId;
+
 
 globalThis.fetch = async (url, init) => {
   if (String(url) !== 'https://docode.cc/v1/responses') throw Error('Fixture outbound request was rejected');
   const payload = JSON.parse(init.body);
-  metrics.inferenceCalls++;
-  metrics.request = {
+  const input = JSON.stringify(payload.input);
+  const latestUser = Array.isArray(payload.input) ? payload.input.findLast(item => item.role === 'user') : payload.input;
+  const submittedText = JSON.stringify(latestUser ?? '');
+  const followup = submittedText.includes(followPrompt);
+  const ordinal = ++metrics.inferenceCalls;
+  const observation = {
     model: payload.model, effort: payload.reasoning?.effort ?? null,
-    expectedPrompt: JSON.stringify(payload.input).includes(prompt), stream: payload.stream === true,
+    expectedPrompt: submittedText.includes(followup ? followPrompt : prompt), stream: payload.stream === true,
+    followup, includesPriorReply: input.includes(reply),
   };
-  if (!metrics.request.expectedPrompt) {
-    return Response.json({ error: { code: 'FIXTURE_UNEXPECTED_PROMPT' } }, { status: 400 });
+  metrics.requests.push(observation);
+  if (!observation.expectedPrompt || (followup && !observation.includesPriorReply)) {
+    return Response.json({ error: { code: 'FIXTURE_UNEXPECTED_CONTEXT' } }, { status: 400 });
   }
-  const part = { type: 'output_text', text: reply, annotations: [] };
-  const item = { id: 'msg_ipad_work_fixture', type: 'message', role: 'assistant' };
+  const answer = followup ? followReply : reply;
+  const part = { type: 'output_text', text: answer, annotations: [] };
+  const item = { id: 'msg_ipad_work_fixture_' + ordinal, type: 'message', role: 'assistant' };
   const message = { ...item, status: 'completed', content: [part] };
-  const response = { id: 'resp_ipad_work_fixture', object: 'response', model: payload.model, status: 'completed',
+  const response = { id: 'resp_ipad_work_fixture_' + ordinal, object: 'response', model: payload.model, status: 'completed',
     created_at: Math.trunc(Date.now() / 1000), output: [message],
     usage: { input_tokens: 14, output_tokens: 8, total_tokens: 22 } };
   const coordinates = { item_id: item.id, output_index: 0, content_index: 0 };
@@ -59,14 +70,27 @@ globalThis.fetch = async (url, init) => {
     { type: 'response.created', response: { ...response, status: 'in_progress', output: [] } },
     { type: 'response.output_item.added', output_index: 0, item: { ...item, status: 'in_progress', content: [] } },
     { type: 'response.content_part.added', ...coordinates, part: { ...part, text: '' } },
-    { type: 'response.output_text.delta', ...coordinates, delta: reply },
-    { type: 'response.output_text.done', ...coordinates, text: reply },
+    { type: 'response.output_text.delta', ...coordinates, delta: answer },
+    { type: 'response.output_text.done', ...coordinates, text: answer },
     { type: 'response.content_part.done', ...coordinates, part },
     { type: 'response.output_item.done', output_index: 0, item: message },
     { type: 'response.completed', response },
   ];
-  return new Response(events.map(event => 'data: ' + JSON.stringify(event) + '\n\n').join(''), {
-    headers: { 'Content-Type': 'text/event-stream', 'X-Request-Id': 'ipad-work-fixture' },
+  const frames = events.map(event => 'data: ' + JSON.stringify(event) + '\n\n');
+  let completionTimer;
+  const output = followup ? new ReadableStream({
+    start(controller) {
+      const encoder = new TextEncoder();
+      controller.enqueue(encoder.encode(frames[0]));
+      completionTimer = setTimeout(() => {
+        controller.enqueue(encoder.encode(frames.slice(1).join('')));
+        controller.close();
+      }, 3000);
+    },
+    cancel() { clearTimeout(completionTimer); },
+  }) : frames.join('');
+  return new Response(output, {
+    headers: { 'Content-Type': 'text/event-stream', 'X-Request-Id': 'ipad-work-fixture-' + ordinal },
   });
 };
 
@@ -94,8 +118,10 @@ function savedWorkThreads() {
     const turn = document.turns.find(turn => turn.executionSurface === 'work' && turn.status === 'completed' &&
       turn.items.some(item => item.type === 'agentMessage' && item.text?.trim() === reply));
     if (!turn) return [];
-    const replyItems = turn.items.filter(item => item.type === 'agentMessage' && item.text?.trim() === reply).length;
-    return [{ id: row.conversation_id, title: document.name, model: turn.model, effort: turn.reasoningEffort, replyItems }];
+    const replyItems = text => document.turns.filter(saved => saved.executionSurface === 'work' && saved.status === 'completed')
+      .flatMap(saved => saved.items).filter(item => item.type === 'agentMessage' && item.text?.trim() === text).length;
+    return [{ id: row.conversation_id, title: document.name, model: turn.model, effort: turn.reasoningEffort,
+      replyItems: replyItems(reply), followupItems: replyItems(followReply) }];
   });
 }
 
@@ -103,6 +129,22 @@ function sendWorkerResponse(res, response) {
   res.writeHead(response.status, { ...headers, ...Object.fromEntries(response.headers) });
   if (response.body) Readable.fromWeb(response.body).pipe(res);
   else res.end();
+}
+
+async function interruptFollowupStream(res, response) {
+  res.writeHead(response.status, { ...headers, ...Object.fromEntries(response.headers) });
+  const reader = response.body.getReader();
+  try {
+    const first = await reader.read();
+    if (first.done) throw Error('The journal did not stream the follow-up start');
+    res.write(first.value);
+    await new Promise(resolve => setTimeout(resolve, 300));
+    metrics.disconnectedStreams++;
+    res.destroy();
+  } finally {
+    await reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
 }
 
 async function respondAccount(req, res, url) {
@@ -128,8 +170,22 @@ async function respondAccount(req, res, url) {
       if (!requestId) return json(res, 400, { error: { code: 'FIXTURE_EXPECTS_JOURNALED_WORK_REQUEST' } });
       metrics.inferenceRequestIds.push(requestId);
       response = await startJournaledInference(request, runtime, workContext, actor, requestId, false);
+      if (response.status === 200 && response.body && metrics.requests.at(-1)?.followup && !followupRequestId) {
+        followupRequestId = requestId;
+        return await interruptFollowupStream(res, response);
+      }
     } else if (route.startsWith(inferencePath + '/')) {
-      response = await readJournaledInference(request, runtime, actor, route.slice(inferencePath.length + 1));
+      const requestId = route.slice(inferencePath.length + 1);
+      if (req.method === 'GET' && followupRequestId === requestId && metrics.disconnectedStreams > 0) {
+        if (metrics.unavailableReceiptReads === 0) {
+          metrics.unavailableReceiptReads++;
+          return json(res, 503, { error: { code: 'FIXTURE_TEMPORARY_TRANSPORT_OUTAGE' } });
+        }
+        response = await readJournaledInference(request, runtime, actor, requestId);
+        if (response.ok) metrics.recoveredReceiptReads++;
+      } else {
+        response = await readJournaledInference(request, runtime, actor, requestId);
+      }
     }
     if (response) return sendWorkerResponse(res, response);
   }

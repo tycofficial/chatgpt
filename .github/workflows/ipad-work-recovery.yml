@@ -18,6 +18,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
+          fetch-depth: 3
       - uses: actions/setup-node@v7
         with:
           node-version: '24'
@@ -32,8 +33,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          source_commit="$(git cat-file -p HEAD | sed -n 's/^parent //p')"
-          test "$source_commit" = "$CANDIDATE_SOURCE"
+          git merge-base --is-ancestor "$CANDIDATE_SOURCE" HEAD
+          git diff --quiet "$CANDIDATE_SOURCE" HEAD -- . \
+            ':(exclude).github/workflows/ipad-work-recovery.yml' ':(exclude,glob)scripts/qa/ipad-work/**'
           qa_root="$RUNNER_TEMP/tyc-ipad-work"
           mkdir -p "$qa_root/capture"
           tar -C "$qa_root/capture" -xzf "$RUNNER_TEMP/ipad-candidate-archive/chatgpt-public-graph.tar.gz"
@@ -101,15 +103,17 @@ jobs:
             -resultBundlePath "$qa_root/work-recovery.xcresult" \
             -only-testing:SafariQAUITests/SafariPublicSiteTests/testWorkTogglesAndBrowserChromeReload \
             -parallel-testing-enabled NO -disable-concurrent-destination-testing \
-            -test-timeouts-enabled YES -default-test-execution-time-allowance 360
+            -test-timeouts-enabled YES -default-test-execution-time-allowance 480
           result="$(curl --cacert "$qa_root/tls/ca.crt" --fail --silent --show-error https://127.0.0.1:4400/__ipad_qa/metrics)"
           echo "$result"
           printf '%s\n' "$result" | jq -e '
-            .documentLoads >= 2 and .inferencePosts == 1 and .inferenceCalls == 1
-            and (.inferenceRequestIds | length) == 1 and .planType == "plus"
-            and .request.model == "gpt-6.2-sol" and .request.effort == "low"
-            and .request.expectedPrompt and .request.stream
-            and (.savedWorkThreads | length) == 1 and .savedWorkThreads[0].replyItems == 1
+            .documentLoads >= 3 and .inferencePosts == 2 and .inferenceCalls == 2
+            and (.inferenceRequestIds | length) == 2 and (.inferenceRequestIds | unique | length) == 2
+            and .planType == "plus" and (.requests | length) == 2
+            and all(.requests[]; .model == "gpt-6.2-sol" and .effort == "low" and .expectedPrompt and .stream)
+            and .requests[1].followup and .requests[1].includesPriorReply
+            and (.savedWorkThreads | length) == 1 and .savedWorkThreads[0].replyItems == 1 and .savedWorkThreads[0].followupItems == 1
+            and .disconnectedStreams == 1 and .unavailableReceiptReads == 1 and .recoveredReceiptReads >= 1
             and (.documentLocations[-1] | startswith("/chatgpt/c/"))'
 
       - name: Record the simulator verification result
@@ -125,7 +129,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: integrated-ipad-work-0237-evidence
+          name: integrated-ipad-work-0237-tab-reopen-evidence
           path: |
             ${{ runner.temp }}/tyc-ipad-work/safari-after.png
             ${{ runner.temp }}/tyc-ipad-work/safari-metrics.json

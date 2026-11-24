@@ -8,12 +8,16 @@ final class SafariPublicSiteTests: XCTestCase {
     private let reloadNames = ["Reload", "Reload Page", "Reload This Page", "reloadButton", "重新载入", "重新載入", "重新加载", "重新整理", "刷新"]
     private let prompt = "Verify the saved Work conversation with a short acknowledgment."
     private let answer = "iPad Work recovery fixture response."
+    private let followPrompt = "Give a second short acknowledgment in this same saved Work conversation."
+    private let followAnswer = "iPad Work saved conversation follow-up response."
 
     private struct RequestMetrics: Decodable {
         let model: String
         let effort: String?
         let expectedPrompt: Bool
         let stream: Bool
+        let followup: Bool
+        let includesPriorReply: Bool
     }
 
     private struct SavedThread: Decodable, Equatable {
@@ -22,6 +26,7 @@ final class SafariPublicSiteTests: XCTestCase {
         let model: String
         let effort: String
         let replyItems: Int
+        let followupItems: Int
     }
 
     private struct FixtureMetrics: Decodable {
@@ -30,8 +35,11 @@ final class SafariPublicSiteTests: XCTestCase {
         let inferencePosts: Int
         let inferenceCalls: Int
         let inferenceRequestIds: [String]
-        let request: RequestMetrics?
+        let requests: [RequestMetrics]
         let savedWorkThreads: [SavedThread]
+        let disconnectedStreams: Int
+        let unavailableReceiptReads: Int
+        let recoveredReceiptReads: Int
     }
 
     @MainActor
@@ -70,10 +78,10 @@ final class SafariPublicSiteTests: XCTestCase {
         XCTAssertEqual(before.inferencePosts, 1)
         XCTAssertEqual(before.inferenceCalls, 1)
         XCTAssertEqual(before.inferenceRequestIds.count, 1)
-        XCTAssertEqual(before.request?.model, "gpt-6.2-sol")
-        XCTAssertEqual(before.request?.effort, "low")
-        XCTAssertEqual(before.request?.expectedPrompt, true)
-        XCTAssertEqual(before.request?.stream, true)
+        XCTAssertEqual(before.requests.first?.model, "gpt-6.2-sol")
+        XCTAssertEqual(before.requests.first?.effort, "low")
+        XCTAssertEqual(before.requests.first?.expectedPrompt, true)
+        XCTAssertEqual(before.requests.first?.stream, true)
         XCTAssertEqual(savedThread.model, "gpt-6.2-sol")
         XCTAssertEqual(savedThread.effort, "low")
         print("IPAD_QA work-model-effort-and-first-visible-reply-verified")
@@ -105,6 +113,83 @@ final class SafariPublicSiteTests: XCTestCase {
         XCTAssertEqual(after.inferencePosts, 1)
         XCTAssertEqual(after.inferenceCalls, 1)
         print("IPAD_QA same-work-conversation-restored-one-inference-\(savedThread.id)")
+
+        try closeSafariTab(safari)
+        XCTAssertTrue(replies.firstMatch.waitForNonExistence(timeout: 22), "The closed Safari tab still shows the Work reply")
+        print("IPAD_QA closed-work-safari-tab")
+
+        openSavedURL("https://127.0.0.1:4400/chatgpt/c/" + savedThread.id, in: safari)
+        _ = try await waitForMetrics { loadedSavedRoute($0, after: after.documentLoads, id: savedThread.id) }
+        _ = try waitForHittable(replies, seconds: 65)
+        _ = try waitForHittable(matchingText(prompt, in: web), seconds: 15)
+        let reopened = try await fixtureMetrics()
+        XCTAssertEqual(reopened.savedWorkThreads, [savedThread])
+        XCTAssertEqual(reopened.inferenceRequestIds, before.inferenceRequestIds)
+        XCTAssertEqual(reopened.inferencePosts, 1)
+        XCTAssertEqual(reopened.inferenceCalls, 1)
+        print("IPAD_QA new-safari-tab-reopened-same-work-text-and-id")
+
+        let followEditor = try waitForHittable([named(editorNames, in: web.textViews), web.textViews], seconds: 28)
+        followEditor.tap()
+        safari.typeText(followPrompt)
+        let followSend = try waitForHittable(named(sendNames, in: web.buttons), seconds: 18)
+        XCTAssertTrue(followSend.isEnabled)
+        followSend.tap()
+        print("IPAD_QA submitted-same-work-thread-followup")
+        _ = try waitForHittable(matchingText(followAnswer, in: web), seconds: 65)
+        _ = try waitForHittable(replies, seconds: 15)
+        let final = try await waitForMetrics { $0.savedWorkThreads.first?.followupItems == 1 }
+        XCTAssertEqual(final.savedWorkThreads.count, 1)
+        XCTAssertEqual(final.savedWorkThreads.first?.id, savedThread.id)
+        XCTAssertEqual(final.savedWorkThreads.first?.replyItems, 1)
+        XCTAssertEqual(final.savedWorkThreads.first?.followupItems, 1)
+        XCTAssertEqual(final.inferencePosts, 2)
+        XCTAssertEqual(final.inferenceCalls, 2)
+        XCTAssertEqual(final.inferenceRequestIds.count, 2)
+        XCTAssertEqual(Set(final.inferenceRequestIds).count, 2)
+        XCTAssertEqual(final.inferenceRequestIds.first, before.inferenceRequestIds.first)
+        XCTAssertEqual(final.requests.last?.model, "gpt-6.2-sol")
+        XCTAssertEqual(final.requests.last?.effort, "low")
+        XCTAssertEqual(final.requests.last?.followup, true)
+        XCTAssertEqual(final.requests.last?.includesPriorReply, true)
+        XCTAssertEqual(final.disconnectedStreams, 1)
+        XCTAssertEqual(final.unavailableReceiptReads, 1)
+        XCTAssertGreaterThan(final.recoveredReceiptReads, 0)
+        print("IPAD_QA visible-followup-restored-from-receipt-after-fixture-disconnect")
+    }
+
+    @MainActor
+    private func closeSafariTab(_ safari: XCUIApplication) throws {
+        let close = safari.buttons.matching(NSPredicate(format:
+            "identifier CONTAINS[c] %@ OR label BEGINSWITH[c] %@ OR label IN[c] %@",
+            "CloseTab", "Close Tab", ["关闭标签页", "关掉标签页"]))
+        if let control = visible(close) {
+            control.tap()
+            return
+        }
+        let tabs = named(["Tabs", "Show Tabs", "Show Tab Overview", "Tab Overview", "TabOverviewButton", "标签页", "显示标签页"], in: safari.buttons)
+        if let overview = visible(tabs) {
+            overview.tap()
+            let closeFromOverview = try waitForHittable([close, named(["Close", "关闭"], in: safari.buttons)], seconds: 8)
+            closeFromOverview.tap()
+            return
+        }
+        safari.typeKey("w", modifierFlags: .command)
+    }
+
+    @MainActor
+    private func openSavedURL(_ url: String, in safari: XCUIApplication) {
+        let addTab = named(["New Tab", "Add Tab", "AddTabButton", "NewTabButton", "新建标签页", "新标签页"], in: safari.buttons)
+        if let control = visible(addTab) { control.tap() }
+        else { safari.typeKey("t", modifierFlags: .command) }
+        let address = named(["Address", "Address Bar", "URL", "Search or enter website name", "Smart Search Field", "搜索或输入网站名称"], in: safari.textFields)
+        if let field = visible(address) { field.tap() }
+        else { safari.typeKey("l", modifierFlags: .command) }
+        safari.typeText(url + "\n")
+    }
+
+    private func visible(_ query: XCUIElementQuery) -> XCUIElement? {
+        query.allElementsBoundByIndex.first(where: { $0.exists && $0.isHittable })
     }
 
     private func tapReload(_ control: XCUIElement) {
@@ -161,7 +246,7 @@ final class SafariPublicSiteTests: XCTestCase {
         let expiry = Date().addingTimeInterval(seconds)
         repeat {
             for query in queries {
-                if let element = query.allElementsBoundByIndex.first(where: { $0.exists && $0.isHittable }) {
+                if let element = visible(query) {
                     return element
                 }
             }
