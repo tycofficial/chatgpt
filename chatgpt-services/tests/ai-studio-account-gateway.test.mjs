@@ -109,7 +109,7 @@ test('AI Studio routes use the existing account authority and keep session and h
   assert.equal((await f.call(path, { token: restored.token })).status, 401);
 });
 
-test('AI Studio HTTP sends the first SSE bytes and resumes the same Worker receipt after disconnect', async t => {
+test('AI Studio HTTP exposes SSE headers before the first output and resumes the same receipt after disconnect', async t => {
   const f = await start(t);
   f.env.DOCODE_API_KEY = 'synthetic-fixture-key';
   assert.equal((await f.call('/auth/site-trial', { method: 'POST', token: f.alice.token, body: { tier: 'plus' } })).status, 200);
@@ -122,7 +122,7 @@ test('AI Studio HTTP sends the first SSE bytes and resumes the same Worker recei
     if (String(input) !== 'https://docode.cc/v1/responses') return actual(input, init);
     executions++;
     return Promise.resolve(new Response(new ReadableStream({
-      start(controller) { writer = controller; controller.enqueue(encoder.encode(delta)); },
+      start(controller) { writer = controller; },
     }), { headers: { 'Content-Type': 'text/event-stream' } }));
   });
   const id = crypto.randomUUID();
@@ -134,6 +134,10 @@ test('AI Studio HTTP sends the first SSE bytes and resumes the same Worker recei
     assert.equal(live.status, 200);
     assert.equal(live.headers.get('X-Chat-Request-Id'), id);
     assert.match(live.headers.get('Access-Control-Expose-Headers'), /X-Chat-Request-Id/);
+    const admitted = await (await f.call(receipt, { token: f.alice.token })).json();
+    assert.equal(admitted.status, 'running');
+    assert.equal(admitted.chunks.length, 0);
+    writer.enqueue(encoder.encode(delta));
     const reader = live.body.getReader();
     assert.equal(new TextDecoder().decode((await reader.read()).value), delta);
     assert.equal((await (await f.call(receipt, { token: f.alice.token })).json()).status, 'running');

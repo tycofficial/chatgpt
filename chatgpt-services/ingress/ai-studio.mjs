@@ -46,8 +46,11 @@ export function createAiStudioAccountGateway({ fetchUpstream } = {}) {
       }));
       if (controller.signal.aborted) return;
       response.writeHead(outgoing.status, Object.fromEntries(outgoing.headers));
-      if (outgoing.body) await pipeline(Readable.fromWeb(outgoing.body), response, { signal: controller.signal });
-      else response.end();
+      if (outgoing.body) {
+        // Deliver admission headers even while the upstream stream has no output.
+        response.flushHeaders();
+        await pipeline(Readable.fromWeb(outgoing.body), response, { signal: controller.signal });
+      } else response.end();
     } catch {
       if (controller.signal.aborted) return;
       if (response.headersSent) response.destroy();
