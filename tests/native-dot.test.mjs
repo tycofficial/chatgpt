@@ -699,13 +699,26 @@ test('native Dot composer can write, edit and delete journal notes shown in the 
   const reopened = fixture({ storage: env.storage });
   const native = (await request(reopened.adapter, `${journal}?view=tasks`)).data;
   assert.equal(native.tasks[0].description, 'Native journal fixture');
-  assert.deepEqual(native.items, []);
   const entryId = native.tasks[0].id;
+  const stored = (await request(reopened.adapter, journal + '/' + entryId)).data;
+  assert.equal(native.items.length, 1);
+  assert.deepEqual(native.items[0], {
+    id: entryId, topic_id: entryId, title: 'Native journal fixture', status: 'complete',
+    description: 'Native journal fixture', completed_at: Date.parse(stored.updated_at) / 1000,
+    message_refs: [], outputs: [],
+  });
   assert.equal((await send(reopened.adapter, 'entry-edit', `/journal edit ${entryId} Updated native fixture`)).response.status, 200);
-  const details = (await request(reopened.adapter, `${journal}?view=tasks&task_id=${entryId}`)).data;
+  const reloaded = fixture({ storage: env.storage });
+  const edited = (await request(reloaded.adapter, `${journal}?view=tasks`)).data.items;
+  assert.deepEqual(edited.map(({ id, title, description }) => ({ id, title, description })), [
+    { id: entryId, title: 'Updated native fixture', description: 'Updated native fixture' },
+  ]);
+  const details = (await request(reloaded.adapter, `${journal}?view=tasks&task_id=${entryId}`)).data;
   assert.equal(details.turns[0].messages[0].text, 'Updated native fixture');
   assert.equal((await send(reopened.adapter, 'entry-delete', `/journal delete ${entryId}`)).response.status, 200);
-  assert.deepEqual((await request(fixture({ storage: env.storage }).adapter, `${journal}?view=tasks`)).data.tasks, []);
+  const afterDelete = (await request(fixture({ storage: env.storage }).adapter, `${journal}?view=tasks`)).data;
+  assert.deepEqual(afterDelete.tasks, []);
+  assert.deepEqual(afterDelete.items, []);
 });
 
 test('queued Dot messages recover after reload and admit a repeated request ID once', async () => {

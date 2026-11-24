@@ -659,7 +659,10 @@ export function createLocalDotAdapter({
     const tasks = notes.map(note => ({ id: note.id, title: title(note.content), outcome_state: 'reached', description: note.content,
       progress: null, input_needed: null, resume_message_id: null,
     }));
-    const items = [];
+    const items = notes.map(note => ({
+      id: note.id, topic_id: note.id, title: title(note.content), status: 'complete',
+      description: note.content, completed_at: Date.parse(note.updated_at) / 1000, message_refs: [], outputs: [],
+    }));
     for (const turn of [...thread.turns].reverse()) {
       const messages = messageByTurn.get(turn.id);
       if (!messages.length) continue;
@@ -671,6 +674,7 @@ export function createLocalDotAdapter({
       items.push({ id: turn.id, topic_id: turn.id, title: label, status,
         description: output ? messageText(output) : null, completed_at: turn.completedAt ?? null, message_refs: messages.map(message => message.id), outputs: [] });
     }
+    items.sort((a, b) => (b.completed_at ?? Number.MAX_SAFE_INTEGER) - (a.completed_at ?? Number.MAX_SAFE_INTEGER));
     const taskCursor = url.searchParams.get('cursor');
     const itemCursor = url.searchParams.get('item_cursor');
     function page(rows, cursor) {
