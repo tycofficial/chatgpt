@@ -55,7 +55,16 @@ function account(record){
  };
 }
 const hasActiveSiteTrial=record=>record.site_trial_expires_at>Date.now()&&siteTrialPlanTypes.has(record.site_trial_tier);
-async function issueUserSession(env,user){const token=hex(crypto.getRandomValues(new Uint8Array(32))),expiresAt=Date.now()+30*86400000;await query(env,'INSERT INTO user_sessions(token_hash,user_id,expires_at,created_at) VALUES(?,?,?,?)',await digest(token),user.id,expiresAt,Date.now()).run();return json({token,expiresAt,user:account({...user,role:'user'})});}
+async function issueUserSession(env,user,accountInsert){
+ const token=hex(crypto.getRandomValues(new Uint8Array(32)));
+ const createdAt=Date.now();
+ const expiresAt=createdAt+30*86400000;
+ const sessionInsert=query(env,'INSERT INTO user_sessions(token_hash,user_id,expires_at,created_at) VALUES(?,?,?,?)',
+  await digest(token),user.id,expiresAt,createdAt);
+ if(accountInsert)await env.DB.batch([accountInsert,sessionInsert]);
+ else await sessionInsert.run();
+ return json({token,expiresAt,user:account({...user,role:'user'})});
+}
 function postRequired(message){
  const response=fail(405,'METHOD_NOT_ALLOWED',message);
  response.headers.set('Allow','POST');
@@ -166,8 +175,14 @@ async function route(request,env,ctx){const path=new URL(request.url).pathname;
   if(!/^[\p{L}\p{N}_-]{3,32}$/u.test(username)||typeof data.password!=='string'||data.password.length<8||data.password.length>128)return fail(400,'INVALID_REGISTRATION','用户名需为3–32个文字、数字、下划线或短横线，密码需为8–128位。');
   if(username===administrator?.username||await query(env,'SELECT id FROM users WHERE username=?',username).first())return fail(409,'USERNAME_UNAVAILABLE','此用户名已被使用。');
   const salt=hex(crypto.getRandomValues(new Uint8Array(16))),user={id:crypto.randomUUID(),username,display_name:String(data.username).normalize('NFKC').trim(),created_at:Date.now()};
-  try{await query(env,'INSERT INTO users(id,username,display_name,password_hash,password_salt,created_at) VALUES(?,?,?,?,?,?)',user.id,user.username,user.display_name,await userPasswordHash(data.password,salt),salt,user.created_at).run();}catch(error){if(/UNIQUE/i.test(error.message))return fail(409,'USERNAME_UNAVAILABLE','此用户名已被使用。');throw error;}
-  return issueUserSession(env,user);
+  const accountInsert=query(env,'INSERT INTO users(id,username,display_name,password_hash,password_salt,created_at) VALUES(?,?,?,?,?,?)',
+   user.id,user.username,user.display_name,await userPasswordHash(data.password,salt),salt,user.created_at);
+  try{
+   return await issueUserSession(env,user,accountInsert);
+  }catch(error){
+   if(/UNIQUE constraint failed:\s*users\.username\b/i.test(error.message))return fail(409,'USERNAME_UNAVAILABLE','此用户名已被使用。');
+   throw error;
+  }
  }
  if(path==='/auth/login'&&request.method==='POST'){
   await configured(env);const data=await readBody(request),username=normalize(data.username);
