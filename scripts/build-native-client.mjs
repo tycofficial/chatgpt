@@ -174,6 +174,7 @@ signOut.installSiteSignOutRestore({home:()=>rootURL});
 const pagePath = location.pathname.replace(/\\/index\\.html$/, '/').replace(/\\/$/, '');
 const authEntry = getSiteAuthEntryKind(location.href, rootURL);
 const homeEntry = !authEntry && pagePath === rootURL.pathname.replace(/\\/$/, '');
+const settingsEntry = !authEntry && pagePath.startsWith(new URL('settings/', rootURL).pathname);
 if (authEntry === 'logout') {
  await siteAccount.logoutSiteAccount({waitForRemote:true});
  siteAccount.startSiteGuestSession();
@@ -194,6 +195,7 @@ else {
  void registerOptionalAssetWorker(workerURL, rootURL.pathname);
 }
 if (homeEntry) startup?.waitForComposer();
+else if (settingsEntry) startup?.waitForSettings();
 else startup?.ready();
 } catch (error) { showStartupError(error); }
 `;
@@ -292,8 +294,8 @@ const startupProgressStyle = `<style id="site-load-progress-style">
 @media(prefers-color-scheme:dark){#site-load-progress{color:#e5d9ff}}
 </style>`;
 const startupGuard = assets => `<script>(function(entries){
- var notice,progress,progressStyle,composerObserver,resolveStyles,drawPending=false,watcher,timer;
- var stylesLoaded=false,stylesFailed=false,finished=false,failed=false,waitingForComposer=false;
+ var notice,progress,progressStyle,renderObserver,resolveStyles,drawPending=false,watcher,timer;
+ var stylesLoaded=false,stylesFailed=false,finished=false,failed=false,waitingForRender=false;
  var resources=new Map(entries),seen=new Set(),timed=new Set();
  var total=entries.reduce(function(a,entry){return a+entry[1]},0),received=0,networkWeight=0,networkStart=Infinity,networkEnd=0;
  var lastProgress=performance.now();
@@ -316,7 +318,7 @@ const startupGuard = assets => `<script>(function(entries){
   gauge.style.setProperty('--site-loaded',percent+'%');
   progress.querySelector('[data-percent]').textContent=percent+'%';
   var span=networkEnd-networkStart, detail='正在测量加载速度';
-  if(waitingForComposer||received>=total) detail='正在初始化页面';
+  if(waitingForRender||received>=total) detail='正在初始化页面';
   else if(performance.now()-lastProgress>8000) detail='连接较慢，正在等待资源';
   else if(timed.size>=2&&span>=600&&networkWeight>0) {
    var seconds=Math.max(1,Math.ceil((total-received)*span/networkWeight/1000));
@@ -363,6 +365,27 @@ const startupGuard = assets => `<script>(function(entries){
   performance.getEntriesByType('resource').forEach(timing);
   updateProgress();
  }
+ function waitForVisibleContent(selector,accept){
+  waitingForRender=true;
+  collect();
+  function check(){
+   drawPending=false;
+   if(failed||finished)return;
+   var visible=Array.prototype.some.call(document.querySelectorAll(selector),function(node){
+    if(node.closest('[inert],[aria-hidden="true"],[hidden]')||!node.getClientRects().length||
+       getComputedStyle(node).visibility!=='visible')return false;
+    return accept(node);
+   });
+   if(visible){state.ready();return}
+   if(progressStyle&&!progressStyle.isConnected&&document.head)document.head.appendChild(progressStyle);
+   if(progress&&!progress.isConnected&&document.body)document.body.appendChild(progress);
+  }
+  function schedule(){if(!drawPending){drawPending=true;requestAnimationFrame(check)}}
+  renderObserver=new MutationObserver(schedule);
+  renderObserver.observe(document,{childList:true,subtree:true,characterData:true,attributes:true,
+   attributeFilter:['class','hidden','style','contenteditable','disabled','readonly','inert','aria-disabled','aria-readonly','aria-hidden']});
+  schedule();
+ }
  var state=window.__TYC_PAGE_START__={
   loadedResource:resourceReady,
   loadStyles:function(sheet){
@@ -391,30 +414,20 @@ const startupGuard = assets => `<script>(function(entries){
    watcher=setInterval(collect,750);
   },
   waitForComposer:function(){
-   waitingForComposer=true;
-   collect();
-   var selector='main [contenteditable="true"], main textarea, [contenteditable="true"][role="textbox"]';
-   function check(){
-    drawPending=false;
-    if(failed||finished)return;
-    var writable=Array.prototype.some.call(document.querySelectorAll(selector),function(node){
-     if(node.disabled||node.readOnly||node.closest('[inert],[aria-disabled="true"],[aria-readonly="true"],[hidden]'))return false;
-     if(node.tagName!=='TEXTAREA'&&!node.isContentEditable)return false;
-     return node.getClientRects().length&&getComputedStyle(node).visibility==='visible';
-    });
-    if(writable){state.ready();return}
-    if(progressStyle&&!progressStyle.isConnected&&document.head)document.head.appendChild(progressStyle);
-    if(progress&&!progress.isConnected&&document.body)document.body.appendChild(progress);
-   }
-   function schedule(){if(!drawPending){drawPending=true;requestAnimationFrame(check)}}
-   composerObserver=new MutationObserver(schedule);
-   composerObserver.observe(document,{childList:true,subtree:true,attributes:true,attributeFilter:['class','hidden','style','contenteditable','disabled','readonly','inert','aria-disabled','aria-readonly']});
-   schedule();
+   waitForVisibleContent('main [contenteditable="true"], main textarea, [contenteditable="true"][role="textbox"]',function(node){
+    if(node.disabled||node.readOnly||node.closest('[aria-disabled="true"],[aria-readonly="true"]'))return false;
+    return node.tagName==='TEXTAREA'||node.isContentEditable;
+   });
+  },
+  waitForSettings:function(){
+   waitForVisibleContent('main:not(#site-load-error), [role="main"], [role="dialog"]',function(node){
+    return Boolean(node.innerText.trim());
+   });
   },
   fail:function(){
    if(finished)return;
    failed=true;
-   if(composerObserver)composerObserver.disconnect();
+   if(renderObserver)renderObserver.disconnect();
    clearTimeout(timer);
    clearInterval(watcher);
    hideProgress();
@@ -423,7 +436,7 @@ const startupGuard = assets => `<script>(function(entries){
   ready:function(){
    if(finished)return;
    finished=true;
-   if(composerObserver)composerObserver.disconnect();
+   if(renderObserver)renderObserver.disconnect();
    clearTimeout(timer);
    clearInterval(watcher);
    if(progress) {

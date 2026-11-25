@@ -222,6 +222,24 @@ test('the homepage keeps its progress across a document mount until the composer
   assert.equal(fixture.progress.isConnected, false);
 });
 
+test('settings keeps measured progress until the settings content has rendered', () => {
+  const fixture = startupFixture();
+  fixture.state.attach(fixture.notice);
+  fixture.state.waitForSettings();
+  fixture.progress.parentNode = null;
+  fixture.progressStyle.parentNode = null;
+
+  fixture.mutate({ getClientRects: () => [{}], visibility: 'visible', innerText: '' });
+  assert.equal(fixture.progress.isConnected, true);
+  assert.equal(fixture.progressStyle.isConnected, true);
+  assert.notEqual(fixture.gauge.value, '100');
+  assert.equal(fixture.time.textContent, '正在初始化页面');
+
+  fixture.mutate({ getClientRects: () => [{}], visibility: 'visible', innerText: '账户设置' });
+  assert.equal(fixture.gauge.value, '100');
+  assert.equal(fixture.progress.isConnected, false);
+});
+
 test('startup tracks completed resources once and estimates the time only after network samples', () => {
   const f = startupFixture();
   f.state.attach(f.notice);
