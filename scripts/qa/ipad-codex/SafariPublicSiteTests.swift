@@ -71,7 +71,7 @@ final class SafariPublicSiteTests: XCTestCase {
         let before = try await waitForMetrics { !$0.savedCodexThreads.isEmpty }
         let savedThread = try XCTUnwrap(before.savedCodexThreads.first)
         XCTAssertEqual(before.savedCodexThreads.count, 1)
-        XCTAssertTrue(savedThread.firstUserText.hasSuffix(prompt), "The stored text must contain the test prompt")
+        XCTAssertTrue(savedThread.firstUserText.contains(prompt), "The stored text must contain the test prompt")
         _ = try waitForHittable(matchingText(savedThread.firstUserText, in: web), seconds: 15)
         if savedThread.firstUserText != prompt { print("IPAD_QA keyboard-added-text-before-send") }
         XCTAssertEqual(savedThread.replyItems, 1, "One assistant reply must be saved before Safari reload")

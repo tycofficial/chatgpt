@@ -134,7 +134,7 @@ function savedCodexThreads(rows) {
       turn.items.some(item => item.type === 'agentMessage' && item.text?.trim() === reply));
     if (!turn) return [];
     const userMessage = turn.items.find(item => item.type === "userMessage");
-    const firstUserText = userMessage?.content.filter(part => part.type === "text").map(part => part.text).join("\n") ?? "";
+    const firstUserText = userMessage?.content.filter(part => part.type === "text").map(part => part.text).join("\n").trim() ?? "";
     const replyItems = text => document.turns.filter(saved => saved.executionSurface === 'codex' && saved.status === 'completed')
       .flatMap(saved => saved.items).filter(item => item.type === 'agentMessage' && item.text?.trim() === text).length;
     return [{ id, title: document.name, firstUserText, model: turn.model, effort: turn.reasoningEffort,
