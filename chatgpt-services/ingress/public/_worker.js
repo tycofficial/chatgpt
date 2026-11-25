@@ -88,6 +88,10 @@ function sendError(status, code, message, headers) {
   return new Response(JSON.stringify({ error: { code, message } }), { status, headers });
 }
 
+export function gatewayError(origin, status, code, message) {
+  return sendError(status, code, message, responseHeaders(origin === siteOrigin ? origin : null));
+}
+
 // Production uses the private defaults. The overrides support isolated local
 // protocol tests only; they are never populated from an HTTP request or binding.
 export function createRelay({ fetchUpstream = (...args) => fetch(...args), allowedOrigin = siteOrigin, headerTimeoutMs } = {}) {

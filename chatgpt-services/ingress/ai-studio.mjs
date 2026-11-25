@@ -1,17 +1,15 @@
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { createRelay } from './public/_worker.js';
+import { createRelay, gatewayError } from './public/_worker.js';
 
 const accountPath = /^\/(?:health\/?$|(?:auth|sync|bridge|jobs|billing\/v1|inference\/v1|dot-computer\/v1)(?:\/|$))/;
 const requestOrigin = 'https://chatgptapi.ai.studio';
 
-function sendGatewayError(response, status, code) {
-  response.writeHead(status, {
-    'Content-Type': 'application/json; charset=utf-8',
-    'Cache-Control': 'private, no-store',
-    'X-Content-Type-Options': 'nosniff',
-  });
-  response.end(JSON.stringify({ error: { code, message: '本站账号服务暂时无法连接。' } }));
+async function sendGatewayError(request, response, status, code, message = '本站账号服务暂时无法连接。') {
+  const error = gatewayError(request.headers.origin, status, code, message);
+  const body = await error.text();
+  response.writeHead(error.status, Object.fromEntries(error.headers));
+  response.end(body);
 }
 
 /** Mount before the existing AI Studio app's JSON parser and API routes. */
@@ -20,8 +18,7 @@ export function createAiStudioAccountGateway({ fetchUpstream, headerTimeoutMs } 
   return async function accountGateway(request, response, next) {
     const target = request.url ?? '';
     if (!target.startsWith('/') || target.startsWith('//') || target.includes('\\')) {
-      sendGatewayError(response, 400, 'INVALID_REQUEST_TARGET');
-      return;
+      return sendGatewayError(request, response, 400, 'INVALID_REQUEST_TARGET');
     }
     const url = new URL(target, requestOrigin);
     if (!accountPath.test(url.pathname) && !accountPath.test(target.split('?')[0])) return next();
@@ -40,6 +37,11 @@ export function createAiStudioAccountGateway({ fetchUpstream, headerTimeoutMs } 
       }
       const hasBody = !['GET', 'HEAD'].includes(method) &&
         (Number(headers.get('content-length')) > 0 || headers.has('transfer-encoding'));
+      if (hasBody && request.readableEnded) {
+        await sendGatewayError(request, response, 500, 'SITE_ACCOUNT_GATEWAY_BODY_UNAVAILABLE',
+          '本站账号网关配置有误，请联系站点维护者。');
+        return;
+      }
       const outgoing = await relay(new Request(url, {
         method, headers, signal: controller.signal,
         ...(hasBody ? { body: Readable.toWeb(request), duplex: 'half' } : {}),
@@ -54,7 +56,7 @@ export function createAiStudioAccountGateway({ fetchUpstream, headerTimeoutMs } 
     } catch {
       if (controller.signal.aborted) return;
       if (response.headersSent) response.destroy();
-      else sendGatewayError(response, 502, 'SITE_ACCOUNT_GATEWAY_FAILED');
+      else await sendGatewayError(request, response, 502, 'SITE_ACCOUNT_GATEWAY_FAILED');
     } finally {
       response.off('close', disconnect);
     }

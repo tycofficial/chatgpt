@@ -10,7 +10,7 @@ const site = 'https://tycofficial.github.io';
 const upstream = 'https://chatgpt-admin-bridge-tyc.hushedtarragon1.chatgpt.site';
 const requestRoute = '/inference/v1/responses';
 
-async function start(t, { headerTimeoutMs } = {}) {
+async function start(t, { headerTimeoutMs, parseBodyFirst = false } = {}) {
   const backend = await syncFixture();
   const calls = [], work = [];
   const gateway = createAiStudioAccountGateway({
@@ -31,7 +31,10 @@ async function start(t, { headerTimeoutMs } = {}) {
       });
     },
   });
-  const server = createServer((request, response) => {
+  const server = createServer(async (request, response) => {
+    if (parseBodyFirst) {
+      for await (const chunk of request) void chunk;
+    }
     void gateway(request, response, () => {
       response.writeHead(200, { 'Content-Type': 'text/plain' });
       response.end('Existing AI Studio app');
@@ -60,6 +63,20 @@ async function start(t, { headerTimeoutMs } = {}) {
   );
   return { ...backend, call, calls, work };
 }
+
+test('AI Studio reports a consumed request body without calling the account authority', async t => {
+  const f = await start(t, { parseBodyFirst: true });
+  const body = { username: 'TYC', password: 'Neutral-Admin-Only' };
+  const login = await f.call('/auth/login', { method: 'POST', body });
+  assert.equal(login.status, 500);
+  assert.equal(login.headers.get('Access-Control-Allow-Origin'), site);
+  assert.equal(login.headers.get('Vary'), 'Origin');
+  assert.match(login.headers.get('Cache-Control'), /no-store/);
+  assert.equal((await login.json()).error.code, 'SITE_ACCOUNT_GATEWAY_BODY_UNAVAILABLE');
+  const foreign = await f.call('/auth/login', { method: 'POST', origin: 'https://unrelated.invalid', body });
+  assert.equal(foreign.headers.get('Access-Control-Allow-Origin'), null);
+  assert.equal(f.calls.length, 0);
+});
 
 test('AI Studio routes use the existing account authority and keep session and history boundaries', async t => {
   const f = await start(t);

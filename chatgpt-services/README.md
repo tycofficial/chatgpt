@@ -45,7 +45,10 @@ The existing AI Studio Node server can use the same account authority as the Git
 import { createAiStudioAccountGateway } from './chatgpt-services/ingress/ai-studio.mjs';
 
 app.use(createAiStudioAccountGateway());
+app.use(express.json());
 ```
+
+Keep the gateway above the existing `express.json()` or other middleware that reads requests. If another handler reads a request body first, the API returns `SITE_ACCOUNT_GATEWAY_BODY_UNAVAILABLE`.
 
 The gateway forwards the site API to the fixed account Worker. It passes response streams through the Node server and closes the client stream when the downstream connection ends. The account Worker remains responsible for session revocation, granting trial or subscription entitlements, and journaled inference. The gateway's authentication depends on the site session. It needs no database password or model provider key in the AI Studio app.
 
