@@ -67,6 +67,42 @@ test('persist before POST, recover a lost admission acknowledgement using GET, a
   assert.ok(!JSON.stringify(checkpoint).includes('fixture-bearer'));
 });
 
+test('a gateway timeout without admission headers recovers the original request from its receipt', async () => {
+  const methods = [];
+  const checkpoint = {};
+  const answer = finish([textItem('m', 'Same request after gateway timeout.')]);
+  const client = transport(async (url, init) => {
+    methods.push(init.method ?? 'GET');
+    if (init.method === 'POST') {
+      assert.equal(init.headers['X-Chat-Request-Id'], uuid(1));
+      return Response.json({ error: { code: 'SITE_UPSTREAM_TIMEOUT' } }, { status: 504 });
+    }
+    assert.equal(url.pathname, route + '/' + uuid(1));
+    return receipt(uuid(1), { data: [answer] });
+  });
+  assert.equal(await (await client.request(payload, { checkpoint })).text(), answer);
+  assert.equal(checkpoint.state, 'completed');
+  assert.deepEqual(methods, ['POST', 'GET']);
+});
+
+test('an admitted 504 with an authoritative receipt remains the original failure', async () => {
+  const methods = [];
+  const checkpoint = {};
+  const failure = { code: 'PROVIDER_TIMEOUT', message: 'The provider timed out.' };
+  const client = transport(async (_url, init) => {
+    methods.push(init.method ?? 'GET');
+    if (init.method === 'POST') return Response.json({ error: failure }, {
+      status: 504, headers: { 'X-Chat-Started-At': String(clockStart) },
+    });
+    return receipt(uuid(1), { status: 'failed', httpStatus: 504, error: failure });
+  });
+  const response = await client.request(payload, { checkpoint });
+  assert.equal(response.status, 504);
+  assert.deepEqual((await response.json()).error, failure);
+  assert.equal(checkpoint.state, 'failed');
+  assert.deepEqual(methods, ['POST', 'GET']);
+});
+
 test('a live disconnect inside Chinese UTF-8 resumes the suffix across journal pages', { timeout: 3000 }, async () => {
   const head = 'data: {"delta":"中国🙂"}\n\n', tail = finish([textItem('m', '中国🙂')]);
   const encoder = new TextEncoder(), bytes = encoder.encode(head), polls = [];

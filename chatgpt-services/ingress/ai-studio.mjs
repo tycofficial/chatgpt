@@ -15,8 +15,8 @@ function sendGatewayError(response, status, code) {
 }
 
 /** Mount before the existing AI Studio app's JSON parser and API routes. */
-export function createAiStudioAccountGateway({ fetchUpstream } = {}) {
-  const relay = createRelay({ fetchUpstream });
+export function createAiStudioAccountGateway({ fetchUpstream, headerTimeoutMs } = {}) {
+  const relay = createRelay({ fetchUpstream, headerTimeoutMs });
   return async function accountGateway(request, response, next) {
     const target = request.url ?? '';
     if (!target.startsWith('/') || target.startsWith('//') || target.includes('\\')) {

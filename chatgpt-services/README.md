@@ -49,6 +49,8 @@ app.use(createAiStudioAccountGateway());
 
 The gateway forwards the site API to the fixed account Worker. It passes response streams through the Node server and closes the client stream when the downstream connection ends. The account Worker remains responsible for session revocation, granting trial or subscription entitlements, and journaled inference. The gateway's authentication depends on the site session. It needs no database password or model provider key in the AI Studio app.
 
+The gateway returns a structured 504 if health, account, or journaled inference requests stall before their response headers. For a journaled inference, the browser first reads the existing request ID from the Worker. Once upstream headers arrive, the header deadline is cleared so it does not interrupt the response stream. Payments, desktop tasks and large history uploads keep their existing service timeouts.
+
 In an AI Studio preview, check that the Node runtime can reach the Worker: `GET /health` should report `storage: "D1"`. Verify an existing account and a separate test account, then check logout and one model reply with the same account. The current published AI Studio app has a separate SQLite store. Identify which accounts belong to that store before switching the existing application's public routes.
 
 The account Worker's public /health response includes inferenceConfigured, billingConfigured and dotComputerConfigured. These report configuration presence and validity without contacting the providers. The account Worker must include the corresponding schema and runtime features for billing and Dot routes. Publishing the existing AI Studio project and changing the Pages API origin are independent deployment steps.

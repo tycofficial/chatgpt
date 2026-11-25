@@ -305,6 +305,10 @@ export function createSiteInferenceTransport({
         if (liveResponse) {
           const startedAt = timestamp(liveResponse.headers.get('X-Chat-Started-At'));
           if (startedAt) await saveFields(checkpoint, onCheckpoint, { startedAt, state: 'running', providerRequestId: liveResponse.headers.get('X-Request-Id') });
+          if (liveResponse.status === 504 && !startedAt) {
+            void liveResponse.body?.cancel().catch(() => {});
+            return null;
+          }
           if (!liveResponse.ok || !liveResponse.body) { cleanup(); await settle(checkpoint, options); return liveResponse; }
           if (liveResponse.status !== 202) return stream(checkpoint, options, cleanup, { liveResponse });
           void liveResponse.body.cancel().catch(() => {});

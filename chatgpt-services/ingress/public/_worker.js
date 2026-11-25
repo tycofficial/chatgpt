@@ -88,7 +88,7 @@ function sendError(status, code, message, headers) {
 
 // Production uses the private defaults. The overrides support isolated local
 // protocol tests only; they are never populated from an HTTP request or binding.
-export function createRelay({ fetchUpstream = (...args) => fetch(...args), allowedOrigin = siteOrigin } = {}) {
+export function createRelay({ fetchUpstream = (...args) => fetch(...args), allowedOrigin = siteOrigin, headerTimeoutMs } = {}) {
   return async function relay(request) {
     const url = new URL(request.url);
     const origin = request.headers.get('Origin');
@@ -143,13 +143,25 @@ export function createRelay({ fetchUpstream = (...args) => fetch(...args), allow
     upstreamURL.pathname = url.pathname;
     upstreamURL.search = url.search;
     let response;
+    const journaled = journalPost && requestId !== null;
+    const shortRequest = url.pathname === '/health' || url.pathname.startsWith('/auth/') ||
+      method === 'GET' && url.pathname.startsWith(inference + '/');
+    const deadline = journaled || shortRequest ? new AbortController() : null;
+    const timer = deadline ? setTimeout(() => deadline.abort(), headerTimeoutMs ?? (journaled ? 12000 : 7500)) : null;
     try {
       response = await fetchUpstream(upstreamURL, {
-        method, headers: upstreamHeaders, signal: request.signal, redirect: 'manual',
+        method, headers: upstreamHeaders,
+        signal: deadline ? AbortSignal.any([request.signal, deadline.signal]) : request.signal, redirect: 'manual',
         ...(request.body ? { body: request.body, duplex: 'half' } : {}),
       });
     } catch {
+      if (deadline?.signal.aborted && !request.signal.aborted) {
+        return error(504, 'SITE_UPSTREAM_TIMEOUT', '等待本站账号服务响应超时。');
+      }
       return error(502, 'SITE_UPSTREAM_UNAVAILABLE', '本站账号服务暂时无法连接。');
+    } finally {
+      // This deadline covers upstream headers. The streaming body keeps the caller's cancellation signal.
+      clearTimeout(timer);
     }
     if (response.status >= 300 && response.status < 400) {
       void response.body?.cancel().catch(() => {});

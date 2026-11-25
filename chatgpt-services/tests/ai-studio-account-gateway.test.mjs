@@ -10,14 +10,25 @@ const site = 'https://tycofficial.github.io';
 const upstream = 'https://chatgpt-admin-bridge-tyc.hushedtarragon1.chatgpt.site';
 const requestRoute = '/inference/v1/responses';
 
-async function start(t) {
+async function start(t, { headerTimeoutMs } = {}) {
   const backend = await syncFixture();
   const calls = [], work = [];
   const gateway = createAiStudioAccountGateway({
+    headerTimeoutMs,
     fetchUpstream: (target, init) => {
       assert.equal(target.origin, upstream);
       calls.push({ path: target.pathname, headers: init.headers });
-      return worker.fetch(new Request(target, init), backend.env, { waitUntil: promise => work.push(promise) });
+      const pending = worker.fetch(new Request(target, init), backend.env, { waitUntil: promise => work.push(promise) });
+      if (headerTimeoutMs === undefined) return pending;
+      // A network client's fetch rejects on abort while Worker waitUntil can complete.
+      return new Promise((resolve, reject) => {
+        const abort = () => reject(init.signal.reason);
+        init.signal.addEventListener('abort', abort, { once: true });
+        void pending.then(response => {
+          if (init.signal.aborted) void response.body?.cancel().catch(() => {});
+          else resolve(response);
+        }, reject).finally(() => init.signal.removeEventListener('abort', abort));
+      });
     },
   });
   const server = createServer((request, response) => {
@@ -202,5 +213,39 @@ test('AI Studio HTTP exposes SSE headers before the first output and resumes the
   assert.equal(result.chunks.map(x => x.data).join(''), delta + terminal);
   assert.equal((await f.call(requestRoute, request)).status, 202);
   assert.equal((await f.call(receipt, { token: f.bob.token })).status, 404);
+  assert.equal(executions, 1);
+});
+
+test('AI Studio HTTP returns a bounded timeout before provider headers while the Worker saves the same inference', async t => {
+  const f = await start(t, { headerTimeoutMs: 150 });
+  f.env.DOCODE_API_KEY = 'synthetic-fixture-key';
+  const output = 'data: {"type":"response.completed","response":{"status":"completed","model":"gpt-6-sol"}}\n\n';
+  const provider = Promise.withResolvers();
+  let executions = 0;
+  const actual = globalThis.fetch;
+  t.mock.method(globalThis, 'fetch', (input, init) => {
+    if (String(input) !== 'https://docode.cc/v1/responses') return actual(input, init);
+    executions++;
+    return provider.promise;
+  });
+  const id = crypto.randomUUID();
+  const submission = { method: 'POST', token: f.alice.token, headers: { 'X-Chat-Request-Id': id },
+    body: { model: 'gpt-6-sol', input: 'Fixture request', stream: true } };
+  try {
+    const response = await f.call(requestRoute, submission);
+    assert.equal(response.status, 504);
+    assert.equal(response.headers.get('Access-Control-Allow-Origin'), site);
+    assert.equal(response.headers.has('X-Chat-Started-At'), false);
+    assert.equal((await response.json()).error.code, 'SITE_UPSTREAM_TIMEOUT');
+  } finally {
+    provider.resolve(new Response(output, { headers: { 'Content-Type': 'text/event-stream' } }));
+    await Promise.all(f.work);
+  }
+  const replay = await f.call(requestRoute + '/' + id + '?after=-1', { token: f.alice.token });
+  assert.equal(replay.status, 200);
+  const result = await replay.json();
+  assert.equal(result.status, 'completed');
+  assert.equal(result.chunks.map(chunk => chunk.data).join(''), output);
+  assert.equal((await f.call(requestRoute, submission)).status, 202);
   assert.equal(executions, 1);
 });

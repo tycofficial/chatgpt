@@ -234,6 +234,56 @@ test('upstream redirects and transport failures are bounded JSON errors and neve
   assert.deepEqual(a, [[worker + '/health', 'manual'], [worker + '/health', 'manual']]);
 });
 
+test('the upstream header deadline bounds a stall without timing out an admitted event stream', async () => {
+  let calls = 0;
+  let upstreamSignal;
+  let stream;
+  const relay = createRelay({ headerTimeoutMs: 20, fetchUpstream(_url, { signal }) {
+    calls++;
+    upstreamSignal = signal;
+    if (calls === 1) {
+      return new Promise((_resolve, reject) => signal.addEventListener('abort', () => reject(signal.reason), { once: true }));
+    }
+    return new Response(new ReadableStream({ start(controller) { stream = controller; } }), {
+      headers: { 'Content-Type': 'text/event-stream', 'X-Chat-Request-Id': id },
+    });
+  } });
+  const post = (signal) => request(inference, { method: 'POST', signal, body: '{"stream":true}', headers: {
+    'Content-Type': 'application/json', 'X-Chat-Request-Id': id,
+  } });
+  const stalled = await relay(post());
+  assert.equal(stalled.status, 504);
+  assert.equal(stalled.headers.get('Access-Control-Allow-Origin'), origin);
+  assert.equal((await stalled.json()).error.code, 'SITE_UPSTREAM_TIMEOUT');
+  assert.equal(upstreamSignal.aborted, true);
+  assert.equal(calls, 1);
+
+  const downstream = new AbortController();
+  const admitted = await relay(post(downstream.signal));
+  await new Promise(resolve => setTimeout(resolve, 45));
+  assert.equal(upstreamSignal.aborted, false);
+  stream.enqueue(new TextEncoder().encode('data: next\n\n'));
+  stream.close();
+  assert.equal(await admitted.text(), 'data: next\n\n');
+  downstream.abort();
+  assert.equal(upstreamSignal.aborted, true);
+  assert.equal(calls, 2);
+});
+
+test('checkout, desktop tasks, and legacy inference keep their existing cancellation behavior', async () => {
+  let activeRequest;
+  const relay = createRelay({ fetchUpstream(_url, init) {
+    assert.equal(init.signal, activeRequest.signal);
+    return Response.json({ ready: true });
+  } });
+  for (const path of ['/billing/v1/checkout', dotEnvironment + '/task', inference]) {
+    activeRequest = request(path, { method: 'POST', body: '{}', headers: {
+      Authorization: 'Bearer ' + 'a'.repeat(64), 'Content-Type': 'application/json',
+    } });
+    assert.equal((await relay(activeRequest)).status, 200);
+  }
+});
+
 test('an upstream challenge is a gateway outage, while a genuine session rejection remains a 401', async () => {
   let calls = 0;
   let discarded = 0;
