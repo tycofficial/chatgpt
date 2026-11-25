@@ -21,6 +21,14 @@ const timestamp = value => {
 };
 const statusCode = value => Number.isInteger(value) && value >= 200 && value <= 599 ? value : null;
 const isTerminal = status => statuses.has(status) && status !== 'running';
+const isJson = response => /^application\/json(?:\s*;|$)/i.test(response.headers.get('Content-Type') ?? '');
+
+async function mayHaveReachedJournal(response) {
+  if (response.status === 504) return true;
+  if (response.status !== 502 || !isJson(response)) return false;
+  try { return (await response.clone().json())?.error?.code === 'SITE_UPSTREAM_UNAVAILABLE'; }
+  catch { return false; }
+}
 
 export const isSiteInferenceCheckpoint = checkpoint => checkpoint?.route === checkpointRoute && uuidPattern.test(checkpoint.siteRequestId ?? '');
 
@@ -127,8 +135,17 @@ export function createSiteInferenceTransport({
     try { response = await fetchSite(receiptPath(checkpoint) + '?after=' + after, token, { signal: signal ? AbortSignal.any([signal, timeout]) : timeout }); }
     catch { signal?.throwIfAborted(); throw reconnect(); }
     if (!response.ok) {
+      if (response.status === 404 || response.status === 410) {
+        let confirmedMissing = false;
+        if (response.status === 404 && isJson(response)) {
+          try { confirmedMissing = (await response.json())?.error?.code === 'INFERENCE_NOT_FOUND'; }
+          catch { signal?.throwIfAborted(); }
+        } else void response.body?.cancel().catch(() => {});
+        throw error('SITE_INFERENCE_RECEIPT_UNAVAILABLE', '找不到本次推理的服务端记录，无法确认它是否已经执行。可保留现有回复并发送新消息继续。', {
+          status: response.status, confirmedMissing, requiresTransportResume: true,
+        });
+      }
       void response.body?.cancel().catch(() => {});
-      if (response.status === 404 || response.status === 410) throw error('SITE_INFERENCE_RECEIPT_UNAVAILABLE', '找不到本次推理的服务端记录，无法确认它是否已经执行。可保留现有回复并发送新消息继续。', { status: response.status, requiresTransportResume: true });
       if (response.status === 429 || response.status >= 500) throw reconnect();
       throw error('SITE_INFERENCE_RECEIPT_DENIED', '当前无法读取本次推理的服务端记录。', { status: response.status, requiresTransportResume: true });
     }
@@ -305,7 +322,7 @@ export function createSiteInferenceTransport({
         if (liveResponse) {
           const startedAt = timestamp(liveResponse.headers.get('X-Chat-Started-At'));
           if (startedAt) await saveFields(checkpoint, onCheckpoint, { startedAt, state: 'running', providerRequestId: liveResponse.headers.get('X-Request-Id') });
-          if (liveResponse.status === 504 && !startedAt) {
+          if (!startedAt && await mayHaveReachedJournal(liveResponse)) {
             void liveResponse.body?.cancel().catch(() => {});
             return null;
           }
@@ -320,11 +337,11 @@ export function createSiteInferenceTransport({
       let initial;
       try { initial = await pollReceipt(checkpoint, -1, options); }
       catch (cause) {
-        // The first page can close before the Worker admits the POST. The Worker
-        // deduplicates by account, request ID and body, even if that POST arrives late.
+        // Only the journal's own missing-receipt result proves this endpoint
+        // understands the request ID. An ordinary 404 can come from an older gateway.
         const withinWindow = Number.isSafeInteger(checkpoint.submittedAt) && Math.abs(Date.now() - checkpoint.submittedAt) < admissionRetryMs;
         const unacknowledged = checkpoint.state === 'submitted' && !checkpoint.startedAt && !checkpoint.cancelRequested;
-        if (cause.status !== 404 || !unacknowledged || !withinWindow || checkpoint.bodyHash !== await bodyDigest(body)) throw cause;
+        if (!cause.confirmedMissing || !unacknowledged || !withinWindow || checkpoint.bodyHash !== await bodyDigest(body)) throw cause;
         response = await submit();
         if (response) return response;
         initial = await pollReceipt(checkpoint, -1, options);

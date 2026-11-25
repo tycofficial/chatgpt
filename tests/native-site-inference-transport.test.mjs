@@ -67,40 +67,72 @@ test('persist before POST, recover a lost admission acknowledgement using GET, a
   assert.ok(!JSON.stringify(checkpoint).includes('fixture-bearer'));
 });
 
-test('a gateway timeout without admission headers recovers the original request from its receipt', async () => {
-  const methods = [];
-  const checkpoint = {};
-  const answer = finish([textItem('m', 'Same request after gateway timeout.')]);
-  const client = transport(async (url, init) => {
-    methods.push(init.method ?? 'GET');
-    if (init.method === 'POST') {
-      assert.equal(init.headers['X-Chat-Request-Id'], uuid(1));
-      return Response.json({ error: { code: 'SITE_UPSTREAM_TIMEOUT' } }, { status: 504 });
-    }
-    assert.equal(url.pathname, route + '/' + uuid(1));
-    return receipt(uuid(1), { data: [answer] });
-  });
-  assert.equal(await (await client.request(payload, { checkpoint })).text(), answer);
-  assert.equal(checkpoint.state, 'completed');
-  assert.deepEqual(methods, ['POST', 'GET']);
+test('a gateway timeout or broken upstream connection recovers the original receipt without another POST', async () => {
+  for (const [status, code] of [[504, 'SITE_UPSTREAM_TIMEOUT'], [502, 'SITE_UPSTREAM_UNAVAILABLE']]) {
+    const methods = [];
+    const checkpoint = {};
+    const answer = finish([textItem('m', 'Same request after gateway disconnect.')]);
+    const client = transport(async (url, init) => {
+      methods.push(init.method ?? 'GET');
+      if (init.method === 'POST') {
+        assert.equal(init.headers['X-Chat-Request-Id'], uuid(1));
+        return Response.json({ error: { code } }, { status });
+      }
+      assert.equal(url.pathname, route + '/' + uuid(1));
+      return receipt(uuid(1), { data: [answer] });
+    });
+    assert.equal(await (await client.request(payload, { checkpoint })).text(), answer);
+    assert.equal(checkpoint.state, 'completed');
+    assert.deepEqual(methods, ['POST', 'GET']);
+  }
 });
 
-test('an admitted 504 with an authoritative receipt remains the original failure', async () => {
-  const methods = [];
-  const checkpoint = {};
-  const failure = { code: 'PROVIDER_TIMEOUT', message: 'The provider timed out.' };
-  const client = transport(async (_url, init) => {
-    methods.push(init.method ?? 'GET');
-    if (init.method === 'POST') return Response.json({ error: failure }, {
-      status: 504, headers: { 'X-Chat-Started-At': String(clockStart) },
+test('admitted upstream errors keep their original provider errors and request information', async () => {
+  for (const [status, code] of [[502, 'DOCODE_UNAVAILABLE'], [504, 'PROVIDER_TIMEOUT']]) {
+    const methods = [];
+    const checkpoint = {};
+    const failure = { code, message: 'The provider failed.' };
+    const client = transport(async (_url, init) => {
+      methods.push(init.method ?? 'GET');
+      if (init.method === 'POST') return Response.json({ error: failure }, {
+        status, headers: { 'X-Chat-Started-At': String(clockStart) },
+      });
+      return receipt(uuid(1), { status: 'failed', httpStatus: status, error: failure });
     });
-    return receipt(uuid(1), { status: 'failed', httpStatus: 504, error: failure });
-  });
-  const response = await client.request(payload, { checkpoint });
-  assert.equal(response.status, 504);
-  assert.deepEqual((await response.json()).error, failure);
-  assert.equal(checkpoint.state, 'failed');
-  assert.deepEqual(methods, ['POST', 'GET']);
+    const response = await client.request(payload, { checkpoint });
+    assert.equal(response.status, status);
+    assert.deepEqual((await response.json()).error, failure);
+    assert.equal(checkpoint.state, 'failed');
+    assert.deepEqual(methods, ['POST', 'GET']);
+  }
+});
+
+test('a route-level 404 after losing the POST response never triggers another inference', async () => {
+  for (const missing of [
+    () => Response.json({ error: { code: 'ROUTE_NOT_FOUND' } }, { status: 404 }),
+    () => new Response('Page not found', { status: 404 }),
+  ]) {
+    const methods = [];
+    const client = transport(async (_url, init) => {
+      methods.push(init.method ?? 'GET');
+      if (init.method === 'POST') return Response.json({ error: { code: 'SITE_UPSTREAM_UNAVAILABLE' } }, { status: 502 });
+      return missing();
+    });
+    await assert.rejects(client.request(payload), { code: 'SITE_INFERENCE_RECEIPT_UNAVAILABLE', status: 404 });
+    assert.deepEqual(methods, ['POST', 'GET']);
+  }
+});
+
+test('configuration and ingress policy errors keep their messages without polling the journal', async () => {
+  for (const [status, code] of [[503, 'DOCODE_NOT_CONFIGURED'], [502, 'SITE_UPSTREAM_INVALID_RESPONSE']]) {
+    const client = transport(async (_url, init) => {
+      assert.equal(init.method, 'POST');
+      return Response.json({ error: { code, message: 'Original failure.' } }, { status });
+    });
+    const response = await client.request(payload);
+    assert.equal(response.status, status);
+    assert.deepEqual(await response.json(), { error: { code, message: 'Original failure.' } });
+  }
 });
 
 test('a live disconnect inside Chinese UTF-8 resumes the suffix across journal pages', { timeout: 3000 }, async () => {
@@ -180,7 +212,7 @@ test('a cached owner can reattach after the account service recovers without sen
   assert.deepEqual(methods, ['GET']);
 });
 
-test('reopening before admission retries the identical UUID and payload after a 404', async () => {
+test('reopening before admission retries the identical UUID and payload only after a confirmed missing receipt', async () => {
   const checkpoint = {}, events = [];
   const closing = new AbortController();
   const first = transport(async (_url, options) => {
@@ -197,7 +229,7 @@ test('reopening before admission retries the identical UUID and payload after a 
       return new Response(output);
     }
     events.push('receipt');
-    return Response.json({}, { status: 404 });
+    return Response.json({ error: { code: 'INFERENCE_NOT_FOUND' } }, { status: 404 });
   });
   await assert.rejects(reopened.request({ ...payload, input: 'Modified payload' }, { checkpoint }), { status: 404 });
   assert.equal(await (await reopened.request(payload, { checkpoint })).text(), output);
@@ -221,7 +253,7 @@ test('reopening a reasoning request retains the body saved before admission acro
     submittedAt: Date.now(), bodyHash: createHash('sha256').update(JSON.stringify(request)).digest('hex') };
   const replies = finish([textItem('m', 'Recovered once')]), submitted = [];
   const reopened = transport(async (_url, options) => {
-    if (options.method !== 'POST') return Response.json({}, { status: 404 });
+    if (options.method !== 'POST') return Response.json({ error: { code: 'INFERENCE_NOT_FOUND' } }, { status: 404 });
     submitted.push([options.headers['X-Chat-Request-Id'], JSON.parse(options.body)]);
     return new Response(replies);
   });
