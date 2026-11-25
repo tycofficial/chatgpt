@@ -44,7 +44,9 @@ function findRoute(pathname) {
   if (pathname.startsWith(dotComputer + '/')) {
     const [resource, id, action, ...extra] = pathname.slice(dotComputer.length + 1).split('/');
     const method = dotOperations.get(action === undefined ? resource : resource + '/' + action);
-    if (method && uuid.test(id ?? '') && extra.length === 0) return { methods: [method], needsBearer: true };
+    if (method && uuid.test(id ?? '') && extra.length === 0) {
+      return { methods: [method], needsBearer: true, desktopFrame: action === 'frame', emptySuccess: action === 'input' };
+    }
     return null;
   }
   const found = /^\/sync\/conversations\/([^/]+)$/.exec(pathname);
@@ -122,7 +124,9 @@ export function createRelay({ fetchUpstream = (...args) => fetch(...args), allow
       headers.set('Access-Control-Allow-Headers', permittedHeaders.join(', '));
       return new Response(null, { status: 204, headers });
     }
-    const upstreamHeaders = new Headers({ Accept: journalPost ? 'text/event-stream, application/json' : 'application/json' });
+    const accept = journalPost ? 'text/event-stream, application/json' :
+      route.desktopFrame ? 'image/png, application/json' : 'application/json';
+    const upstreamHeaders = new Headers({ Accept: accept });
     if (origin) upstreamHeaders.set('Origin', origin);
     const bearer = request.headers.get('Authorization');
     const requestId = request.headers.get('X-Chat-Request-Id');
@@ -167,9 +171,13 @@ export function createRelay({ fetchUpstream = (...args) => fetch(...args), allow
       void response.body?.cancel().catch(() => {});
       return error(502, 'SITE_UPSTREAM_REDIRECT', '本站账号服务返回了意外跳转。');
     }
-    const contentType = response.headers.get('Content-Type') ?? '';
-    if (response.headers.get('CF-Mitigated') === 'challenge' ||
-        (response.status >= 400 && !jsonType.test(contentType))) {
+    const contentType = response.headers.get('Content-Type')?.split(';', 1)[0].trim().toLowerCase();
+    const expectedType = response.ok && route.desktopFrame ? 'image/png' : 'application/json';
+    const acceptsEventStream = response.ok && journalPost && contentType === 'text/event-stream';
+    const hasBody = Boolean(response.body) && response.headers.get('Content-Length') !== '0';
+    const validBody = response.ok && route.emptySuccess ? response.status === 204 && !response.body :
+      hasBody && (contentType === expectedType || acceptsEventStream);
+    if (response.headers.get('CF-Mitigated') === 'challenge' || !validBody) {
       void response.body?.cancel().catch(() => {});
       return error(502, 'SITE_UPSTREAM_INVALID_RESPONSE', '本站账号服务入口暂时不可用，请稍后重试。');
     }

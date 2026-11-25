@@ -311,6 +311,28 @@ test('an upstream challenge is a gateway outage, while a genuine session rejecti
   assert.equal(calls, 3);
 });
 
+test('relay rejects wrong upstream media or empty success according to the route contract', async () => {
+  const cases = [
+    ['/health', 'GET', () => new Response('<h1>Intercepted</h1>', { headers: { 'Content-Type': 'text/html' } }), 502],
+    ['/auth/login', 'POST', () => new Response(null, { status: 204 }), 502],
+    ['/auth/session', 'GET', () => new Response(null, { headers: { 'Content-Type': 'application/json' } }), 502],
+    ['/auth/session', 'GET', () => new Response('', { headers: { 'Content-Type': 'application/json', 'Content-Length': '0' } }), 502],
+    ['/auth/session', 'GET', () => new Response('data: not a session', { headers: { 'Content-Type': 'text/event-stream' } }), 502],
+    [inference, 'POST', () => Response.json({ running: true }, { status: 202 }), 202],
+    [dotEnvironment + '/input', 'POST', () => new Response(null, { status: 204 }), 204],
+    [dotEnvironment + '/frame', 'GET', () => new Response('png', { headers: { 'Content-Type': 'image/png' } }), 200],
+    [dotEnvironment + '/frame', 'GET', () => Response.json({ error: { code: 'DOT_COMPUTER_NOT_READY' } }, { status: 409 }), 409],
+    [dotEnvironment + '/frame', 'GET', () => Response.json({}), 502],
+  ];
+  for (const [path, method, upstreamReply, expected] of cases) {
+    const relay = createRelay({ fetchUpstream: upstreamReply });
+    const response = await relay(request(path, { method, headers: { Authorization: 'Bearer ' + 'a'.repeat(64) } }));
+    assert.equal(response.status, expected, path);
+    assert.equal(response.headers.get('Access-Control-Allow-Origin'), origin);
+    if (expected === 502) assert.equal((await response.json()).error.code, 'SITE_UPSTREAM_INVALID_RESPONSE');
+  }
+});
+
 test('billing options and authenticated checkout and portal use the fixed account Worker', async () => {
   const site = 'https://tycofficial.github.io';
   const token = 'Bearer ' + 'b'.repeat(64);
