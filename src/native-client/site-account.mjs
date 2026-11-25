@@ -162,7 +162,8 @@ function validatedTrial(trial, planType) {
 function validatedSubscription(subscription, planType) {
   if (subscription == null) return null;
   const { tier, expiresAt, cancelAtPeriodEnd } = subscription;
-  if (!trialPlans.has(tier) || trialPlans.get(tier) !== planType || !Number.isSafeInteger(expiresAt) ||
+  const subscribedPlan = getSiteSubscriptionPlan(tier);
+  if (!subscribedPlan || subscribedPlan !== planType || !Number.isSafeInteger(expiresAt) ||
       expiresAt <= 0 || expiresAt > 8640000000000000 || typeof cancelAtPeriodEnd !== 'boolean') throw Error(accountInvalid);
   return expiresAt > Date.now() ? Object.freeze({ tier, expiresAt, cancelAtPeriodEnd }) : null;
 }
@@ -201,12 +202,14 @@ function accountFromServer(user) {
 
 export const getSiteAccount = () => currentAccount();
 export const getSiteTrialPlan = tier => trialPlans.get(tier) ?? null;
+export const getSiteSubscriptionPlan = tier => tier === 'go' ? 'go' : getSiteTrialPlan(tier);
 export const isSiteGuestSession = () => guestActive;
 export const getSiteAccountError = () => lastError;
 
 export function getSitePlanCapabilities(plan = currentAccount()?.planType ?? 'free') {
-  const paid = plan === 'plus' || plan === 'pro';
-  return Object.freeze({ planType: paid ? plan : 'free', chat: true, modelSelection: paid, work: paid, codex: paid, dot: plan === 'pro' });
+  const advanced = plan === 'plus' || plan === 'pro';
+  return Object.freeze({ planType: advanced || plan === 'go' ? plan : 'free', chat: true,
+    modelSelection: advanced, work: advanced, codex: advanced, dot: plan === 'pro' });
 }
 
 export const hasModelSelectionAccess = () => getSitePlanCapabilities().modelSelection;
@@ -611,7 +614,7 @@ export async function refreshSiteBillingReturn() {
 export async function readSiteBillingOptions() {
   const result = await api('/billing/v1/options');
   if (typeof result?.checkoutAvailable !== 'boolean' || !Array.isArray(result.tiers) ||
-      result.tiers.some(tier => !trialPlans.has(tier))) throw Error('无法核实本站订阅选项。');
+      result.tiers.some(tier => !getSiteSubscriptionPlan(tier))) throw Error('无法核实本站订阅选项。');
   const tiers = Object.freeze([...new Set(result.tiers)]);
   return Object.freeze({ tiers, checkoutAvailable: result.checkoutAvailable && tiers.length > 0 });
 }
@@ -643,7 +646,7 @@ async function requestSiteBillingUrl(path, body, allowedOrigin) {
 }
 
 export function createSiteCheckout(tier) {
-  if (!trialPlans.has(tier)) throw Error('请选择有效的本站订阅方案。');
+  if (!getSiteSubscriptionPlan(tier)) throw Error('请选择有效的本站订阅方案。');
   return requestSiteBillingUrl('/billing/v1/checkout', { tier }, 'https://checkout.stripe.com');
 }
 

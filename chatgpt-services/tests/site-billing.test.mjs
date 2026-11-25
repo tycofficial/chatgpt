@@ -245,3 +245,80 @@ test('plan changes expire the old unpaid Checkout and a delayed paid webhook can
   assert.equal((await choose('plus')).status, 409);
   assert.equal(sessions.size, 2);
 });
+
+test('a signed paid Go checkout projects the correct ongoing account without creating a Go trial', async t => {
+  const { DB, env, call, register, sendEvent } = testSite();
+  t.after(() => DB.raw.close());
+  const goPrice = 'price_fixture_go';
+  env.SITE_STRIPE_PRICES = JSON.stringify({ go: goPrice, plus: firstPrice, pro: proPrice });
+  const owner = await register('bill_go_owner');
+  const other = await register('bill_go_other');
+  const account = async token => (await (await call('/auth/session', { token })).json()).user;
+  const options = await call('/billing/v1/options');
+  assert.deepEqual(await options.json(), { tiers: ['go', 'plus', 'pro'], checkoutAvailable: true });
+  const trial = await call('/auth/site-trial', { method: 'POST', token: owner.token, body: { tier: 'go' } });
+  assert.equal(trial.status, 400);
+  assert.equal((await trial.json()).error.code, 'INVALID_SITE_TRIAL_TIER');
+  assert.equal(DB.raw.prepare('SELECT COUNT(*) AS count FROM site_trials').get().count, 0);
+
+  const customer = 'cus_fixture_go_owner';
+  const session = 'cs_test_fixture_go';
+  const subscription = 'sub_fixture_go';
+  const price = { id: goPrice };
+  const expires = nowSeconds() + 30 * 86400;
+  let attempt;
+  const stripe = t.mock.method(globalThis, 'fetch', async (url, request) => {
+    const target = new URL(url);
+    assert.equal(target.origin, 'https://api.stripe.com');
+    assert.equal(request.headers.Authorization, 'Bearer ' + apiKey);
+    if (target.pathname === '/v1/customers') {
+      assert.equal(request.body.get('metadata[site_user_id]'), owner.user.accountId);
+      return Response.json({ id: customer, livemode: false, metadata: { site_user_id: owner.user.accountId } });
+    }
+    if (target.pathname === '/v1/subscriptions') return Response.json({ data: [], has_more: false });
+    if (target.pathname === '/v1/checkout/sessions') {
+      assert.equal(request.body.get('mode'), 'subscription');
+      assert.equal(request.body.get('line_items[0][price]'), goPrice);
+      assert.equal(request.body.get('customer'), customer);
+      attempt = request.body.get('client_reference_id');
+      return Response.json({ id: session, customer, client_reference_id: attempt, status: 'open', livemode: false,
+        url: 'https://checkout.stripe.com/c/pay/' + session });
+    }
+    assert.equal(target.pathname, '/v1/subscriptions/' + subscription);
+    return Response.json({ id: subscription, customer, livemode: false, status: 'active', current_period_end: expires,
+      metadata: { site_user_id: owner.user.accountId }, cancel_at_period_end: true, items: { data: [{ id: itemId, price }] },
+      latest_invoice: { status: 'paid', subscription, lines: { data: [{ subscription_item: itemId, price, period: { end: expires } }] } } });
+  });
+  const checkout = await call('/billing/v1/checkout', { method: 'POST', token: owner.token, body: { tier: 'go' } });
+  assert.equal(checkout.status, 200);
+  assert.equal((await checkout.json()).url, 'https://checkout.stripe.com/c/pay/' + session);
+  assert.equal((await account(owner.token)).planType, 'free');
+  const event = { id: 'evt_fixture_go_paid', type: 'checkout.session.completed', created: nowSeconds(), livemode: false,
+    data: { object: { id: session, customer, subscription, client_reference_id: attempt } } };
+  assert.equal((await sendEvent(event, { key: 'wrong' })).status, 400);
+  assert.equal((await account(owner.token)).planType, 'free');
+  assert.equal((await sendEvent(event)).status, 200);
+  assert.equal((await sendEvent(event)).status, 200);
+  assert.equal(stripe.mock.calls.filter(({ arguments: [url] }) => new URL(url).pathname === '/v1/subscriptions/' + subscription).length, 1);
+
+  const login = await call('/auth/login', { method: 'POST', body: { username: owner.user.username, password: 'Fixture-only-password' } });
+  assert.equal(login.status, 200);
+  const fresh = await login.json();
+  assert.notEqual(fresh.token, owner.token);
+  assert.equal(fresh.user.id, owner.user.id);
+  assert.equal(fresh.user.planType, 'go');
+  assert.equal(fresh.user.siteTrial, null);
+  assert.deepEqual(fresh.user.siteSubscription, { tier: 'go', expiresAt: expires * 1000, cancelAtPeriodEnd: true });
+  assert.equal((await account(other.token)).planType, 'free');
+  assert.equal((await call('/auth/site-trial', { method: 'POST', token: fresh.token, body: { tier: 'plus' } })).status, 409);
+
+  const addTier = DB.raw.prepare("INSERT INTO site_billing_subscriptions VALUES (?,?,?,?,'active',?,0,?,?)");
+  addTier.run(subscription, 1, other.user.accountId, 'promax', (expires + 60) * 1000, nowSeconds(), Date.now());
+  assert.deepEqual(await account(fresh.token), fresh.user);
+  addTier.run('sub_fixture_go_plus', 0, owner.user.accountId, 'plus', (expires - 60) * 1000, nowSeconds(), Date.now());
+  assert.equal((await account(fresh.token)).siteSubscription.tier, 'plus');
+  addTier.run('sub_fixture_go_pro', 0, owner.user.accountId, 'pro', (expires - 120) * 1000, nowSeconds(), Date.now());
+  assert.equal((await account(fresh.token)).siteSubscription.tier, 'pro');
+  DB.raw.prepare("UPDATE site_billing_subscriptions SET paid_through=0 WHERE user_id=? AND tier IN ('plus','pro')").run(owner.user.accountId);
+  assert.deepEqual(await account(fresh.token), fresh.user);
+});

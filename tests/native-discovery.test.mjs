@@ -464,7 +464,7 @@ function workerUsage(plan = usageOwner, fields = {}) {
   };
 }
 
-test('native usage reports actual site counts and only makes a daily limit from an active Free meter', async () => {
+test('native usage reports actual site counts and uses the active Free or Go meter', async () => {
   let membership = usageOwner, receipt = workerUsage();
   const diagnostic = [];
   const adapter = createLocalPricingAdapter({
@@ -494,6 +494,14 @@ test('native usage reports actual site counts and only makes a daily limit from 
   assert.equal((await rpc(adapter, '/wham/usage')).body.rate_limit.primary_window.used_percent, 100);
   assert.equal((await rpc(adapter, '/wham/usage')).body.rate_limit.limit_reached, true);
   receipt = workerUsage(usageOwner, { freeDaily: { requests: 20, limit: 20, resetsAt: usageTime } });
+  assert.equal((await rpc(adapter, '/wham/usage')).body.rate_limit, null);
+
+  membership = { ...usageOwner, planType: 'go', siteSubscription: { tier: 'go', expiresAt: usageTime + 86400000, cancelAtPeriodEnd: false } };
+  receipt = workerUsage(membership, { goDaily: { requests: 8, limit: 40, resetsAt: usageTime + 60000 } });
+  const go = (await rpc(adapter, '/wham/usage')).body;
+  assert.equal(go.plan_type, 'go');
+  assert.equal(go.rate_limit.primary_window.used_percent, 20);
+  receipt = workerUsage(membership);
   assert.equal((await rpc(adapter, '/wham/usage')).body.rate_limit, null);
 
   membership = { ...usageOwner, planType: 'pro', siteTrial: { tier: 'promax', expiresAt: usageTime + 86400000 } };

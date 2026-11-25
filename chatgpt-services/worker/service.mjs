@@ -1,6 +1,6 @@
 import {handleChatSync} from './chat-sync.mjs';
 import {handleDotComputer} from './dot-computer.mjs';
-import {getPaidSiteSubscription, handleSiteBilling, paidSubscriptionColumns, paidSubscriptionJoin, siteBillingMode} from './site-billing.mjs';
+import {getPaidSitePlan, getPaidSiteSubscription, handleSiteBilling, paidSubscriptionColumns, paidSubscriptionJoin, siteBillingMode} from './site-billing.mjs';
 import {proxyDocodeResponses} from './site-inference.mjs';
 import {readJournaledInference, readSiteInferenceUsage, startJournaledInference} from './inference-recovery.mjs';
 /** Username/password auth is local to this site; no original account token is used. */
@@ -49,7 +49,7 @@ function account(record){
   : null;
  return {
   id:'site-user:'+record.id,accountId:record.id,username:name,name,role:'user',
-  planType:siteTrialPlanTypes.get((siteSubscription??siteTrial)?.tier)??'free',
+  planType:(siteSubscription?getPaidSitePlan(siteSubscription.tier):siteTrialPlanTypes.get(siteTrial?.tier))??'free',
   membershipSource:'site-registration',createdAt:record.created_at,officialSubscriptionVerified:false,siteTrial,siteSubscription,
  };
 }
@@ -82,10 +82,11 @@ async function claimSiteTrial(request,env,actor){
 async function siteInference(request,env,ctx,actor){
  if(request.method!=='POST')return postRequired('请使用 POST 发送模型请求。');
  if(!actor)return fail(401,'SITE_AUTH_REQUIRED','请先登录本站账户。');
- const free=actor.role!=='administrator'&&!hasActiveSiteTrial(actor)&&!getPaidSiteSubscription(actor);
+ const {planType}=account(actor);
  const requestId=request.headers.get('x-chat-request-id');
- if(requestId)return startJournaledInference(request,env,ctx,actor,requestId,free);
- if(free)return fail(403,'SITE_INFERENCE_PLAN_REQUIRED','请更新至支持标准聊天的本站版本，或开通站内试用。');
+ if(requestId)return startJournaledInference(request,env,ctx,actor,requestId,planType);
+ if(planType==='free')return fail(403,'SITE_INFERENCE_PLAN_REQUIRED','请更新至支持标准聊天的本站版本，或开通站内试用。');
+ if(planType==='go')return fail(403,'SITE_INFERENCE_PLAN_REQUIRED','请更新至支持请求恢复的本站版本。');
  return proxyDocodeResponses(request,env.DOCODE_API_KEY);
 }
 async function largeBody(request,limit=2000000){if(Number(request.headers.get('Content-Length'))>limit)throw Error('Request too large');const text=await request.text();if(text.length>limit)throw Error('Request too large');return JSON.parse(text||'{}');}
@@ -191,8 +192,9 @@ async function route(request,env,ctx){const path=new URL(request.url).pathname;
  if(path==='/auth/session')return json({user:account(actor),expiresAt:actor.sessionExpiresAt});
  if(path==='/auth/logout'&&request.method==='POST'){const tokenHash=await digest(request.headers.get('authorization').replace(/^Bearer\s+/i,''));await env.DB.batch([query(env,'DELETE FROM sessions WHERE token_hash=?',tokenHash),query(env,'DELETE FROM user_sessions WHERE token_hash=?',tokenHash)]);return json({signedOut:true});}
  if(path==='/inference/v1/usage'&&request.method==='GET'){
-  const usage=await readSiteInferenceUsage(env,actor);
-  return json({sources:[usage],plan:account(actor),subscription:{remaining:null,source:'not-reported-by-official-service'}});
+  const plan=account(actor);
+  const usage=await readSiteInferenceUsage(env,actor,plan.planType);
+  return json({sources:[usage],plan,subscription:{remaining:null,source:'not-reported-by-official-service'}});
  }
  if(actor.role!=='administrator')return fail(403,'ADMIN_MEMBERSHIP_REQUIRED','此功能需要管理员 Pro 账户。');
  if(path==='/bridge/status')return json(await bridgeStatus(env));

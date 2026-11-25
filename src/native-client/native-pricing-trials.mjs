@@ -45,14 +45,17 @@ export function createNativeSiteTrialCard(Card, { React, Button, Amount, Frequen
   const element = React.createElement;
 
   function refreshBillingOptions() {
-    if (readingOptions || globalThis.navigator?.onLine === false) return;
-    readingOptions = readSiteBillingOptions().then(value => { options = value; }, () => { options = null; })
-      .finally(() => { readingOptions = null; notify(); });
+    if (globalThis.navigator?.onLine === false) return;
+    if (!readingOptions) {
+      readingOptions = readSiteBillingOptions().then(value => { options = value; }, () => { options = null; })
+        .finally(() => { readingOptions = null; notify(); });
+    }
+    return readingOptions;
   }
 
   function SitePlanCard({ original, tier }) {
     const [, redraw] = React.useReducer(value => value + 1, 0);
-    const [message, setMessage] = React.useState('');
+    const [feedback, setFeedback] = React.useState(null);
     React.useEffect(() => {
       listeners.add(redraw);
       const events = ['codex-site-account-changed', 'offline'];
@@ -66,9 +69,13 @@ export function createNativeSiteTrialCard(Card, { React, Button, Amount, Frequen
         for (const event of events) globalThis.removeEventListener(event, redraw);
       };
     }, []);
-    const trial = { ...getSiteTrialAction(tier), kind: 'trial' };
+    const account = getSiteAccount();
+    const administrator = account?.role === 'administrator';
+    const trial = getSiteTrialAction(tier);
     const billing = getSiteBillingAction(tier, options);
-    const action = billing ?? trial;
+    const action = billing ?? trial ?? { status: 'administrator', label: '管理员已开通', disabled: true };
+    const outdatedAvailability = feedback?.kind === 'availability' && (action.kind !== 'availability' || options !== null);
+    const message = outdatedAvailability ? null : feedback?.message;
     const submit = async (event, selected) => {
       event?.preventDefault();
       if (pending || selected.disabled) return;
@@ -78,22 +85,30 @@ export function createNativeSiteTrialCard(Card, { React, Button, Amount, Frequen
         return;
       }
       pending = tier;
-      setMessage('');
+      setFeedback(null);
       notify();
       try {
         if (selected.kind === 'checkout') location.assign(await createSiteCheckout(tier));
         else if (selected.kind === 'portal') location.assign(await createSiteBillingPortal());
-        else await submitSiteTrial(tier);
-      } catch (error) { setMessage(error.message || '暂时无法完成套餐操作，请重试。'); }
+        else if (selected.kind === 'availability') {
+          await refreshBillingOptions();
+          if (!options) setFeedback({ kind: selected.kind, message: '暂时无法核实本站 Go 订阅状态。' });
+        } else await submitSiteTrial(tier);
+      } catch (error) { setFeedback({ kind: selected.kind, message: error.message || '暂时无法完成套餐操作，请重试。' }); }
       finally { pending = null; notify(); }
     };
 
-    const subscription = getSiteAccount()?.siteSubscription;
+    const subscription = account?.siteSubscription;
     const subscriptionExpiry = subscription?.tier === tier ? subscription.expiresAt : null;
     const includesDot = ['prolite', 'pro', 'promax'].includes(tier);
     const date = expiration => new Date(expiration).toLocaleDateString('zh-CN');
-    let caption = trial.expiresAt ? '本站试用至 ' + date(trial.expiresAt) : '本站试用 · 30 天，可续期';
-    if (billing) caption = subscriptionExpiry ? '本站订阅至 ' + date(subscriptionExpiry) : '美元参考价 · 实付金额以支付页为准';
+    let caption = '本站试用 · 30 天，可续期';
+    if (administrator) caption = tier === 'promax' ? '管理员当前套餐' : '已包含在管理员套餐中';
+    else if (subscriptionExpiry) caption = '本站订阅至 ' + date(subscriptionExpiry);
+    else if (billing?.kind === 'checkout') caption = '美元参考价 · 实付金额以支付页为准';
+    else if (billing?.kind === 'portal') caption = '通过本站账单管理套餐';
+    else if (billing?.kind === 'availability') caption = options ? '本站 Go 订阅暂未开放' : '美元参考价';
+    else if (trial?.expiresAt) caption = '本站试用至 ' + date(trial.expiresAt);
     const existing = React.Children.toArray(original.actions?.props?.children)[0];
     const activeButton = existing?.type === Button;
     const icon = activeButton && Array.isArray(existing.props.children) ? existing.props.children[0] : null;
@@ -103,11 +118,12 @@ export function createNativeSiteTrialCard(Card, { React, Button, Amount, Frequen
       'aria-describedby': undefined, disabled: Boolean(pending) || action.disabled, loading: pending === tier,
       onClick: event => submit(event, action), type: 'button',
     }, icon, action.label);
-    const trialButton = billing?.kind === 'checkout' ? element(Button, {
+    const trialButton = billing?.kind === 'checkout' && trial ? element(Button, {
       ...fallback, disabled: Boolean(pending) || trial.disabled, onClick: event => submit(event, trial), type: 'button',
     }, trial.label) : null;
     const quotedPrice = subscriptionExpiry ? element(Amount, { amount: '本站订阅', currency: '' }) :
-      billing ? original.price?.content : element(Amount, { amount: '免费试用', currency: '', screenReaderText: '本站免费试用 30 天' });
+      billing || administrator ? original.price?.content :
+        element(Amount, { amount: '免费试用', currency: '', screenReaderText: '本站免费试用 30 天' });
     return element(Card, {
       ...original, actions: trialButton ? element(React.Fragment, null, button, trialButton) : button,
       price: { ...original.price, content: element(React.Fragment, null, quotedPrice,
@@ -118,21 +134,7 @@ export function createNativeSiteTrialCard(Card, { React, Button, Amount, Frequen
   }
   return function PersonalPlanCard(props) {
     const tier = props.plan?.lookupType;
-    if (tier === 'go') {
-      const original = React.Children.toArray(props.actions?.props?.children)[0];
-      const price = props.price && {
-        ...props.price,
-        content: element(React.Fragment, null, props.price.content, element(Frequency, null, '美元参考价')),
-      };
-      return element(Card, { ...props, price, actions: element(Button, {
-        ...(original?.type === Button ? original.props : { className: 'w-full justify-center', color: 'secondary', size: 'beaconAction', radius: 'full' }),
-        onClick(event) {
-          event.preventDefault();
-          location.assign('https://chatgpt.com/pricing/');
-        },
-        type: 'button',
-      }, '查看官方 Go 套餐') });
-    }
-    return getSiteTrialAction(tier) ? element(SitePlanCard, { key: tier, original: props, tier }) : element(Card, props);
+    return tier === 'go' || getSiteTrialAction(tier) ?
+      element(SitePlanCard, { key: tier, original: props, tier }) : element(Card, props);
   };
 }

@@ -734,7 +734,7 @@ test('first display waits for server verification when the remembered profile la
 
 const billingPeriodEnd = now + 2 * 86400000;
 const subscriptionUser = (tier = 'plus') => ({
-  ...freeAccount(), planType: trialPlansByTier[tier], siteTrial: null,
+  ...freeAccount(), planType: tier === 'go' ? 'go' : trialPlansByTier[tier], siteTrial: null,
   siteSubscription: { tier, expiresAt: billingPeriodEnd, cancelAtPeriodEnd: true },
 });
 
@@ -782,6 +782,29 @@ test('invalid paid receipts cannot grant access', async t => {
   });
 });
 
+test('a verified Go receipt keeps Standard Chat and never grants Plus or Pro access', async () => {
+  const f = fixture();
+  f.setHandler(() => serverLogin(subscriptionUser('go')));
+  const account = await f.api.loginSiteAccount('Fixture Go', 'fixture-password');
+  const capabilities = f.api.getSitePlanCapabilities();
+  assert.equal(account.siteSubscription.tier, 'go');
+  assert.equal(account.siteTrial, null);
+  assert.equal(capabilities.planType, 'go');
+  assert.equal(capabilities.chat, true);
+  for (const feature of ['modelSelection', 'work', 'codex', 'dot']) assert.equal(capabilities[feature], false);
+  const identity = f.loadIdentity().getLocalAccountCheck().accounts[account.accountId];
+  assert.equal(identity.account.plan_type, 'go');
+  assert.equal(identity.entitlement.has_active_subscription, true);
+  assert.equal(identity.account.tbo_config.tbo_available, false);
+  const pricing = f.loadPricing();
+  assert.equal(pricing.normalizeLocalMembership(account).site_subscription_tier, 'go');
+  assert.equal(pricing.getSiteBillingAction('go', null).kind, 'portal');
+  assert.equal(pricing.getSiteTrialAction('go'), null);
+  await assert.rejects(f.api.claimSiteTrial('go'), /有效的本站试用方案/);
+  f.setClock(billingPeriodEnd);
+  assert.equal(f.api.getSitePlanCapabilities().planType, 'free');
+});
+
 test('only server-configured tiers show checkout and the eligible trial remains available', async () => {
   const f = fixture();
   const pricing = f.loadPricing();
@@ -795,8 +818,8 @@ test('only server-configured tiers show checkout and the eligible trial remains 
   const options = await f.api.readSiteBillingOptions();
   assert.equal(pricing.getSiteBillingAction('plus', options).status, 'login');
   assert.equal(pricing.getSiteBillingAction('pro', options), null);
-  assert.equal(pricing.getSiteBillingAction('go', options), null);
-  assert.throws(() => f.api.createSiteCheckout('go'), /有效的本站订阅方案/);
+  assert.equal(pricing.getSiteBillingAction('go', options).kind, 'availability');
+  await assert.rejects(f.api.createSiteCheckout('go'), /先登录本站注册账户/);
   await assert.rejects(f.api.createSiteCheckout('plus'), /先登录本站注册账户/);
 
   f.setHandler(() => serverLogin(freeAccount()));
@@ -804,6 +827,9 @@ test('only server-configured tiers show checkout and the eligible trial remains 
   assert.equal(pricing.getSiteBillingAction('plus', options).kind, 'checkout');
   assert.equal(pricing.getSiteTrialAction('plus').status, 'start');
   f.setHandler(() => ({ tiers: ['go'], checkoutAvailable: true }));
+  assert.equal(pricing.getSiteBillingAction('go', await f.api.readSiteBillingOptions()).kind, 'checkout');
+  assert.equal(pricing.getSiteTrialAction('go'), null);
+  f.setHandler(() => ({ tiers: ['unknown'], checkoutAvailable: true }));
   await assert.rejects(f.api.readSiteBillingOptions(), /无法核实/);
 });
 
@@ -815,6 +841,8 @@ test('checkout and portal require site auth and only return their exact trusted 
   f.setHandler(() => ({ url: address }));
   assert.equal(await f.api.createSiteCheckout('plus'), address);
   assert.deepEqual(f.calls.at(-1), { path: '/billing/v1/checkout', method: 'POST', authorizationPresent: true, keepalive: false, tier: 'plus' });
+  assert.equal(await f.api.createSiteCheckout('go'), address);
+  assert.equal(f.calls.at(-1).tier, 'go');
   const portal = 'https://billing.stripe.com/p/session/bps_neutral';
   f.setHandler(() => ({ url: portal }));
   assert.equal(await f.api.createSiteBillingPortal(), portal);

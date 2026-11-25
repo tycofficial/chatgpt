@@ -11,7 +11,7 @@
  * p3vI, 396705.00162c6ea9.js:564237-564553 (payment methods).
  * wbWw/Bhuf/YoTg/JGV6, async/899311.9233e1594e.js (billing read shapes).
  */
-import { claimSiteTrial, createSiteBillingPortal, getSiteAccount, getSiteSessionToken, getSiteTrialPlan, refreshSiteAccount } from './site-account.mjs';
+import { claimSiteTrial, createSiteBillingPortal, getSiteAccount, getSiteSessionToken, getSiteSubscriptionPlan, getSiteTrialPlan, refreshSiteAccount } from './site-account.mjs';
 
 export const LOCAL_PRICING_REFERENCE = Object.freeze({
   source: 'https://learn.chatgpt.com/docs/pricing',
@@ -100,7 +100,7 @@ export function normalizeLocalMembership(record, now = Date.now()) {
   const trial = record?.siteTrial;
   const subscription = record?.siteSubscription;
   const term = subscription ?? trial;
-  const termPlan = getSiteTrialPlan(term?.tier);
+  const termPlan = subscription ? getSiteSubscriptionPlan(term.tier) : getSiteTrialPlan(term?.tier);
   const validTerm = term == null ? record?.membershipSource !== 'site-registration' || requestedPlan === 'free' :
     termPlan !== null && termPlan === requestedPlan && Number.isSafeInteger(term.expiresAt) && term.expiresAt > 0 &&
       (!subscription || !trial && record.role === 'user' && record.membershipSource === 'site-registration' && typeof term.cancelAtPeriodEnd === 'boolean');
@@ -185,7 +185,8 @@ function nativeUsage(receipt, membership, identity, currentTime) {
   const input = requestCount(source.input_tokens);
   const output = requestCount(source.output_tokens);
   const plan = normalizeLocalMembership(receipt.plan, currentTime).plan_type;
-  const rateLimit = plan === 'free' ? dailyRequestLimit(source.freeDaily, currentTime) : null;
+  const daily = plan === 'go' ? source.goDaily : plan === 'free' ? source.freeDaily : null;
+  const rateLimit = dailyRequestLimit(daily, currentTime);
   const rows = [
     ['本站请求', requested],
     ['已完成', completed],
@@ -247,7 +248,7 @@ export function createNativeSiteUsageLayout(Layout, {
     const membership = normalizeLocalMembership(getMembership());
     const tier = membership.site_subscription_tier;
     if (!tier) return null;
-    const plan = { plus: 'Plus', prolite: 'Pro Lite', pro: 'Pro', promax: 'Pro Max' }[tier];
+    const plan = { go: 'Go', plus: 'Plus', prolite: 'Pro Lite', pro: 'Pro', promax: 'Pro Max' }[tier];
     const offline = globalThis.navigator?.onLine === false;
     async function manage() {
       setMessage('');
@@ -272,15 +273,16 @@ export function createNativeSiteUsageLayout(Layout, {
     );
   }
   return function SiteUsageLayout(props) {
-    if (BillingButton && isBillingRoute()) return createElement(Layout, props, createElement(SiteBillingSummary), props.children);
-    if (props.scrollResetKey !== 'usage' || !isUsageRoute()) return createElement(Layout, props);
+    const billingRoute = BillingButton && isBillingRoute();
+    if (!billingRoute && (props.scrollResetKey !== 'usage' || !isUsageRoute())) return createElement(Layout, props);
     const membership = normalizeLocalMembership(getMembership());
     const administratorPlan = membership.pro_tier === 500 && membership.managed_by === 'local-administrator' ?
       createElement(Section, { id: 'site-plan-summary' },
         createElement(Section.Header, { title: '本站套餐' }),
         createElement(Section.Content, null, createElement(Group, null,
           createElement(Row, { label: '管理员套餐', control: createElement('span', null, 'Pro $500') })))) : null;
-    return createElement(Layout, props, administratorPlan, createElement(SiteUsageSummary), props.children);
+    return createElement(Layout, props, administratorPlan,
+      createElement(billingRoute ? SiteBillingSummary : SiteUsageSummary), props.children);
   };
 }
 
@@ -387,14 +389,19 @@ export function getSiteTrialAction(tier) {
 }
 
 export function getSiteBillingAction(tier, options) {
-  if (!getSiteTrialPlan(tier)) return null;
+  if (!getSiteSubscriptionPlan(tier)) return null;
   const account = getSiteAccount();
   if (account?.role === 'administrator') return null;
   const offline = globalThis.navigator?.onLine === false;
   if (account?.siteSubscription) {
     return { kind: 'portal', status: 'manage', label: offline ? '联网后管理订阅' : '管理订阅', disabled: offline };
   }
-  if (!options?.checkoutAvailable || !options.tiers.includes(tier)) return null;
+  if (!options?.checkoutAvailable || !options.tiers.includes(tier)) {
+    return tier === 'go' ? {
+      kind: 'availability', status: 'unavailable',
+      label: offline ? '联网后查看 Go 状态' : '查看本站 Go 状态', disabled: offline,
+    } : null;
+  }
   return {
     kind: 'checkout', status: account ? 'purchase' : 'login',
     label: offline ? '联网后订购' : account ? '订购本站套餐' : '登录后订购', disabled: offline,

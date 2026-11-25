@@ -1,6 +1,9 @@
 const origin = 'https://tycofficial.github.io/chatgpt/';
 const prefix = '/billing/v1/';
-const tierSet = new Set(['plus', 'prolite', 'pro', 'promax']);
+const planTypes = new Map([
+  ['go', 'go'], ['plus', 'plus'], ['prolite', 'pro'], ['pro', 'pro'], ['promax', 'pro'],
+]);
+export const getPaidSitePlan = tier => planTypes.get(tier) ?? null;
 const checkoutLifetime = 20 * 60 * 60;
 const signatureTolerance = 300;
 const maxBodyBytes = 256 * 1024;
@@ -14,17 +17,17 @@ const conflict = message => error(409, 'SITE_BILLING_IN_PROGRESS', message);
 const unavailable = () => error(503, 'SITE_BILLING_UNAVAILABLE', '本站支付服务暂时不可用，请稍后再试。');
 
 export const paidSubscriptionColumns = 'b.tier AS paid_tier, b.paid_through, b.cancel_at_period_end';
-export const paidSubscriptionJoin = `LEFT JOIN site_billing_subscriptions b ON b.subscription_id=(
-  SELECT lease.subscription_id FROM site_billing_subscriptions lease
+export const paidSubscriptionJoin = `LEFT JOIN site_billing_subscriptions b ON b.rowid=(
+  SELECT lease.rowid FROM site_billing_subscriptions lease
   WHERE lease.user_id=u.id AND lease.livemode=? AND lease.status IN ('active','past_due') AND lease.paid_through > ?
-  ORDER BY CASE lease.tier WHEN 'promax' THEN 4 WHEN 'pro' THEN 3 WHEN 'prolite' THEN 2 WHEN 'plus' THEN 1 ELSE 0 END DESC,
+  ORDER BY CASE lease.tier WHEN 'promax' THEN 5 WHEN 'pro' THEN 4 WHEN 'prolite' THEN 3 WHEN 'plus' THEN 2 WHEN 'go' THEN 1 ELSE 0 END DESC,
            lease.paid_through DESC, lease.subscription_id LIMIT 1
 )`;
 
 export const siteBillingMode = env => /^(?:sk|rk)_test_/.test(env.SITE_STRIPE_SECRET_KEY ?? '') ? 0 : 1;
 
 export function getPaidSiteSubscription(record) {
-  return tierSet.has(record.paid_tier) && Number.isSafeInteger(record.paid_through) && record.paid_through > Date.now()
+  return planTypes.has(record.paid_tier) && Number.isSafeInteger(record.paid_through) && record.paid_through > Date.now()
     ? { tier: record.paid_tier, expiresAt: record.paid_through, cancelAtPeriodEnd: record.cancel_at_period_end === 1 }
     : null;
 }
@@ -34,7 +37,7 @@ function config(env) {
   if (!/^(?:sk|rk)_(?:test|live)_[A-Za-z0-9]+$/.test(apiKey ?? '') || !/^whsec_[A-Za-z0-9]+$/.test(webhookSecret ?? '')) return null;
   let entries;
   try { entries = Object.entries(JSON.parse(env.SITE_STRIPE_PRICES)); } catch { return null; }
-  if (!entries.length || entries.some(([tier, price]) => !tierSet.has(tier) || !validId(price, 'price_')) ||
+  if (!entries.length || entries.some(([tier, price]) => !planTypes.has(tier) || !validId(price, 'price_')) ||
       new Set(entries.map(([, price]) => price)).size !== entries.length) return null;
   const mode = siteBillingMode(env);
   return { apiKey, webhookSecret, mode, live: mode === 1, prices: new Map(entries) };

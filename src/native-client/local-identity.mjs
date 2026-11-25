@@ -119,7 +119,7 @@ export function getLocalAccountCheck() {
           tbo_config: { tbo_available: account.planType === 'pro', adapter_source: 'site-local-dot-provider' },
           adapter_identity: 'prototype-local-only',
         },
-        entitlement: { has_active_subscription: ['plus','pro'].includes(account.planType), is_delinquent: false, grace_period_id: null, adapter_source: 'site-membership' },
+        entitlement: { has_active_subscription: ['go','plus','pro'].includes(account.planType), is_delinquent: false, grace_period_id: null, adapter_source: 'site-membership' },
         // The native account adapter reads this envelope for Free too.
         last_active_subscription: { purchase_origin_platform: null, will_renew: false },
         features: ['dot_account_access_policy'],

@@ -12,6 +12,7 @@ const acceptedFields = new Set([
   'parallel_tool_calls', 'stream_options', 'text', 'top_p', 'truncation',
 ]);
 const toolTypes = new Set(['function', 'web_search', 'web_search_preview']);
+const standardEfforts = new Set(['none', 'low', 'medium']);
 
 const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const jsonType = 'application/json; charset=utf-8';
@@ -44,8 +45,8 @@ async function boundedText(message, limit) {
 }
 
 function validRequest(payload) {
-  if (!isObject(payload) || Object.keys(payload).some(field => !acceptedFields.has(field))) return false;
-  if (!models.has(payload.model) || (payload.store !== undefined && payload.store !== false)) return false;
+  if (Object.keys(payload).some(field => !acceptedFields.has(field))) return false;
+  if (!models.has(payload.model)) return false;
   if (payload.stream !== undefined && typeof payload.stream !== 'boolean') return false;
   if (payload.tools !== undefined && (!Array.isArray(payload.tools) || payload.tools.some(tool => !toolTypes.has(tool?.type)))) return false;
   return typeof payload.input === 'string' || Array.isArray(payload.input) &&
@@ -113,27 +114,43 @@ async function upstreamError(response, redact, headers) {
   return jsonResponse(response.status, error, headers);
 }
 
-export async function prepareDocodeRequest(request, configuredKey, { free = false } = {}) {
-  const key = typeof configuredKey === 'string' ? configuredKey.trim() : '';
-  if (!key) return failure(503, 'DOCODE_NOT_CONFIGURED', '站内推理服务尚未配置。');
+export async function readDocodeInput(request) {
   if (!/^application\/json(?:\s*;|$)/i.test(request.headers.get('content-type') ?? '')) {
     return failure(415, 'INFERENCE_JSON_REQUIRED', '请发送 JSON 推理请求。');
   }
   try {
     const payload = JSON.parse(await boundedText(request, requestBytes));
-    if (free && payload?.model !== freeInferenceModel) {
-      return failure(403, 'SITE_INFERENCE_PLAN_REQUIRED', '此模型需要有效的站内试用。');
+    if (!isObject(payload)) return failure(400, 'INVALID_INFERENCE_REQUEST', '推理请求必须是 JSON 对象。');
+    if (payload.store !== undefined && payload.store !== false) {
+      return failure(400, 'INVALID_INFERENCE_REQUEST', '此推理接口只接受无服务端存储的请求。');
     }
-    if (!validRequest(payload)) return failure(400, 'INVALID_INFERENCE_REQUEST', '此推理接口只接受支持的模型及其输入。');
-    if (free && payload.service_tier != null && payload.service_tier !== 'default') {
-      return failure(403, 'SITE_INFERENCE_PLAN_REQUIRED', '加速需要有效的站内试用。');
-    }
-    return { key, model: payload.model, body: JSON.stringify({ ...payload, store: false }) };
+    return { payload, body: JSON.stringify({ ...payload, store: false }) };
   } catch (error) {
     if (error instanceof BodyTooLarge) return failure(413, 'INFERENCE_REQUEST_TOO_LARGE', '推理请求过大。');
     return failure(400, 'INVALID_INFERENCE_REQUEST', '推理请求必须是有效的 JSON。');
   }
+}
 
+export function prepareDocodeInput(input, configuredKey, { planType } = {}) {
+  const key = typeof configuredKey === 'string' ? configuredKey.trim() : '';
+  if (!key) return failure(503, 'DOCODE_NOT_CONFIGURED', '站内推理服务尚未配置。');
+  if (input instanceof Response) return input;
+  const { payload, body } = input;
+  const standard = planType === 'free' || planType === 'go';
+  if (standard && payload.model !== freeInferenceModel) {
+    return failure(403, 'SITE_INFERENCE_PLAN_REQUIRED', '当前套餐仅支持标准聊天模型。');
+  }
+  if (!validRequest(payload)) return failure(400, 'INVALID_INFERENCE_REQUEST', '此推理接口只接受支持的模型及其输入。');
+  if (standard && payload.service_tier != null && payload.service_tier !== 'default') {
+    return failure(403, 'SITE_INFERENCE_PLAN_REQUIRED', '当前套餐仅支持标准速度。');
+  }
+  const reasoning = payload.reasoning;
+  if (planType === 'go' && reasoning != null &&
+      (!isObject(reasoning) || reasoning.mode != null && reasoning.mode !== 'standard' ||
+       reasoning.effort != null && !standardEfforts.has(reasoning.effort))) {
+    return failure(403, 'SITE_INFERENCE_PLAN_REQUIRED', '当前套餐仅支持标准思考设置。');
+  }
+  return { key, model: payload.model, body };
 }
 
 export async function sendDocodeRequest({ key, body }, signal) {
@@ -179,6 +196,6 @@ export async function sendDocodeRequest({ key, body }, signal) {
 }
 
 export async function proxyDocodeResponses(request, configuredKey, options) {
-  const prepared = await prepareDocodeRequest(request, configuredKey, options);
+  const prepared = prepareDocodeInput(await readDocodeInput(request), configuredKey, options);
   return prepared instanceof Response ? prepared : sendDocodeRequest(prepared, request.signal);
 }

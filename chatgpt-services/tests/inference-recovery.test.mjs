@@ -160,3 +160,87 @@ test('premature EOF, expiry of a running worker, and early cancel never dispatch
   assert.equal((await lateSubmission.json()).status, 'cancelled');
   assert.equal(upstream.mock.callCount(), 1);
 });
+
+test('Go admits Standard Chat atomically, counts earlier same-day admissions and keeps existing receipts', async t => {
+  let now = Date.UTC(2026, 10, 25, 23, 59, 45);
+  const reset = now + 15_000;
+  t.mock.method(Date, 'now', () => now);
+  const f = await prepare(t);
+  f.env.FREE_DAILY_REQUESTS = '1';
+  f.env.FREE_GLOBAL_DAILY_REQUESTS = '1';
+  const upstream = t.mock.method(globalThis, 'fetch', async (_url, request) => {
+    const { model } = JSON.parse(request.body);
+    return Response.json({ model, status: 'completed', output: [] });
+  });
+  const usage = async actor => (await (await f.call('/inference/v1/usage', { token: actor.token })).json()).sources[0];
+  const prior = crypto.randomUUID();
+  const priorOptions = { reasoning: { effort: 'high' } };
+  assert.equal((await f.claim(f.alice)).status, 200);
+  const premium = await f.submit(f.alice, prior, 'gpt-6.2-sol', priorOptions);
+  assert.equal(premium.status, 200);
+  await premium.text();
+  assert.equal((await f.receipt(f.alice, crypto.randomUUID(), '', 'DELETE')).status, 200);
+  await f.settle();
+  f.DB.raw.prepare("INSERT INTO site_billing_subscriptions VALUES ('sub_go_quota',1,?,'go','active',?,0,?,?)")
+    .run(f.alice.user.accountId, reset + 86_400_000, now, now);
+  assert.deepEqual((await usage(f.alice)).goDaily, { requests: 1, limit: 2, resetsAt: reset });
+
+  for (const [model, fields] of [
+    ['gpt-6.2-sol', priorOptions],
+    ['gpt-6-sol', { service_tier: 'priority' }],
+    ['gpt-6-sol', { reasoning: { effort: 'high' } }],
+    ['gpt-6-sol', { reasoning: { mode: 'pro' } }],
+  ]) {
+    const denied = await f.submit(f.alice, crypto.randomUUID(), model, fields);
+    assert.equal(denied.status, 403);
+    assert.equal((await denied.json()).error.code, 'SITE_INFERENCE_PLAN_REQUIRED');
+  }
+  const unjournaled = await f.call(path, { method: 'POST', token: f.alice.token, body: { model: 'gpt-6-sol', input: 'Neutral fixture' } });
+  assert.equal(unjournaled.status, 403);
+  assert.equal((await f.call('/dot-computer/v1/threads/' + crypto.randomUUID(), { token: f.alice.token })).status, 403);
+  assert.equal((await f.call('/bridge/status', { token: f.alice.token })).status, 403);
+
+  const resumed = await f.submit(f.alice, prior, 'gpt-6.2-sol', priorOptions);
+  assert.equal(resumed.status, 202);
+  assert.equal((await resumed.json()).status, 'completed');
+  assert.equal((await f.submit(f.alice, prior, 'gpt-6.2-sol', { input: 'Different fixture' })).status, 409);
+  assert.equal((await f.submit(f.alice, prior, 'gpt-6.2-sol', { ...priorOptions, store: true })).status, 400);
+  assert.equal((await f.receipt(f.alice, prior)).status, 200);
+  assert.equal(upstream.mock.callCount(), 1);
+
+  const input = [{ role: 'user', content: [{ type: 'input_text', text: 'Neutral fixture' },
+    { type: 'input_image', image_url: 'data:image/png;base64,iVBORw0KGgo=' }] }];
+  const ids = [crypto.randomUUID(), crypto.randomUUID()];
+  const standard = id => f.submit(f.alice, id, 'gpt-6-sol', { input, reasoning: { mode: 'standard', effort: 'medium' } });
+  const attempts = await Promise.all(ids.map(standard));
+  assert.deepEqual(attempts.map(response => response.status).sort(), [200, 429]);
+  const accepted = attempts.find(response => response.status === 200);
+  const refused = attempts.find(response => response.status === 429);
+  assert.equal(refused.headers.get('Retry-After'), '15');
+  assert.equal((await refused.json()).error.code, 'SITE_GO_LIMIT');
+  await accepted.text();
+  assert.deepEqual(JSON.parse(upstream.mock.calls[1].arguments[1].body).input, input);
+  assert.equal((await standard(accepted.headers.get('X-Chat-Request-Id'))).status, 202);
+  assert.deepEqual((await usage(f.alice)).goDaily, { requests: 2, limit: 2, resetsAt: reset });
+  assert.equal((await usage(f.alice)).freeDaily.requests, 0);
+
+  const free = await f.submit(f.bob, crypto.randomUUID(), 'gpt-6-sol');
+  assert.equal(free.status, 200);
+  await free.text();
+  assert.equal((await f.submit(f.bob, crypto.randomUUID(), 'gpt-6-sol')).status, 429);
+  assert.equal((await usage(f.bob)).goDaily, undefined);
+
+  f.env.GO_DAILY_REQUESTS = '3';
+  const extra = await standard(crypto.randomUUID());
+  assert.equal(extra.status, 200);
+  await extra.text();
+  assert.deepEqual((await usage(f.alice)).goDaily, { requests: 3, limit: 3, resetsAt: reset });
+  assert.equal((await standard(crypto.randomUUID())).status, 429);
+  now = reset;
+  assert.deepEqual((await usage(f.alice)).goDaily, { requests: 0, limit: 3, resetsAt: reset + 86_400_000 });
+  const nextDay = await standard(crypto.randomUUID());
+  assert.equal(nextDay.status, 200);
+  await nextDay.text();
+  await f.settle();
+  assert.equal(upstream.mock.callCount(), 5);
+});

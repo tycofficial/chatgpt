@@ -1,4 +1,4 @@
-import { prepareDocodeRequest, sendDocodeRequest } from './site-inference.mjs';
+import { prepareDocodeInput, readDocodeInput, sendDocodeRequest } from './site-inference.mjs';
 
 const uuid = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/;
 const retentionMs = 24 * 60 * 60 * 1000;
@@ -17,6 +17,7 @@ const json = (value, status = 200, headers = {}) => new Response(JSON.stringify(
 });
 const fail = (status, code, message, headers) => json({ error: receiptError(code, message) }, status, headers);
 const scope = actor => actor.role === 'administrator' ? 'administrator:' + actor.id : 'user:' + actor.id;
+const dailyAdmissions = "SELECT COUNT(*) AS requests FROM inference_receipts WHERE owner_id=? AND started_at>=? AND started_at<? AND payload_hash<>''";
 
 function correlationHeaders(id, startedAt) {
   return {
@@ -34,6 +35,13 @@ async function payloadHash(body) {
 function positiveInteger(value, fallback) {
   const number = Number(value);
   return Number.isSafeInteger(number) && number > 0 ? number : fallback;
+}
+
+const freeDailyLimit = env => positiveInteger(env.FREE_DAILY_REQUESTS, 20);
+function goDailyLimit(env) {
+  const free = freeDailyLimit(env);
+  const configured = positiveInteger(env.GO_DAILY_REQUESTS, 0);
+  return configured > free ? configured : Math.min(free * 2, Number.MAX_SAFE_INTEGER);
 }
 
 function reportedCount(value) {
@@ -257,35 +265,52 @@ async function runInference(env, owner, id, startedAt, prepared, respond) {
   }
 }
 
-export async function startJournaledInference(request, env, ctx, actor, suppliedId, free) {
+async function reattach(env, owner, id, hash) {
+  const prior = await query(env, 'SELECT payload_hash FROM inference_receipts WHERE owner_id=? AND id=?', owner, id).first();
+  if (!prior) return null;
+  if (prior.payload_hash && prior.payload_hash !== hash) return fail(409, 'INFERENCE_ID_CONFLICT', '此请求编号已对应另一项请求。');
+  const receipt = await getReceipt(env, owner, id);
+  return json({ ...receipt, reattached: true }, 202, correlationHeaders(id, receipt.startedAt));
+}
+
+export async function startJournaledInference(request, env, ctx, actor, suppliedId, planType) {
   const id = suppliedId.toLowerCase();
   if (!uuid.test(id)) return fail(400, 'INVALID_INFERENCE_ID', '请求编号必须是 UUID。');
-  const prepared = await prepareDocodeRequest(request, env.DOCODE_API_KEY, { free });
-  if (prepared instanceof Response) return prepared;
-  if (typeof ctx?.waitUntil !== 'function') return fail(503, 'INFERENCE_RECOVERY_UNAVAILABLE', '当前环境无法保存推理恢复记录。');
+  const input = await readDocodeInput(request);
+  if (input instanceof Response) return input;
 
   const owner = scope(actor);
-  const hash = await payloadHash(prepared.body);
-  const startedAt = Date.now();
-  const floor = Math.floor(startedAt / retentionMs) * retentionMs;
-  const budget = positiveInteger(env.FREE_DAILY_REQUESTS, 20);
-  const globalBudget = positiveInteger(env.FREE_GLOBAL_DAILY_REQUESTS, 200);
-  const result = await query(env, `
-    INSERT OR IGNORE INTO inference_receipts (owner_id,id,payload_hash,model,free_request,status,started_at,updated_at)
-    SELECT ?,?,?,?,?,'running',?,? WHERE ?=0 OR (
-      (SELECT COUNT(*) FROM inference_receipts WHERE owner_id=? AND free_request=1 AND started_at>=?)<?
-      AND (SELECT COUNT(*) FROM inference_receipts WHERE free_request=1 AND started_at>=?)<?
-    )
-  `, owner, id, hash, prepared.model, free ? 1 : 0, startedAt, startedAt, free ? 1 : 0,
-  owner, floor, budget, floor, globalBudget).run();
-  if (!changes(result)) {
-    const prior = await query(env, 'SELECT payload_hash FROM inference_receipts WHERE owner_id=? AND id=?', owner, id).first();
-    if (!prior) return fail(429, 'SITE_FREE_LIMIT', '站内标准聊天已达到当日请求额度。', { 'Retry-After': String(Math.ceil((floor + retentionMs - startedAt) / 1000)) });
-    if (prior.payload_hash && prior.payload_hash !== hash) return fail(409, 'INFERENCE_ID_CONFLICT', '此请求编号已对应另一项请求。');
-    const receipt = await getReceipt(env, owner, id);
-    return json({ ...receipt, reattached: true }, 202, correlationHeaders(id, receipt.startedAt));
+  const hash = await payloadHash(input.body);
+  const prepared = prepareDocodeInput(input, env.DOCODE_API_KEY, { planType });
+  if (prepared instanceof Response) return (await reattach(env, owner, id, hash)) ?? prepared;
+  if (typeof ctx?.waitUntil !== 'function') {
+    return (await reattach(env, owner, id, hash)) ??
+      fail(503, 'INFERENCE_RECOVERY_UNAVAILABLE', '当前环境无法保存推理恢复记录。');
   }
 
+  const startedAt = Date.now();
+  const floor = Math.floor(startedAt / retentionMs) * retentionMs;
+  const reset = floor + retentionMs;
+  const result = await query(env, `
+    INSERT OR IGNORE INTO inference_receipts (owner_id,id,payload_hash,model,free_request,status,started_at,updated_at)
+    SELECT ?,?,?,?,?,'running',?,? WHERE CASE ?
+      WHEN 'free' THEN
+        (SELECT COUNT(*) FROM inference_receipts WHERE owner_id=? AND free_request=1 AND started_at>=?)<?
+        AND (SELECT COUNT(*) FROM inference_receipts WHERE free_request=1 AND started_at>=?)<?
+      WHEN 'go' THEN (${dailyAdmissions})<?
+      ELSE TRUE
+    END
+  `, owner, id, hash, prepared.model, Number(planType === 'free'), startedAt, startedAt, planType,
+  owner, floor, freeDailyLimit(env), floor, positiveInteger(env.FREE_GLOBAL_DAILY_REQUESTS, 200),
+  owner, floor, reset, goDailyLimit(env)).run();
+  if (!changes(result)) {
+    const recovered = await reattach(env, owner, id, hash);
+    if (recovered) return recovered;
+    const headers = { 'Retry-After': String(Math.ceil((reset - startedAt) / 1000)) };
+    return planType === 'go'
+      ? fail(429, 'SITE_GO_LIMIT', '本站 Go 套餐已达到当日请求额度。', headers)
+      : fail(429, 'SITE_FREE_LIMIT', '站内标准聊天已达到当日请求额度。', headers);
+  }
   // Only the admission winner starts upstream work. Retain the small receipt even after the stream expires.
   const liveResponse = new Promise(resolve => ctx.waitUntil(runInference(env, owner, id, startedAt, prepared, resolve)));
   ctx.waitUntil(query(env, "DELETE FROM inference_response_chunks WHERE rowid IN (SELECT rowid FROM inference_response_chunks WHERE created_at<? LIMIT 100)",
@@ -311,7 +336,7 @@ export async function readJournaledInference(request, env, actor, suppliedId) {
     : fail(404, 'INFERENCE_NOT_FOUND', '找不到此请求的服务端接收记录。');
 }
 
-export async function readSiteInferenceUsage(env, actor) {
+export async function readSiteInferenceUsage(env, actor, planType) {
   const owner = scope(actor);
   const now = Date.now();
   const floor = Math.floor(now / retentionMs) * retentionMs;
@@ -321,8 +346,14 @@ export async function readSiteInferenceUsage(env, actor) {
     FROM inference_receipts WHERE owner_id=? AND payload_hash<>''
   `, owner).first();
   const free = await query(env, 'SELECT COUNT(*) AS requests FROM inference_receipts WHERE owner_id=? AND free_request=1 AND started_at>=?', owner, floor).first();
-  return {
+  const resetsAt = floor + retentionMs;
+  const usage = {
     source: 'site-docode', ...totals,
-    freeDaily: { requests: free.requests, limit: positiveInteger(env.FREE_DAILY_REQUESTS, 20), resetsAt: floor + retentionMs },
+    freeDaily: { requests: free.requests, limit: freeDailyLimit(env), resetsAt },
   };
+  if (planType === 'go') {
+    const { requests } = await query(env, dailyAdmissions, owner, floor, resetsAt).first();
+    usage.goDaily = { requests, limit: goDailyLimit(env), resetsAt };
+  }
+  return usage;
 }
