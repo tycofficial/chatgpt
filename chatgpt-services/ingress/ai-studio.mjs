@@ -2,7 +2,9 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { createRelay, gatewayError } from './public/_worker.js';
 
-const accountPath = /^\/(?:health\/?$|(?:auth|sync|bridge|jobs|billing\/v1|inference\/v1|dot-computer\/v1)(?:\/|$))/;
+// Express matches routes case-insensitively by default. Own those paths here
+// so unsupported spellings cannot fall through to legacy account handlers.
+const accountPath = /^\/(?:health\/?$|(?:auth|sync|bridge|jobs|billing\/v1|inference\/v1|dot-computer\/v1)(?:\/|$))/i;
 const requestOrigin = 'https://chatgptapi.ai.studio';
 
 async function sendGatewayError(request, response, status, code, message = '本站账号服务暂时无法连接。') {

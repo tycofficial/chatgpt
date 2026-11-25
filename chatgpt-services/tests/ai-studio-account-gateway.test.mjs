@@ -137,6 +137,23 @@ test('AI Studio routes use the existing account authority and keep session and h
   assert.equal((await f.call(path, { token: restored.token })).status, 401);
 });
 
+test('alternate account route casing cannot reach the existing app handlers', async t => {
+  const f = await start(t);
+  const attempts = [
+    ['/Health', {}],
+    ['/AUTH/session', { token: f.alice.token }],
+    ['/Auth/Login', { method: 'POST', body: { username: 'TYC', password: 'Neutral-Admin-Only' } }],
+  ];
+  for (const [path, options] of attempts) {
+    const response = await f.call(path, options);
+    assert.equal(response.status, 404);
+    assert.equal(response.headers.get('Access-Control-Allow-Origin'), site);
+    assert.equal((await response.json()).error.code, 'ROUTE_NOT_FOUND');
+  }
+  assert.equal(f.calls.length, 0);
+  assert.equal(await (await f.call('/healthy')).text(), 'Existing AI Studio app');
+});
+
 test('AI Studio health reports only readiness flags using the same configuration checks as the service routes', async t => {
   const f = await start(t);
   const actual = globalThis.fetch;
