@@ -376,11 +376,14 @@ const startupGuard = assets => `<script>(function(entries){
        getComputedStyle(node).visibility!=='visible')return false;
     return accept(node);
    });
-   if(visible){state.ready();return}
+   if(visible)state.ready();
+  }
+  function schedule(){
+   if(failed||finished)return;
    if(progressStyle&&!progressStyle.isConnected&&document.head)document.head.appendChild(progressStyle);
    if(progress&&!progress.isConnected&&document.body)document.body.appendChild(progress);
+   if(!drawPending){drawPending=true;requestAnimationFrame(check)}
   }
-  function schedule(){if(!drawPending){drawPending=true;requestAnimationFrame(check)}}
   renderObserver=new MutationObserver(schedule);
   renderObserver.observe(document,{childList:true,subtree:true,characterData:true,attributes:true,
    attributeFilter:['class','hidden','style','contenteditable','disabled','readonly','inert','aria-disabled','aria-readonly','aria-hidden']});

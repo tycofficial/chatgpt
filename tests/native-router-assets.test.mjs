@@ -98,7 +98,7 @@ test('the packaged entry mounts a client root on the static Pages document', () 
   assert.equal(embedded.mountMode, plan.mountMode);
 });
 
-function startupFixture({ stylesheet } = {}) {
+function startupFixture({ stylesheet, requestFrame = callback => callback() } = {}) {
   const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   const guard = html.match(/<script>([\s\S]*?)<\/script>/)[1];
   const notice = { hidden: true };
@@ -123,7 +123,7 @@ function startupFixture({ stylesheet } = {}) {
     performance: { now: () => 2000, getEntriesByType: () => entries },
     setInterval: fn => { observeTiming = fn; return 1; },
     clearInterval: () => { observeTiming = undefined; },
-    requestAnimationFrame: fn => fn(),
+    requestAnimationFrame: requestFrame,
     MutationObserver: class {
       constructor(listener) { onMutation = listener; }
       observe() {}
@@ -223,9 +223,11 @@ test('the homepage keeps its progress across a document mount until the composer
 });
 
 test('settings keeps measured progress until the settings content has rendered', () => {
-  const fixture = startupFixture();
+  const frames = [];
+  const fixture = startupFixture({ requestFrame: callback => frames.push(callback) });
   fixture.state.attach(fixture.notice);
   fixture.state.waitForSettings();
+  frames.shift()();
   fixture.progress.parentNode = null;
   fixture.progressStyle.parentNode = null;
 
@@ -234,9 +236,12 @@ test('settings keeps measured progress until the settings content has rendered',
   assert.equal(fixture.progressStyle.isConnected, true);
   assert.notEqual(fixture.gauge.value, '100');
   assert.equal(fixture.time.textContent, '正在初始化页面');
+  frames.shift()();
 
   fixture.mutate({ getClientRects: () => [{}], visibility: 'visible', innerText: '账户设置' });
+  frames.shift()();
   assert.equal(fixture.gauge.value, '100');
+  frames.shift()();
   assert.equal(fixture.progress.isConnected, false);
 });
 
