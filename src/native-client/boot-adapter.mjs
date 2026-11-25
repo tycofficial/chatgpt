@@ -17,8 +17,8 @@ import { createNativeSiteUsageLayout } from './local-pricing.mjs';
 import { createNativeSiteSignOut, isSiteSignOutPage } from './site-signout.mjs';
 import { createNativeSiteLoginRoute } from './native-site-login.mjs';
 import { localizeRouterAssets } from './startup-compatibility.mjs';
-import { siteSignOut, localAppServer as timingServer } from './service-boundary.mjs';
-import { wrapNativeChatPreamble, wrapNativeClassicChatTiming, wrapNativeClassicStatus, wrapNativeClassicTiming, wrapNativeReasoningGroups } from './classic-chat-adapter.mjs';
+import { siteSignOut, localAppServer as timingServer, localWorkspaceDownloadSource, localWorkspaceDownloadService } from './service-boundary.mjs';
+import { wrapNativeChatPreamble, wrapNativeClassicChatTiming, wrapNativeClassicStatus, wrapNativeClassicTiming, wrapNativeReasoningGroups, wrapNativeWorkFileActivity } from './classic-chat-adapter.mjs';
 import { projectNativeCodexPublicSummary, storedConversationSurface, wrapNativeCodexActivityItem, wrapNativeCodexWorkTiming, wrapNativeWorkedDuration } from './local-app-server.mjs';
 import { projectNativeCodexPythonResult } from './native-python-activity.mjs';
 import { terminalSiteInferenceReason } from './site-inference-transport.mjs';
@@ -348,6 +348,72 @@ overrideExports('hUUF', {}, { deferred: true }, { b: wrapNativeReasoningGroups }
 overrideExports('R2pa', {}, { deferred: true }, {
   a: original => wrapNativeClassicTiming(wrapNativeClassicChatTiming(original)),
 });
+function SiteWorkFileRow({ fileName, description }) {
+  const { useEffect, useState } = requireOriginal('zd8w');
+  const { jsx, jsxs, Fragment } = requireOriginal('ABep');
+  const scope = requireOriginal('Q840').y(requireOriginal('tSEg').a);
+  const { formatMessage } = requireOriginal('Wf1j').a();
+  const Button = requireOriginal('Sm6l').a;
+  const [verified, setVerified] = useState(null);
+  useEffect(() => {
+    if (!description) return;
+    const controller = new AbortController();
+    localWorkspaceDownloadSource.readDescribedFile(description, { signal: controller.signal }).then(() => {
+      if (!controller.signal.aborted) setVerified(description);
+    }).catch(() => {});
+    return () => controller.abort();
+  }, [description]);
+  const current = () => localWorkspaceDownloadSource.isDescriptionCurrent(description);
+  const ready = description && verified === description && current();
+  const preview = ready ? requireOriginal('f2PP') : null;
+  const download = async () => {
+    if (!current()) return;
+    await localWorkspaceDownloadService.downloadSource(description, {}, (blob, name) => {
+      if (!current()) throw Error('The original workspace file is no longer available.');
+      requireOriginal('ripK').a(blob, name);
+    });
+  };
+  const open = async () => {
+    const sourceFile = await localWorkspaceDownloadSource.readDescribedFile(description);
+    if (!current()) return;
+    const { conversationId, mimeType, messageId, sandboxPath } = description;
+    await preview.openChatGptFile(scope, {
+      conversationId, fileName, mimeType, messageId, sourceFile, browserPreview: true, downloadFallback: false,
+      target: { type: 'sandbox', messageId, sandboxPath },
+      tabKey: 'work-file:' + messageId + ':' + sandboxPath, isAccessBlocked: () => !current(), onDownload: download,
+    });
+  };
+  const activate = action => event => {
+    event.stopPropagation();
+    void action().catch(() => setVerified(null));
+  };
+  const openable = preview?.canOpenChatGptFilePreview({ browserPreview: true });
+  return jsx(requireOriginal('MFk9').a, {
+    summary: jsxs(Fragment, { children: [
+      formatMessage({ id: 'codex.patch.change.created', defaultMessage: 'Created' }) + ' ',
+      openable ? jsx(Button, { color: 'ghostMuted', size: 'inline', 'data-agent-activity-file-link': true,
+        onClick: activate(open), children: fileName }) : fileName,
+    ] }),
+    accessory: ready ? jsx(Button, { color: 'ghostMuted', size: 'inline', onClick: activate(download),
+      children: formatMessage({ id: 'chatgptConversations.files.download', defaultMessage: 'Download' }) }) : null,
+  });
+}
+
+overrideExports('toTV', {}, { deferred: true }, {
+  a: original => wrapNativeWorkFileActivity(original, {
+    useAllowed: () => requireOriginal('zd8w').useContext(requireOriginal('WAdu').a) !== 'restricted',
+    // Subscribe to the same optimistic Classic alias as the native Work pane.
+    useConversationAlias: id => requireOriginal('Q840').x(id ? requireOriginal('dQRk').j : null, id),
+    getFile: (conversationId, activityId) => {
+      if (storedConversationSurface(timingServer.threads.get(conversationId)) !== 'work') return null;
+      try { return localWorkspaceDownloadSource.describeWorkFileActivity(conversationId, activityId); }
+      catch { return null; }
+    },
+    renderActivity: (Component, props) => requireOriginal('ABep').jsx(Component, props),
+    renderFile: file => requireOriginal('ABep').jsx(SiteWorkFileRow, file),
+  }),
+});
+
 function useTerminalSiteReceipt(conversationId) {
   const { useCallback, useSyncExternalStore } = requireOriginal('zd8w');
   const subscribe = useCallback(onChange => {

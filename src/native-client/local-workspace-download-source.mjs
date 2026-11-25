@@ -192,7 +192,7 @@ export function createWorkspaceDownloadSource({ getIdentity, getThread, getWorks
   function descriptionCurrent(source) {
     try { const next = capture(source.spec); return next.prefix === source.prefix && next.signature === source.signature && next.artifactURI === source.artifactURI && readOwner() === bootOwner; } catch { return false; }
   }
-  function describe(value) {
+  function describe(value, expectedProducer) {
     guardOwner();
     if (!artifactBase) fail('PRESENTATION_UNAVAILABLE', 'A verified artifact app base has not been configured.', 503);
     const ids = request({ ...value, sandboxPath: '/mnt/data/presentation-request' });
@@ -205,6 +205,7 @@ export function createWorkspaceDownloadSource({ getIdentity, getThread, getWorks
     let relative;
     try { relative = uri.pathname.slice(prefixURI.pathname.length).split('/').map(decodeURIComponent).join('/'); } catch { fail('INVALID_ARTIFACT_URI', 'The produced artifact URI has invalid escaping.', 400); }
     const spec = request({ conversationId: ids.conversationId, messageId: ids.messageId, sandboxPath: '/mnt/data/' + relative }), source = capture(spec);
+    if (expectedProducer && source.producer !== expectedProducer) fail('SOURCE_CHANGED', 'The file belongs to a different recorded operation.', 409);
     const expected = new URL(prefixURI.pathname + spec.relativePath.split('/').map(encodeURIComponent).join('/'), artifactBase.origin);
     if (source.prefix !== prefix || uri.href !== expected.href || typeof source.artifactURI !== 'string' || ![expected.href, expected.pathname].includes(source.artifactURI) || ![source.artifactURI, expected.href].includes(value.artifactURI)) fail('ARTIFACT_URI_MISMATCH', 'The URI does not match the actual produced file descriptor.', 409);
     if (source.kind === 'create_file') {
@@ -216,6 +217,52 @@ export function createWorkspaceDownloadSource({ getIdentity, getThread, getWorks
     const description = Object.freeze({ conversationId: spec.conversationId, messageId: spec.messageId, sandboxPath: spec.sandboxPath, ownerKey: bootOwner, fileName: source.fileName, mimeType: source.mimeType, size: source.size, artifactURI: expected.href, producerKind: source.kind, bytesVerified: false });
     descriptions.set(description, source); return description;
   }
+  function describeWorkFileActivity(conversationId, activityId) {
+    guardOwner();
+    const thread = getThread(conversationId);
+    if (!thread || thread.id !== conversationId || !Array.isArray(thread.turns) || typeof activityId !== 'string') return null;
+    let match;
+    for (const turn of thread.turns) {
+      if (typeof turn?.id !== 'string' || !activityId.startsWith(turn.id + ':') || !Array.isArray(turn.items)) continue;
+      const id = activityId.slice(turn.id.length + 1);
+      for (const item of turn.items) {
+        if (item?.id !== id) continue;
+        if (match) return null;
+        match = { turn, item };
+      }
+    }
+    if (!match) return null;
+    const { turn, item } = match;
+    if (item.type !== 'mcpToolCall' || item.server !== 'browser_workspace' || item.tool !== 'create_file' ||
+        item.status !== 'completed' || item.error || item.result?.isError !== false || typeof item.arguments?.content !== 'string') return null;
+    const file = item.result.structuredContent?.file;
+    if (!object(file)) return null;
+    const spec = request({ conversationId, messageId: item.id, sandboxPath: file.path });
+    const fileName = spec.relativePath.split('/').at(-1);
+    if (file.name !== spec.relativePath || pathOf(item.arguments.name ?? item.arguments.path) !== spec.relativePath ||
+        fileName.length > 255 || !Number.isSafeInteger(file.size) || file.size < 0 || file.size > maxBytes) return null;
+
+    let description = null;
+    const assistant = turn.items.findLast(candidate => candidate?.type === 'agentMessage' && candidate.phase !== 'commentary');
+    if (assistant && terminal.has(turn.status) && turn.items.indexOf(assistant) > turn.items.indexOf(item)) {
+      try { description = describe({ conversationId, messageId: assistant.id, artifactURI: file.url }, item); }
+      catch { /* The writer remains in activity even without its original downloadable revision. */ }
+    }
+    guardOwner();
+    return { fileName, description };
+  }
+
+  async function readDescribedFile(description, { signal } = {}) {
+    const source = object(description) ? descriptions.get(description) : null;
+    if (!source || !isDescriptionCurrent(description)) fail('SOURCE_CHANGED', 'The original workspace file is no longer available.', 409);
+    const proof = await resolve({ ...source.spec, signal });
+    signal?.throwIfAborted();
+    if (!isDescriptionCurrent(description) || !isCurrent(proof) || issued.get(proof).signature !== source.signature) {
+      fail('SOURCE_CHANGED', 'The original workspace file is no longer available.', 409);
+    }
+    return new Blob([proof.bytes], { type: proof.mimeType });
+  }
+
   function isDescriptionCurrent(description) {
     const source = object(description) ? descriptions.get(description) : null;
     return !!source && readOwner() === bootOwner && descriptionCurrent(source) && readOwner() === bootOwner;
@@ -239,5 +286,5 @@ export function createWorkspaceDownloadSource({ getIdentity, getThread, getWorks
       return isDescriptionCurrent(description) ? digest : null;
     } catch { return null; }
   }
-  return Object.freeze({ resolve, isCurrent, describe, isDescriptionCurrent, getDescriptionSHA });
+  return Object.freeze({ resolve, isCurrent, describe, describeWorkFileActivity, readDescribedFile, isDescriptionCurrent, getDescriptionSHA });
 }

@@ -137,6 +137,34 @@ export function wrapNativeClassicStatus(NativeTurn, { renderTurn, renderStatus, 
   };
 }
 
+const stableWorkConversationId = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
+
+export function wrapNativeWorkFileActivity(NativeActivity, { useAllowed, useConversationAlias, getFile, renderActivity, renderFile }) {
+  return function SiteWorkFileActivity(props) {
+    const original = props.standaloneActivityContentByItemId;
+    let content = original;
+    const localId = typeof props.conversationId === 'string' ? props.conversationId.replace(/^chatgpt:/, '') : '';
+    const optimisticPrefix = 'local-chatgpt:';
+    const optimistic = localId.startsWith(optimisticPrefix);
+    const alias = useConversationAlias(optimistic && stableWorkConversationId.test(localId.slice(optimisticPrefix.length)) ? localId : null);
+    const conversationId = optimistic ? alias : localId;
+    if (useAllowed() && stableWorkConversationId.test(conversationId ?? '') && Array.isArray(props.units)) {
+      for (const unit of props.units) {
+        const entries = unit.kind === 'group' ? unit.items : unit.kind === 'standalone' ? [unit.item] : [];
+        for (const { item } of entries) {
+          if (item.type !== 'patch' || item.success !== true || typeof item.callId !== 'string' ||
+              item.chatGptWorkActivityId !== item.callId || (item.id ?? item.callId) !== item.callId || content?.has(item.callId)) continue;
+          const file = getFile(conversationId, item.callId);
+          if (!file) continue;
+          if (content === original) content = new Map(original);
+          content.set(item.callId, renderFile(file));
+        }
+      }
+    }
+    return renderActivity(NativeActivity, content === original ? props : { ...props, standaloneActivityContentByItemId: content });
+  };
+}
+
 export class ClassicChatAdapter {
   constructor({ appServer, models, now = Date.now, uuid = () => crypto.randomUUID(), onConversationChange = () => {}, heartbeatMs = 10000, getPublishedFileReferences = () => [] }) { this.server = appServer; this.models = models; this.now = now; this.uuid = uuid; this.onConversationChange = onConversationChange; this.heartbeatMs = heartbeatMs; this.getPublishedFileReferences = getPublishedFileReferences; this.mutationQueue = Promise.resolve(); }
   json(body, status = 200) { return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }); }
@@ -237,8 +265,8 @@ export class ClassicChatAdapter {
       (item.tool === 'create_file' || item.tool === 'write_file') && item.status === 'completed' &&
       !item.error && output.isError === false && typeof file?.path === 'string' && file.path.startsWith('/mnt/data/');
     const metadata = written ? {
-      ...base.metadata, ...classicTurnClock(turn), reasoning_title: file.path,
-      work_activity: { groups: [{ group_id: turn.id, items: [{ item_id: file.path, kind: 'file-change', count: 1, status: 'completed' }] }] },
+      ...base.metadata, ...classicTurnClock(turn), reasoning_title: file.path.split('/').at(-1),
+      work_activity: { groups: [{ group_id: turn.id, items: [{ item_id: item.id, kind: 'file-change', count: 1, status: 'completed' }] }] },
     } : base.metadata;
     return [call, { ...base, metadata, id: item.id + '-result', author: { role: 'tool', name: item.tool, metadata: {} }, recipient: 'all', channel: null, content: { content_type: 'text', parts: [text] }, status: output.isError ? 'finished_partial_completion' : 'finished_successfully', end_turn: false }];
   }

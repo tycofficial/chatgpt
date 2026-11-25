@@ -105,6 +105,29 @@ test('native Save re-resolves the exact issued source and grants only its exact 
   const later = e.service.createNativeDownloadURL(captured.blob, e.create); assert.equal(e.service.ownsObjectURL(later), false, 'The exact Blob grant ends when the synchronous callback exits.'); e.revoke(later);
 });
 
+test('native Work download resolves its exact source and grants the link without an earlier preview ticket', async t => {
+  const e = fixture();
+  t.after(() => e.service.dispose());
+  let saved;
+  await e.service.downloadSource(context, {}, (blob, name) => {
+    const url = e.service.createNativeDownloadURL(blob, e.create);
+    assert.equal(e.service.ownsObjectURL(url), true);
+    saved = { name, url };
+  });
+  assert.equal(saved.name, e.state.fileName);
+  assert.equal(e.counters.resolves, 1);
+  assert.equal(e.proofs[0].messageId, context.messageId);
+  assert.deepEqual(new Uint8Array(await (await fetch(saved.url)).arrayBuffer()), e.state.bytes);
+
+  e.state.current = false;
+  assert.equal(e.service.ownsObjectURL(saved.url), false);
+  await assert.rejects(e.service.downloadSource(context, {}, () => assert.fail('Saved a stale file')),
+    { code: 'WORKSPACE_DOWNLOAD_SOURCE_CHANGED' });
+  await assert.rejects(e.service.downloadSource({ ...context, sandboxPath: '/mnt/data/../invalid.txt' }, {},
+    () => assert.fail('Saved an invalid path')), { code: 'WORKSPACE_DOWNLOAD_INVALID_REQUEST' });
+  assert.equal(e.counters.resolves, 2);
+});
+
 test('one native grant cannot authorize two URLs and unknown Blob objects keep standard URL behavior without authority', async t => {
   const e = fixture(); t.after(() => e.service.dispose()); await admitted(e); let first;
   await e.service.downloadVerifiedBytes(e.state.bytes, {}, blob => { first = e.service.createNativeDownloadURL(blob, e.create); assert.throws(() => e.service.createNativeDownloadURL(blob, e.create), /only one URL/); });

@@ -139,7 +139,7 @@ export function createLocalWorkspaceDownloadService({
     catch (error) { for (const entry of [...cache.values()]) if (entry.source.ownerKey === authority.key && sameContext(entry.source, spec)) removeEntry(entry); throw error; }
     check(authority, signal); requireCurrent(verified.proof);
     const key = cacheKey(verified.source), existing = cache.get(key);
-    if (existing && entryCurrent(existing)) { existing.sequence = ++sequence; return existing; }
+    if (existing && entryCurrent(existing)) { existing.sequence = ++sequence; return { entry: existing, verified }; }
     if (existing) removeEntry(existing);
     // The same source context may not silently keep an earlier token/MIME snapshot.
     for (const entry of [...cache.values()]) if (entry.source.ownerKey === authority.key && sameContext(entry.source, spec) && entry.key !== key) removeEntry(entry);
@@ -151,7 +151,7 @@ export function createLocalWorkspaceDownloadService({
       cache.set(key, entry); urls.set(url, entry);
       recognizedBytes.set(byteKey(authority.key, verified.source.sha256, verified.source.size), true);
       note({ type: 'workspace-download-issued', size: verified.source.size });
-      return entry;
+      return { entry, verified };
     } catch (error) { revoke(url); throw error; }
   }
   function ownsObjectURL(url) {
@@ -166,6 +166,30 @@ export function createLocalWorkspaceDownloadService({
       return true;
     } catch { return false; }
   }
+  function invokeNativeDownload(entry, verified, downloadName, signal, nativeDownload) {
+    if (typeof nativeDownload !== 'function') throw new TypeError('The original synchronous native download primitive is required.');
+    check(entry.authority, signal); requireCurrent(entry.proof); requireCurrent(verified.proof);
+    if (!entryCurrent(entry) || !sameSource(verified.source, entry.source)) {
+      throw issue('The source download grant changed. Reopen the preview.', 409, 'WORKSPACE_DOWNLOAD_SOURCE_CHANGED');
+    }
+    const blob = new Blob([verified.bytes], { type: verified.source.mimeType });
+    const grant = { entry, proof: verified.proof, used: false };
+    nativeBlobGrants.set(blob, grant);
+    try {
+      const output = nativeDownload(blob, downloadName);
+      if (output != null && typeof output.then === 'function') throw new TypeError('The original native download primitive must remain synchronous.');
+    } finally { nativeBlobGrants.delete(blob); }
+  }
+
+  async function downloadSource({ conversationId, messageId, sandboxPath: path }, { signal } = {}, nativeDownload) {
+    if (![conversationId, messageId].every(value => typeof value === 'string' && ID.test(value))) {
+      throw issue('An exact conversation and message are required.');
+    }
+    const spec = { conversationId, messageId, sandboxPath: sandboxPath(path) };
+    const { entry, verified } = await resource(spec, signal);
+    invokeNativeDownload(entry, verified, verified.source.fileName, signal, nativeDownload);
+  }
+
   async function downloadVerifiedBytes(value, { fileName, signal } = {}, nativeDownload) {
     if (typeof nativeDownload !== 'function') throw new TypeError('The original synchronous native download primitive is required.');
     const authority = owner(), bytes = byteCopy(value);
@@ -188,16 +212,8 @@ export function createLocalWorkspaceDownloadService({
     if (!sameSource(verified.source, entry.source) || verified.bytes.length !== bytes.length || verified.source.sha256 !== hash || !entryCurrent(entry)) {
       removeEntry(entry); throw issue('The workspace file version changed before Save.', 409, 'WORKSPACE_DOWNLOAD_BYTES_CHANGED');
     }
-    requireCurrent(entry.proof); requireCurrent(verified.proof);
-    const downloadName = filename(fileName ?? verified.source.fileName), blob = new Blob([bytes], { type: verified.source.mimeType });
-    const grant = { entry, proof: verified.proof, used: false };
-    nativeBlobGrants.set(blob, grant);
-    try {
-      check(authority, signal); requireCurrent(entry.proof); requireCurrent(verified.proof);
-      const output = nativeDownload(blob, downloadName);
-      if (output != null && typeof output.then === 'function') throw new TypeError('The original native download primitive must remain synchronous.');
-      return { handled: true };
-    } finally { nativeBlobGrants.delete(blob); }
+    invokeNativeDownload(entry, verified, filename(fileName ?? verified.source.fileName), signal, nativeDownload);
+    return { handled: true };
   }
   // Compose with Library's same method; the innermost callback creates one URL.
   function createNativeDownloadURL(blob, createURL) {
@@ -229,7 +245,8 @@ export function createLocalWorkspaceDownloadService({
     if (!match) return null;
     if (request.method !== 'GET') return json({ error: { code: 'WORKSPACE_DOWNLOAD_METHOD_NOT_ALLOWED', message: 'Only GET is supported.' } }, 405, { Allow: 'GET' });
     try {
-      const spec = requestSpec(url, match[1]), entry = await resource(spec, request.signal);
+      const spec = requestSpec(url, match[1]);
+      const { entry } = await resource(spec, request.signal);
       return json({ status: 'success', download_url: entry.url });
     } catch (error) {
       const aborted = error?.name === 'AbortError', code = aborted ? 'WORKSPACE_DOWNLOAD_ABORTED' : error?.code ?? 'WORKSPACE_DOWNLOAD_ERROR';
@@ -237,5 +254,5 @@ export function createLocalWorkspaceDownloadService({
       return json({ error: { code, message: error?.message ?? 'The local workspace file is unavailable.' } }, aborted ? 499 : error?.status ?? 500);
     }
   }
-  return { handle, ownsObjectURL, downloadVerifiedBytes, createNativeDownloadURL, forgetNativeDownloadURL, dispose };
+  return { handle, ownsObjectURL, downloadSource, downloadVerifiedBytes, createNativeDownloadURL, forgetNativeDownloadURL, dispose };
 }

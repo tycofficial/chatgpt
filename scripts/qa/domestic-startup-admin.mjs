@@ -102,7 +102,18 @@ try {
       globalThis.__qaProgress=[];
       new MutationObserver(()=>{
         const gauge=document.querySelector('#site-load-progress [role=progressbar]');
-        if(gauge)globalThis.__qaProgress.push(Number(gauge.getAttribute('aria-valuenow')));
+        if (!gauge) return;
+        const progress = Number(gauge.getAttribute('aria-valuenow'));
+        globalThis.__qaProgress.push(progress);
+        if (progress !== 100 || globalThis.__qaConversationAtReady !== undefined) return;
+        const visible = node => node.getClientRects().length && getComputedStyle(node).visibility === 'visible' &&
+          !node.closest('[hidden],[inert],[aria-hidden="true"]');
+        globalThis.__qaConversationAtReady = Array.from(document.querySelectorAll(
+          'main [data-conversation-role], main [data-message-author-role], main [contenteditable="true"], main textarea',
+        )).some(node => visible(node) && (node.matches('[data-conversation-role],[data-message-author-role]')
+          ? Boolean(node.textContent.trim())
+          : (node.isContentEditable || node.tagName === 'TEXTAREA') && !node.disabled && !node.readOnly &&
+            !node.closest('[aria-disabled="true"],[aria-readonly="true"]')));
       }).observe(document,{subtree:true,childList:true,attributes:true,attributeFilter:['aria-valuenow']});
     });
     const page=await context.newPage();
@@ -143,11 +154,12 @@ try {
       await page.reload({waitUntil:'domcontentloaded',timeout:45000});
       await editor().waitFor({state:'visible',timeout:45000});
       const responseText = number => page.locator('main').getByText('ADMIN-DIRECT-QA-' + number, {exact: true}).first();
-      async function sendMessage(text, expected) {
+      async function sendMessage(text, expected, { codex = false } = {}) {
         const started = performance.now();
         await editor().fill(text);
         const send=page.locator('#composer-submit-button, button[data-testid="send-button"], button[aria-label="发送"], button[aria-label="发送消息"]').filter({visible:true}).first();
-        if(await send.isVisible()&&await send.isEnabled()) await send.click();
+        if (codex) await send.click({ timeout: 30000 });
+        else if(await send.isVisible()&&await send.isEnabled()) await send.click();
         else await editor().press('Enter');
         await responseText(expected).waitFor({state:'visible',timeout:40000});
         return Math.round(performance.now() - started);
@@ -233,7 +245,9 @@ try {
         assert.equal(codexMode, 'codex');
         await report('codex');
         const homePath = new URL(page.url()).pathname.replace(/\/+$/, '');
-        const firstCodexReplyMs = await sendMessage(codexPrompts[0], 3);
+        const firstCodexReplyMs = await sendMessage(codexPrompts[0], 3, { codex: true });
+        await page.waitForURL(url => url.origin === origin &&
+          /^\/chatgpt\/local\/[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}\/?$/i.test(url.pathname), { timeout: 25000 });
         const codexThread = new URL(page.url());
         assert.equal(codexThread.origin, origin);
         assert.ok(codexThread.pathname.startsWith('/chatgpt/'));
@@ -242,10 +256,13 @@ try {
         await page.reload({ waitUntil: 'domcontentloaded', timeout: 45000 });
         await responseText(3).waitFor({ state: 'visible', timeout: 40000 });
         await editor().waitFor({ state: 'visible', timeout: 30000 });
+        await page.locator('#site-load-progress').waitFor({ state: 'hidden', timeout: 12000 });
+        assert.equal(await page.evaluate(() => globalThis.__qaConversationAtReady), true,
+          'Codex reached 100 percent before restoring any conversation content');
         assert.equal(page.url(), codexThread.href, 'Reload reopened a different Codex thread');
         assert.equal(await selectedMode(), 'codex', 'Reload selected a different product mode');
         assert.equal(modelPosts, 3, 'Reload replayed the first Codex response request');
-        const secondCodexReplyMs = await sendMessage(codexPrompts[1], 4);
+        const secondCodexReplyMs = await sendMessage(codexPrompts[1], 4, { codex: true });
         assert.equal(page.url(), codexThread.href, 'Codex follow-up opened another thread');
         assert.equal(modelPosts, 4);
         assert.equal(codexRequests.length, 2);

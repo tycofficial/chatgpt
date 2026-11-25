@@ -6,6 +6,7 @@ import os from 'node:os';
 import { createHash } from 'node:crypto';
 import { createBrowserToolExecutor, workspacePath } from '../src/native-client/browser-tool-executor.mjs';
 import { createWorkspaceDownloadSource } from '../src/native-client/local-workspace-download-source.mjs';
+import { ClassicChatAdapter, wrapNativeWorkFileActivity } from '../src/native-client/classic-chat-adapter.mjs';
 import { projectChatHistoryThread } from '../src/native-client/chat-history-sync.mjs';
 
 const encoder = new TextEncoder(), decoder = new TextDecoder();
@@ -74,6 +75,81 @@ test('actual create_file and filesystem readback yield a branded exact UTF-8 pro
   assert.equal(Object.isFrozen(proof), true); assert.equal(e.source.isCurrent(proof), true); assert.equal(e.source.isCurrent({ ...proof }), false);
   assert.equal(e.metrics.reads.length, 1); assert.equal(e.metrics.writes.length, writes);
   assert.deepEqual(e.metrics.reads, [e.executor.getWorkspacePrefix(e.thread.id) + '/report.md']);
+});
+
+test('Work uses the actual writer ID and filename in the existing activity row with an exact owned file', async t => {
+  const e = await environment(t, { artifactBaseURL: 'https://work-files.invalid/' });
+  const thread = e.addThread('fb218cc4-eed1-44e4-9b0c-91116591d358');
+  const made = await e.produce('Actual saved work file.', 'subdir/work-proof.txt', thread);
+  thread.adapterMetadata.conversationOrigin = 'tpp';
+  made.turn.adapterMetadata = {};
+  const adapter = new ClassicChatAdapter({ appServer: {}, models: {} });
+  const [, result] = adapter.projectItem(thread, made.turn, made.tool);
+  const [group] = result.metadata.work_activity.groups;
+  assert.deepEqual(group.items, [{ item_id: made.tool.id, kind: 'file-change', count: 1, status: 'completed' }]);
+  assert.equal(result.metadata.reasoning_title, 'work-proof.txt');
+  const callId = group.group_id + ':' + group.items[0].item_id;
+  const patch = { type: 'patch', callId, chatGptWorkActivityId: callId, success: true };
+  const existing = new Map([['original-image', { kind: 'original-image' }]]);
+  const renderActivity = (_activity, props) => props;
+  const readFile = (id, activity) => e.source.describeWorkFileActivity(id, activity);
+  const optimisticId = 'local-chatgpt:69e9b78d-d9f1-449e-9b00-4942ac0c7cef';
+  const aliases = new Map();
+  const render = useAllowed => wrapNativeWorkFileActivity(() => {}, {
+    useAllowed, useConversationAlias: id => aliases.get(id), getFile: readFile, renderActivity, renderFile: file => file,
+  });
+  const props = { conversationId: 'chatgpt:' + thread.id, units: [{ kind: 'group', items: [{ item: patch }] }], standaloneActivityContentByItemId: existing };
+  assert.equal(render(() => false)(props), props);
+  for (const conversationId of ['chatgpt:' + e.thread.id, 'chatgpt:chatgpt:' + thread.id, 'chatgpt:17823203-f252-44e0-ba4c-47f52753a00b']) {
+    const foreign = { ...props, conversationId };
+    assert.equal(render(() => true)(foreign), foreign);
+  }
+  const presenter = render(() => true);
+  const optimisticProps = { ...props, conversationId: 'chatgpt:' + optimisticId };
+  assert.equal(presenter(optimisticProps), optimisticProps);
+  aliases.set(optimisticId, '17823203-f252-44e0-ba4c-47f52753a00b');
+  assert.equal(presenter(optimisticProps), optimisticProps);
+  aliases.set(optimisticId, thread.id);
+  const secondOptimistic = { ...props, conversationId: 'chatgpt:local-chatgpt:27c63559-f8f9-4b9d-9080-620413e37a16' };
+  assert.equal(presenter(secondOptimistic), secondOptimistic);
+  const output = presenter(optimisticProps).standaloneActivityContentByItemId;
+  assert.equal(presenter(props).standaloneActivityContentByItemId.get(callId).fileName, output.get(callId).fileName);
+  assert.equal(output.get('original-image'), existing.get('original-image'));
+  assert.equal(existing.has(callId), false);
+  const file = output.get(callId);
+  assert.equal(file.fileName, 'work-proof.txt');
+  assert.equal(file.description.messageId, made.item.id);
+  assert.equal(file.description.sandboxPath, '/mnt/data/subdir/work-proof.txt');
+  assert.equal(e.metrics.reads.length, 0);
+  const blob = await e.source.readDescribedFile(file.description);
+  assert.equal(blob.type, 'text/plain');
+  assert.equal(await blob.text(), 'Actual saved work file.');
+  await rejects(e.source.readDescribedFile({ ...file.description }), 409, 'SOURCE_CHANGED');
+  e.setIdentity({ accountId: 'other-owner', userId: 'other-user' });
+  await rejects(e.source.readDescribedFile(file.description), 409, 'SOURCE_CHANGED');
+  assert.throws(() => readFile(thread.id, callId), { code: 'LOCAL_WORKSPACE_DOWNLOAD_ACCOUNT_CHANGED' });
+});
+
+test('Work keeps real filenames while withholding unproven revisions and rejects deleted or replaced bytes', async t => {
+  const e = await environment(t, { artifactBaseURL: 'https://work-files.invalid/' });
+  const made = await e.produce('Produced version one.', 'same.txt');
+  const activity = tool => e.source.describeWorkFileActivity(e.thread.id, made.turn.id + ':' + tool.id);
+  made.turn.status = 'inProgress';
+  assert.deepEqual(activity(made.tool), { fileName: 'same.txt', description: null });
+  made.turn.status = 'completed';
+  const first = activity(made.tool).description;
+  const secondTool = await e.appendTool(e.thread, made.turn, 'create_file', { name: 'same.txt', content: 'Produced version two.' });
+  made.turn.items = [made.tool, secondTool, made.item];
+  assert.deepEqual(activity(made.tool), { fileName: 'same.txt', description: null });
+  await rejects(e.source.readDescribedFile(first), 409, 'SOURCE_CHANGED');
+  const second = activity(secondTool).description;
+  assert.equal(await (await e.source.readDescribedFile(second)).text(), 'Produced version two.');
+  await e.write('same.txt', 'Different real bytes.');
+  await rejects(e.source.readDescribedFile(second), 409, 'VERSION_UNAVAILABLE');
+  await e.remove('same.txt');
+  await rejects(e.source.readDescribedFile(second), 404, 'FILE_NOT_FOUND');
+  secondTool.status = 'failed';
+  assert.equal(activity(secondTool), null);
 });
 
 test('repeated source tokens are stable, byte getters cannot corrupt the private snapshot, and no raw bytes are accidentally enumerable', async t => {
