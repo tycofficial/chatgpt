@@ -3,6 +3,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
 import crypto from 'node:crypto';
+import { sharedNativeAssets } from './shared-native-assets.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const directory=path.join(root,'native-client');
 const source=path.join(root,'src/native-client');
@@ -10,8 +11,12 @@ const sha256=bytes=>crypto.createHash('sha256').update(bytes).digest('hex');
 const provenance=JSON.parse(await fs.readFile(path.join(directory,'adapter-provenance.json'),'utf8'));
 const active=JSON.parse(await fs.readFile(path.join(directory,'active.json'),'utf8'));
 if(!active.active||!provenance.sharedAssets?.length||!provenance.resources)throw Error('Native release has not been packaged with complete provenance');
-const sharedFiles=['config.js','model-catalog.js','runtime.js','python-worker.js','release-updater.js'];
-if(provenance.sharedAssets.length!==sharedFiles.length||new Set(provenance.sharedAssets.map(asset=>asset.file)).size!==sharedFiles.length||provenance.sharedAssets.some(asset=>!sharedFiles.includes(asset.file)))throw Error('Native release must retain exactly the five declared shared assets');
+const sharedInputs = new Map(sharedNativeAssets.map(asset => [asset.file, asset.inputFile]));
+if (provenance.sharedAssets.length !== sharedInputs.size ||
+    new Set(provenance.sharedAssets.map(asset => asset.file)).size !== sharedInputs.size ||
+    provenance.sharedAssets.some(asset => !sharedInputs.has(asset.file))) {
+ throw Error('Native release must retain the declared shared assets');
+}
 const builderBytes=await fs.readFile(path.join(root,'scripts/build-native-client.mjs'));
 const planInput=await fs.readFile(path.join(source,'entry-plan.json'),'utf8');
 if(sha256(builderBytes)!==provenance.builderSha256||sha256(planInput)!==provenance.entryPlanInputSha256)throw Error('Build inputs changed after packaging');
@@ -38,7 +43,7 @@ if (provenance.preservedRegistrationEntry) {
  releaseHash.update('\0preserved-registration:').update(provenance.preservedRegistrationEntry);
 }
 for(const asset of provenance.sharedAssets){
- const expectedInput=['python-worker.js','model-catalog.js'].includes(asset.file)?'src/native-client/'+asset.file:null;
+ const expectedInput=sharedInputs.get(asset.file);
  if(expectedInput){
   if(asset.inputFile!==expectedInput||asset.inputSha256!==asset.sha256)throw Error('Shared asset must be packaged from its canonical source');
   const inputBytes=await fs.readFile(path.join(root,expectedInput));

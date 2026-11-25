@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import {fileURLToPath} from 'node:url';
+import { sharedNativeAssets } from './shared-native-assets.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const referenceInput=path.join(root,'.test-output/original-client-prototype');
 const input=path.join(root,'src/native-client');
@@ -67,8 +68,7 @@ if (servicesOnly && (prior.deploymentBase !== deploymentBase || prior.sourceBuil
 }
 const originalOnSite = url => deploymentBase + 'original-client/public/chatgpt.com' + url;
 const builderBytes=await fs.readFile(fileURLToPath(import.meta.url));
-const sharedAssetInputs=['config.js','model-catalog.js','runtime.js','python-worker.js','release-updater.js'].map(file=>({file,...(['python-worker.js','model-catalog.js'].includes(file)?{inputFile:'src/native-client/'+file}:{})}));
-const sharedAssets=await Promise.all(sharedAssetInputs.map(async asset=>({...asset,bytes:await fs.readFile(path.join(root,asset.inputFile??asset.file))})));
+const sharedAssets=await Promise.all(sharedNativeAssets.map(async asset=>({...asset,bytes:await fs.readFile(path.join(root,asset.inputFile??asset.file))})));
 const releaseHash=crypto.createHash('sha256').update([...raw.values()].join('\n')).update(builderBytes).update(entryPlanInput).update(deploymentBase);
 if (siteAccountOrigin) releaseHash.update('\0site-account-origin:').update(siteAccountOrigin);
 if (priorPlan) releaseHash.update('\0preserved-registration:').update(priorPlan.registrationEntry);
@@ -81,7 +81,12 @@ const registrationEntry = priorPlan?.registrationEntry ?? './entry-library.mjs?v
 await fs.mkdir(output,{recursive:true});
 async function write(file,data){const temporary=file+'.'+process.pid+'.tmp';await fs.writeFile(temporary,data);await fs.rename(temporary,file);}
 // Migrated shared assets have one canonical input; root URLs remain build-derived.
-for(const asset of sharedAssets)if(asset.inputFile)await write(path.join(root,asset.file),asset.bytes);
+for (const asset of sharedAssets) {
+ if (!asset.inputFile) continue;
+ const target = path.join(root, asset.file);
+ await fs.mkdir(path.dirname(target), { recursive: true });
+ await write(target, asset.bytes);
+}
 function replace(text,from,to){if(!text.includes(from))throw Error('Missing packaging seam: '+from);return text.replaceAll(from,()=>to);}
 for(const asset of publicAssets){
  const file=path.join(output,asset.relative);

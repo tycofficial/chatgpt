@@ -17,3 +17,5 @@ npm start
 Free 开放标准 Chat，Plus 增加 Work 和 Codex，Pro 增加 Dot。模型请求通过现有账户服务发出，断线后按原请求编号接回。注册账户同步文字历史和套餐。浏览器保留附件原件，图片以适合推理的尺寸传送。
 
 账户和推理服务的部署、配置及测试见 `chatgpt-services/README.md`。
+
+发布构建会从锁定的 npm 依赖复制 Python 核心运行时。浏览器在首次执行 Python 时从本站加载这些文件。额外的 Python 包按需从 Pyodide CDN 加载。运行时的许可文件在 `vendor/`。[Pyodide 314.0.8](https://github.com/pyodide/pyodide/tree/314.0.8) · [CPython 3.14.2](https://github.com/python/cpython/tree/v3.14.2) · [Emscripten 5.0.3](https://github.com/emscripten-core/emscripten/tree/5.0.3)

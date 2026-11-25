@@ -25,6 +25,7 @@
   "devDependencies": {
     "acorn": "8.15.0",
     "esbuild": "^0.28.2",
-    "linkedom": "^0.18.15"
+    "linkedom": "^0.18.15",
+    "pyodide": "314.0.8"
   }
 }

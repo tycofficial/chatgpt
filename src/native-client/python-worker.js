@@ -1,7 +1,8 @@
 // A module worker keeps CPython execution off the interface thread.
 // Version and module-worker API verified against https://pyodide.org/en/stable/usage/webworker.html
 const PYODIDE_VERSION = '314.0.8';
-const CDN = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
+const indexURL = new URL(`./vendor/pyodide/${PYODIDE_VERSION}/`, import.meta.url).href;
+const packageBaseUrl = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
 let engine;
 let enginePromise;
 let currentId;
@@ -12,8 +13,8 @@ async function initialize() {
   if (engine) return engine;
   if (!enginePromise) enginePromise = (async () => {
     status('正在准备 Python 运行环境…');
-    const { loadPyodide } = await import(`${CDN}pyodide.mjs`);
-    const runtime = await loadPyodide({ indexURL: CDN });
+    const { loadPyodide } = await import(new URL('pyodide.mjs', indexURL).href);
+    const runtime = await loadPyodide({ indexURL, packageBaseUrl });
     runtime.FS.mkdirTree('/mnt/data');
     runtime.FS.chdir('/mnt/data');
     runtime.runPython(`

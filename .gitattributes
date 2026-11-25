@@ -6,6 +6,10 @@
 /model-catalog.js -text
 /runtime.js -text
 /python-worker.js -text
+/vendor/pyodide/** -text
+/vendor/LICENSE-cpython.txt -text
+/vendor/LICENSE-emscripten.txt -text
+/vendor/LICENSE-pyodide.txt -text
 /release-updater.js -text
 /original-client/public/** -text
 /original-client/resource-manifest.json -text
