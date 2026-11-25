@@ -156,7 +156,9 @@ export function createLocalDotRecognition(browser = globalThis) {
           if ((finished || now - started >= MAX_CLIP_MS) && recorder.state === 'recording') recorder.stop();
         }, 60);
       } catch (error) {
-        this.#fail(capture, error.name === 'NotAllowedError' ? 'not-allowed' : 'audio-capture');
+        const name = error?.name;
+        const code = name === 'NotAllowedError' ? 'not-allowed' : name === 'NotFoundError' ? 'audio-device-not-found' : 'audio-capture';
+        this.#fail(capture, code);
       }
     }
 

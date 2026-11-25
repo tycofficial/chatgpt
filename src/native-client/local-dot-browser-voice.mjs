@@ -120,7 +120,8 @@ export function createLocalDotBrowserVoice({
         if (!recording() || event.error === 'no-speech') return;
         const denied = event.error === 'not-allowed' || event.error === 'service-not-allowed';
         const message = denied ? '浏览器未允许 Dot 使用语音识别。' :
-          event.error === 'audio-capture' ? '浏览器没有找到可用的麦克风。' :
+          event.error === 'audio-device-not-found' ? '浏览器没有找到可用的麦克风。' :
+          event.error === 'audio-capture' ? '浏览器暂时无法读取麦克风。请检查设备后重试。' :
           event.error === 'audio-context-unavailable' ? '浏览器未能启用录音音频。请重新发起通话。' :
           event.error === 'local-transcription-failed' ? '浏览器未能完成本地语音转写。' :
           '浏览器语音识别暂不可用（' + String(event.error ?? 'unknown').slice(0, 40) + '）。';

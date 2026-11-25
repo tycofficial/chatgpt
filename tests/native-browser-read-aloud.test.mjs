@@ -199,6 +199,7 @@ function dotCaptureFixture(t, { resume = async () => {}, permission, failWorker 
       createAnalyser() { return { fftSize: 0 }; }
       createMediaStreamSource() { return { connect() {} }; }
     },
+    OfflineAudioContext: class {},
     MediaRecorder: class {
       state = 'inactive';
       start() { this.state = 'recording'; }
@@ -218,7 +219,7 @@ function dotCaptureFixture(t, { resume = async () => {}, permission, failWorker 
   recorder.onstart = () => events.push('started');
   recorder.onerror = event => events.push(event.error);
   t.after(() => { recorder.abort(); local.dispose(); });
-  return { recorder, events, counters };
+  return { browser, recorder, events, counters };
 }
 
 test('Dot voice waits for audio readiness and releases a late microphone on failed AudioContext resume', async t => {
@@ -258,4 +259,34 @@ test('Dot voice reports a blocked local worker as transcription failure and rele
   await new Promise(resolve => setImmediate(resolve));
   assert.deepEqual(f.events, ['started', 'local-transcription-failed']);
   assert.deepEqual(f.counters, { mediaRequests: 1, trackStops: 1, contextsClosed: 1, workers: 1, meters: 0 });
+});
+
+test('Dot voice distinguishes missing, unreadable, interrupted and denied microphone access', async t => {
+  const unavailable = '浏览器暂时无法读取麦克风。请检查设备后重试。';
+  const cases = [
+    ['NotFoundError', '浏览器没有找到可用的麦克风。', false],
+    ['NotReadableError', unavailable, false],
+    ['AbortError', unavailable, false],
+    ['NotAllowedError', '浏览器未允许 Dot 使用语音识别。', true],
+  ];
+  for (const [name, message, denied] of cases) await t.test(name, async t => {
+    const permission = Promise.withResolvers();
+    const f = dotCaptureFixture(t, { permission: permission.promise });
+    const owner = { ...identity(), profileId: 'neutral-dot', threadId: 'neutral-thread' };
+    const speech = speechFixture(), errors = [], states = [];
+    const voice = createLocalDotBrowserVoice({
+      adapter: { browserVoiceContext: () => owner },
+      browser: f.browser, secureContext: true, synthesis: speech.engine, Utterance: speech.Utterance,
+    });
+    assert(voice.start(owner, {
+      onChange: state => states.push(state?.phase ?? null),
+      onError: error => errors.push({ message: error.message, denied: error.permissionDenied }),
+    }));
+    permission.reject(new DOMException('Neutral fixture microphone failure', name));
+    await new Promise(resolve => setImmediate(resolve));
+    assert.deepEqual(errors, [{ message, denied }]);
+    assert.deepEqual(states, ['starting', null]);
+    assert.equal(f.counters.contextsClosed, 1);
+    assert.equal(f.counters.workers, 0);
+  });
 });

@@ -274,7 +274,10 @@ export function getSitePlansUrl(next) {
 }
 
 class AccountConnectionError extends Error {
-  constructor(gateway = false) { super(networkUnavailable); this.gateway = gateway; }
+  constructor(gateway = false, message = networkUnavailable) {
+    super(message);
+    this.gateway = gateway;
+  }
 }
 
 const sessionRejectionCodes = new Set([
@@ -322,6 +325,9 @@ async function api(path, { body, token, keepalive = false, timeoutMs = 10000 } =
     }
     if (!response.ok) {
       const code = result?.error?.code;
+      if (status === 500 && code === 'SITE_ACCOUNT_GATEWAY_BODY_UNAVAILABLE') {
+        throw new AccountConnectionError(true, '本站账号网关配置有误，请联系站点维护者。');
+      }
       if (isAccountGatewayFailure(path, status, code)) throw new AccountConnectionError(true);
       throw Object.assign(Error(result?.error?.message || '账户服务暂时不可用。'), { status, code });
     }

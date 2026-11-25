@@ -246,6 +246,16 @@ test('gateway failure still allows the verified local administrator and a tab-sc
   assert.throws(() => restored.api.setAdminModelConnection({ apiBase: 'https://provider.invalid/', apiKey: 'test-only' }), /管理员/);
 });
 
+test('login and registration report a config failure while preserving local administrator fallback', async () => {
+  const verifierPassword = 'neutral-gateway-config-fixture';
+  const f = fixture(undefined, { verifierPassword, siteAccountService: true });
+  f.setHandler(() => ({ status: 500, body: { error: { code: 'SITE_ACCOUNT_GATEWAY_BODY_UNAVAILABLE' } } }));
+  await assert.rejects(f.api.loginSiteAccount('fixture-user', 'fixture-password'), /账号网关配置有误/);
+  await assert.rejects(f.api.registerSiteAccount('fixture-user', 'fixture-password'), /账号网关配置有误/);
+  assert.equal((await f.api.loginSiteAccount('TYC', verifierPassword)).authenticationMode, 'offline-administrator');
+  assert.equal(f.api.getSiteSessionToken(), null);
+});
+
 test('model settings preserve an internal return URL and reject external destinations and account entry loops', () => {
   const { api } = fixture();
   const settings = api.getAdminModelConnectionUrl('/chatgpt/settings/account?localSession=0');
