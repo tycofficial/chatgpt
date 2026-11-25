@@ -313,12 +313,18 @@ export function createSiteInferenceTransport({
       async function submit() {
         signal?.throwIfAborted();
         let liveResponse;
+        // Missing headers can hide an already admitted request. Move to the
+        // existing receipt lookup without limiting the duration of a live body.
+        const deadline = new AbortController();
+        const timer = setTimeout(() => deadline.abort(), requestTimeoutMs);
         try {
           liveResponse = await fetchSite(route, token, {
-            method: 'POST', signal, headers: { 'Content-Type': 'application/json', 'X-Chat-Request-Id': checkpoint.siteRequestId },
+            method: 'POST', signal: signal ? AbortSignal.any([signal, deadline.signal]) : deadline.signal,
+            headers: { 'Content-Type': 'application/json', 'X-Chat-Request-Id': checkpoint.siteRequestId },
             body,
           });
         } catch { signal?.throwIfAborted(); }
+        finally { clearTimeout(timer); }
         if (liveResponse) {
           const startedAt = timestamp(liveResponse.headers.get('X-Chat-Started-At'));
           if (startedAt) await saveFields(checkpoint, onCheckpoint, { startedAt, state: 'running', providerRequestId: liveResponse.headers.get('X-Request-Id') });

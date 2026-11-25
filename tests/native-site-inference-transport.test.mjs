@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
+import { setTimeout as wait } from 'node:timers/promises';
 import { createSiteInferenceTransport, isSiteInferenceCheckpoint } from '../src/native-client/site-inference-transport.mjs';
 import { LocalAppServer } from '../src/native-client/local-app-server.mjs';
 import { createModelCatalogAdapter } from '../src/native-client/model-catalog-adapter.mjs';
@@ -85,6 +86,55 @@ test('a gateway timeout or broken upstream connection recovers the original rece
     assert.equal(checkpoint.state, 'completed');
     assert.deepEqual(methods, ['POST', 'GET']);
   }
+});
+
+test('a stalled journal POST header triggers same-ID receipt recovery', { timeout: 2000 }, async () => {
+  const checkpoint = {}, methods = [];
+  const answer = finish([textItem('m', 'Reply stored before the browser saw headers.')]);
+  let lostHeaderSignal;
+  const client = transport(async (url, init) => {
+    methods.push(init.method ?? 'GET');
+    if (init.method === 'POST') {
+      assert.equal(init.headers['X-Chat-Request-Id'], uuid(1));
+      assert.deepEqual(JSON.parse(init.body), payload);
+      lostHeaderSignal = init.signal;
+      if (!lostHeaderSignal) throw Error('A pending header read requires a cancellable signal');
+      return new Promise((_, reject) => lostHeaderSignal.addEventListener('abort', () => reject(lostHeaderSignal.reason), { once: true }));
+    }
+    assert.equal(lostHeaderSignal?.aborted, true);
+    assert.equal(url.pathname, route + '/' + uuid(1));
+    assert.equal(url.searchParams.get('after'), '-1');
+    return receipt(uuid(1), { data: [answer] });
+  }, { requestTimeoutMs: 25 });
+  assert.equal(await (await client.request(payload, { checkpoint })).text(), answer);
+  assert.deepEqual(methods, ['POST', 'GET']);
+  assert.equal(checkpoint.state, 'completed');
+});
+
+test('an accepted stream body stays live past the POST header deadline', { timeout: 2000 }, async () => {
+  const checkpoint = {};
+  const head = sse('response.output_text.delta', { delta: 'Live first paragraph.' });
+  const tail = finish([textItem('m', 'Live first paragraph.')]);
+  const encoder = new TextEncoder();
+  let live, postSignal, posts = 0;
+  const client = transport(async (_url, init) => {
+    if (init.method !== 'POST') return receipt(uuid(1), { data: [head, tail] });
+    posts++;
+    postSignal = init.signal;
+    return streamResponse(new ReadableStream({
+      start(controller) { live = controller; controller.enqueue(encoder.encode(head)); },
+    }));
+  }, { requestTimeoutMs: 25 });
+  const reader = (await client.request(payload, { checkpoint })).body.getReader();
+  assert.equal(new TextDecoder().decode((await reader.read()).value), head);
+  await wait(55);
+  assert.equal(postSignal?.aborted, false);
+  live.enqueue(encoder.encode(tail));
+  live.close();
+  assert.equal(new TextDecoder().decode((await reader.read()).value), tail);
+  assert.equal((await reader.read()).done, true);
+  assert.equal(posts, 1);
+  assert.equal(checkpoint.state, 'completed');
 });
 
 test('admitted upstream errors keep their original provider errors and request information', async () => {
