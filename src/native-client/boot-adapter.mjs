@@ -476,8 +476,8 @@ overrideExports('majR', {}, { deferred: true }, {
   },
 });
 
-// Personal pricing uses the original Go layout and this site's public reference quote.
-adaptFactory('Mg5i', factory => function (module, exports, require) {
+// The supported native builds register the Personal Pricing factory under different IDs.
+const localPersonalPricingFactory = factory => function (module, exports, require) {
   let pricingGates;
   const scopedRequire = new Proxy(require, {
     apply(target, receiver, args) {
@@ -492,7 +492,10 @@ adaptFactory('Mg5i', factory => function (module, exports, require) {
     },
   });
   return factory.call(this, module, exports, scopedRequire);
-}, { deferred: true });
+};
+for (const pricingModule of ['gi1q', 'Mg5i']) {
+  adaptFactory(pricingModule, localPersonalPricingFactory, { deferred: true });
+}
 
 overrideExports('Y0ov', {}, { deferred: true }, {
   b: Card => createNativeSiteTrialCard(Card, {

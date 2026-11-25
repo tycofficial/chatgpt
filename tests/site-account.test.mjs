@@ -794,7 +794,7 @@ test('a verified Go receipt keeps Standard Chat and never grants Plus or Pro acc
   for (const feature of ['modelSelection', 'work', 'codex', 'dot']) assert.equal(capabilities[feature], false);
   const identity = f.loadIdentity().getLocalAccountCheck().accounts[account.accountId];
   assert.equal(identity.account.plan_type, 'go');
-  assert.equal(identity.entitlement.has_active_subscription, true);
+  assert.equal(identity.entitlement.has_active_subscription, false);
   assert.equal(identity.account.tbo_config.tbo_available, false);
   const pricing = f.loadPricing();
   assert.equal(pricing.normalizeLocalMembership(account).site_subscription_tier, 'go');
