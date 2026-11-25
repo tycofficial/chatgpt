@@ -155,6 +155,12 @@ export function createRelay({ fetchUpstream = (...args) => fetch(...args), allow
       void response.body?.cancel().catch(() => {});
       return error(502, 'SITE_UPSTREAM_REDIRECT', '本站账号服务返回了意外跳转。');
     }
+    const contentType = response.headers.get('Content-Type') ?? '';
+    if (response.headers.get('CF-Mitigated') === 'challenge' ||
+        (response.status >= 400 && !jsonType.test(contentType))) {
+      void response.body?.cancel().catch(() => {});
+      return error(502, 'SITE_UPSTREAM_INVALID_RESPONSE', '本站账号服务入口暂时不可用，请稍后重试。');
+    }
     for (const key of ['Content-Type', ...correlation]) {
       const value = response.headers.get(key);
       if (value !== null) headers.set(key, value);

@@ -234,6 +234,33 @@ test('upstream redirects and transport failures are bounded JSON errors and neve
   assert.deepEqual(a, [[worker + '/health', 'manual'], [worker + '/health', 'manual']]);
 });
 
+test('an upstream challenge is a gateway outage, while a genuine session rejection remains a 401', async () => {
+  let calls = 0;
+  let discarded = 0;
+  const authentication = { error: { code: 'SITE_AUTH_REQUIRED', message: '请重新登录本站账号。' } };
+  const relay = createRelay({ fetchUpstream() {
+    calls++;
+    if (calls === 3) return Response.json(authentication, { status: 401 });
+    const challenge = new ReadableStream({ cancel() { discarded++; } });
+    return new Response(challenge, {
+      status: calls === 1 ? 403 : 200,
+      headers: { 'Content-Type': 'text/html', ...(calls === 2 && { 'CF-Mitigated': 'challenge' }) },
+    });
+  } });
+  const session = () => request('/auth/session', { headers: { Authorization: 'Bearer ' + 'b'.repeat(64) } });
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const response = await relay(session());
+    assert.equal(response.status, 502);
+    assert.equal(response.headers.get('Access-Control-Allow-Origin'), origin);
+    assert.equal((await response.json()).error.code, 'SITE_UPSTREAM_INVALID_RESPONSE');
+  }
+  assert.equal(discarded, 2);
+  const expired = await relay(session());
+  assert.equal(expired.status, 401);
+  assert.deepEqual(await expired.json(), authentication);
+  assert.equal(calls, 3);
+});
+
 test('billing options and authenticated checkout and portal use the fixed account Worker', async () => {
   const site = 'https://tycofficial.github.io';
   const token = 'Bearer ' + 'b'.repeat(64);
