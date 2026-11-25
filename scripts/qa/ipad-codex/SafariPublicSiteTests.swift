@@ -2,9 +2,9 @@ import Foundation
 import XCTest
 
 final class SafariPublicSiteTests: XCTestCase {
-    private let exploreNames = ["Explore", "探索"]
+    private let exploreNames = ["Explore", "探索", "Your stuff", "你的内容"]
     private let codexName = ["Codex"]
-    private let sidebarNames = ["显示/隐藏侧边栏"]
+    private let sidebarNames = ["Toggle sidebar", "Open sidebar", "显示/隐藏侧边栏", "打开侧边栏"]
     private let sendNames = ["send-button", "Send", "Send message", "发送", "发送消息"]
     private let editorNames = ["prompt-textarea"]
     private let reloadNames = ["Reload", "Reload Page", "Reload This Page", "reloadButton", "重新载入", "重新載入", "重新加载", "重新整理", "刷新"]
@@ -54,13 +54,7 @@ final class SafariPublicSiteTests: XCTestCase {
         let web = safari.webViews.firstMatch
         XCTAssertTrue(web.waitForExistence(timeout: 35), "Fixture web view did not start")
 
-        let explore = named(exploreNames, in: web.buttons)
-        if visible(explore) == nil, let sidebar = visible(named(sidebarNames, in: web.buttons)) { sidebar.tap() }
-        let exploreControl = try waitForHittable(explore, seconds: 35)
-        let codexItem = named(codexName, in: web.buttons)
-        if visible(codexItem) == nil { exploreControl.tap() }
-        try waitForHittable(codexItem, seconds: 25).tap()
-        print("IPAD_QA native-codex-entry-tapped")
+        try openNativeCodex(in: web)
 
         let editor = try waitForHittable([named(editorNames, in: web.textViews), web.textViews], seconds: 25)
         editor.tap()
@@ -144,6 +138,44 @@ final class SafariPublicSiteTests: XCTestCase {
         XCTAssertEqual(final.unavailableReceiptReads, 1)
         XCTAssertGreaterThan(final.recoveredReceiptReads, 0)
         print("IPAD_QA visible-followup-restored-from-receipt-after-fixture-disconnect")
+    }
+
+    @MainActor
+    private func openNativeCodex(in web: XCUIElement) throws {
+        let descendants = web.descendants(matching: .any)
+        let namedRail = [named(exploreNames, in: web.buttons), named(exploreNames, in: descendants)]
+        let switcher = web.buttons.matching(NSPredicate(format:
+            "label BEGINSWITH[c] %@ OR label BEGINSWITH[c] %@",
+            "Switch mode, current mode:", "切换模式，当前模式："))
+        let codexMenuItem = web.menuItems.matching(NSPredicate(format:
+            "label ==[c] %@ OR label BEGINSWITH[c] %@ OR label BEGINSWITH[c] %@", "Codex", "Codex,", "Codex "))
+        let codexItems = [named(codexName, in: web.buttons), codexMenuItem, named(codexName, in: descendants)]
+        if !namedRail.contains(where: { visible($0) != nil }), visible(switcher) == nil,
+           let sidebar = visible(named(sidebarNames, in: web.buttons)) { sidebar.tap() }
+
+        if !codexItems.contains(where: { visible($0) != nil }) {
+            if let menu = try? waitForHittable(namedRail + [switcher], seconds: 12) {
+                menu.tap()
+                print("IPAD_QA native-codex-named-menu-tapped")
+            } else {
+                _ = try waitForHittable([named(editorNames, in: web.textViews), web.textViews], seconds: 15)
+                let frame = web.frame
+                // The recorded iPad A16 landscape fixture has a 52-point rail.
+                // Explore is its fifth icon and its name comes from sr-only text.
+                guard abs(frame.width - 1180) <= 2, abs(frame.minX) <= 2,
+                      abs(frame.minY - 86) <= 18, frame.height >= 680 else {
+                    let controls = web.buttons.allElementsBoundByIndex.filter { $0.isHittable }.prefix(16).map { $0.label }
+                    print("IPAD_QA native-home-buttons \(controls)")
+                    throw NSError(domain: "SafariQA", code: 3, userInfo: [
+                        NSLocalizedDescriptionKey: "No named Codex menu on the measured landscape rail. Web frame: \(frame)"
+                    ])
+                }
+                web.coordinate(withNormalizedOffset: CGVector(dx: 26 / frame.width, dy: 234 / frame.height)).tap()
+                print("IPAD_QA native-codex-measured-rail-tapped")
+            }
+        }
+        try waitForHittable(codexItems, seconds: 25).tap()
+        print("IPAD_QA native-codex-entry-tapped")
     }
 
     @MainActor
