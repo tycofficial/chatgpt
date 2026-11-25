@@ -158,6 +158,24 @@ export function projectChatHistoryThread(thread) {
   return out;
 }
 
+function projectLocalHistory(threads) {
+  if (!Array.isArray(threads) || threads.length > CHAT_HISTORY_SYNC_LIMITS.threads) fail('SYNC_INVALID_DOCUMENT', 'A bounded complete local thread snapshot is required.');
+  const records = new Map();
+  for (const thread of threads) {
+    let document;
+    try {
+      document = projectChatHistoryThread(thread);
+      if (!document) continue;
+    } catch (error) {
+      if (!(error instanceof ChatHistorySyncError) || error.code !== 'SYNC_DOCUMENT_TOO_LARGE') throw error;
+      document = null;
+    }
+    if (records.has(thread.id)) fail('SYNC_INVALID_DOCUMENT', 'Duplicate local conversation IDs.');
+    records.set(thread.id, { thread, document });
+  }
+  return records;
+}
+
 function unfinishedTurnView(turn) {
   const { adapterMetadata, completedAt, durationMs, status, items, ...fields } = turn;
   const { interruption, reasoningLifecycle, apiTranscript, ...metadata } = adapterMetadata;
@@ -324,6 +342,7 @@ export function createChatHistorySync({ baseURL, fetchImpl = globalThis.fetch?.b
   const stateStore = store ?? createIndexedDBChatHistoryStore();
   let serial = Promise.resolve(), disposed = false, localBaseline = null;
   let observedRevisions = new Map();
+  let oversizedLocally = new Set();
   // A reload/new engine is not the causal author of older durable intents.
   const contextId = 'context-' + crypto.randomUUID();
   const activeRequests = new Set();
@@ -356,19 +375,34 @@ export function createChatHistorySync({ baseURL, fetchImpl = globalThis.fetch?.b
     if (!Number.isSafeInteger(baseRevision) || baseRevision < 0) fail('SYNC_OUTBOX_INVALID_REVISION', 'The saved mutation has no valid observed revision; its local history was retained.');
     const next = newMutation(id, method, document, baseRevision); state.outbox.push(next); return next;
   }
+  function rememberLocalHistory(records, observed) {
+    const nextBaseline = new Map(), nextRevisions = new Map(), nextOversized = new Set();
+    for (const [id, { document }] of records) {
+      if (document) {
+        nextBaseline.set(id, clone(document));
+        nextRevisions.set(id, observed[id]);
+      } else {
+        // The displayed local record is still present, but its last valid
+        // baseline cannot be advanced to a version this device never applied.
+        nextOversized.add(id);
+        if (localBaseline?.has(id)) nextBaseline.set(id, localBaseline.get(id));
+        if (observedRevisions.has(id)) nextRevisions.set(id, observedRevisions.get(id));
+      }
+    }
+    localBaseline = nextBaseline;
+    observedRevisions = nextRevisions;
+    oversizedLocally = nextOversized;
+  }
   async function captureInside(threads, { detectDeletes = true, initial = false } = {}) {
-    if (!Array.isArray(threads) || threads.length > CHAT_HISTORY_SYNC_LIMITS.threads) fail('SYNC_INVALID_DOCUMENT', 'A bounded complete local thread snapshot is required.');
-    const documents = threads.map(projectChatHistoryThread).filter(Boolean), ids = documents.map(doc => doc.id);
-    if (new Set(ids).size !== ids.length) fail('SYNC_INVALID_DOCUMENT', 'Duplicate local conversation IDs.');
-    const previousLocal = localBaseline, originals = new Map(threads.map(thread => [thread.id, thread]));
+    const records = projectLocalHistory(threads), previousLocal = localBaseline;
     const result = await update(state => {
-      for (const document of documents) {
-        const id = document.id;
+      for (const [id, { thread: original, document }] of records) {
+        if (!document) continue;
         // A projected running turn can be ahead of its first upload after the
         // owning browser reattaches. The normal revision-zero check still
         // prevents this local continuation from replacing another device's copy.
         if (!state.known[id] && !state.outbox.some(item => item.id === id) &&
-            completesLocalStartupConflict(state.conflicts[id], document, originals.get(id))) {
+            completesLocalStartupConflict(state.conflicts[id], document, original)) {
           delete state.conflicts[id];
           state.heads[id] = clone(document);
           queue(state, id, 'PUT', document, 0);
@@ -381,11 +415,12 @@ export function createChatHistorySync({ baseURL, fetchImpl = globalThis.fetch?.b
         // A page can finish saving browser progress before its history capture
         // runs. Continue that one local journal turn through normal CAS without
         // discarding an earlier attempted mutation or adopting a remote edit.
-        const original = originals.get(id);
         const localRecovery = initial && head && !state.conflicts[id] &&
           (followsLocalRecovery(head, document, original, identity?.ownerId) ||
             completesSavedReattachment(state, id, head, document, original));
-        if (head && !localRecovery && ((initial && (state.known[id]?.revision || state.outbox.some(item => item.id === id))) || previousLocal?.has(id) && !equal(previousLocal.get(id), head))) {
+        const unobservedWhileOversized = oversizedLocally.has(id) &&
+          (!previousLocal?.has(id) || observedRevisions.get(id) !== (state.known[id]?.revision ?? 0));
+        if (head && !localRecovery && (unobservedWhileOversized || (initial && (state.known[id]?.revision || state.outbox.some(item => item.id === id))) || previousLocal?.has(id) && !equal(previousLocal.get(id), head))) {
           state.conflicts[id] = { id, reason: initial ? 'startup-local-diverged' : 'concurrent-local-context', local: clone(document), remote: clone(state.heads[id]), remoteMetadata: clone(state.known[id] ?? { id, revision: 0, deleted: false, sequence: 0 }), createdAt: now() };
           state.outbox = state.outbox.filter(item => item.id !== id);
         }
@@ -393,20 +428,21 @@ export function createChatHistorySync({ baseURL, fetchImpl = globalThis.fetch?.b
         if (state.conflicts[id]) state.conflicts[id].local = clone(document);
         else queue(state, id, 'PUT', document, observedRevisions.get(id) ?? state.known[id]?.revision ?? 0);
       }
-      if (detectDeletes) for (const id of previousLocal?.keys() ?? []) if (!ids.includes(id) && !state.known[id]?.deleted) {
+      if (detectDeletes) for (const id of new Set([...(previousLocal?.keys() ?? []), ...oversizedLocally])) if (!records.has(id) && !state.known[id]?.deleted) {
         const remote = state.heads[id] ?? null, known = state.known[id] ?? { id, revision: 0, deleted: false, sequence: 0 }, observed = observedRevisions.get(id) ?? 0;
-        const pending = state.outbox.filter(item => item.id === id), causal = pending.some(item => item.method === 'PUT' && equal(item.document, previousLocal.get(id)));
-        if (!remote || !equal(remote, previousLocal.get(id)) || known.revision !== observed && !causal) {
+        const previous = previousLocal?.get(id);
+        if (!previous && !remote) continue;
+        const pending = state.outbox.filter(item => item.id === id), causal = previous && pending.some(item => item.method === 'PUT' && equal(item.document, previous));
+        if (!previous || !remote || !equal(remote, previous) || known.revision !== observed && !causal) {
           state.conflicts[id] = { id, reason: 'concurrent-local-delete', local: null, remote: clone(remote), remoteMetadata: clone(known), createdAt: now() };
           state.outbox = state.outbox.filter(item => item.id !== id);
         } else { delete state.conflicts[id]; queue(state, id, 'DELETE', null, observed); }
         delete state.heads[id];
       }
-      state.localIds = ids.filter(id => !state.known[id]?.deleted);
-      return { queuedCount: state.outbox.length, conflictCount: Object.keys(state.conflicts).length, observed: Object.fromEntries(ids.map(id => [id, state.known[id]?.revision ?? 0])) };
+      state.localIds = [...records.keys()].filter(id => !state.known[id]?.deleted);
+      return { queuedCount: state.outbox.length, conflictCount: Object.keys(state.conflicts).length, observed: Object.fromEntries([...records.keys()].map(id => [id, state.known[id]?.revision ?? 0])) };
     });
-    localBaseline = new Map(documents.map(document => [document.id, clone(document)]));
-    observedRevisions = new Map(documents.map(document => [document.id, result.observed[document.id]]));
+    rememberLocalHistory(records, result.observed);
     return { queuedCount: result.queuedCount, conflictCount: result.conflictCount };
   }
   async function adopt(remoteMetadata, document, wireDocument = document) {
@@ -531,10 +567,15 @@ export function createChatHistorySync({ baseURL, fetchImpl = globalThis.fetch?.b
     return { sent, pending: (await load()).outbox.length };
   }
   async function snapshotInside(localThreads = []) {
-    const state = await load(), originals = new Map();
-    for (const thread of localThreads) { const doc = projectChatHistoryThread(thread); if (doc) originals.set(doc.id, { thread, doc }); }
-    const threads = Object.values(state.heads).map(doc => { const original = originals.get(doc.id); return clone(original && equal(original.doc, doc) ? original.thread : doc); });
-    return { threads, cursor: state.cursor, queuedCount: state.outbox.length, conflicts: clone(Object.values(state.conflicts)) };
+    const state = await load(), records = projectLocalHistory(localThreads);
+    const restored = new Map(Object.entries(state.heads)), oversizedConversationIds = [];
+    for (const [id, { thread, document }] of records) {
+      if (!document) {
+        oversizedConversationIds.push(id);
+        restored.set(id, thread);
+      } else if (restored.has(id) && equal(restored.get(id), document)) restored.set(id, thread);
+    }
+    return { threads: clone([...restored.values()]), cursor: state.cursor, queuedCount: state.outbox.length, conflicts: clone(Object.values(state.conflicts)), oversizedConversationIds };
   }
   async function initializeInside(localThreads, { signal } = {}) {
     await captureInside(localThreads, { detectDeletes: false, initial: true });
@@ -553,12 +594,10 @@ export function createChatHistorySync({ baseURL, fetchImpl = globalThis.fetch?.b
       const input = clone(localThreads);
       return exclusive(async () => {
         if (!Array.isArray(input)) fail('SYNC_INVALID_DOCUMENT', 'A complete applied local thread snapshot is required.');
-        const documents = input.map(projectChatHistoryThread).filter(Boolean);
-        if (new Set(documents.map(document => document.id)).size !== documents.length) fail('SYNC_INVALID_DOCUMENT', 'Duplicate applied conversation IDs.');
-        const revisions = await update(state => { state.localIds = documents.map(document => document.id); return Object.fromEntries(documents.map(document => [document.id, state.known[document.id]?.revision ?? 0])); });
-        localBaseline = new Map(documents.map(document => [document.id, document]));
-        observedRevisions = new Map(documents.map(document => [document.id, revisions[document.id]]));
-        return { applied: documents.length };
+        const records = projectLocalHistory(input);
+        const revisions = await update(state => { state.localIds = [...records.keys()]; return Object.fromEntries(state.localIds.map(id => [id, state.known[id]?.revision ?? 0])); });
+        rememberLocalHistory(records, revisions);
+        return { applied: records.size };
       });
     },
     pull: options => exclusive(() => pullInside(options)),
@@ -568,6 +607,7 @@ export function createChatHistorySync({ baseURL, fetchImpl = globalThis.fetch?.b
     conflicts: () => exclusive(async () => clone(Object.values((await load()).conflicts))),
     resolveConflict: (id, decision) => exclusive(async () => update(state => {
       const conflict = state.conflicts[safeId(id)]; if (!conflict) fail('SYNC_CONFLICT_NOT_FOUND', 'No durable history conflict exists.');
+      if (oversizedLocally.has(id)) fail('SYNC_DOCUMENT_TOO_LARGE', 'Bring the current local conversation within the cloud text-history budget before resolving its sync conflict.', { status: 413 });
       if (decision === 'remote') {
         if (conflict.remoteMetadata.deleted || conflict.remote === null) delete state.heads[id]; else state.heads[id] = clone(conflict.remote);
         state.outbox = state.outbox.filter(item => item.id !== id); delete state.conflicts[id]; return { id, decision, pending: false };

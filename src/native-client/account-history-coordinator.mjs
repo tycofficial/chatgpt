@@ -28,6 +28,7 @@ export function createAccountHistoryCoordinator({
   let cachedPage = false;
   let debounceTimer = null, pollTimer = null, startPromise = null, synchronizePromise = null, activeOperation = null;
   let sequence = 0, queuedCount = 0, conflictCount = 0, lastErrorCode = null, deferred = false;
+  let oversizedCount = 0;
   const captures = new Map(), notices = new Set(), copiedConflicts = new Map();
 
   const diagnostic = (type, code) => { try { onDiagnostic({ type, ...(typeof code === 'string' ? { code } : {}) }); } catch {} };
@@ -35,7 +36,8 @@ export function createAccountHistoryCoordinator({
   const visible = () => !cachedPage && documentTarget?.visibilityState !== 'hidden' && eventTarget?.visibilityState !== 'hidden';
   const notify = event => { try { onFeedback({ ownerId, ...event }); } catch { diagnostic('account-history-feedback-error'); } };
   const clearNotice = event => { try { onClearFeedback({ ownerId, ...event }); } catch { diagnostic('account-history-feedback-error'); } };
-  function status() { return Object.freeze({ ready, disposed, restartNeeded, queuedCount, conflictCount, pendingCaptures: captures.size, pending: queuedCount > 0 || captures.size > 0 || deferred || restartNeeded || conflictCount > 0, deferred, lastErrorCode }); }
+  function status() { return Object.freeze({ ready, disposed, restartNeeded, queuedCount, conflictCount, oversizedCount, pendingCaptures: captures.size,
+    pending: queuedCount > 0 || captures.size > 0 || deferred || restartNeeded || conflictCount > 0, deferred, lastErrorCode: lastErrorCode ?? (oversizedCount ? 'SYNC_DOCUMENT_TOO_LARGE' : null) }); }
   function stopTimer(kind) {
     if (kind === 'debounce' && debounceTimer !== null) { clearTimer(debounceTimer); debounceTimer = null; }
     if (kind === 'poll' && pollTimer !== null) { clearTimer(pollTimer); pollTimer = null; }
@@ -51,6 +53,7 @@ export function createAccountHistoryCoordinator({
     eventTarget?.removeEventListener?.('online', foreground);
     eventTarget?.removeEventListener?.('focus', foreground);
     clearNotice({ kind: 'failure' });
+    if (oversizedCount) clearNotice({ kind: 'oversized' });
     for (const id of notices) clearNotice({ kind: 'conflict', conversationId: id });
     notices.clear();
   }
@@ -105,10 +108,16 @@ export function createAccountHistoryCoordinator({
   }
   function refresh(snapshot) {
     queuedCount = snapshot.queuedCount ?? 0;
-    const conflicts = snapshot.conflicts ?? [], ids = new Set(conflicts.map(value => value.id));
+    const previousOversizedCount = oversizedCount;
+    oversizedCount = snapshot.oversizedConversationIds?.length ?? 0;
+    if (oversizedCount && !previousOversizedCount) notify({ kind: 'oversized' });
+    else if (!oversizedCount && previousOversizedCount) clearNotice({ kind: 'oversized' });
+    const conflicts = snapshot.conflicts ?? [], oversized = new Set(snapshot.oversizedConversationIds);
+    const ids = new Set(conflicts.filter(value => !oversized.has(value.id)).map(value => value.id));
     conflictCount = conflicts.length;
     for (const id of notices) if (!ids.has(id)) { clearNotice({ kind: 'conflict', conversationId: id }); notices.delete(id); copiedConflicts.delete(id); }
     for (const conflict of conflicts) {
+      if (oversized.has(conflict.id)) continue;
       const label = appServer.threads.get(conflict.id)?.name ?? conflict.local?.name ?? conflict.remote?.name ?? '未命名对话';
       notify({ kind: 'conflict', conversationId: conflict.id, conversationLabel: typeof label === 'string' ? label : '未命名对话', remoteDeleted: conflict.remoteMetadata?.deleted === true });
       notices.add(conflict.id);
@@ -133,7 +142,15 @@ export function createAccountHistoryCoordinator({
   }
   async function appliedSnapshot(snapshot) {
     assertCurrent();
-    const changes = appServer.applyHistorySnapshot(snapshot.threads, { projectThread });
+    const oversized = new Set(snapshot.oversizedConversationIds);
+    const changes = appServer.applyHistorySnapshot(snapshot.threads, { projectThread: thread => {
+      if (oversized.has(thread.id)) return null;
+      try { return projectThread(thread); }
+      catch (error) {
+        if (error?.code === 'SYNC_DOCUMENT_TOO_LARGE') return null;
+        throw error;
+      }
+    } });
     // Clone ONCE before awaiting capture; acknowledge exactly this S1 even if
     // native persist(S2) arrives while the durable store is awaiting commit.
     const S1 = currentThreads();
@@ -222,6 +239,14 @@ export function createAccountHistoryCoordinator({
       const resolved = await engine.snapshot(currentThreads()); assertCurrent();
       await reconcile(resolved);
       return { ok: true, alreadyResolved: true, ...status() };
+    }
+    const current = appServer.threads.get(id);
+    try { if (current) projectThread(current); }
+    catch (error) {
+      // A saved conflict may hold the earlier, smaller local version. Do not
+      // resolve that version while a different unsynced record is visible.
+      if (error?.code === 'SYNC_DOCUMENT_TOO_LARGE') return { ok: false, ...status(), lastErrorCode: error.code };
+      throw error;
     }
     let forkedId = null;
     if (decision === 'local' && conflict.remoteMetadata?.deleted && conflict.local !== null) {

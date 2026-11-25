@@ -8,6 +8,10 @@ const messages = Object.freeze({
     level: 'danger', title: '聊天记录尚未同步',
     description: '云端尚未确认保存聊天记录。请检查网络后重试。',
   }),
+  oversized: Object.freeze({
+    level: 'warning', title: '超长对话已保存在此设备',
+    description: '有对话超过云端同步上限。此设备上的完整对话仍可查看，其他对话会继续同步。',
+  }),
   conflict: Object.freeze({
     level: 'warning', title: '聊天记录存在同步冲突',
     description: '此对话在其他设备上发生了更改。请选择要保留的版本。',
@@ -37,7 +41,7 @@ export function createNativeCloudSyncFeedback({
   }
   const instanceId = ++instanceSequence;
   const delay = Number.isFinite(pollMs) ? Math.min(5000, Math.max(100, pollMs)) : 500;
-  // One generic failure and at most five distinct conversation conflicts.
+  // One generic failure, one size warning and at most five conversation conflicts.
   // Overflow is returned explicitly; the durable coordinator retains the rest.
   const entries = new Map();
   let disposed = false, timer = null, entrySequence = 0;
@@ -113,9 +117,9 @@ export function createNativeCloudSyncFeedback({
           // A conflict must remain reachable until an explicit decision is
           // confirmed; original SGsN suppresses close/swipe for this option.
           ...(entry.kind === 'conflict' ? { hasCloseButton: false } : {}),
-          primaryAction: entry.kind === 'conflict'
+          ...(entry.kind === 'oversized' ? {} : { primaryAction: entry.kind === 'conflict'
             ? { label: '保留此设备版本', onClick: () => action(entry, 'local', generation) }
-            : { label: '重试', onClick: () => action(entry, 'retry', generation) },
+            : { label: '重试', onClick: () => action(entry, 'retry', generation) } }),
           ...(entry.kind === 'conflict' ? { secondaryAction: { label: '使用云端版本', onClick: () => action(entry, 'remote', generation) } } : {}),
           onRemove: () => {
             removed = true;
@@ -136,7 +140,7 @@ export function createNativeCloudSyncFeedback({
   function report(event) {
     if (!current() || event?.ownerId !== ownerId || !Object.prototype.hasOwnProperty.call(messages, event?.kind)) return { status: 'ignored' };
     if (event.kind === 'conflict' && (typeof event.conversationId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(event.conversationId))) return { status: 'ignored' };
-    const key = event.kind === 'failure' ? 'failure' : 'conflict:' + event.conversationId;
+    const key = event.kind === 'conflict' ? 'conflict:' + event.conversationId : event.kind;
     const conversationLabel = event.kind === 'conflict' ? safeConversationLabel(event.conversationLabel) : undefined;
     const existing = entries.get(key);
     if (existing) {

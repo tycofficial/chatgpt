@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createChatHistorySync, projectChatHistoryThread, createIndexedDBChatHistoryStore } from '../src/native-client/chat-history-sync.mjs';
+import { createRelay } from '../chatgpt-services/ingress/public/_worker.js';
 import { syncFixture, save, mutation } from '../chatgpt-services/tests/chat-sync-fixture.mjs';
 const copy = value => structuredClone(value);
 function memoryStore() {
@@ -34,11 +35,11 @@ function device(f, actor = f.alice, options = {}) {
     calls.push({ method: init.method, path: url.pathname + url.search, body: copy(body), headers: { ...init.headers }, credentials: init.credentials, redirect: init.redirect });
     if (!state.online) throw Error('Neutral offline');
     await state.beforeFetch?.(url, init);
-    const response = await f.call(url.pathname + url.search, { method: init.method, token: init.headers.Authorization.slice(7), body });
+    const response = await (options.transport ?? f.call)(url.pathname + url.search, { method: init.method, token: init.headers.Authorization.slice(7), body });
     if (state.loseAckOnce && ['PUT', 'DELETE'].includes(init.method) && response.ok) { state.loseAckOnce = false; throw Error('Neutral lost acknowledgement after real SQL commit'); }
     await state.afterResponse?.(url, init, response); return response;
   };
-  const create = () => createChatHistorySync({ baseURL: 'https://neutral-sync.test', fetchImpl, getIdentity: () => identity, getSessionToken: () => token, store: storage, onDiagnostic: event => diagnostics.push(event), requestTimeoutMs: 1000 });
+  const create = () => createChatHistorySync({ baseURL: options.baseURL ?? 'https://neutral-sync.test', fetchImpl, getIdentity: () => identity, getSessionToken: () => token, store: storage, onDiagnostic: event => diagnostics.push(event), requestTimeoutMs: 1000 });
   return { sync: create(), create, store: storage, calls, diagnostics, state, setIdentity: value => { identity = value; }, setToken: value => { token = value; }, getIdentity: () => copy(identity) };
 }
 
@@ -214,12 +215,92 @@ test('durable outbox commit failure sends no request; failed ACK save retries ex
   await assert.rejects(a.sync.flush(), /Neutral durable-store failure/); const first = a.calls.find(call => call.method === 'PUT'); await a.create().flush(); assert.deepEqual(a.calls.filter(call => call.method === 'PUT')[1].body, first.body); assert.equal(f.DB.raw.prepare('SELECT COUNT(*) AS n FROM chat_sync_changes').get().n, 1);
 });
 
-test('malformed/oversize/duplicate local histories reject atomically and ephemeral records are never uploaded', async t => {
-  const f = await fixture(t), a = device(f), doc = thread(), huge = thread('huge'); huge.turns[0].items.at(-1).text = '中'.repeat(400000);
-  await assert.rejects(a.sync.capture([doc, huge]), { code: 'SYNC_DOCUMENT_TOO_LARGE' }); assert.equal(a.store.values.size, 0); assert.equal(a.calls.length, 0);
+test('invalid and duplicate local histories reject atomically while ephemeral records are never uploaded', async t => {
+  const f = await fixture(t), a = device(f), doc = thread(), huge = thread('huge', '中'.repeat(180000));
+  assert.throws(() => projectChatHistoryThread(huge), { code: 'SYNC_DOCUMENT_TOO_LARGE' });
+  await assert.rejects(a.sync.capture([doc, huge, huge]), { code: 'SYNC_INVALID_DOCUMENT' }); assert.equal(a.store.values.size, 0); assert.equal(a.calls.length, 0);
   await assert.rejects(a.sync.capture([doc, doc]), { code: 'SYNC_INVALID_DOCUMENT' });
   const ephemeral = thread('temporary'); ephemeral.ephemeral = true; await a.sync.initialize([ephemeral]); assert.equal(a.calls.filter(call => call.method === 'PUT').length, 0);
   const bad = thread('bad'); bad.turns[0].items.push({ id: 'unknown', type: 'unimplementedExecutable' }); await assert.rejects(a.sync.capture([bad]), { code: 'SYNC_UNSUPPORTED_ITEM' });
+});
+
+test('an oversized local continuation survives reload while other writes and deletions reach the same account via the relay', async t => {
+  const f = await fixture(t), direct = device(f);
+  const longBase = thread('last-synced-before-growth'), obsolete = thread('delete-while-another-is-large');
+  await direct.sync.initialize([longBase, obsolete]);
+
+  const oversized = addTurn(longBase, '中'.repeat(180000));
+  const other = thread('valid-after-reconnect'), input = other.turns[0];
+  input.items[0].content.push({ type: 'image', url: 'data:image/png;base64,ORIGINAL_FIXTURE_IMAGE' });
+  input.adapterMetadata.classicUserMessage.metadata.attachments = [
+    { id: 'file_local_image', name: 'fixture.png', mime_type: 'image/png', size: 22 },
+  ];
+  direct.state.online = false;
+  assert.equal((await direct.sync.capture([oversized, other])).queuedCount, 2);
+  await assert.rejects(direct.sync.flush(), { code: 'SYNC_NETWORK_UNAVAILABLE' });
+  direct.sync.dispose();
+
+  const baseURL = 'https://alternate-site-ingress.test';
+  const relay = createRelay({ fetchUpstream: async (url, init) => f.call(url.pathname + url.search, {
+    method: init.method, token: init.headers.get('Authorization').slice(7),
+    body: init.body ? await new Response(init.body).json() : undefined,
+  }) });
+  const transport = (path, { method, token, body }) => relay(new Request(new URL(path, baseURL), {
+    method, headers: { Origin: 'https://tycofficial.github.io', Authorization: 'Bearer ' + token,
+      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }) },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  }));
+  const resumed = device(f, f.alice, { store: direct.store, baseURL, transport });
+  const local = await resumed.sync.initialize([oversized, other]);
+  assert.equal(local.queuedCount, 0);
+  assert.deepEqual(local.oversizedConversationIds, [longBase.id]);
+  assert.deepEqual(local.threads.find(record => record.id === longBase.id), oversized);
+  assert.deepEqual(local.threads.find(record => record.id === other.id), other);
+  assert.deepEqual(resumed.calls.filter(call => call.method === 'PUT' || call.method === 'DELETE').map(call => [call.method, call.path]), [
+    ['PUT', '/sync/conversations/' + other.id], ['DELETE', '/sync/conversations/' + obsolete.id],
+  ]);
+  assert.deepEqual(resumed.calls.find(call => call.method === 'PUT').body, direct.calls.findLast(call => call.method === 'PUT').body);
+
+  const login = await f.call('/auth/login', { method: 'POST', body: { username: 'NeutralAlice', password: 'Neutral-Free-Only' } });
+  assert.equal(login.status, 200);
+  const second = device(f, await login.json(), { baseURL, transport });
+  const restored = await second.sync.initialize([]);
+  assert.deepEqual(restored.threads, [longBase, other].map(projectChatHistoryThread));
+  assert.deepEqual(restored.oversizedConversationIds, []);
+  assert.equal(restored.threads[1].turns[0].adapterMetadata.classicUserMessage.metadata.adapter_attachment_availability, 'original-browser-only');
+  assert.equal(JSON.stringify(restored).includes('ORIGINAL_FIXTURE_IMAGE'), false);
+  const rows = f.DB.raw.prepare('SELECT conversation_id,revision,deleted FROM chat_sync_conversations ORDER BY conversation_id').all();
+  assert.deepEqual(rows.map(row => [row.conversation_id, row.revision, row.deleted]), [
+    [obsolete.id, 2, 1], [longBase.id, 1, 0], [other.id, 1, 0],
+  ]);
+});
+
+test('a bounded revision after an oversized one uses only the locally observed CAS base', async t => {
+  const f = await fixture(t), a = device(f), base = thread('oversized-cas');
+  const bigText = '中'.repeat(180000);
+  await a.sync.initialize([base]);
+  const oversized = addTurn(base, bigText);
+  assert.deepEqual((await a.sync.synchronize([oversized])).oversizedConversationIds, [base.id]);
+  const fits = addTurn(base, 'Fits the cloud budget');
+  const saved = await a.sync.synchronize([fits]);
+  assert.deepEqual(saved.oversizedConversationIds, []);
+  assert.equal(saved.queuedCount, 0);
+  assert.equal(a.calls.findLast(call => call.method === 'PUT').body.baseRevision, 1);
+
+  const growsAgain = addTurn(fits, bigText);
+  await a.sync.synchronize([growsAgain]);
+  const remoteEdit = addTurn(fits, 'A separate device edits while this record is oversized');
+  assert.equal((await save(f, f.alice, base.id, mutation(projectChatHistoryThread(remoteEdit), 2))).status, 200);
+  const kept = await a.sync.synchronize([growsAgain]);
+  assert.deepEqual(kept.threads, [growsAgain]);
+  const before = a.calls.filter(call => call.method === 'PUT').length;
+  const smallerEdit = addTurn(fits, 'A later local edit that fits');
+  const result = await a.sync.synchronize([smallerEdit]);
+  assert.equal(result.conflicts.length, 1);
+  assert.deepEqual(result.conflicts[0].remote, projectChatHistoryThread(remoteEdit));
+  assert.deepEqual(result.conflicts[0].local, projectChatHistoryThread(smallerEdit));
+  assert.equal(a.calls.filter(call => call.method === 'PUT').length, before);
+  assert.equal(f.DB.raw.prepare('SELECT revision FROM chat_sync_conversations').get().revision, 3);
 });
 
 test('original hidden system records and order persist but cannot grant tools/model/account permissions', async t => {

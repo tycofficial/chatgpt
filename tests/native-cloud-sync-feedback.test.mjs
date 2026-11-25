@@ -57,6 +57,21 @@ test('raw error text, owner identifiers, titles, prompts and content are never f
   f.helper.dispose();
 });
 
+test('oversized local histories have a deduplicated warning without a futile retry action', () => {
+  const f = fixture(); f.setReady();
+  assert.equal(f.report('oversized', { document: { text: 'PRIVATE_OVERSIZED_TEXT' } }).status, 'notified');
+  assert.equal(f.report('oversized').status, 'deduplicated');
+  const [notice] = f.calls;
+  assert.equal(f.calls.length, 1);
+  assert.equal(notice.level, 'warning');
+  assert.match(notice.options.description, /超过云端同步上限/);
+  assert.equal(notice.options.primaryAction, undefined);
+  assert.equal(JSON.stringify(notice.options).includes('PRIVATE_OVERSIZED_TEXT'), false);
+  f.helper.clear('oversized');
+  assert.equal(f.closed.length, 1);
+  f.helper.dispose();
+});
+
 test('callbacks for a foreign owner or unknown kind cannot enter the queue', () => {
   const f = fixture(); f.setReady();
   assert.equal(f.report('failure', { ownerId: 'site-user:neutral-b' }).status, 'ignored');

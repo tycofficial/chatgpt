@@ -62,6 +62,66 @@ test('pre-mount start applies genuine remote JSON through native disk and captur
   assert.equal(f.applied[0].added[0], doc.id); assert.equal(f.calls.filter(call => call.method === 'DELETE').length, 0);
 });
 
+test('startup applies account history with an oversized local thread and clears its warning when it can sync', async t => {
+  const oversized = nativeDocument('oversized-local-kept');
+  oversized.turns[0].items[0].text = '中'.repeat(180000);
+  const f = await fixture(t, [oversized]);
+  const other = nativeDocument('normal-remote-restored');
+  await save(f.backend, f.backend.alice, other.id, mutation(projectChatHistoryThread(other)));
+
+  const started = await f.coordinator.start();
+  assert.equal(started.ready, true);
+  assert.equal(started.oversizedCount, 1);
+  assert.equal(started.lastErrorCode, 'SYNC_DOCUMENT_TOO_LARGE');
+  assert.equal(started.pendingCaptures, 0);
+  assert.equal(started.deferred, false);
+  assert.equal(started.pending, false);
+  assert.deepEqual(f.app.threads.get(oversized.id), oversized);
+  assert.deepEqual(JSON.parse(f.disk.getItem(f.app.storageKey)).threads.find(record => record.id === oversized.id), oversized);
+  assert.equal(f.app.threads.has(other.id), true);
+  assert.deepEqual(f.events.map(event => event.kind), ['oversized']);
+  assert.ok(f.calls.every(call => call.method === 'GET'));
+
+  f.edit(oversized.id, 'Now fits the budget');
+  const synced = await f.coordinator.synchronize();
+  assert.equal(synced.oversizedCount, 0);
+  assert.equal(synced.lastErrorCode, null);
+  assert.ok(f.clear.some(event => event.kind === 'oversized'));
+  assert.equal((await cloud(f, oversized.id)).document.name, 'Now fits the budget');
+});
+
+test('an existing conflict cannot publish an older local copy while the visible conversation is oversized', async t => {
+  const original = nativeDocument('existing-conflict-grows');
+  const f = await fixture(t, [original]);
+  await f.coordinator.start();
+  f.edit(original.id, 'Local conflict edit');
+  await f.coordinator.whenIdle();
+  const remote = projectChatHistoryThread({ ...original, name: 'Cloud conflict edit' });
+  assert.equal((await save(f.backend, f.backend.alice, original.id, mutation(remote, 1))).status, 200);
+  assert.equal((await f.coordinator.synchronize()).conflictCount, 1);
+  assert.ok(f.events.some(event => event.kind === 'conflict'));
+
+  f.edit(original.id, '中'.repeat(180000));
+  await f.coordinator.whenIdle();
+  const fullCopy = copy(f.app.threads.get(original.id));
+  const before = f.calls.filter(call => call.method === 'PUT').length;
+  assert.ok(f.clear.some(event => event.kind === 'conflict' && event.conversationId === original.id));
+  for (const decision of ['local', 'remote']) {
+    const result = await f.coordinator.resolveConflict(original.id, decision);
+    assert.equal(result.ok, false);
+    assert.equal(result.lastErrorCode, 'SYNC_DOCUMENT_TOO_LARGE');
+  }
+  await assert.rejects(f.coordinator.sync.resolveConflict(original.id, 'local'), { code: 'SYNC_DOCUMENT_TOO_LARGE' });
+  assert.deepEqual(f.app.threads.get(original.id), fullCopy);
+  assert.deepEqual((await cloud(f, original.id)).document, remote);
+  assert.equal(f.calls.filter(call => call.method === 'PUT').length, before);
+
+  f.edit(original.id, 'A smaller local conflict edit');
+  await f.coordinator.whenIdle();
+  assert.equal((await f.coordinator.resolveConflict(original.id, 'remote')).ok, true);
+  assert.equal(f.app.threads.get(original.id).name, remote.name);
+});
+
 test('a stalled IndexedDB open releases pre-mount history and preserves the local copy', { timeout: 3000 }, async t => {
   let request, closed = 0;
   const indexedDB = { open() { return request = { result: { close() { closed++; } } }; } };
