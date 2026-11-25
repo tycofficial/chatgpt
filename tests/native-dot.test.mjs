@@ -887,6 +887,41 @@ test('the native Dot room auto-advances a queued send and preserves its message 
   assert.deepEqual(calls, ['First native send', 'Second native send']);
 });
 
+test('the native Dot room opens and background errors are handled without Web Locks', async t => {
+  t.mock.getter(globalThis, 'navigator', () => ({ onLine: true }));
+  const callbacks = [];
+  t.mock.method(globalThis, 'setInterval', callback => {
+    callbacks.push(callback);
+    return { unref() {} };
+  });
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  const diagnostics = [];
+  const env = fixture({ backgroundRoomPump: true, diagnostics });
+  const profile = (await request(env.adapter, '/tbo')).data.items[0];
+  diagnostics.length = 0;
+  const room = '/messaging/rooms/' + profile.root_thread_id;
+  const connection = await request(env.adapter, '/tbo/' + profile.id + '/messaging-room', 'POST');
+  assert.equal(connection.response.status, 200);
+  await settle();
+  assert.deepEqual(diagnostics, []);
+  assert.equal((await request(env.adapter, room)).data.id, profile.root_thread_id);
+
+  assert.equal(callbacks.length, 1);
+  const read = env.storage.getItem;
+  let readUnavailable = true;
+  t.mock.method(env.storage, 'getItem', key => {
+    if (readUnavailable) throw Error('Fixture storage is temporarily unavailable');
+    return read(key);
+  });
+  callbacks[0]();
+  await settle();
+  readUnavailable = false;
+  assert.deepEqual(diagnostics.map(({ kind, code }) => ({ kind, code })), [
+    { kind: 'automation-tick-error', code: 'LOCAL_DOT_STORAGE_UNAVAILABLE' },
+  ]);
+  assert.equal((await request(env.adapter, room)).response.status, 200);
+});
+
 test('Dot uses actual uploaded bytes for a message and its follow-up after reload', async () => {
   const bytes = new Map();
   const storage = memory();

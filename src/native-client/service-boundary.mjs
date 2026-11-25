@@ -82,9 +82,6 @@ export const localPreferredHostTransport = createPreferredHostTransport({ baseUR
   fetchImpl: (...args) => globalThis.fetch(...args), getSiteAccount, getSiteSessionToken,
   onDiagnostic: event => localProtocolDiagnostics.push(event),
 });
-function modelConnectionError(messages, code, checkpoint) {
-  return Object.assign(Error(messages), { code, retryable: false, requiresTransportResume: isSiteInferenceCheckpoint(checkpoint) });
-}
 async function verifiedSiteToken() {
   const account = getSiteAccount();
   if (!getSiteSessionToken() && account && account.authenticationMode !== 'offline-administrator' && navigator.onLine !== false) await refreshSiteAccount();
@@ -113,7 +110,9 @@ async function completeWithAdminConnection(options, connection) {
         });
       } catch (error) {
         signal?.throwIfAborted();
-        throw modelConnectionError('本机模型服务连接中断。已保留对话，请检查所设置的模型地址和浏览器跨域权限。', 'ADMIN_MODEL_CONNECTION_FAILED');
+        throw Object.assign(Error('本机模型服务连接中断。已保留对话，请检查所设置的模型地址和浏览器跨域权限。'), {
+          code: 'ADMIN_MODEL_CONNECTION_FAILED', retryable: false,
+        });
       }
     },
   }).catch(error => {
@@ -131,23 +130,24 @@ const siteInferenceTransport = createSiteInferenceTransport({
   baseURL: SITE_ACCOUNT_SERVICE,
   getSessionToken: verifiedSiteToken,
   getAccountId: () => getSiteAccount()?.id ?? null,
+  describeUnverifiedAccount: ({ requiresTransportResume }) => {
+    const role = getSiteAccount()?.role;
+    if (role !== 'administrator' && role !== 'user') return null;
+    if (requiresTransportResume) return '暂时无法验证本站会话。已保留原请求，账号服务恢复后可重新连接。';
+    if (role === 'administrator') {
+      return '管理员已在本机登录。暂时无法连接本站模型服务。可在设置的账户页配置本机模型连接，再发送新消息。';
+    }
+    return '本站账号已在本机恢复。暂时无法连接本站模型服务，已保留对话。';
+  },
 });
 function completeWithSiteInference(options) {
   // Chat's Pro presentation is backed by the highest conventional effort for Astra.
   const settings = options.settings.reasoningMode === 'pro' && options.settings.model === 'gpt-6-astra'
     ? { ...options.settings, reasoningMode: 'standard', reasoningEffort: 'max' }
     : options.settings;
-  const directSiteResponse = async (payload, { signal }) => {
-    const account = getSiteAccount();
-    const checkpoint = options.transportContext?.checkpoint;
-    if (account && !await verifiedSiteToken()) {
-      const message = account.role === 'administrator'
-        ? '管理员已在本机登录。本站模型服务无法连接。可从 /chatgpt/auth/login/?model_connection=1 设置本机模型连接。'
-        : '本站账号已在本机恢复。当前无法连接本站模型服务，已保留对话。';
-      throw modelConnectionError(message, 'SITE_INFERENCE_CONNECTION_UNAVAILABLE', checkpoint);
-    }
-    return siteInferenceTransport.request(payload, { ...options.transportContext, signal, isFreeChat: options.providerRoutingContext?.isFreeChat });
-  };
+  const directSiteResponse = (payload, { signal }) => siteInferenceTransport.request(payload, {
+    ...options.transportContext, signal, isFreeChat: options.providerRoutingContext?.isFreeChat,
+  });
   return streamCompletion({
     ...options,
     settings: { ...settings, apiTransport: 'responses' },

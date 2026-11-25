@@ -448,7 +448,7 @@ export function createLocalDotAdapter({
     const items = messages.slice(start, end);
     return { items, prev_cursor: start > 0 ? items[0]?.id ?? null : null, next_cursor: end < messages.length ? items.at(-1)?.id ?? null : null };
   }
-  function roomLock(session, action) {
+  async function roomLock(session, action) {
     const locks = globalThis.navigator?.locks;
     return locks ? locks.request(stateKey(session), async () => action()) : action();
   }

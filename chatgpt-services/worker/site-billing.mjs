@@ -43,6 +43,8 @@ function config(env) {
   return { apiKey, webhookSecret, mode, live: mode === 1, prices: new Map(entries) };
 }
 
+export const siteBillingConfigured = env => Boolean(config(env));
+
 async function boundedBody(request, limit) {
   if (!request.body || Number(request.headers.get('content-length')) > limit) return null;
   const reader = request.body.getReader(), chunks = [];

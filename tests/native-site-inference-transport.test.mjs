@@ -113,6 +113,37 @@ test('an unavailable or foreign saved receipt cannot issue a replacement request
   assert.deepEqual(methods, ['GET']);
 });
 
+test('a cached owner can reattach after the account service recovers without sending another inference', async () => {
+  const checkpoint = { route: 'site-inference', siteRequestId: uuid(1), ownerId: 'test-user', state: 'running' };
+  let token = null;
+  let accountId = 'test-user';
+  const methods = [];
+  const output = finish([textItem('m', 'Recovered existing response.')]);
+  const client = transport(async (_url, options) => {
+    methods.push(options.method ?? 'GET');
+    return receipt(uuid(1), { data: [output] });
+  }, {
+    getSessionToken: () => token,
+    getAccountId: () => accountId,
+    describeUnverifiedAccount: ({ requiresTransportResume }) => {
+      assert.equal(requiresTransportResume, true);
+      return '本机身份仍有效，本站模型服务暂不可用。';
+    },
+  });
+  await assert.rejects(client.request(payload, { checkpoint }), {
+    code: 'SITE_INFERENCE_CONNECTION_UNAVAILABLE', status: 503, requiresTransportResume: true,
+  });
+  accountId = 'different-owner';
+  await assert.rejects(client.request(payload, { checkpoint }), { code: 'SITE_INFERENCE_SIGN_IN', status: 401 });
+  accountId = null;
+  await assert.rejects(client.request(payload, { checkpoint }), { code: 'SITE_INFERENCE_SIGN_IN', status: 401 });
+  assert.deepEqual(methods, []);
+  accountId = 'test-user';
+  token = 'fixture-bearer';
+  assert.equal(await (await client.request(payload, { checkpoint })).text(), output);
+  assert.deepEqual(methods, ['GET']);
+});
+
 test('reopening before admission retries the identical UUID and payload after a 404', async () => {
   const checkpoint = {}, events = [];
   const closing = new AbortController();

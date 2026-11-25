@@ -83,7 +83,7 @@ function deliveredPrefix() {
 }
 
 export function createSiteInferenceTransport({
-  baseURL, getSessionToken, getAccountId, fetchImpl = globalThis.fetch,
+  baseURL, getSessionToken, getAccountId, describeUnverifiedAccount, fetchImpl = globalThis.fetch,
   uuid = () => crypto.randomUUID(), pollIntervalMs = 650, requestTimeoutMs = 12000,
   maxNetworkRetries = 4, sleep = delay,
 } = {}) {
@@ -96,8 +96,12 @@ export function createSiteInferenceTransport({
     signal?.throwIfAborted();
     const token = await getSessionToken(), accountId = getAccountId();
     signal?.throwIfAborted();
-    if (!token || !accountId || checkpoint.ownerId && checkpoint.ownerId !== accountId) {
-      throw error('SITE_INFERENCE_SIGN_IN', '请在线验证发送该消息的本站账号。', { status: 401, requiresTransportResume: isSiteInferenceCheckpoint(checkpoint) });
+    const sameOwner = accountId && (!checkpoint.ownerId || checkpoint.ownerId === accountId);
+    if (!token || !sameOwner) {
+      const requiresTransportResume = isSiteInferenceCheckpoint(checkpoint);
+      const unavailable = sameOwner && describeUnverifiedAccount?.({ requiresTransportResume });
+      if (unavailable) throw error('SITE_INFERENCE_CONNECTION_UNAVAILABLE', unavailable, { status: 503, requiresTransportResume });
+      throw error('SITE_INFERENCE_SIGN_IN', '请在线验证发送该消息的本站账号。', { status: 401, requiresTransportResume });
     }
     return { token, accountId };
   }

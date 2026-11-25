@@ -11,7 +11,7 @@ import { installRestrictedBrowserStorage, isVolatileBrowserStorage } from '../sr
 const identitySource=fs.readFileSync(new URL('../src/native-client/local-identity.mjs',import.meta.url),'utf8');
 const pricingSource=fs.readFileSync(new URL('../src/native-client/local-pricing.mjs',import.meta.url),'utf8');
 const source=fs.readFileSync(new URL('../src/native-client/site-account.mjs',import.meta.url),'utf8');
-const names=['getSiteAccount','setAdminModelConnection','getAdminModelConnection','hasModelSelectionAccess','getSiteSessionToken','getSiteAccountError','initializeSiteAccount','initializeSiteAccountForDisplay','loginSiteAccount','registerSiteAccount','logoutSiteAccount','getSiteLoginUrl','getSiteRegistrationUrl','safeSiteReturnUrl','getSitePlanCapabilities','refreshSiteAccount','isSiteGuestSession','startSiteGuestSession','claimSiteTrial','getSiteHomeUrl','readSiteBillingOptions','createSiteCheckout','createSiteBillingPortal','refreshSiteBillingReturn'];
+const names=['getSiteAccount','setAdminModelConnection','getAdminModelConnection','getAdminModelConnectionUrl','hasModelSelectionAccess','getSiteSessionToken','getSiteAccountError','initializeSiteAccount','initializeSiteAccountForDisplay','loginSiteAccount','registerSiteAccount','logoutSiteAccount','getSiteLoginUrl','getSiteRegistrationUrl','safeSiteReturnUrl','getSitePlanCapabilities','refreshSiteAccount','isSiteGuestSession','startSiteGuestSession','claimSiteTrial','getSiteHomeUrl','readSiteBillingOptions','createSiteCheckout','createSiteBillingPortal','refreshSiteBillingReturn'];
 // Execute the actual module in an isolated VM with the deployment module URL and URL helpers.
 // No real browser storage, password, token, account service, or network is used.
 const fixtureToken='c'.repeat(64),key='chatgpt-site-admin-session:v1',now=1800000000000;
@@ -244,6 +244,17 @@ test('gateway failure still allows the verified local administrator and a tab-sc
   await restored.api.logoutSiteAccount();
   assert.equal(restored.api.getAdminModelConnection(), null);
   assert.throws(() => restored.api.setAdminModelConnection({ apiBase: 'https://provider.invalid/', apiKey: 'test-only' }), /管理员/);
+});
+
+test('model settings preserve an internal return URL and reject external destinations and account entry loops', () => {
+  const { api } = fixture();
+  const settings = api.getAdminModelConnectionUrl('/chatgpt/settings/account?localSession=0');
+  assert.equal(settings.pathname, '/chatgpt/login');
+  assert.equal(settings.searchParams.get('model_connection'), '1');
+  assert.equal(settings.searchParams.get('next'), 'https://tycofficial.github.io/chatgpt/settings/account');
+  for (const next of ['https://unrelated.invalid/', '/chatgpt/logout', '/chatgpt/auth/login/']) {
+    assert.equal(api.getAdminModelConnectionUrl(next).searchParams.get('next'), 'https://tycofficial.github.io/chatgpt/');
+  }
 });
 
 test('account gateways preserve a verified administrator and local model selection across revalidation', async t => {

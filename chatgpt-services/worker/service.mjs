@@ -1,7 +1,8 @@
 import {handleChatSync} from './chat-sync.mjs';
 import {handleDotComputer} from './dot-computer.mjs';
-import {getPaidSitePlan, getPaidSiteSubscription, handleSiteBilling, paidSubscriptionColumns, paidSubscriptionJoin, siteBillingMode} from './site-billing.mjs';
-import {proxyDocodeResponses} from './site-inference.mjs';
+import {desktopConfigured} from './linux-desktop.mjs';
+import {getPaidSitePlan, getPaidSiteSubscription, handleSiteBilling, paidSubscriptionColumns, paidSubscriptionJoin, siteBillingConfigured, siteBillingMode} from './site-billing.mjs';
+import {proxyDocodeResponses, siteInferenceConfigured} from './site-inference.mjs';
 import {readJournaledInference, readSiteInferenceUsage, startJournaledInference} from './inference-recovery.mjs';
 /** Username/password auth is local to this site; no original account token is used. */
 const encoder=new TextEncoder();
@@ -151,7 +152,15 @@ async function bridgeRoute(request,env,path){
 }
 
 async function route(request,env,ctx){const path=new URL(request.url).pathname;
- if(path==='/health'){const admin=await configured(env);return json({ready:true,adminConfigured:Boolean(admin),storage:'D1',version:'admin-auth-1'});}
+ if(path==='/health'){
+  const admin=await configured(env);
+  return json({
+   ready:true,adminConfigured:Boolean(admin),storage:'D1',version:'admin-auth-1',
+   inferenceConfigured:siteInferenceConfigured(env.DOCODE_API_KEY),
+   billingConfigured:siteBillingConfigured(env),
+   dotComputerConfigured:desktopConfigured(env),
+  });
+ }
  if(path==='/auth/register'&&request.method==='POST'){
   const administrator=await configured(env),data=await readBody(request),username=normalize(data.username);
   if(!/^[\p{L}\p{N}_-]{3,32}$/u.test(username)||typeof data.password!=='string'||data.password.length<8||data.password.length>128)return fail(400,'INVALID_REGISTRATION','用户名需为3–32个文字、数字、下划线或短横线，密码需为8–128位。');

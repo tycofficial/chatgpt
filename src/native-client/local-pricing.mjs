@@ -11,7 +11,7 @@
  * p3vI, 396705.00162c6ea9.js:564237-564553 (payment methods).
  * wbWw/Bhuf/YoTg/JGV6, async/899311.9233e1594e.js (billing read shapes).
  */
-import { claimSiteTrial, createSiteBillingPortal, getSiteAccount, getSiteSessionToken, getSiteSubscriptionPlan, getSiteTrialPlan, refreshSiteAccount } from './site-account.mjs';
+import { claimSiteTrial, createSiteBillingPortal, getAdminModelConnectionUrl, getSiteAccount, getSiteSessionToken, getSiteSubscriptionPlan, getSiteTrialPlan, refreshSiteAccount } from './site-account.mjs';
 
 export const LOCAL_PRICING_REFERENCE = Object.freeze({
   source: 'https://learn.chatgpt.com/docs/pricing',
@@ -276,11 +276,17 @@ export function createNativeSiteUsageLayout(Layout, {
     const billingRoute = BillingButton && isBillingRoute();
     if (!billingRoute && (props.scrollResetKey !== 'usage' || !isUsageRoute())) return createElement(Layout, props);
     const membership = normalizeLocalMembership(getMembership());
+    const localModelSettings = billingRoute ? createElement(Row, { label: '本机模型连接',
+      control: createElement(BillingButton, {
+        type: 'button', onClick: () => location.assign(getAdminModelConnectionUrl(location.href).href),
+      }, '设置模型连接'),
+    }) : null;
     const administratorPlan = membership.pro_tier === 500 && membership.managed_by === 'local-administrator' ?
       createElement(Section, { id: 'site-plan-summary' },
         createElement(Section.Header, { title: '本站套餐' }),
         createElement(Section.Content, null, createElement(Group, null,
-          createElement(Row, { label: '管理员套餐', control: createElement('span', null, 'Pro $500') })))) : null;
+          createElement(Row, { label: '管理员套餐', control: createElement('span', null, 'Pro $500') }),
+          localModelSettings))) : null;
     return createElement(Layout, props, administratorPlan,
       createElement(billingRoute ? SiteBillingSummary : SiteUsageSummary), props.children);
   };

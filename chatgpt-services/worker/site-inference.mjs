@@ -24,6 +24,8 @@ const jsonResponse = (status, error, extraHeaders) => {
 };
 const failure = (status, code, message) => jsonResponse(status, { code, message });
 const cancel = stream => stream?.cancel().catch(() => {});
+const docodeKey = value => typeof value === 'string' ? value.trim() : '';
+export const siteInferenceConfigured = value => Boolean(docodeKey(value));
 
 class BodyTooLarge extends Error {}
 
@@ -132,7 +134,7 @@ export async function readDocodeInput(request) {
 }
 
 export function prepareDocodeInput(input, configuredKey, { planType } = {}) {
-  const key = typeof configuredKey === 'string' ? configuredKey.trim() : '';
+  const key = docodeKey(configuredKey);
   if (!key) return failure(503, 'DOCODE_NOT_CONFIGURED', '站内推理服务尚未配置。');
   if (input instanceof Response) return input;
   const { payload, body } = input;

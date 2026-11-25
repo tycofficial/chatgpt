@@ -254,6 +254,12 @@ function accountPageUrl(path, next) {
 export const getSiteLoginUrl = next => accountPageUrl('login', next);
 export const getSiteRegistrationUrl = next => accountPageUrl('signup', next);
 
+export function getAdminModelConnectionUrl(next) {
+  const url = getSiteLoginUrl(next);
+  url.searchParams.set('model_connection', '1');
+  return url;
+}
+
 export function getSitePlansUrl(next) {
   const home = getSiteHomeUrl();
   const url = new URL('site-plans/', home);
@@ -761,6 +767,7 @@ function renderAdminModelConnection(main) {
     '<a class="site-login-back">返回 ChatGPT</a></section>',
   ].join('');
   const home = getSiteHomeUrl().href;
+  const target = safeSiteReturnUrl(new URL(location.href).searchParams.get('next')).href;
   const form = main.querySelector('form');
   const input = form.querySelector('[name=endpoint]');
   const credential = form.querySelector('[name=credential]');
@@ -771,7 +778,7 @@ function renderAdminModelConnection(main) {
     try {
       setAdminModelConnection({ apiBase: input.value, apiKey: credential.value });
       credential.value = '';
-      location.assign(home);
+      location.assign(target);
     } catch (error) {
       credential.value = '';
       status.textContent = error.message;
@@ -780,10 +787,11 @@ function renderAdminModelConnection(main) {
   main.querySelector('button[type=button]').addEventListener('click', () => {
     try {
       setAdminModelConnection(null);
-      location.assign(home);
+      location.assign(target);
     } catch (error) { status.textContent = error.message; }
   });
-  for (const link of main.querySelectorAll('a')) link.href = home;
+  main.querySelector('.site-login-brand').href = home;
+  main.querySelector('.site-login-back').href = target;
   document.body.replaceChildren(main);
   document.title = '本机模型连接 — ChatGPT';
 }

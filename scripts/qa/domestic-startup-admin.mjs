@@ -41,11 +41,22 @@ try {
   const origin='http://127.0.0.1:' + server.address().port, home=origin+'/chatgpt/';
   const browser = engine === 'webkit-ipad' ? await webkit.launch() : await chromium.launch({ channel: engine==='edge' ? 'msedge' : 'chrome' });
   try {
-    const context = await browser.newContext({
-      ...(engine==='webkit-ipad' ? devices['iPad (gen 7)'] : {}), locale:'zh-CN', serviceWorkers:'block',
-    });
+    async function isolatedContext() {
+      const instance = await browser.newContext({
+        ...(engine==='webkit-ipad' ? devices['iPad (gen 7)'] : {}), locale:'zh-CN', serviceWorkers:'block',
+      });
+      await instance.route('**/*', route => new URL(route.request().url()).origin === origin
+        ? route.continue() : route.abort('blockedbyclient'));
+      return instance;
+    }
+    const context = await isolatedContext();
     const cors = {'Access-Control-Allow-Origin':origin,'Access-Control-Allow-Methods':'GET, POST, OPTIONS',
       'Access-Control-Allow-Headers':'content-type, authorization, x-chat-request-id'};
+    function unavailableAccountService(route) {
+      if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 204, headers: cors });
+      return route.fulfill({ status: 503, headers: { ...cors, 'Content-Type': 'application/json' },
+        body: '{"error":{"code":"SERVICE_UNAVAILABLE"}}' });
+    }
     let authPosts=0, modelPosts=0;
     const codexPrompts = [
       'Codex browser regression first turn CDX-ENTRY-01',
@@ -53,9 +64,8 @@ try {
     ];
     const codexRequests = [];
     await context.route(backend+'/**', async route => {
-      if(route.request().method()==='OPTIONS') return route.fulfill({status:204,headers:cors});
-      if(new URL(route.request().url()).pathname==='/auth/login') authPosts++;
-      return route.fulfill({status:503,headers:{...cors,'Content-Type':'application/json'},body:'{"error":{"code":"SERVICE_UNAVAILABLE"}}'});
+      if (route.request().method() === 'POST' && new URL(route.request().url()).pathname === '/auth/login') authPosts++;
+      return unavailableAccountService(route);
     });
     await context.route(provider+'/**', async route => {
       const req=route.request();
@@ -101,14 +111,29 @@ try {
     page.on('pageerror',error=>errors.push(error.name+': '+error.message.slice(0,130)));
     try {
       const active=await fetch(home+'native-client/active.json').then(r=>r.json());
-      await page.goto(home+'auth/login/?model_connection=1',{waitUntil:'domcontentloaded',timeout:40000});
+      const accountUrl = new URL('settings/account', home);
+      const loginUrl = new URL('auth/login/', home);
+      loginUrl.searchParams.set('next', accountUrl.pathname);
+      await page.goto(loginUrl.href,{waitUntil:'domcontentloaded',timeout:40000});
       await page.locator('#site-username').fill('TYC');
       await page.locator('#site-password').fill(password);
       await page.getByRole('button',{name:'继续',exact:true}).click();
+      await page.waitForURL(accountUrl.href, { timeout: 45000 });
+      const modelSettings = page.getByRole('button', { name: '设置模型连接', exact: true });
+      await modelSettings.click({ timeout: 25000 });
+      await page.locator('#site-model-url').waitFor({ state: 'visible', timeout: 20000 });
+      const modelUrl = new URL(page.url());
+      assert.equal(modelUrl.origin, origin);
+      assert.equal(modelUrl.pathname.replace(/\/+$/, ''), new URL('login', home).pathname);
+      assert.equal(modelUrl.searchParams.get('model_connection'), '1');
+      assert.ok(modelUrl.searchParams.get('next'), 'The model settings link lost its return destination');
+      assert.equal(new URL(modelUrl.searchParams.get('next'), home).href, accountUrl.href);
       await page.locator('#site-model-url').fill(provider);
       await page.locator('#site-model-key').fill(credential);
       await page.getByRole('button',{name:'保存连接并返回',exact:true}).click();
-      await page.waitForURL(new URL(home).href,{timeout:45000});
+      await page.waitForURL(accountUrl.href, { timeout: 45000 });
+      await modelSettings.waitFor({ state: 'visible', timeout: 25000 });
+      await page.goto(home, { waitUntil: 'domcontentloaded', timeout: 45000 });
       await editor().waitFor({state:'visible',timeout:45000});
       await page.locator('#site-load-progress').waitFor({state:'hidden',timeout:14000});
       const progress=await page.evaluate(()=>({release:window.__CHATGPT_REPLICA_ENV__?.release,steps:[...new Set(window.__qaProgress)]}));
@@ -136,7 +161,8 @@ try {
       assert.equal(page.url(), conversationUrl);
       assert.equal(authPosts, 1);
       assert.equal(modelPosts, 2);
-      console.log('Browser QA '+JSON.stringify({engine,release:active.release,progress,authPosts,modelPosts,reloadedReply:true,sameThread:true,firstReplyMs,secondReplyMs}));
+      console.log('Browser QA '+JSON.stringify({engine,release:active.release,progress,authPosts,modelPosts,modelSettingsRoundTrip:true,
+        reloadedReply:true,sameThread:true,firstReplyMs,secondReplyMs}));
       if (process.env.QA_NATIVE_CODEX_ENTRY === '1') {
         const modeLabel = /切换.*模式|切換.*模式|Switch mode/i;
         const switcher = () => page.getByRole('button', { name: modeLabel }).filter({ visible: true }).first();
@@ -266,33 +292,69 @@ try {
           } catch (cause) { surfaces.push({name, failure:cause.name}); }
         }
         const goto = path => page.goto(home + path,{waitUntil:'domcontentloaded',timeout:20000});
-        await inspect('usage', () => goto('settings/usage'), {adminPro: /Pro\s*\$?500/});
-        await inspect('personal-pricing', () => goto('#pricing'), {go: /^Go$/, pro: /^Pro$/, dotBenefit: /含站内 Dot/});
-        const personal = surfaces.at(-1);
-        const beforeControls = await page.getByRole('button').filter({visible:true}).allTextContents();
-        const plans = beforeControls.map(t=>t.trim()).filter(t=>/套餐|plan|compare|更多|更少/i.test(t)).slice(-20);
-        console.log('Native Go initial '+JSON.stringify({seen:personal.seen,plans}));
-        let expandedInTest=false;
-        if(!personal.seen.go){
-          const more=page.getByRole('button',{name:/^(?:查看(?:所有|全部|更多|其他).*(?:套餐|方案|计划)|(?:查看)?全部套餐|(?:See|View|Show) (?:all|more).*plans)$/i}).filter({visible:true}).first();
-          if(await more.isVisible()){await more.click();expandedInTest=true;}
+        for (const section of ['account', 'usage']) {
+          await goto('settings/' + section);
+          const pro500 = page.locator('#site-plan-summary').getByText('Pro $500', { exact: true });
+          await pro500.waitFor({ state: 'visible', timeout: 12000 });
+          surfaces.push({ name: section, documentPath: new URL(page.url()).pathname, seen: { adminPro500: true } });
         }
-        await page.getByText('Go',{exact:true}).filter({visible:true}).first().waitFor({state:'visible',timeout:10000});
-        assert.equal(personal.seen.pro,true);
-        assert.equal(personal.seen.dotBenefit,true);
-        const goAction = page.getByRole('button',{name:'查看官方 Go 套餐',exact:true}).filter({visible:true}).first();
-        await goAction.waitFor({state:'visible',timeout:10000});
-        const referenceCard = await goAction.evaluate(button=>{
-          for(let node=button.parentElement;node&&node!==document.body;node=node.parentElement){
-            const text=node.innerText??'';
-            if(text.split('\n').some(line=>line.trim()==='Go')&&text.includes('美元参考价'))return text;
-          }
-          return '';
-        });
-        assert.match(referenceCard, /(?:US\$|\$)\s*8(?:[.,]00)?\b|8(?:[.,]00)?\s*(?:USD|美元)/);
-        const offeredPlans = await page.evaluate(()=>['Free','Go','Plus','Pro'].filter(plan=>
-          [...document.querySelectorAll('h2,h3,h4,[role=heading]')].some(node=>node.textContent.trim()===plan&&node.getClientRects().length)));
-        console.log('Native Go QA '+JSON.stringify({release:active.release,openedWithoutExpanding:!expandedInTest,goReference:true,hasOfficialPriceAction:true,offeredPlans}));
+
+        const planHeading = (surface, plan) => surface.getByRole('heading', { name: plan, exact: true })
+          .filter({ visible: true }).first();
+        const showAll = /^(?:查看(?:所有|全部|更多|其他).*(?:套餐|方案|计划)|(?:查看)?全部套餐|(?:See|View|Show) (?:all|more).*plans)$/i;
+        async function revealGo(surface) {
+          const go = planHeading(surface, 'Go');
+          const more = surface.getByRole('button', { name: showAll }).filter({ visible: true }).first();
+          await go.or(more).first().waitFor({ state: 'visible', timeout: 12000 });
+          const expanded = !await go.isVisible();
+          if (expanded) await more.click();
+          await go.waitFor({ state: 'visible', timeout: 12000 });
+          return expanded;
+        }
+        async function readPlanCard(surface, plan, actions) {
+          const heading = planHeading(surface, plan);
+          await heading.waitFor({ state: 'visible', timeout: 12000 });
+          const card = await heading.evaluate((heading, allowed) => {
+            const isPlanHeading = element => ['Free', 'Go', 'Plus', 'Pro'].includes(element.textContent.trim());
+            for (let node = heading.parentElement; node && node !== document.body; node = node.parentElement) {
+              if ([...node.querySelectorAll('h2,h3,h4,[role="heading"]')].some(element => element !== heading && isPlanHeading(element))) break;
+              const button = [...node.querySelectorAll('button,[role="button"]')].find(element =>
+                element.getClientRects().length && allowed.includes((element.getAttribute('aria-label') || element.innerText).trim()));
+              if (button) return { text: node.innerText, action: (button.getAttribute('aria-label') || button.innerText).trim(),
+                disabled: button.matches(':disabled,[aria-disabled="true"]') };
+            }
+            return null;
+          }, actions);
+          assert.ok(card, plan + ' does not show its expected site action');
+          return card;
+        }
+
+        await goto('#pricing');
+        const adminGoExpanded = await revealGo(page);
+        const adminAction = ['管理员已开通'];
+        const adminGo = await readPlanCard(page, 'Go', adminAction);
+        const adminPro = await readPlanCard(page, 'Pro', adminAction);
+        assert.equal(adminGo.disabled, true);
+        assert.equal(adminPro.disabled, true);
+        assert.match(adminPro.text, /含站内 Dot/);
+        surfaces.push({ name: 'personal-pricing', documentPath: new URL(page.url()).pathname,
+          seen: { adminGo: true, adminPro: true, dotBenefit: true }, adminGoExpanded });
+
+        const visitorContext = await isolatedContext();
+        try {
+          await visitorContext.route(backend+'/**', unavailableAccountService);
+          const visitor = await visitorContext.newPage();
+          await visitor.goto(home + '#pricing', { waitUntil: 'domcontentloaded', timeout: 20000 });
+          const expanded = await revealGo(visitor);
+          const go = await readPlanCard(visitor, 'Go', ['查看本站 Go 状态', '登录后订购', '订购本站套餐']);
+          assert.equal(go.disabled, false);
+          assert.match(go.text, /美元参考价|本站 Go 订阅暂未开放/);
+          assert.match(go.text, /(?:US\$|\$)\s*8(?:[.,]00)?\b|8(?:[.,]00)?\s*(?:USD|美元)/);
+          const offeredPlans = await visitor.evaluate(() => ['Free', 'Go', 'Plus', 'Pro'].filter(plan =>
+            [...document.querySelectorAll('h2,h3,h4,[role="heading"]')].some(node => node.textContent.trim() === plan && node.getClientRects().length)));
+          console.log('Native Go QA ' + JSON.stringify({ release: active.release, openedWithoutExpanding: !expanded,
+            goReference: true, goAction: go.action, adminGoAction: adminGo.action, adminProAction: adminPro.action, offeredPlans }));
+        } finally { await visitorContext.close(); }
         await inspect('dot', async () => {
           await goto('');
           await page.getByText('Dot',{exact:true}).filter({visible:true}).first().click({timeout:10000});

@@ -109,6 +109,54 @@ test('AI Studio routes use the existing account authority and keep session and h
   assert.equal((await f.call(path, { token: restored.token })).status, 401);
 });
 
+test('AI Studio health reports only readiness flags using the same configuration checks as the service routes', async t => {
+  const f = await start(t);
+  const actual = globalThis.fetch;
+  let providerCalls = 0;
+  t.mock.method(globalThis, 'fetch', (input, init) => {
+    if (new URL(input).hostname === '127.0.0.1') return actual(input, init);
+    providerCalls++;
+    throw Error('Health and its fixture probes must not call providers');
+  });
+  const thread = '/dot-computer/v1/threads/' + crypto.randomUUID();
+  const inference = { method: 'POST', token: f.admin.token, body: { input: 'Fixture', model: 'unsupported-fixture-model' } };
+  async function check(configured) {
+    const health = await f.call('/health', { origin: null });
+    assert.equal(health.status, 200);
+    assert.match(health.headers.get('cache-control'), /no-store/);
+    assert.deepEqual(await health.json(), {
+      ready: true, adminConfigured: true, storage: 'D1', version: 'admin-auth-1',
+      inferenceConfigured: configured, billingConfigured: configured, dotComputerConfigured: configured,
+    });
+    const billing = await f.call('/billing/v1/options');
+    assert.deepEqual(await billing.json(), { tiers: configured ? ['go', 'plus'] : [], checkoutAvailable: configured });
+    const desktop = await f.call(thread, { token: f.admin.token });
+    assert.equal(desktop.status, 200);
+    assert.equal((await desktop.json()).status, configured ? 'stopped' : 'unconfigured');
+    const model = await f.call(requestRoute, inference);
+    assert.equal(model.status, configured ? 400 : 503);
+    assert.equal((await model.json()).error.code, configured ? 'INVALID_INFERENCE_REQUEST' : 'DOCODE_NOT_CONFIGURED');
+  }
+
+  await check(false);
+  Object.assign(f.env, {
+    DOCODE_API_KEY: '  ',
+    SITE_STRIPE_SECRET_KEY: 'sk_test_IsolatedFixture',
+    SITE_STRIPE_WEBHOOK_SECRET: 'whsec_IsolatedFixture',
+    SITE_STRIPE_PRICES: JSON.stringify({ go: 'price_fixture_go', plus: 'price_fixture_go' }),
+    DOT_COMPUTER_PROVIDER_ORIGIN: 'https://linux-fixture.example/not-an-origin',
+    DOT_COMPUTER_PROVIDER_TOKEN: 'isolated-fixture-desktop-token-only',
+  });
+  await check(false);
+  Object.assign(f.env, {
+    DOCODE_API_KEY: ' fixture-key-only ',
+    SITE_STRIPE_PRICES: JSON.stringify({ go: 'price_fixture_go', plus: 'price_fixture_plus' }),
+    DOT_COMPUTER_PROVIDER_ORIGIN: 'https://linux-fixture.example',
+  });
+  await check(true);
+  assert.equal(providerCalls, 0);
+});
+
 test('AI Studio HTTP exposes SSE headers before the first output and resumes the same receipt after disconnect', async t => {
   const f = await start(t);
   f.env.DOCODE_API_KEY = 'synthetic-fixture-key';
