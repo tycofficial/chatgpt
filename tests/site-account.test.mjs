@@ -732,6 +732,53 @@ test('first display keeps a verified receipt offline and reconciles a server rej
   assert.equal(identity.getPrototypeLocalAuth(), null);
 });
 
+test('a registered owner survives gateway route mistakes on reconnect and honors actual revocation', async t => {
+  const DB = sqliteD1();
+  t.after(() => DB.raw.close());
+  let observedRejection;
+  const authority = async (url, options) => {
+    const response = await accountWorker.fetch(new Request(url, options), { DB });
+    if (response.status === 401) observedRejection = (await response.clone().json()).error.code;
+    return response;
+  };
+  const first = fixture();
+  first.setClock(Date.now());
+  first.setHandler(authority);
+  const user = await first.api.registerSiteAccount('ReconnectFixture', 'Neutral-Fixture-Password');
+  const savedRecord = first.values.get(key), savedReceipts = structuredClone(first.receipts);
+  const f = fixture(savedRecord, { receipts: structuredClone(savedReceipts), online: false });
+  f.setClock(Date.now());
+  assert.equal((await f.api.initializeSiteAccountForDisplay()).id, user.id);
+  const localIdentity = f.loadIdentity();
+  for (const response of [
+    () => new Response('<h1>Gateway route not found</h1>', { status: 404, headers: {
+      'Content-Type': 'text/html', 'Access-Control-Allow-Origin': 'https://tycofficial.github.io',
+    } }),
+    () => ({ status: 405, body: { error: { code: 'ROUTE_NOT_AVAILABLE' } } }),
+  ]) {
+    f.setHandler(response);
+    f.setOnline(true);
+    const cached = await f.api.refreshSiteAccount();
+    assert.equal(cached?.accountId, user.accountId);
+    assert.equal(cached.authenticationMode, 'site-offline-cache');
+    assert.equal(localIdentity.getLocalAccountStorageKey('history'), 'history:account:' + user.accountId);
+    assert.equal(f.api.getSiteSessionToken(), null);
+    assert.equal(f.values.get(key), savedRecord);
+    assert.equal(f.receipts.size, 1);
+    f.setHandler(authority);
+    f.events.dispatchEvent(new Event('focus'));
+    assert.equal((await f.api.refreshSiteAccount())?.cloudSessionVerified, true);
+    f.setOnline(false);
+  }
+  await first.api.logoutSiteAccount({ waitForRemote: true });
+  f.setOnline(true);
+  assert.equal(await f.api.refreshSiteAccount(), null);
+  assert.equal(observedRejection, 'ADMIN_AUTH_REQUIRED');
+  assert.equal(localIdentity.getPrototypeLocalAuth(), null);
+  assert.equal(f.values.has(key), false);
+  assert.equal(f.receipts.size, 0);
+});
+
 test('first display waits for server verification when the remembered profile lacks a matching receipt', async () => {
   const saved = await savedRegisteredSession();
   const claimed = record({ expiresAt: JSON.parse(saved.record).expiresAt + 1000 });

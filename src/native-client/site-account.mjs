@@ -287,8 +287,11 @@ const sessionRejectionCodes = new Set([
 
 function isAccountGatewayFailure(path, status, code) {
   if (status >= 500 || (status === 403 && (!code || code === 'ORIGIN_NOT_ALLOWED'))) return true;
-  if (path !== '/auth/session' && path !== '/auth/site-trial') return false;
-  // Distinguish a site session rejection from a gateway response.
+  // Only the account authority's explicit denial revokes a remembered session.
+  if (path === '/auth/session') {
+    return !((status === 401 || status === 403) && sessionRejectionCodes.has(code));
+  }
+  if (path !== '/auth/site-trial') return false;
   if (status === 401 || status === 403) return !sessionRejectionCodes.has(code);
   return status === 408 || status === 429;
 }
