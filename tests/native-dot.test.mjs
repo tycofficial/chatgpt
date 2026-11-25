@@ -991,6 +991,84 @@ test('Dot automation uses one actual model turn per scheduled interval, stores i
   assert.equal((await request(reopened.adapter, path)).data.items[0].last_run.output, 'Fixture task result');
 });
 
+test('ordinary startup restores a kept Dot interval once and stays stopped after disable', { timeout: 5000 }, async t => {
+  let clock = 1700000000000, online = true, runs = 0;
+  t.mock.getter(globalThis, 'navigator', () => ({ onLine: online }));
+  const ticks = [];
+  t.mock.method(globalThis, 'setInterval', callback => {
+    ticks.push(callback);
+    return { unref() {} };
+  });
+  const settle = () => new Promise(resolve => setImmediate(resolve));
+  const options = { now: () => clock, streamCompletion: async ({ messages }) => {
+    runs++;
+    assert.match(JSON.stringify(messages), /Retained interval prompt/);
+    return { content: 'Restored interval result', finish_reason: 'stop' };
+  } };
+  const empty = fixture({ ...options, backgroundRoomPump: true });
+  empty.adapter.restoreScheduledRooms();
+  assert.equal(empty.storage.values.size, 0);
+  assert.equal(ticks.length, 0);
+
+  const saved = fixture(options);
+  const profile = (await request(saved.adapter, '/tbo')).data.items[0];
+  const threadId = profile.root_thread_id;
+  const path = '/tbo/' + profile.id + '/automations';
+  await request(saved.adapter, '/tbo/' + profile.id + '/messaging-room', 'POST');
+  const { data: schedule } = await request(saved.adapter, path, 'POST', {
+    name: 'Retained interval', prompt: 'Retained interval prompt', interval_minutes: 1,
+  });
+  clock = schedule.next_at;
+
+  const homeOptions = { ...options, storage: saved.storage, backgroundRoomPump: true };
+  const foreign = fixture(homeOptions);
+  foreign.setIdentity({ accountId: 'different-account', userId: 'different-user' });
+  foreign.adapter.restoreScheduledRooms();
+  assert.equal(ticks.length, 0);
+  let canUseDot = false;
+  const home = fixture({ ...homeOptions, hasDotAccess: () => canUseDot });
+  home.adapter.restoreScheduledRooms();
+  assert.equal(ticks.length, 0);
+  canUseDot = true;
+  const retained = home.appServer.threads.get(threadId);
+  home.appServer.threads.delete(threadId);
+  home.adapter.restoreScheduledRooms();
+  assert.equal(ticks.length, 0);
+  home.appServer.threads.set(threadId, retained);
+  home.adapter.restoreScheduledRooms();
+  home.adapter.restoreScheduledRooms();
+  assert.equal(ticks.length, 1);
+
+  online = false;
+  ticks[0]();
+  await settle();
+  assert.equal(runs, 0);
+  online = true;
+  const done = waitDotTurn(home.appServer, threadId);
+  ticks[0]();
+  ticks[0]();
+  const completed = await done;
+  assert.equal(completed.clientUserMessageId, 'dot-automation-' + schedule.id + '-' + schedule.next_at);
+  assert.equal(completed.status, 'completed');
+  assert.equal(runs, 1);
+
+  const reloaded = fixture(homeOptions);
+  reloaded.adapter.restoreScheduledRooms();
+  assert.equal(ticks.length, 2);
+  ticks[1]();
+  await settle();
+  assert.equal(runs, 1);
+  const { data: { items: [view] } } = await request(reloaded.adapter, path);
+  assert.equal(view.last_run.output, 'Restored interval result');
+  assert.equal((await request(reloaded.adapter, path + '/' + schedule.id, 'PATCH', { enabled: false })).data.enabled, false);
+  clock = view.next_at;
+  ticks[1]();
+  await settle();
+  fixture(homeOptions).adapter.restoreScheduledRooms();
+  assert.equal(ticks.length, 2);
+  assert.equal(runs, 1);
+});
+
 test('a schedule made from the original Dot composer can run and stop through native automation actions', async () => {
   const env = fixture({ streamCompletion: async ({ messages }) => {
     assert.match(JSON.stringify(messages.at(-1)), /Native automation prompt/);

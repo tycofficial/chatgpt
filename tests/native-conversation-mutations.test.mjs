@@ -55,6 +55,28 @@ test('single title/archive/star changes use the same rollback while retaining ac
   const result = await api(env, '/conversation/' + thread.id, { title: 'Changed title', is_archived: true, is_starred: true }); assert.equal(result.response.status, 507); assert.equal(thread.name, 'Original neutral title'); assert.equal(thread.archived, false); assert.equal(Object.hasOwn(thread.adapterMetadata, 'isStarred'), false); assert.strictEqual(env.server.getThread(thread.id), thread); assert.equal(env.storage.getItem(env.server.storageKey), before); assert.equal(env.events.length, 0);
 });
 
+test('native Codex title changes persist across reload and only notify after successful storage', () => {
+  const env = fixture(), thread = rpc(env, 'codex');
+  const events = [];
+  env.server.subscribe(event => events.push(event));
+  const rename = name => env.server.dispatch('thread/name/set', { threadId: thread.id, name });
+  assert.throws(() => rename('   '), { code: -32602 });
+  const change = rename('  Native Codex title  ');
+  assert.deepEqual(change.result, {});
+  assert.deepEqual(events, []);
+  change.afterReply();
+  assert.deepEqual(events, [{ method: 'thread/name/updated', params: { threadId: thread.id, threadName: 'Native Codex title' } }]);
+  assert.equal(rename('Native Codex title').afterReply, undefined);
+  assert.equal(fixture({ storage: env.storage }).server.getThread(thread.id).name, 'Native Codex title');
+
+  const saved = env.storage.getItem(env.server.storageKey);
+  env.storage.failWhen = () => true;
+  assert.throws(() => rename('Uncommitted title'), /history could not be saved/);
+  assert.equal(thread.name, 'Native Codex title');
+  assert.equal(env.storage.getItem(env.server.storageKey), saved);
+  assert.equal(events.length, 1);
+});
+
 test('archive preserves an actively running controller and its thread reference', async () => {
   let release, entered; const started = new Promise(resolve => entered = resolve);
   const env = fixture({ completion: () => { entered(); return new Promise(resolve => release = () => resolve({ content: 'Actual active fixture completed.', finish_reason: 'stop' })); } });

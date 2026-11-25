@@ -444,6 +444,17 @@ export class LocalAppServer {
         return { result: this.startResponse(thread), afterReply: () => this.notify('thread/started', { thread: this.snapshot(thread, false) }) };
       }
       case 'thread/read': return { result: { thread: this.snapshot(this.getThread(params.threadId), params.includeTurns === true) } };
+      case 'thread/name/set': {
+        const thread = this.getThread(params.threadId);
+        const name = typeof params.name === 'string' ? params.name.trim().slice(0, 200) : '';
+        if (!name) throw new RpcError(-32602, 'A thread name is required');
+        if (thread.name === name) return { result: {} };
+        const previousName = thread.name;
+        thread.name = name;
+        try { this.persist(); }
+        catch (error) { thread.name = previousName; throw error; }
+        return { result: {}, afterReply: () => this.notify('thread/name/updated', { threadId: thread.id, threadName: name }) };
+      }
       case 'thread/resume': {
         const thread = this.getThread(params.threadId), selected = this.selection(params, thread);
         this.updateSelection(thread, selected, params);

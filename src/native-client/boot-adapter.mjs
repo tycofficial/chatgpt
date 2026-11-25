@@ -37,7 +37,18 @@ globalThis.__originalClientProbe = boundary.diagnostics;
 const threadOnEntry = location.pathname.match(/\/(?:c|conversation|tasks|local)\/([^/]+)\/?$/)?.[1];
 const needsHistoryBeforeMount = threadOnEntry && !timingServer.threads.has(threadOnEntry);
 const initialHistory = initializeLocalAccountHistory({ threadOnEntry });
-void initialHistory.then(() => initializeLocalPublishedResources()).catch(() => {});
+const restoreDotSchedules = localDotAdapter.restoreScheduledRooms;
+queueMicrotask(restoreDotSchedules);
+globalThis.addEventListener('codex-site-account-changed', restoreDotSchedules);
+timingServer.subscribe(event => {
+  if (event.method === 'thread/started' && timingServer.threads.get(event.params?.thread?.id)?.adapterMetadata?.conversationOrigin === 'dot') {
+    restoreDotSchedules();
+  }
+});
+void initialHistory.then(() => {
+  restoreDotSchedules();
+  return initializeLocalPublishedResources();
+}).catch(() => {});
 installSyntheticDocumentState(localCodexAdapter.mergeConfiguration);
 
 const plan = await (await fetch('/__prototype/entry-plan.json')).json();

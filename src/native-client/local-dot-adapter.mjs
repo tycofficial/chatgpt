@@ -530,6 +530,22 @@ export function createLocalDotAdapter({
     activeRooms.set(id, { owner, timer: null });
     queueMicrotask(() => pumpRoom(id));
   }
+  function restoreScheduledRooms() {
+    if (!backgroundRoomPump) return;
+    try {
+      const session = identity(false);
+      if (!session) return;
+      for (const row of state(session).profiles) {
+        const id = row.messaging_room_id;
+        if (typeof id !== 'string' || !row.thread_ids.includes(id) ||
+            appServer?.threads?.get(id)?.adapterMetadata?.conversationOrigin !== 'dot') continue;
+        if (Array.isArray(row.room_automations) && row.room_automations.some(schedule =>
+          schedule?.enabled === true && schedule.interval_minutes > 0 && Number.isFinite(schedule.next_at))) activateRoom(session, id);
+      }
+    } catch (cause) {
+      diagnostic('automation-restore-error', { code: cause?.code ?? 'LOCAL_DOT_AUTOMATION_RESTORE' });
+    }
+  }
   function enqueueMessage(session, id, next) {
     const { data, row, thread } = ownedRoom(session, id);
     if (row.room_command_log?.some(value => value.message.request_id === next.requestId)) throw error('此 Dot 消息请求已使用。', 409, 'LOCAL_DOT_REQUEST_CONFLICT');
@@ -1510,6 +1526,6 @@ export function createLocalDotAdapter({
     };
   }
   return { handle, createRpcFacade, subscribeRoomMessages, complete, getLocalDotPolicy, adaptCapabilityAtoms, browserVoiceContext, submitBrowserVoice,
-    cloudComputerContext, prepareCloudTaskExecutor,
+    cloudComputerContext, prepareCloudTaskExecutor, restoreScheduledRooms,
     provenance: Object.freeze({ provider: LOCAL_DOT_SOURCE, profileNamespace: '/tbo', cloudComputer: false, defaultAppearance: LOCAL_DOT_DEFAULT_APPEARANCE }) };
 }
