@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createLocalReadAloudSource, createBrowserReadAloudController, createNativeReadAloudBindings } from '../src/native-client/local-native-read-aloud.mjs';
+import { createLocalDotBrowserVoice } from '../src/native-client/local-dot-browser-voice.mjs';
+import { createLocalDotRecognition } from '../src/native-client/local-dot-transcription.mjs';
 const identity = () => ({ accountId: 'neutral-account', userId: 'neutral-user', accountUserId: 'neutral-member' });
 const copy = value => structuredClone(value);
 const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
@@ -140,4 +142,120 @@ test('empty, throwing, cloud-only or unavailable voice catalog still uses real b
     assert.equal(utterance.voice, undefined, 'Leave browser default untouched; do not select a cloud voice'); assert.equal(utterance.text, f.thread.turns[0].items[0].text); assert.deepEqual(f.states, ['loading']);
     utterance.onstart(); utterance.onend(); assert.deepEqual(f.states, ['loading', 'playing', 'idle']); assert.equal(f.events.length, 0); f.controller.dispose();
   }
+});
+
+test('Dot voice releases the owned recorder or speech immediately when site eligibility changes', async t => {
+  for (const stage of ['recording', 'speaking']) await t.test(stage, async t => {
+    const target = new EventTarget();
+    const owner = { ...identity(), profileId: 'neutral-dot', threadId: 'neutral-thread' };
+    let authorized = owner, recorder, recorderAborts = 0;
+    const synthesis = speechFixture(), states = [];
+    const voice = createLocalDotBrowserVoice({
+      adapter: { browserVoiceContext: () => authorized, submitBrowserVoice: async () => 'Saved neutral answer' },
+      browser: target, secureContext: true, synthesis: synthesis.engine, Utterance: synthesis.Utterance,
+      Recognition: class {
+        start() { recorder = this; this.onstart(); }
+        abort() { recorderAborts++; }
+      },
+    });
+    t.after(() => target.dispatchEvent(new Event('pagehide')));
+    assert(voice.start(owner, { onChange: state => states.push(state?.phase ?? null) }));
+    if (stage === 'speaking') {
+      recorder.onresult({ results: [{ 0: { transcript: 'Neutral synthetic input' }, isFinal: true }] });
+      recorder.onend();
+      await new Promise(resolve => setImmediate(resolve));
+      assert.equal(synthesis.spoken.length, 1);
+    }
+
+    authorized = { ...owner };
+    target.dispatchEvent(new Event('codex-site-account-changed'));
+    assert.deepEqual(states, ['starting', 'active']);
+    assert.equal(recorderAborts, 0);
+    assert.equal(synthesis.counts().cancels, 0);
+
+    authorized = null;
+    target.dispatchEvent(new Event('codex-site-account-changed'));
+    assert.deepEqual(states, ['starting', 'active', null]);
+    assert.equal(recorderAborts, stage === 'recording' ? 1 : 0);
+    assert.equal(synthesis.counts().cancels, stage === 'speaking' ? 1 : 0);
+    target.dispatchEvent(new Event('codex-site-account-changed'));
+    assert.equal(states.length, 3);
+  });
+});
+
+function dotCaptureFixture(t, { resume = async () => {}, permission, failWorker = false } = {}) {
+  const counters = { mediaRequests: 0, trackStops: 0, contextsClosed: 0, workers: 0, meters: 0 };
+  t.mock.method(globalThis, 'setInterval', () => { counters.meters++; });
+  const browser = {
+    navigator: { mediaDevices: { async getUserMedia() {
+      counters.mediaRequests++;
+      await permission;
+      return { getTracks: () => [{ stop() { counters.trackStops++; } }] };
+    } } },
+    AudioContext: class {
+      state = 'suspended';
+      async resume() { await resume(); this.state = 'running'; }
+      async close() { this.state = 'closed'; counters.contextsClosed++; }
+      createAnalyser() { return { fftSize: 0 }; }
+      createMediaStreamSource() { return { connect() {} }; }
+    },
+    MediaRecorder: class {
+      state = 'inactive';
+      start() { this.state = 'recording'; }
+      stop() { this.state = 'inactive'; }
+    },
+    Worker: class {
+      constructor() {
+        counters.workers++;
+        if (failWorker) throw new DOMException('Fixture module Worker blocked', 'SecurityError');
+      }
+      terminate() {}
+    },
+    performance: { now: () => 0 },
+  };
+  const local = createLocalDotRecognition(browser);
+  const recorder = new local.Recognition(), events = [];
+  recorder.onstart = () => events.push('started');
+  recorder.onerror = event => events.push(event.error);
+  t.after(() => { recorder.abort(); local.dispose(); });
+  return { recorder, events, counters };
+}
+
+test('Dot voice waits for audio readiness and releases a late microphone on failed AudioContext resume', async t => {
+  const permission = Promise.withResolvers();
+  const blocked = dotCaptureFixture(t, {
+    permission: permission.promise,
+    resume: async () => { throw new DOMException('Fixture audio context blocked', 'NotAllowedError'); },
+  });
+  blocked.recorder.start();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(blocked.events, ['audio-context-unavailable']);
+  assert.equal(blocked.counters.contextsClosed, 1);
+  permission.resolve();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(blocked.counters.mediaRequests, 1);
+  assert.equal(blocked.counters.trackStops, 1);
+  assert.equal(blocked.counters.workers, 0);
+  assert.equal(blocked.counters.meters, 0);
+});
+
+test('Dot voice does not warm a worker or meter after an immediate stop in the started callback', async t => {
+  const ready = Promise.withResolvers();
+  const f = dotCaptureFixture(t, { resume: () => ready.promise });
+  f.recorder.onstart = () => { f.events.push('started'); f.recorder.abort(); };
+  f.recorder.start();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(f.events, []);
+  ready.resolve();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(f.events, ['started']);
+  assert.deepEqual(f.counters, { mediaRequests: 1, trackStops: 1, contextsClosed: 1, workers: 0, meters: 0 });
+});
+
+test('Dot voice reports a blocked local worker as transcription failure and releases capture', async t => {
+  const f = dotCaptureFixture(t, { failWorker: true });
+  f.recorder.start();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(f.events, ['started', 'local-transcription-failed']);
+  assert.deepEqual(f.counters, { mediaRequests: 1, trackStops: 1, contextsClosed: 1, workers: 1, meters: 0 });
 });

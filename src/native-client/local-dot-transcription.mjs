@@ -85,8 +85,14 @@ export function createLocalDotRecognition(browser = globalThis) {
       const capture = { context, stream: null, recorder: null, tick: null, decoding: false };
       this.#capture = capture;
       // Resume inside the original Start call button's user gesture.
-      void context.resume().catch(() => {});
-      void this.#record(capture);
+      let resumed;
+      try {
+        resumed = context.resume().catch(() => this.#fail(capture, 'audio-context-unavailable'));
+      } catch {
+        this.#fail(capture, 'audio-context-unavailable');
+        return;
+      }
+      void this.#record(capture, resumed);
     }
 
     abort() {
@@ -105,11 +111,17 @@ export function createLocalDotRecognition(browser = globalThis) {
       if (capture.decoding && pending) stopWorker();
     }
 
-    async #record(capture) {
+    async #record(capture, resumed) {
       try {
         const stream = await browser.navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true } });
         if (this.#capture !== capture) { stopMedia(stream); return; }
         capture.stream = stream;
+        await resumed;
+        if (this.#capture !== capture) return;
+        if (capture.context.state !== 'running') {
+          this.#fail(capture, 'audio-context-unavailable');
+          return;
+        }
         const recorder = new browser.MediaRecorder(stream);
         capture.recorder = recorder;
         const analyser = capture.context.createAnalyser();
@@ -129,7 +141,12 @@ export function createLocalDotRecognition(browser = globalThis) {
         };
         recorder.start();
         this.onstart?.();
-        startWorker();
+        if (this.#capture !== capture) return;
+        try { startWorker(); }
+        catch {
+          this.#fail(capture, 'local-transcription-failed');
+          return;
+        }
         capture.tick = setInterval(() => {
           analyser.getFloatTimeDomainData(meter);
           const now = browser.performance.now();

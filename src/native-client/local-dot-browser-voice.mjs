@@ -25,7 +25,11 @@ export function createLocalDotBrowserVoice({
   const Recorder = Recognition ?? transcriber?.Recognition ?? browser.SpeechRecognition ?? browser.webkitSpeechRecognition;
   let active = null;
   const available = () => hasLocalDotBrowserVoice({ Recognition: Recorder, synthesis, Utterance, secureContext, localTranscription: Boolean(transcriber) });
-  const current = session => active === session && sameContext(session.context, adapter.browserVoiceContext(session.context.threadId));
+  const current = session => {
+    if (active !== session) return false;
+    try { return sameContext(session.context, adapter.browserVoiceContext(session.context.threadId)); }
+    catch { return false; }
+  };
   const publish = session => session.onChange({ phase: session.connectedAtMs == null ? 'starting' : 'active',
     connectedAtMs: session.connectedAtMs, microphoneMuted: session.microphoneMuted });
   function releaseRecorder(session) {
@@ -40,6 +44,7 @@ export function createLocalDotBrowserVoice({
     active = null;
     clearTimeout(session.timer);
     browser.removeEventListener?.('pagehide', session.pagehide);
+    browser.removeEventListener?.('codex-site-account-changed', session.accountChanged);
     session.controller.abort(new DOMException('Dot voice ended', 'AbortError'));
     releaseRecorder(session);
     transcriber?.dispose();
@@ -116,7 +121,8 @@ export function createLocalDotBrowserVoice({
         const denied = event.error === 'not-allowed' || event.error === 'service-not-allowed';
         const message = denied ? '浏览器未允许 Dot 使用语音识别。' :
           event.error === 'audio-capture' ? '浏览器没有找到可用的麦克风。' :
-          event.error === 'local-transcription-failed' ? '浏览器未能转录这段语音。' :
+          event.error === 'audio-context-unavailable' ? '浏览器未能启用录音音频。请重新发起通话。' :
+          event.error === 'local-transcription-failed' ? '浏览器未能完成本地语音转写。' :
           '浏览器语音识别暂不可用（' + String(event.error ?? 'unknown').slice(0, 40) + '）。';
         finish(session, Object.assign(new Error(message), { permissionDenied: denied }));
       };
@@ -141,7 +147,9 @@ export function createLocalDotBrowserVoice({
     const session = { context, onChange, onError, controller: new AbortController(), microphoneMuted: false,
       connectedAtMs: null, answering: false, recorder: null, utterance: null, timer: null };
     session.pagehide = () => finish(session);
+    session.accountChanged = () => { if (!current(session)) finish(session); };
     browser.addEventListener?.('pagehide', session.pagehide, { once: true });
+    browser.addEventListener?.('codex-site-account-changed', session.accountChanged);
     active = session;
     publish(session);
     listen(session);
