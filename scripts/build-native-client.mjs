@@ -180,6 +180,8 @@ const pagePath = location.pathname.replace(/\\/index\\.html$/, '/').replace(/\\/
 const authEntry = getSiteAuthEntryKind(location.href, rootURL);
 const homeEntry = !authEntry && pagePath === rootURL.pathname.replace(/\\/$/, '');
 const settingsEntry = !authEntry && pagePath.startsWith(new URL('settings/', rootURL).pathname);
+const conversationEntry = !authEntry && pagePath.startsWith(rootURL.pathname) &&
+ /^(?:c|conversation|tasks|local)\\/[^/]+$/.test(pagePath.slice(rootURL.pathname.length));
 if (authEntry === 'logout') {
  await siteAccount.logoutSiteAccount({waitForRemote:true});
  siteAccount.startSiteGuestSession();
@@ -201,6 +203,7 @@ else {
 }
 if (homeEntry) startup?.waitForComposer();
 else if (settingsEntry) startup?.waitForSettings();
+else if (conversationEntry) startup?.waitForConversation();
 else startup?.ready();
 } catch (error) { showStartupError(error); }
 `;
@@ -304,6 +307,8 @@ const startupGuard = assets => `<script>(function(entries){
  var resources=new Map(entries),seen=new Set(),timed=new Set();
  var total=entries.reduce(function(a,entry){return a+entry[1]},0),received=0,networkWeight=0,networkStart=Infinity,networkEnd=0;
  var lastProgress=performance.now();
+ var composerSelector='main [contenteditable="true"], main textarea, [contenteditable="true"][role="textbox"]';
+ var conversationContent='main [data-conversation-role], main [data-message-author-role], main[role="alert"]:not(#site-load-error), main:not(#site-load-error) [role="alert"]';
  function hideProgress(){
   progress=progress||document.getElementById('site-load-progress');
   if(progress&&progress.parentNode)progress.parentNode.removeChild(progress);
@@ -391,8 +396,13 @@ const startupGuard = assets => `<script>(function(entries){
   }
   renderObserver=new MutationObserver(schedule);
   renderObserver.observe(document,{childList:true,subtree:true,characterData:true,attributes:true,
-   attributeFilter:['class','hidden','style','contenteditable','disabled','readonly','inert','aria-disabled','aria-readonly','aria-hidden']});
+   attributeFilter:['class','hidden','style','contenteditable','disabled','readonly','inert','aria-disabled','aria-readonly','aria-hidden',
+    'role','data-conversation-role','data-message-author-role']});
   schedule();
+ }
+ function usableComposer(node){
+  if(node.disabled||node.readOnly||node.closest('[aria-disabled="true"],[aria-readonly="true"]'))return false;
+  return node.tagName==='TEXTAREA'||node.isContentEditable;
  }
  var state=window.__TYC_PAGE_START__={
   loadedResource:resourceReady,
@@ -422,9 +432,11 @@ const startupGuard = assets => `<script>(function(entries){
    watcher=setInterval(collect,750);
   },
   waitForComposer:function(){
-   waitForVisibleContent('main [contenteditable="true"], main textarea, [contenteditable="true"][role="textbox"]',function(node){
-    if(node.disabled||node.readOnly||node.closest('[aria-disabled="true"],[aria-readonly="true"]'))return false;
-    return node.tagName==='TEXTAREA'||node.isContentEditable;
+   waitForVisibleContent(composerSelector,usableComposer);
+  },
+  waitForConversation:function(){
+   waitForVisibleContent(composerSelector+', '+conversationContent,function(node){
+    return node.matches(conversationContent)?Boolean(node.textContent.trim()):usableComposer(node);
    });
   },
   waitForSettings:function(){

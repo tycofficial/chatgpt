@@ -222,6 +222,26 @@ test('the homepage keeps its progress across a document mount until the composer
   assert.equal(fixture.progress.isConnected, false);
 });
 
+test('a conversation stays at startup until its transcript, usable composer, or error is visible', () => {
+  const loaded = { getClientRects: () => [{}], visibility: 'visible' };
+  for (const resolved of [
+    { ...loaded, matches: selector => selector.includes('[data-conversation-role]'), textContent: 'Saved reply' },
+    { ...loaded, matches: selector => selector.includes('[role="alert"]'), textContent: 'Conversation unavailable' },
+    { ...loaded, matches: () => false },
+  ]) {
+    const fixture = startupFixture();
+    fixture.state.attach(fixture.notice);
+    fixture.state.waitForConversation();
+    fixture.mutate({ ...loaded, matches: () => true, textContent: '   ' });
+    assert.notEqual(fixture.gauge.value, '100');
+    fixture.mutate({ ...loaded, matches: () => false, disabled: true });
+    assert.notEqual(fixture.gauge.value, '100');
+    fixture.mutate(resolved);
+    assert.equal(fixture.gauge.value, '100');
+    assert.equal(fixture.progress.isConnected, false);
+  }
+});
+
 test('settings keeps measured progress until the settings content has rendered', () => {
   const frames = [];
   const fixture = startupFixture({ requestFrame: callback => frames.push(callback) });
