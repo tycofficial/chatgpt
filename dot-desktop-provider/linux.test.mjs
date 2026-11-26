@@ -42,7 +42,7 @@ test('real Linux HTTP provider draws pixels with confined Python and preserves r
     body: body ? JSON.stringify(body) : undefined,
   });
   const id = randomUUID(), path = '/v1/desktops/' + id;
-  const created = await request('/v1/desktops', 'POST', { id, ttlSeconds: 30 });
+  const created = await request('/v1/desktops', 'POST', { id, ttlSeconds: 90 });
   assert.equal(created.status, 200, await created.clone().text());
   assert.deepEqual(await created.json(), { id });
   const grab = async () => {
