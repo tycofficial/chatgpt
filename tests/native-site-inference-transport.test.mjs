@@ -499,6 +499,55 @@ test('interleaved public summaries and assistant messages can replay the same sa
   assert.equal(posts, 1);
 });
 
+test('reconnecting the current conversation reads its admitted request once for the original owner', { timeout: 4000 }, async () => {
+  const storage = memory(), savedFirstText = deferred(), calls = [];
+  const partial = sse('response.output_text.delta', { output_index: 0, delta: 'First paragraph.' });
+  const fullText = 'First paragraph. Restored ending.';
+  let liveBody, online = true;
+  const client = transport(async (url, options) => {
+    if (options.method === 'POST') {
+      calls.push(['POST', options.headers['X-Chat-Request-Id']]);
+      return streamResponse(new ReadableStream({ start(stream) {
+        liveBody = stream;
+        stream.enqueue(new TextEncoder().encode(partial));
+      } }));
+    }
+    const id = url.pathname.split('/').at(-1);
+    calls.push([options.method ?? 'GET', id]);
+    return receipt(id, { data: [partial, finish([textItem('final', fullText)])] });
+  }, {
+    getSessionToken: async () => online ? 'fixture-bearer' : null,
+    describeUnverifiedAccount: () => 'Temporarily offline',
+  });
+  const complete = options => streamCompletion({
+    ...options, responsesTransport: (data, wire) => client.request(data, { ...options.transportContext, signal: wire.signal }),
+  });
+  const server = createServer(storage, complete);
+  server.subscribe(({ method, params }) => {
+    if (method === 'item/agentMessage/delta' && params.delta === 'First paragraph.') savedFirstText.resolve();
+  });
+  const original = launch(server);
+  await savedFirstText.promise;
+  online = false;
+  liveBody.error(new TypeError('Load failed'));
+  const interrupted = await original.done;
+  assert.equal(interrupted.adapterMetadata.lastFailure.code, 'SITE_INFERENCE_CONNECTION_UNAVAILABLE');
+  assert.equal(interrupted.adapterMetadata.resumePolicy, 'automatic');
+  assert.deepEqual(calls, [['POST', uuid(1)]]);
+
+  online = true;
+  server.resumeAcceptedSiteTurn(original.threadId, 'different-owner');
+  assert.equal(server.running.has(original.threadId), false);
+  const done = terminal(server, original.threadId);
+  server.resumeAcceptedSiteTurn(original.threadId, 'test-user');
+  server.resumeAcceptedSiteTurn(original.threadId, 'test-user');
+  const restored = await done;
+  assert.equal(restored.id, original.turn.id);
+  assert.equal(restored.status, 'completed');
+  assert.deepEqual(restored.items.filter(item => item.type === 'agentMessage').map(item => item.text), [fullText]);
+  assert.deepEqual(calls, [['POST', uuid(1)], ['GET', uuid(1)]]);
+});
+
 test('a confirmed interrupted receipt keeps its saved text and rejects stale resume', { timeout: 4000 }, async () => {
   const storage = memory();
   const savedText = 'Saved text before the interruption.';

@@ -1,7 +1,7 @@
 /** Original app-server protocol over real, resumable local execution. */
 import { hasUncertainPlainResponse, plainInterruptionMessage, runAgentTurn } from './agent-turn-runner.mjs';
 import { readWebSearchIntent, interruptHostedSearch } from './local-web-search.mjs';
-import { terminalSiteInferenceReason } from './site-inference-transport.mjs';
+import { isSiteInferenceCheckpoint, terminalSiteInferenceReason } from './site-inference-transport.mjs';
 import { readClassicBranchRequest, getClassicExecutionThread } from './classic-response-branches.mjs';
 import { parseClassicInputMessages } from './classic-input-messages.mjs';
 import { compactPreparedUserContent, isProviderContent, needsPreparedInputStorage } from './prepared-input-store.mjs';
@@ -796,6 +796,17 @@ export class LocalAppServer {
     if (this.now() - running.lastSavedAt >= (this.agentOptions.persistIntervalMs ?? 1000)) { this.persist(); running.lastSavedAt = this.now(); }
   }
   async runTurn(running) { return runAgentTurn(this, running); }
+  resumeAcceptedSiteTurn(threadId, accountId) {
+    const thread = this.threads.get(threadId);
+    const saved = thread?.turns.at(-1)?.adapterMetadata;
+    const request = saved?.checkpoint?.inFlight?.transport;
+    // An online event can reattach an admitted request for this account.
+    // The normal resume path handles new work and uncertain admissions.
+    if (!accountId || !saved?.lastFailure?.requiresTransportResume || !isSiteInferenceCheckpoint(request) ||
+        request.ownerId !== accountId || !Number.isSafeInteger(request.startedAt) || request.startedAt <= 0 ||
+        request.consumerFinished || request.cancelRequested || request.state === 'cancelled') return;
+    this.resumeAutomaticCheckpoint(thread)?.();
+  }
   resumeAutomaticCheckpoint(thread) {
     const turn = thread.turns.at(-1), saved = turn?.adapterMetadata;
     if (this.running.has(thread.id) || !saved?.resumable || saved.resumePolicy !== 'automatic' ||

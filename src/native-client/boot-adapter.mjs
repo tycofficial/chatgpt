@@ -34,7 +34,12 @@ void refreshSiteBillingReturn().catch(() => {});
 globalThis.__originalClientProbe = boundary.diagnostics;
 // A fresh-device deep link needs its conversation before the router reads it.
 // A home page can render while the same owner-scoped sync and attachment restore run.
-const threadOnEntry = location.pathname.match(/\/(?:c|conversation|tasks|local)\/([^/]+)\/?$/)?.[1];
+const currentThreadId = () => location.pathname.match(/\/(?:c|conversation|tasks|local)\/([^/]+)\/?$/)?.[1];
+const threadOnEntry = currentThreadId();
+globalThis.addEventListener('online', () => {
+  const threadId = currentThreadId();
+  if (threadId) timingServer.resumeAcceptedSiteTurn(threadId, getSiteAccount()?.id);
+});
 const needsHistoryBeforeMount = threadOnEntry && !timingServer.threads.has(threadOnEntry);
 const initialHistory = initializeLocalAccountHistory({ threadOnEntry });
 const restoreDotSchedules = localDotAdapter.restoreScheduledRooms;
