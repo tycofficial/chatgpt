@@ -1,12 +1,12 @@
 name: Verify private Linux Dot desktop provider
 on:
   push:
-    branches: [qa/linux-dot-desktop-provider]
+    branches: [qa/dot-strict-ubuntu26-423b58c]
 permissions:
   contents: read
 jobs:
   linux:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v6
@@ -21,6 +21,8 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends xvfb libx11-6 libxtst6 bubblewrap python3
       - name: Check source syntax and exercise private desktop behavior
+        env:
+          QA_REQUIRE_DOT_SANDBOX: '1'
         run: |
           node --check dot-desktop-provider/index.mjs
           node --check dot-desktop-provider/linux-desktop.mjs
