@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import path from 'node:path';
 import vm from 'node:vm';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -98,15 +99,60 @@ test('the packaged entry mounts a client root on the static Pages document', () 
   assert.equal(embedded.mountMode, plan.mountMode);
 });
 
-function startupFixture({ stylesheet, requestFrame = callback => callback() } = {}) {
+const builder = fs.readFileSync(new URL('../scripts/build-native-client.mjs', import.meta.url), 'utf8');
+const startupScript = html => html.match(/<script>([\s\S]*?)<\/script>/)[1];
+const startupWeights = script => JSON.parse(script.slice(script.lastIndexOf('})(') + 3, -1));
+
+test('source separates staged native preloads from the eager boot, auth and stylesheet', async () => {
+  const root = fileURLToPath(new URL('../', import.meta.url));
+  const plan = JSON.parse(fs.readFileSync(path.join(root, 'native-client/entry-plan.json'), 'utf8'));
+  const release = '0123456789abcdef', deploymentBase = '/chatgpt/';
+  const originalOnSite = url => deploymentBase + 'original-client/public/chatgpt.com' + url;
+  const cssAsset = originalOnSite(plan.stylesheet).slice(deploymentBase.length);
+  // Render the real shell declarations without running the packaging writes.
+  const declarations = builder.slice(builder.indexOf('const ownModule ='), builder.indexOf('const html = entryHTML();'));
+  const [home, auth] = await vm.runInNewContext('(async () => {\n' + declarations +
+    '\nreturn [entryHTML(), entryHTML({ auth: true })];\n})()', {
+    fs: fs.promises, path, root, plan, release, deploymentBase, originalOnSite, cssAsset,
+    registrationEntry: plan.registrationEntry, upstreamSprite: plan.iconSprite, sourceBuild: plan.sourceBuild, localCSS: '',
+  });
+  const stage = home.match(/<template id="site-native-module-preloads">([\s\S]*?)<\/template>/);
+  assert.ok(stage);
+  assert.equal(home.split(stage[0]).length, 2);
+  assert.doesNotMatch(auth, /<template|rel="stylesheet"/);
+  const preloads = html => [...html.matchAll(/<link rel="modulepreload" href="([^"]+)"([^>]+)>/g)]
+    .map(([, href, attributes]) => {
+      assert.equal(attributes, ' crossorigin="anonymous" onload="window.__TYC_PAGE_START__.loadedResource(this.href)"');
+      return href;
+    });
+  const expectedAuth = ['bootstrap.mjs', 'startup-compatibility.mjs', 'site-account.mjs', 'site-signout.mjs', 'site-paths.mjs']
+    .map(file => deploymentBase + 'native-client/' + file + '?v=' + release);
+  const expectedEager = [...expectedAuth, ...['native-client/boot-adapter.mjs', 'native-client/service-boundary.mjs', 'runtime.js',
+    'model-catalog.js'].map(file => deploymentBase + file + '?v=' + release), originalOnSite(plan.runtime)];
+  const expectedStage = [deploymentBase + 'native-client/' + plan.registrationEntry.slice(2),
+    ...[...new Set([...plan.registrationChunks, plan.manifest, ...Object.values(plan.initialRoutes)])]
+      .filter(file => file !== plan.runtime).map(originalOnSite)];
+  assert.deepEqual(preloads(auth), expectedAuth);
+  assert.deepEqual(preloads(home.replace(stage[0], '')), expectedEager);
+  assert.deepEqual(preloads(stage[1]).sort(), expectedStage.sort());
+  assert.match(home, /<link id="site-main-style" rel="stylesheet"/);
+  for (const [markup, expected] of [[home, [...expectedEager, ...expectedStage, deploymentBase + cssAsset]], [auth, expectedAuth]]) {
+    assert.match(markup, /<noscript>[\s\S]*此页面需要浏览器启用 JavaScript。<\/p><\/noscript>/);
+    const entries = startupWeights(startupScript(markup));
+    assert.deepEqual(entries.map(([href]) => href).sort(), [...expected].sort());
+    for (const [href, bytes] of entries) {
+      assert.equal(bytes, fs.statSync(path.join(root, href.slice(deploymentBase.length).split('?')[0])).size);
+    }
+  }
+});
+
+function startupFixture({ stylesheet, requestFrame = callback => callback(), readyState = 'loading', stagePreloads = false } = {}) {
   const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-  const packagedGuard = html.match(/<script>([\s\S]*?)<\/script>/)[1];
-  const weights = JSON.parse(packagedGuard.slice(packagedGuard.lastIndexOf('})(') + 3, -1));
-  const builder = fs.readFileSync(new URL('../scripts/build-native-client.mjs', import.meta.url), 'utf8');
+  const weights = startupWeights(startupScript(html));
   const declaration = builder.slice(builder.indexOf('const startupGuard ='), builder.indexOf('const startupBody ='));
-  const messages = builder.match(/^const (?:errorMessage|delayedMessage) = [^\r\n]+$/gm).join('\n');
+  const settings = builder.match(/^const (?:errorMessage|delayedMessage|stagedPreloadsId) = [^\r\n]+$/gm).join('\n');
   // Exercise the builder's exact guard without regenerating the saved client.
-  const guard = vm.runInNewContext(messages + '\n' + declaration + '\nstartupGuard(weights)', { weights }).slice(8, -9);
+  const guard = vm.runInNewContext(settings + '\n' + declaration + '\nstartupGuard(weights)', { weights }).slice(8, -9);
   const message = {};
   const notice = { hidden: true, querySelector: () => message };
   const connectedNode = () => ({ get isConnected() { return this.parentNode != null; } });
@@ -122,7 +168,15 @@ function startupFixture({ stylesheet, requestFrame = callback => callback() } = 
     },
     removeChild(node) { node.parentNode = null; },
   };
-  const head = { appendChild(node) { node.parentNode = head; } };
+  let onDOMReady, appended = 0;
+  const preloadFragment = {};
+  let template = stagePreloads ? { content: preloadFragment, remove() { template = undefined; } } : undefined;
+  const head = {
+    appendChild(node) {
+      if (node === preloadFragment) appended++;
+      else node.parentNode = head;
+    },
+  };
   body.appendChild(notice);
   body.appendChild(progress);
   head.appendChild(progressStyle);
@@ -144,13 +198,19 @@ function startupFixture({ stylesheet, requestFrame = callback => callback() } = 
     setTimeout(fn, delay) { callback = fn; timeout = delay; return 1; },
     clearTimeout() { callback = null; },
     document: {
-      body, head, addEventListener() {},
+      body, head, readyState,
+      addEventListener(type, handler, options) {
+        assert.equal(type, 'DOMContentLoaded');
+        assert.equal(options.once, true);
+        onDOMReady = handler;
+      },
       querySelectorAll: () => composer ? [composer] : [],
       getElementById: id => ({
         'site-load-error': notice,
         'site-load-progress': progress,
         'site-load-progress-style': progressStyle,
         'site-main-style': stylesheet,
+        'site-native-module-preloads': template,
       })[id],
     },
     location: { origin: 'https://fixture.test', href: 'https://fixture.test/chatgpt/c/abc?keep=1#turn', replace: value => { replaced = new URL(value); } },
@@ -159,6 +219,8 @@ function startupFixture({ stylesheet, requestFrame = callback => callback() } = 
     notice, message, progress, progressStyle, timeout, resources, gauge, time, state: window.__TYC_PAGE_START__,
     recordTiming(...samples) { entries.push(...samples); observeTiming?.(); },
     triggerTimeout: () => callback?.(), replacement: () => replaced,
+    documentReady: () => onDOMReady?.(),
+    preloads: () => ({ pending: Boolean(template), appended }),
     active: () => ({ timeout: !!callback, progressPolling: !!observeTiming, renderObserver: !!onMutation }),
     noticeAppends: () => noticeAppends,
     mutate(nextComposer) {
@@ -167,6 +229,40 @@ function startupFixture({ stylesheet, requestFrame = callback => callback() } = 
     },
   };
 }
+
+test('staged module hints become live once after parsing, including when initialized late', () => {
+  const fixture = startupFixture({ stagePreloads: true });
+  assert.deepEqual(fixture.preloads(), { pending: true, appended: 0 });
+  fixture.documentReady();
+  fixture.documentReady();
+  assert.deepEqual(fixture.preloads(), { pending: false, appended: 1 });
+
+  for (const readyState of ['interactive', 'complete']) {
+    const late = startupFixture({ readyState, stagePreloads: true });
+    assert.deepEqual(late.preloads(), { pending: false, appended: 1 });
+    late.documentReady();
+    assert.deepEqual(late.preloads(), { pending: false, appended: 1 });
+  }
+
+  const auth = startupFixture();
+  auth.documentReady();
+  assert.deepEqual(auth.preloads(), { pending: false, appended: 0 });
+});
+
+test('a soft idle warning keeps staged preloads eligible until startup succeeds or fails', () => {
+  for (const action of ['ready', 'fail', 'failStyles']) {
+    const settled = startupFixture({ stagePreloads: true });
+    settled.state[action]();
+    settled.documentReady();
+    assert.deepEqual(settled.preloads(), { pending: false, appended: 0 });
+  }
+
+  const delayed = startupFixture({ stagePreloads: true });
+  delayed.triggerTimeout();
+  assert.equal(delayed.notice.hidden, false);
+  delayed.documentReady();
+  assert.deepEqual(delayed.preloads(), { pending: false, appended: 1 });
+});
 
 test('an idle module watchdog allows retry or clears the notice when the late composer is usable', () => {
   const composer = { getClientRects: () => [{}], visibility: 'visible' };

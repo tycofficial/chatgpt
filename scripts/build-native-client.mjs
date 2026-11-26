@@ -273,18 +273,23 @@ localCSS = overrides.replace(rootAsset, (_, quote) => 'url(' + quote + deploymen
 const ownModule = name => deploymentBase + name + '?v=' + release;
 const earlyModules = ['native-client/bootstrap.mjs', 'native-client/startup-compatibility.mjs', 'native-client/site-account.mjs',
  'native-client/site-signout.mjs', 'native-client/site-paths.mjs'].map(ownModule);
-// Start the largest entry chunks early, while the browser fetches smaller dependencies.
+// Keep the largest registration chunks first when their preload hints are released.
 const registrationAssets = await Promise.all(plan.registrationChunks.map(async url => ({
  url, bytes: (await fs.stat(path.join(root, 'original-client/public/chatgpt.com', url.slice(1)))).size,
 })));
 registrationAssets.sort((a, b) => b.bytes - a.bytes);
-const archivedModules = new Set([plan.runtime, ...registrationAssets.map(asset => asset.url), plan.manifest, ...Object.values(plan.initialRoutes)]);
-const mainModules = [
- ownModule('native-client/boot-adapter.mjs'),
+const archivedModules = new Set([...registrationAssets.map(asset => asset.url), plan.manifest, ...Object.values(plan.initialRoutes)]);
+archivedModules.delete(plan.runtime);
+const eagerNativeModules = [
+ ownModule('native-client/boot-adapter.mjs'), ownModule('native-client/service-boundary.mjs'),
+ ownModule('runtime.js'), ownModule('model-catalog.js'), originalOnSite(plan.runtime),
+];
+// Preloading the registration entry also discovers its large static imports.
+const stagedNativeModules = [
  deploymentBase + 'native-client/' + registrationEntry.slice(2),
- ownModule('native-client/service-boundary.mjs'), ownModule('runtime.js'), ownModule('model-catalog.js'),
  ...Array.from(archivedModules, originalOnSite),
 ];
+const stagedPreloadsId = 'site-native-module-preloads';
 const modulePreload = href => `<link rel="modulepreload" href="${href}" crossorigin="anonymous" onload="window.__TYC_PAGE_START__.loadedResource(this.href)">`;
 const importMap = JSON.stringify({imports:{
  '/cdn/': deploymentBase + 'original-client/public/chatgpt.com/cdn/',
@@ -488,9 +493,15 @@ const startupGuard = assets => `<script>(function(entries){
   }
  };
  restartTimeout();
- document.addEventListener('DOMContentLoaded',function(){
+ function documentReady(){
   if((failed||delayed)&&!finished)showFailure();
- },{once:true});
+  var staged=document.getElementById(${JSON.stringify(stagedPreloadsId)});
+  if(!staged)return;
+  staged.remove();
+  if(!failed&&!finished)document.head.appendChild(staged.content);
+ }
+ if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',documentReady,{once:true});
+ else documentReady();
 })(${JSON.stringify(assets)})</script>`;
 const startupBody = `<body>
 <div id="site-load-progress"><span data-percent>0%</span><div role="progressbar" aria-label="首屏加载进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div><span data-time>准备加载</span></div>
@@ -507,7 +518,7 @@ async function startupResources(hrefs) {
   href, Math.max(1, (await fs.stat(path.join(root, href.slice(deploymentBase.length).split('?')[0]))).size),
  ]));
 }
-const pagesStartupResources = await startupResources([...earlyModules, ...mainModules, stylesheetURL]);
+const pagesStartupResources = await startupResources([...earlyModules, ...eagerNativeModules, ...stagedNativeModules, stylesheetURL]);
 const authStartupResources = await startupResources(earlyModules);
 const entryHTML = ({ auth = false } = {}) => `<!DOCTYPE html>
 <html class="chatgpt-theme" lang="zh-CN" dir="ltr" data-theme="light" data-appearance-preset="codex" data-ios="false" data-build="${sourceBuild}" data-client-build-revision="${sourceBuild}" data-router-basename="${deploymentBase.replace(/\/$/,'') || '/'}" data-icon-sprite-url="${originalOnSite(upstreamSprite)}" data-codex-cli-version="0.171.0-alpha.2" data-codex-window-type="browser" data-window-type="browser" data-native-client-release="${release}">
@@ -518,7 +529,10 @@ ${startupGuard(auth ? authStartupResources : pagesStartupResources)}
 ${auth ? '' : `<link rel="preload" as="style" fetchpriority="high" href="${stylesheetURL}">
 <link id="site-main-style" rel="stylesheet" href="${stylesheetURL}" media="print" onload="window.__TYC_PAGE_START__.loadStyles(this)" onerror="window.__TYC_PAGE_START__.failStyles()">\n`}
 ${earlyModules.map(modulePreload).join('\n')}
-${auth ? '' : mainModules.map(modulePreload).join('\n')}
+${auth ? '' : `${eagerNativeModules.map(modulePreload).join('\n')}
+<template id="${stagedPreloadsId}">
+${stagedNativeModules.map(modulePreload).join('\n')}
+</template>`}
 <style data-native-asset-rebase>${localCSS}</style><style data-codex-app-themes></style>
 </head>
 ${startupBody}
