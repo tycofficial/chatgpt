@@ -76,7 +76,12 @@ test('real Linux HTTP provider draws pixels with confined Python and preserves r
     '    print(conn.connect_ex(tuple(' + hostEndpoint + ')) == 0)',
   ].join('\n');
   assert.deepEqual(await task(confinement), { exitCode: 0, stdout: 'False\nFalse\nFalse\n', stderr: '' });
-  const slow = await task('import time; time.sleep(30)');
+  const slowCode = 'import time; time.sleep(30)';
+  const started = performance.now();
+  const slow = await task(slowCode);
+  const elapsedMs = Math.round(performance.now() - started);
+  const maximumMs = 12_000;
+  console.info('Dot desktop timeout fixture', { code: slowCode, elapsedMs, maximumMs, result: slow });
   assert.equal(slow.exitCode, 124);
   assert.match(slow.stderr, /wall-clock limit/);
   const location = (await task('import os; print(os.environ["DISPLAY"])')).stdout.trim();
@@ -86,4 +91,5 @@ test('real Linux HTTP provider draws pixels with confined Python and preserves r
   assert.equal((await request(path, 'DELETE')).status, 204);
   assert.equal((await request(path + '/frame')).status, 410);
   await assert.rejects(lstat(socket), { code: 'ENOENT' });
+  assert.ok(elapsedMs >= 7_000 && elapsedMs <= maximumMs, `Task returned after ${elapsedMs} ms, expected 7,000–${maximumMs} ms for the 8,000 ms limit`);
 });
