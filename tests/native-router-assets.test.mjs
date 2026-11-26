@@ -105,7 +105,7 @@ const startupWeights = script => JSON.parse(script.slice(script.lastIndexOf('})(
 
 test('source separates staged native preloads from the eager boot, auth and stylesheet', async () => {
   const root = fileURLToPath(new URL('../', import.meta.url));
-  const plan = JSON.parse(fs.readFileSync(path.join(root, 'native-client/entry-plan.json'), 'utf8'));
+  const plan = JSON.parse(fs.readFileSync(path.join(root, 'src/native-client/entry-plan.json'), 'utf8'));
   const release = '0123456789abcdef', deploymentBase = '/chatgpt/';
   const originalOnSite = url => deploymentBase + 'original-client/public/chatgpt.com' + url;
   const cssAsset = originalOnSite(plan.stylesheet).slice(deploymentBase.length);
@@ -119,7 +119,7 @@ test('source separates staged native preloads from the eager boot, auth and styl
   const stage = home.match(/<template id="site-native-module-preloads">([\s\S]*?)<\/template>/);
   assert.ok(stage);
   assert.equal(home.split(stage[0]).length, 2);
-  assert.doesNotMatch(auth, /<template|rel="stylesheet"/);
+  assert.doesNotMatch(auth, /<template|rel="stylesheet"|as="fetch"/);
   const preloads = html => [...html.matchAll(/<link rel="modulepreload" href="([^"]+)"([^>]+)>/g)]
     .map(([, href, attributes]) => {
       assert.equal(attributes, ' crossorigin="anonymous" onload="window.__TYC_PAGE_START__.loadedResource(this.href)"');
@@ -136,7 +136,11 @@ test('source separates staged native preloads from the eager boot, auth and styl
   assert.deepEqual(preloads(home.replace(stage[0], '')), expectedEager);
   assert.deepEqual(preloads(stage[1]).sort(), expectedStage.sort());
   assert.match(home, /<link id="site-main-style" rel="stylesheet"/);
-  for (const [markup, expected] of [[home, [...expectedEager, ...expectedStage, deploymentBase + cssAsset]], [auth, expectedAuth]]) {
+  const locale = originalOnSite(plan.startupLocale);
+  const localeHint = [...home.replace(stage[0], '').matchAll(/<link rel="preload" as="fetch" href="([^"]+)"([^>]+)>/g)];
+  assert.deepEqual(localeHint.map(([, href, attrs]) => [href, attrs]), [[locale,
+    ' crossorigin="anonymous" fetchpriority="low" onload="window.__TYC_PAGE_START__.loadedResource(this.href)"']]);
+  for (const [markup, expected] of [[home, [...expectedEager, ...expectedStage, deploymentBase + cssAsset, locale]], [auth, expectedAuth]]) {
     assert.match(markup, /<noscript>[\s\S]*此页面需要浏览器启用 JavaScript。<\/p><\/noscript>/);
     const entries = startupWeights(startupScript(markup));
     assert.deepEqual(entries.map(([href]) => href).sort(), [...expected].sort());

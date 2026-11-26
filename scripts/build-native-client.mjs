@@ -300,6 +300,10 @@ const entryScript = ownModule('native-client/bootstrap.mjs');
 const errorMessage = '页面未能完成加载。请检查网络连接后重试。';
 const delayedMessage = '页面加载时间较长。可以继续等待，或选择重新加载。';
 const stylesheetURL = deploymentBase + cssAsset;
+if (plan.startupLocale && !/^\/cdn\/assets\/zh-CN\.[a-f0-9]{10}\.json$/.test(plan.startupLocale)) {
+ throw Error('Invalid startup locale path');
+}
+const startupLocaleURL = plan.startupLocale && originalOnSite(plan.startupLocale);
 const startupProgressStyle = `<style id="site-load-progress-style">
 #site-load-progress{position:fixed;z-index:2147483647;top:50%;left:50%;transform:translate(-50%,-50%);width:220px;max-width:70vw;pointer-events:none;font:14px/1.45 system-ui;color:#5d478c}
 #site-load-progress [role=progressbar]{height:4px;margin:8px 0;border-radius:999px;overflow:hidden;background:#ddd5ee}
@@ -518,7 +522,9 @@ async function startupResources(hrefs) {
   href, Math.max(1, (await fs.stat(path.join(root, href.slice(deploymentBase.length).split('?')[0]))).size),
  ]));
 }
-const pagesStartupResources = await startupResources([...earlyModules, ...eagerNativeModules, ...stagedNativeModules, stylesheetURL]);
+const pagesStartupResources = await startupResources([
+ ...earlyModules, ...eagerNativeModules, ...stagedNativeModules, stylesheetURL, ...(startupLocaleURL ? [startupLocaleURL] : []),
+]);
 const authStartupResources = await startupResources(earlyModules);
 const entryHTML = ({ auth = false } = {}) => `<!DOCTYPE html>
 <html class="chatgpt-theme" lang="zh-CN" dir="ltr" data-theme="light" data-appearance-preset="codex" data-ios="false" data-build="${sourceBuild}" data-client-build-revision="${sourceBuild}" data-router-basename="${deploymentBase.replace(/\/$/,'') || '/'}" data-icon-sprite-url="${originalOnSite(upstreamSprite)}" data-codex-cli-version="0.171.0-alpha.2" data-codex-window-type="browser" data-window-type="browser" data-native-client-release="${release}">
@@ -530,7 +536,7 @@ ${auth ? '' : `<link rel="preload" as="style" fetchpriority="high" href="${style
 <link id="site-main-style" rel="stylesheet" href="${stylesheetURL}" media="print" onload="window.__TYC_PAGE_START__.loadStyles(this)" onerror="window.__TYC_PAGE_START__.failStyles()">\n`}
 ${earlyModules.map(modulePreload).join('\n')}
 ${auth ? '' : `${eagerNativeModules.map(modulePreload).join('\n')}
-<template id="${stagedPreloadsId}">
+${startupLocaleURL ? `<link rel="preload" as="fetch" href="${startupLocaleURL}" crossorigin="anonymous" fetchpriority="low" onload="window.__TYC_PAGE_START__.loadedResource(this.href)">\n` : ''}<template id="${stagedPreloadsId}">
 ${stagedNativeModules.map(modulePreload).join('\n')}
 </template>`}
 <style data-native-asset-rebase>${localCSS}</style><style data-codex-app-themes></style>
