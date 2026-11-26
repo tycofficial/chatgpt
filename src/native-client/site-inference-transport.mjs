@@ -224,16 +224,18 @@ export function createSiteInferenceTransport({
       async pull(controller) {
         try {
           options.signal?.throwIfAborted();
-          if (live) {
+          const reader = live;
+          if (reader) {
             let piece;
-            try { piece = await live.read(); }
+            try { piece = await reader.read(); }
             catch { options.signal?.throwIfAborted(); }
+            if (reader !== live) return;
             if (piece && !piece.done) {
               prefix.push(piece.value);
               controller.enqueue(piece.value);
               return;
             }
-            live.releaseLock(); live = null;
+            reader.releaseLock(); live = null;
             if (piece?.done && !checkpoint.startedAt) { cleanup(); controller.close(); return; }
           }
           playback ??= replay(checkpoint, options, prefix, initial);
@@ -247,9 +249,14 @@ export function createSiteInferenceTransport({
       },
       async cancel(reason) {
         cleanup(); prefix.clear();
-        try { await live?.cancel(reason); }
-        catch { /* A disconnected reader is already closed. */ }
-        finally { live?.releaseLock(); live = null; }
+        const reader = live;
+        live = null;
+        if (reader) {
+          // The underlying fetch may leave its cancellation pending. The
+          // journal can still confirm the terminal state and actual end time.
+          void reader.cancel(reason).catch(() => {});
+          reader.releaseLock();
+        }
         void playback?.return().catch(() => {});
         await settle(checkpoint, options);
       },

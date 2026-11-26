@@ -137,6 +137,36 @@ test('an accepted stream body stays live past the POST header deadline', { timeo
   assert.equal(checkpoint.state, 'completed');
 });
 
+test('confirmed completion waits for its journal timestamp without waiting for live stream cleanup', { timeout: 1200 }, async () => {
+  const checkpoint = {}, methods = [];
+  const answer = 'The complete reply is already recorded.';
+  const frame = finish([textItem('completed-reply', answer)]);
+  let cancelCalled = false;
+  const client = transport(async (url, options) => {
+    methods.push([options.method ?? 'GET', url.pathname, url.searchParams.get('after')]);
+    if (options.method === 'POST') {
+      return streamResponse(new ReadableStream({
+        start(controller) { controller.enqueue(new TextEncoder().encode(frame)); },
+        cancel() {
+          cancelCalled = true;
+          return new Promise(() => {});
+        },
+      }));
+    }
+    return receipt(uuid(1), { finishedAt: clockStart + 150 });
+  });
+  const result = await streamCompletion({
+    settings: { model, reasoningEffort: 'low', apiTransport: 'responses' },
+    messages: [{ role: 'user', content: 'Finish this stored request.' }],
+    responsesTransport: (body, { signal }) => client.request(body, { checkpoint, signal }),
+  });
+  assert.equal(result.content, answer);
+  assert.equal(cancelCalled, true);
+  assert.equal(checkpoint.state, 'completed');
+  assert.equal(checkpoint.finishedAt, clockStart + 150);
+  assert.deepEqual(methods, [['POST', route, null], ['GET', route + '/' + uuid(1), String(Number.MAX_SAFE_INTEGER)]]);
+});
+
 test('admitted upstream errors keep their original provider errors and request information', async () => {
   for (const [status, code] of [[502, 'DOCODE_UNAVAILABLE'], [504, 'PROVIDER_TIMEOUT']]) {
     const methods = [];
