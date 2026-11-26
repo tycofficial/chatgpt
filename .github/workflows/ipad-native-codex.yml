@@ -1,0 +1,135 @@
+name: Diagnose native iPad Codex recovery
+on:
+  push:
+    branches: [qa/ipad-codex-sync-diagnostic-dc2074a]
+
+permissions:
+  contents: read
+
+jobs:
+  safari:
+    runs-on: macos-26
+    timeout-minutes: 35
+    env:
+      CANDIDATE_SOURCE: dc2074af0f0bdb528103d5a063a5626b7b591fef
+      UPSTREAM: b6348792a294e8e04a67660959ba41914937938f
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          fetch-depth: 3
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          package-manager-cache: false
+      - name: Build the pinned source with its checked-in b634 graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          git merge-base --is-ancestor "$CANDIDATE_SOURCE" HEAD
+          git diff --quiet "$CANDIDATE_SOURCE" HEAD -- . \
+            ':(exclude).github/workflows/ipad-native-codex.yml' ':(exclude,glob)scripts/qa/ipad-codex/**'
+          qa_root="$RUNNER_TEMP/tyc-ipad-codex"
+          mkdir -p "$qa_root"
+          npm ci --no-audit --no-fund
+          node scripts/build-native-client.mjs --services-only --activate
+          npm run native:check
+          node -e 'const a=require("./native-client/active.json"); if (a.active !== true || a.sourceBuild !== process.env.UPSTREAM || !/^[a-f0-9]{16}$/.test(a.release)) process.exit(1); console.log("iPad integrated candidate " + JSON.stringify(a));'
+          cp native-client/active.json "$qa_root/candidate-release.json"
+      - name: Build the isolated iPad XCTest harness
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags --depth=1 origin d1c9ca2aa55d2a32c624317c276d4204905dfc8b
+          qa_root="$RUNNER_TEMP/tyc-ipad-codex"
+          mkdir -p "$qa_root"
+          git archive FETCH_HEAD scripts/qa/ipad-xcuitest | tar -x -C "$qa_root"
+          qa_project="$qa_root/scripts/qa/ipad-xcuitest"
+          cp scripts/qa/ipad-codex/SafariPublicSiteTests.swift "$qa_project/SafariQAUITests/SafariPublicSiteTests.swift"
+          xcodebuild -version
+          xcrun simctl list devices available -j | node "$qa_project/select-device.mjs" > "$qa_root/device"
+          cat "$qa_root/device"
+          IPAD_UDID="$(sed -n 's/^IPAD_UDID=//p' "$qa_root/device")"
+          [[ "$IPAD_UDID" =~ ^[a-fA-F0-9-]{36}$ ]]
+          xcodebuild build-for-testing -project "$qa_project/SafariQA.xcodeproj" -scheme SafariQA \
+            -destination "platform=iOS Simulator,id=$IPAD_UDID" \
+            -derivedDataPath "$qa_root/build" -parallel-testing-enabled NO -quiet
+
+      - id: codex-safari
+        name: Test Codex against the runner-local fixture in MobileSafari
+        shell: bash
+        run: |
+          set -euo pipefail
+          qa_root="$RUNNER_TEMP/tyc-ipad-codex"
+          IPAD_UDID="$(sed -n 's/^IPAD_UDID=//p' "$qa_root/device")"
+          [[ "$IPAD_UDID" =~ ^[a-fA-F0-9-]{36}$ ]]
+          qa_project="$qa_root/scripts/qa/ipad-xcuitest"
+          bash scripts/qa/ipad-codex/create-loopback-tls.sh "$qa_root/tls"
+          TYC_IPAD_TLS_KEY="$qa_root/tls/leaf.key" TYC_IPAD_TLS_CERT="$qa_root/tls/leaf.crt" \
+            node scripts/qa/ipad-codex/serve-ipad-fixture.mjs "$GITHUB_WORKSPACE" > "$qa_root/fixture.log" 2>&1 &
+          fixture_pid=$!
+          report_fixture() {
+            curl --cacert "$qa_root/tls/ca.crt" --max-time 4 --fail --silent --show-error \
+              https://127.0.0.1:4400/__ipad_qa/metrics > "$qa_root/safari-metrics.json" || true
+            cat "$qa_root/safari-metrics.json" || true
+            printf '\n'
+            xcrun simctl io "$IPAD_UDID" screenshot "$qa_root/safari-after.png" || true
+            kill "$fixture_pid" 2>/dev/null || true
+          }
+          trap report_fixture EXIT
+          curl --cacert "$qa_root/tls/ca.crt" --fail --silent --show-error --retry 8 --retry-connrefused --max-time 5 \
+            https://127.0.0.1:4400/__ipad_qa/metrics
+          defaults write com.apple.iphonesimulator ConnectHardwareKeyboard -bool NO
+          if ! xcrun simctl bootstatus "$IPAD_UDID" -b; then
+            xcrun simctl bootstatus "$IPAD_UDID"
+          fi
+          xcrun simctl listapps "$IPAD_UDID" > "$qa_root/installed-apps.plist"
+          grep -F 'com.apple.mobilesafari' "$qa_root/installed-apps.plist"
+          xcrun simctl keychain "$IPAD_UDID" add-root-cert "$qa_root/tls/ca.crt"
+          printf 'Launching MobileSafari on %s\n' "$IPAD_UDID"
+          xcrun simctl launch "$IPAD_UDID" com.apple.mobilesafari
+          xcrun simctl openurl "$IPAD_UDID" https://127.0.0.1:4400/__ipad_qa/seed
+          xcodebuild test-without-building -project "$qa_project/SafariQA.xcodeproj" -scheme SafariQA \
+            -destination "platform=iOS Simulator,id=$IPAD_UDID" -derivedDataPath "$qa_root/build" \
+            -resultBundlePath "$qa_root/codex-recovery.xcresult" \
+            -only-testing:SafariQAUITests/SafariPublicSiteTests/testCodexEntryAndBrowserChromeRecovery \
+            -parallel-testing-enabled NO -disable-concurrent-destination-testing \
+            -test-timeouts-enabled YES -default-test-execution-time-allowance 480
+          result="$(curl --cacert "$qa_root/tls/ca.crt" --fail --silent --show-error https://127.0.0.1:4400/__ipad_qa/metrics)"
+          echo "$result"
+          printf '%s\n' "$result" | jq -e '
+            .documentLoads >= 3 and .inferencePosts == 2 and .inferenceCalls == 2
+            and (.inferenceRequestIds | length) == 2 and (.inferenceRequestIds | unique | length) == 2
+            and .planType == "plus" and (.requests | length) == 2
+            and all(.requests[]; .model == "gpt-6.2-sol" and .effort == "low" and .expectedPrompt and .stream)
+            and .requests[1].followup and .requests[1].includesPriorReply
+            and (.savedCodexThreads | length) == 1 and .savedCodexThreads[0].replyItems == 1 and .savedCodexThreads[0].followupItems == 1
+            and .disconnectedStreams == 1 and .unavailableReceiptReads == 1 and .recoveredReceiptReads >= 1
+            and .storedTurns.conversationCount == 1 and .storedTurns.codexCompleted == 2 and .storedTurns.otherTurns == 0
+            and (.inferenceReceipts | length) == 2
+            and all(.inferenceReceipts[]; .status == "completed" and .httpStatus == 200)
+            and (.savedCodexThreads[0].id as $id |
+                 ($id | test("^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$"; "i"))
+                 and ([.documentLocations[] | split("?")[0] | select(. == ("/chatgpt/local/" + $id))] | length) >= 2)'
+
+      - name: Record the simulator verification result
+        if: always()
+        shell: bash
+        env:
+          IPAD_RESULT: ${{ steps.codex-safari.outcome }}
+        run: |
+          printf 'Native Safari fixture check: %s\n' "$IPAD_RESULT" >> "$GITHUB_STEP_SUMMARY"
+          printf 'Native Safari fixture check: %s\n' "$IPAD_RESULT"
+
+      - name: Attach simulator evidence
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-ipad-codex-b634
+          path: |
+            ${{ runner.temp }}/tyc-ipad-codex/safari-after.png
+            ${{ runner.temp }}/tyc-ipad-codex/safari-metrics.json
+            ${{ runner.temp }}/tyc-ipad-codex/device
+            ${{ runner.temp }}/tyc-ipad-codex/candidate-release.json
+            ${{ runner.temp }}/tyc-ipad-codex/codex-recovery.xcresult
+          if-no-files-found: ignore
