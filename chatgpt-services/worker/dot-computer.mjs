@@ -115,7 +115,7 @@ async function runTask(request, env, ctx, row) {
       const run = await desktopTask(env, row.provider_id, code, requestId);
       result = { status: run.exitCode === 0 ? 'complete' : 'failed', ...run };
     } catch {
-      result = { status: 'failed', stdout: '', stderr: '未能获取云电脑任务结果。', exitCode: null };
+      result = { status: 'failed', stdout: '', stderr: '云电脑任务结果暂时无法确认。', exitCode: null };
     }
     await query(env, 'UPDATE dot_computer_tasks SET status=?, result=? WHERE environment_id=? AND id=?', result.status, JSON.stringify(result), row.id, requestId).run();
     return result;

@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createServer } from 'node:http';
 import { syncFixture } from './chat-sync-fixture.mjs';
 
 const prefix = '/dot-computer/v1';
@@ -119,6 +120,60 @@ test('native Dot Worker owns exactly one Linux desktop and journals each task on
   assert.deepEqual(await (await send(body)).json(), actualResult);
   assert.equal((await send({ ...body, requestId: crypto.randomUUID() })).status, 409);
   assert.equal(provider.mock.callCount(), 5);
+});
+
+test('a lost provider response recovers the original task receipt over HTTP', async t => {
+  const f = await syncFixture();
+  t.after(() => f.DB.raw.close());
+  const receipt = { exitCode: 0, stdout: '899\n', stderr: '' };
+  const received = [];
+  let executions = 0, providerId;
+  const provider = createServer(async (req, res) => {
+    let raw = '';
+    for await (const part of req) raw += part;
+    const body = JSON.parse(raw);
+    res.setHeader('Content-Type', 'application/json');
+    if (req.url === '/v1/desktops') {
+      providerId = body.id;
+      res.end(JSON.stringify({ id: providerId }));
+      return;
+    }
+    if (req.url !== '/v1/desktops/' + providerId + '/task') {
+      res.writeHead(404).end();
+      return;
+    }
+    const first = !received.some(task => task.requestId === body.requestId);
+    received.push(body);
+    if (first) {
+      executions++;
+      if (executions === 1) req.socket.destroy();
+      else {
+        res.setHeader('Content-Length', Buffer.byteLength(JSON.stringify(receipt)));
+        res.write('{"exitCode":', () => req.socket.destroy());
+      }
+      return;
+    }
+    res.end(JSON.stringify(receipt));
+  });
+  await new Promise(resolve => provider.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise(resolve => provider.close(resolve)));
+  configure(f);
+  f.env.DOT_COMPUTER_PROVIDER_ORIGIN = 'http://127.0.0.1:' + provider.address().port;
+  const owner = { token: f.admin.token }, path = thread(crypto.randomUUID());
+  const work = [];
+  const context = { waitUntil(promise) { work.push(promise); } };
+  const response = await f.call(path + '/wake', { method: 'POST', context, ...owner });
+  const { environmentId } = await response.json();
+  await Promise.all(work);
+  const expectReceipt = { status: 'complete', ...receipt };
+  for (let index = 0; index < 2; index++) {
+    const body = { code, requestId: crypto.randomUUID() };
+    const send = () => f.call(environment(environmentId) + '/task', { method: 'POST', body, ...owner });
+    assert.deepEqual(await (await send()).json(), expectReceipt);
+    assert.deepEqual(await (await send()).json(), expectReceipt);
+    assert.deepEqual(received.slice(index * 2), [body, body]);
+    assert.equal(executions, index + 1);
+  }
 });
 
 test('stop while a provider is starting prevents a leaked Linux session', async t => {

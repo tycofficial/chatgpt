@@ -31,7 +31,7 @@ async function call(env, suffix, { method = 'GET', body, timeout = 15000, missin
     ...(body !== undefined && { body: JSON.stringify(body) }),
   });
   if (reply.ok || missingIsOK && [404, 410].includes(reply.status)) return reply;
-  await reply.body?.cancel().catch(() => {});
+  void reply.body?.cancel().catch(() => {});
   throw providerError(reply.status, 'Linux desktop provider rejected the operation');
 }
 
@@ -42,7 +42,7 @@ function sessionPath(id, action) {
 
 async function boundedReply(reply, limit) {
   if (!reply.body || Number(reply.headers.get('content-length')) > limit) {
-    await reply.body?.cancel().catch(() => {});
+    void reply.body?.cancel().catch(() => {});
     throw providerError(502, 'Invalid Linux desktop response size');
   }
   const reader = reply.body.getReader();
@@ -57,7 +57,7 @@ async function boundedReply(reply, limit) {
       chunks.push(value);
     }
   } finally {
-    await reader.cancel().catch(() => {});
+    void reader.cancel().catch(() => {});
   }
   const bytes = new Uint8Array(size);
   let offset = 0;
@@ -70,7 +70,7 @@ async function boundedReply(reply, limit) {
 
 async function jsonReply(reply, limit) {
   if (!/^application\/json(?:\s*;|$)/i.test(reply.headers.get('content-type') ?? '')) {
-    await reply.body?.cancel().catch(() => {});
+    void reply.body?.cancel().catch(() => {});
     throw providerError(502, 'Linux desktop provider returned an unexpected content type');
   }
   try { return JSON.parse(new TextDecoder().decode(await boundedReply(reply, limit))); }
@@ -145,11 +145,26 @@ export async function desktopTask(env, id, code, requestId) {
   if (!uuid.test(requestId) || typeof code !== 'string' || !code.trim() || code.length > 4000 || code.includes('\0')) {
     throw providerError(400, 'Invalid Linux desktop task');
   }
-  const reply = await call(env, sessionPath(id, 'task'), { method: 'POST', body: { code, requestId }, timeout: 22000 });
-  const result = await jsonReply(reply, 72 * 1024);
-  if (!Number.isInteger(result?.exitCode) || result.exitCode < 0 || result.exitCode > 255 ||
-      typeof result.stdout !== 'string' || typeof result.stderr !== 'string') {
-    throw providerError(502, 'Linux desktop provider returned no execution receipt');
+  const path = sessionPath(id, 'task');
+  const body = { code, requestId };
+  const readReceipt = async timeout => {
+    const reply = await call(env, path, { method: 'POST', body, timeout });
+    const result = await jsonReply(reply, 72 * 1024);
+    if (!Number.isInteger(result?.exitCode) || result.exitCode < 0 || result.exitCode > 255 ||
+        typeof result.stdout !== 'string' || typeof result.stderr !== 'string') {
+      throw providerError(502, 'Linux desktop provider returned no execution receipt');
+    }
+    return { exitCode: result.exitCode, stdout: result.stdout.slice(0, 12000), stderr: result.stderr.slice(0, 12000) };
+  };
+  const deadline = Date.now() + 27000;
+  try {
+    return await readReceipt(18000);
+  } catch (error) {
+    if (![408, 502, 503, 504].includes(error?.status) &&
+        !['AbortError', 'TimeoutError', 'TypeError'].includes(error?.name)) throw error;
+    // The provider returns the original execution promise when the same request ID is replayed.
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) throw error;
+    return readReceipt(remaining);
   }
-  return { exitCode: result.exitCode, stdout: result.stdout.slice(0, 12000), stderr: result.stderr.slice(0, 12000) };
 }
