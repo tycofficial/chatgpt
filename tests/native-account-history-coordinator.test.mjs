@@ -177,6 +177,143 @@ test('a turn finishing while cloud waits is neither rewound nor acknowledged as 
   assert.equal(f.coordinator.status().conflictCount, 0);
 });
 
+function historyPeer(t, source, disk = source.disk) {
+  const app = new LocalAppServer({ storage: disk, streamCompletion: () => assert.fail('History apply must not start inference'),
+    readSettings: () => ({}), models: {}, catalog: {} });
+  const coordinator = createAccountHistoryCoordinator({ appServer: app, createSync: source.createSync,
+    getIdentity: source.identity, projectThread: projectChatHistoryThread, eventTarget: null });
+  t.after(() => coordinator.dispose());
+  return { app, coordinator };
+}
+
+function startAdmittedHistory(turns, updatedAt, ownerId) {
+  const receipt = { route: 'site-inference', siteRequestId: '00000000-0000-4000-8000-000000000301',
+    ownerId, state: 'running', startedAt: updatedAt * 1000, bodyHash: 'a'.repeat(64) };
+  const turn = { id: 'pending-follow-up', model: 'gpt-6.2-sol', reasoningEffort: 'low', executionSurface: 'codex',
+    status: 'inProgress', startedAt: updatedAt, completedAt: null, durationMs: null, error: null,
+    items: [{ id: 'follow-up-question', type: 'userMessage', content: [{ type: 'text', text: 'Continue our conversation.' }] }],
+    adapterMetadata: { startedAtMs: receipt.startedAt, checkpoint: { schemaVersion: 1, state: 'model',
+      inFlight: { transport: receipt }, metrics: [{ transportCheckpoint: receipt }] } } };
+  turns.push(turn);
+  return { turn, receipt };
+}
+
+test('an older page applies the synced prefix without overwriting an admitted sibling or blocking its final CAS', async t => {
+  for (const timing of ['early poll', 'delayed startup', 'terminal before snapshot apply']) await t.test(timing, async t => {
+    const doc = nativeDocument('continued-codex'), f = await fixture(t, [doc]);
+    await f.coordinator.start();
+    const peer = historyPeer(t, f);
+    if (timing === 'early poll') await peer.coordinator.start();
+    const sender = f.app.threads.get(doc.id);
+    sender.updatedAt = sender.recencyAt = doc.updatedAt + 1;
+    const { turn, receipt } = startAdmittedHistory(sender.turns, sender.updatedAt, f.identity().ownerId);
+    f.app.running.set(sender.id, { turn });
+    f.app.persist();
+    await f.coordinator.whenIdle();
+    await f.coordinator.synchronize();
+    const partial = await cloud(f, sender.id);
+    assert.equal(partial.revision, 2);
+    assert.equal(partial.document.turns.at(-1).status, 'interrupted');
+
+    const finishLocally = () => {
+      turn.status = 'completed';
+      turn.completedAt = sender.updatedAt + 1;
+      turn.durationMs = 1000;
+      turn.adapterMetadata.checkpoint.state = 'completed';
+      delete turn.adapterMetadata.checkpoint.inFlight;
+      turn.items.push({ id: 'follow-up-answer', type: 'agentMessage', text: 'The admitted request finished.' });
+      f.app.running.delete(sender.id);
+    };
+    if (timing === 'terminal before snapshot apply') {
+      const held = gate();
+      f.network.after = async url => {
+        if (url.pathname === '/sync/changes') { f.network.after = null; held.enter(); await held.waiting; }
+      };
+      const starting = peer.coordinator.start();
+      await held.entered;
+      // Simulate the sender's local write completing before its cloud capture.
+      const capture = f.app.onPersist;
+      f.app.onPersist = null;
+      finishLocally();
+      f.app.persist();
+      f.app.onPersist = capture;
+      held.release();
+      assert.equal((await starting).ok, true);
+    } else if (timing === 'early poll') await peer.coordinator.synchronize();
+    else await peer.coordinator.start();
+
+    assert.equal(peer.coordinator.status().conflictCount, 0);
+    const peerTurn = peer.app.threads.get(sender.id).turns.at(-1);
+    assert.equal(peerTurn.status, 'interrupted');
+    assert.equal(peerTurn.adapterMetadata.checkpoint, undefined);
+    assert.equal(peer.app.running.has(sender.id), false);
+    const persisted = f.app.readPersistedThreads().find(thread => thread.id === sender.id).turns.at(-1);
+    assert.deepEqual(persisted, turn);
+    assert.deepEqual(persisted.adapterMetadata.checkpoint.metrics[0].transportCheckpoint, receipt);
+
+    if (timing !== 'terminal before snapshot apply') finishLocally();
+    f.app.persist();
+    await f.coordinator.whenIdle();
+    await f.coordinator.synchronize();
+    const final = await cloud(f, sender.id);
+    assert.equal(final.revision, 3);
+    assert.equal(final.document.turns.at(-1).status, 'completed');
+    assert.equal(final.document.turns.at(-1).items.at(-1).text, 'The admitted request finished.');
+    assert.deepEqual(f.calls.filter(call => call.method === 'PUT').map(call => call.body.baseRevision), [0, 1, 2]);
+    assert.equal(f.coordinator.status().conflictCount, 0);
+
+    const renamed = { ...final.document, name: 'Renamed on a verified separate device', updatedAt: sender.updatedAt + 2 };
+    assert.equal((await save(f.backend, f.backend.alice, sender.id, mutation(renamed, final.revision))).status, 200);
+    await peer.coordinator.synchronize();
+    assert.equal(peer.app.threads.get(sender.id).name, renamed.name);
+    assert.equal(peer.app.readPersistedThreads().find(thread => thread.id === sender.id).name, renamed.name);
+    assert.deepEqual((await peer.coordinator.sync.snapshot()).siblingRequests, []);
+  });
+});
+
+test('stale startup still preserves a real pending rename, unshared disk or explicit deletion', async t => {
+  for (const action of ['rename', 'other browser', 'inaccessible disk', 'other receipt owner', 'pending delete']) await t.test(action, async t => {
+    const doc = nativeDocument('retained-decision'), f = await fixture(t, [doc]);
+    await f.coordinator.start();
+    const disk = action === 'other browser' ? storage([doc]) : { ...f.disk };
+    const peer = historyPeer(t, f, disk);
+    if (action === 'inaccessible disk') disk.getItem = () => { throw Error('History storage is unavailable'); };
+    if (action === 'rename') peer.app.dispatch('thread/name/set', { threadId: doc.id, name: 'My real rename' });
+    const sender = f.app.threads.get(doc.id);
+    sender.updatedAt = sender.recencyAt = doc.updatedAt + 1;
+    startAdmittedHistory(sender.turns, sender.updatedAt, action === 'other receipt owner' ? 'unverified-owner' : f.identity().ownerId);
+    f.app.persist();
+    await f.coordinator.whenIdle();
+    await f.coordinator.synchronize();
+    const partial = await cloud(f, sender.id);
+    assert.equal(partial.revision, 2);
+
+    if (action === 'pending delete') {
+      const deleting = f.createSync();
+      t.after(() => deleting.dispose());
+      await deleting.initialize([partial.document]);
+      await deleting.acknowledgeApplied([partial.document]);
+      await deleting.capture([]);
+      const pending = await deleting.snapshot();
+      assert.equal(pending.queuedCount, 1);
+      await peer.coordinator.start();
+      const tombstone = await f.backend.call('/sync/conversations/' + sender.id, { token: f.backend.alice.token });
+      assert.equal(tombstone.status, 410);
+      assert.equal((await tombstone.json()).tombstone.revision, 3);
+      assert.deepEqual(f.calls.filter(call => ['PUT', 'DELETE'].includes(call.method)).map(call => call.method), ['PUT', 'PUT', 'DELETE']);
+      return;
+    }
+
+    await peer.coordinator.start();
+    const [conflict] = await peer.coordinator.sync.conflicts();
+    assert.equal(conflict.local.name, action === 'rename' ? 'My real rename' : doc.name);
+    assert.equal(conflict.remote.turns.at(-1).id, 'pending-follow-up');
+    assert.equal(conflict.remoteMetadata.revision, 2);
+    assert.equal((await cloud(f, sender.id)).revision, 2);
+    assert.deepEqual(f.calls.filter(call => call.method === 'PUT').map(call => call.body.baseRevision), [0, 1]);
+  });
+});
+
 test('S2 arriving while post-apply capture awaits cannot change the acknowledged S1 input', async t => {
   const f = await fixture(t, [nativeDocument('fixed-s1')]); await f.coordinator.start();
   const originalApply = f.app.applyHistorySnapshot.bind(f.app), hold = gate(); let once = true;

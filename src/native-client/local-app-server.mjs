@@ -137,14 +137,17 @@ export class LocalAppServer {
       catch (error) { this.diagnostics.push({ type: 'local-protocol-listener-error', message: String(error?.message ?? error) }); }
     }
   }
+  readPersistedThreads() {
+    const serialized = this.storage?.getItem(this.storageKey);
+    if (!serialized) return [];
+    const state = JSON.parse(serialized);
+    if (state?.schemaVersion !== 1 || !Array.isArray(state.threads)) throw Error('Unsupported local conversation storage');
+    return state.threads;
+  }
   restore() {
     let changed = false;
     try {
-      const serialized = this.storage?.getItem(this.storageKey);
-      if (!serialized) return;
-      const state = JSON.parse(serialized);
-      if (state.schemaVersion !== 1 || !Array.isArray(state.threads)) throw Error('Unsupported local conversation storage');
-      for (const thread of state.threads) {
+      for (const thread of this.readPersistedThreads()) {
         if (!object(thread) || typeof thread.id !== 'string' || !Array.isArray(thread.turns)) throw Error('Invalid local conversation storage');
         for (const turn of thread.turns) if (turn.status === 'inProgress') {
           const plainAttempt = hasUncertainPlainResponse(turn.adapterMetadata?.checkpoint?.inFlight);
@@ -227,7 +230,7 @@ export class LocalAppServer {
       if (pending?.then) Promise.resolve(pending).catch(() => this.diagnostics.push({ type: 'local-history-capture-error' }));
     } catch { this.diagnostics.push({ type: 'local-history-capture-error' }); }
   }
-  applyHistorySnapshot(records, { projectThread = null } = {}) {
+  applyHistorySnapshot(records, { projectThread = null, preservePersistedThread = null } = {}) {
     if (this.loadError) throw this.loadError;
     if (!Array.isArray(records) || records.length > 2000) throw new RpcError(-32602, 'Invalid account conversation snapshot');
     const next = new Map();
@@ -264,7 +267,18 @@ export class LocalAppServer {
     for (const [id, thread] of this.threads) if (thread.ephemeral || this.running.has(id)) next.set(id, thread);
     const before = this.threads;
     try {
-      this.storage?.setItem(this.storageKey, JSON.stringify({ schemaVersion: 1, threads: [...next.values()].filter(thread => !thread.ephemeral) }));
+      let threads = [...next.values()].filter(thread => !thread.ephemeral);
+      if (this.storage && preservePersistedThread) {
+        const persisted = new Map(this.readPersistedThreads().map(thread => [thread.id, thread]));
+        threads = threads.flatMap(thread => {
+          const existing = persisted.get(thread.id);
+          if (this.running.has(thread.id) || !preservePersistedThread(thread, existing)) return [thread];
+          // Keep the same owner's browser checkpoint on disk. This tab retains
+          // the sanitized snapshot in memory and does not start its own replay.
+          return existing ? [existing] : [];
+        });
+      }
+      this.storage?.setItem(this.storageKey, JSON.stringify({ schemaVersion: 1, threads }));
     } catch (error) { throw new RpcError(-32000, `Account conversation history could not be applied: ${error.message}`); }
     this.threads = next;
     const changes = { added: [], updated: [], removed: [] };

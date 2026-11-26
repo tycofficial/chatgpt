@@ -216,6 +216,55 @@ function historyExtension(head, document) {
   return { earlier, current };
 }
 
+function admittedHistoryTransport(turn, ownerId, requestId) {
+  const checkpoint = turn?.adapterMetadata?.checkpoint;
+  const accepted = transport => Boolean(ownerId) && isSiteInferenceCheckpoint(transport) && transport.ownerId === ownerId &&
+    Number.isSafeInteger(transport.startedAt) && transport.startedAt > 0 && !transport.cancelRequested &&
+    transport.state !== 'cancelled' && (!requestId || transport.siteRequestId === requestId);
+  const inFlight = checkpoint?.inFlight?.transport;
+  if (accepted(inFlight)) return inFlight;
+  if (requestId && Array.isArray(checkpoint?.metrics)) return checkpoint.metrics.find(metric => accepted(metric?.transportCheckpoint))?.transportCheckpoint;
+}
+
+function appendedHistoryTurn(previous, next) {
+  const extension = historyExtension(previous, next);
+  if (!extension || !extension.earlier.length || extension.current.length !== extension.earlier.length + 1 ||
+      !extension.earlier.every((turn, index) => equal(turn, extension.current[index]))) return null;
+  return extension.current.at(-1);
+}
+
+function staleBrowserRequest(document, head, readPersistedThread, ownerId) {
+  const appended = appendedHistoryTurn(document, head);
+  if (appended?.adapterMetadata?.interruption !== 'cloud-history-restored-without-execution-checkpoint') return null;
+  try {
+    const persisted = readPersistedThread(document.id), last = persisted?.turns?.at(-1);
+    const transport = last?.status === 'inProgress' && admittedHistoryTransport(last, ownerId);
+    return transport && equal(projectChatHistoryThread(persisted), head)
+      ? { previous: document, turnId: appended.id, requestId: transport.siteRequestId } : null;
+  } catch { return null; }
+}
+
+export function preserveSiblingHistoryTurn(view, persisted, ownerId, proof) {
+  if (!view) return false;
+  if (!persisted) return Boolean(proof); // The newer disk snapshot may already have removed this thread.
+  const localTurn = persisted.turns.at(-1), knownTurn = view.turns.at(-1);
+  if (!localTurn || localTurn.id !== knownTurn?.id ||
+      (proof ? localTurn.id !== proof.turnId : localTurn.status !== 'inProgress') ||
+      !admittedHistoryTransport(localTurn, ownerId, proof?.requestId)) return false;
+  let local;
+  try { local = projectChatHistoryThread(persisted); }
+  catch (error) {
+    if (error?.code === 'SYNC_DOCUMENT_TOO_LARGE') return Boolean(proof);
+    throw error;
+  }
+  if (equal(local, view)) return true;
+  if (!proof) return false;
+  const extension = historyExtension(view, local);
+  return Boolean(extension && extension.earlier.length === extension.current.length &&
+    extension.earlier.slice(0, -1).every((turn, index) => equal(turn, extension.current[index])) &&
+    followsCapturedTurn(knownTurn, extension.current.at(-1)));
+}
+
 function followsLocalRecovery(head, document, original, ownerId) {
   const latest = original?.turns.at(-1), local = latest?.adapterMetadata;
   const transport = local?.checkpoint?.inFlight?.transport;
@@ -343,6 +392,7 @@ export function createChatHistorySync({ baseURL, fetchImpl = globalThis.fetch?.b
   let serial = Promise.resolve(), disposed = false, localBaseline = null;
   let observedRevisions = new Map();
   let oversizedLocally = new Set();
+  const siblingTurns = new Map();
   // A reload/new engine is not the causal author of older durable intents.
   const contextId = 'context-' + crypto.randomUUID();
   const activeRequests = new Set();
@@ -393,9 +443,18 @@ export function createChatHistorySync({ baseURL, fetchImpl = globalThis.fetch?.b
     observedRevisions = nextRevisions;
     oversizedLocally = nextOversized;
   }
-  async function captureInside(threads, { detectDeletes = true, initial = false } = {}) {
+  async function captureInside(threads, { detectDeletes = true, initial = false, readPersistedThreads } = {}) {
     const records = projectLocalHistory(threads), previousLocal = localBaseline;
+    let persisted;
+    const readPersistedThread = id => {
+      if (!persisted) {
+        persisted = new Map();
+        persisted = new Map(readPersistedThreads().map(thread => [thread.id, thread]));
+      }
+      return persisted.get(id);
+    };
     const result = await update(state => {
+      const stale = new Map(), edited = new Set();
       for (const [id, { thread: original, document }] of records) {
         if (!document) continue;
         // A projected running turn can be ahead of its first upload after the
@@ -412,6 +471,16 @@ export function createChatHistorySync({ baseURL, fetchImpl = globalThis.fetch?.b
         if (state.known[id]?.deleted) { state.conflicts[id] = { id, reason: 'remote-deleted', local: document, remote: null, remoteMetadata: clone(state.known[id]), createdAt: now() }; delete state.heads[id]; continue; }
         if (state.heads[id] && equal(state.heads[id], document)) continue;
         const head = state.heads[id];
+        if (initial && head && typeof readPersistedThreads === 'function' && state.localIds.includes(id) &&
+            state.known[id]?.revision > 0 && !state.conflicts[id] && !state.outbox.some(item => item.id === id)) {
+          const proof = staleBrowserRequest(document, head, readPersistedThread, identity?.ownerId);
+          if (proof) {
+            // This memory snapshot predates the other page's admitted turn.
+            stale.set(id, proof);
+            continue;
+          }
+        }
+        if (siblingTurns.has(id)) edited.add(id);
         // A page can finish saving browser progress before its history capture
         // runs. Continue that one local journal turn through normal CAS without
         // discarding an earlier attempted mutation or adopting a remote edit.
@@ -429,6 +498,7 @@ export function createChatHistorySync({ baseURL, fetchImpl = globalThis.fetch?.b
         else queue(state, id, 'PUT', document, observedRevisions.get(id) ?? state.known[id]?.revision ?? 0);
       }
       if (detectDeletes) for (const id of new Set([...(previousLocal?.keys() ?? []), ...oversizedLocally])) if (!records.has(id) && !state.known[id]?.deleted) {
+        if (siblingTurns.has(id)) edited.add(id);
         const remote = state.heads[id] ?? null, known = state.known[id] ?? { id, revision: 0, deleted: false, sequence: 0 }, observed = observedRevisions.get(id) ?? 0;
         const previous = previousLocal?.get(id);
         if (!previous && !remote) continue;
@@ -440,8 +510,14 @@ export function createChatHistorySync({ baseURL, fetchImpl = globalThis.fetch?.b
         delete state.heads[id];
       }
       state.localIds = [...records.keys()].filter(id => !state.known[id]?.deleted);
-      return { queuedCount: state.outbox.length, conflictCount: Object.keys(state.conflicts).length, observed: Object.fromEntries([...records.keys()].map(id => [id, state.known[id]?.revision ?? 0])) };
+      const observed = Object.fromEntries([...records].map(([id, { document }]) => [id,
+        (stale.has(id) || siblingTurns.has(id)) && !equal(state.heads[id], document)
+          ? observedRevisions.get(id) ?? 0 : state.known[id]?.revision ?? 0]));
+      return { queuedCount: state.outbox.length, conflictCount: Object.keys(state.conflicts).length, observed,
+        stale: [...stale], edited: [...edited] };
     });
+    for (const id of result.edited) siblingTurns.delete(id);
+    for (const [id, proof] of result.stale) siblingTurns.set(id, proof);
     rememberLocalHistory(records, result.observed);
     return { queuedCount: result.queuedCount, conflictCount: result.conflictCount };
   }
@@ -575,10 +651,19 @@ export function createChatHistorySync({ baseURL, fetchImpl = globalThis.fetch?.b
         restored.set(id, thread);
       } else if (restored.has(id) && equal(restored.get(id), document)) restored.set(id, thread);
     }
-    return { threads: clone([...restored.values()]), cursor: state.cursor, queuedCount: state.outbox.length, conflicts: clone(Object.values(state.conflicts)), oversizedConversationIds };
+    const siblingRequests = [];
+    for (const [id, proof] of siblingTurns) {
+      const head = state.heads[id];
+      if (!head || state.conflicts[id] || state.known[id]?.deleted || appendedHistoryTurn(proof.previous, head)?.id !== proof.turnId) {
+        siblingTurns.delete(id);
+      } else {
+        siblingRequests.push({ id, turnId: proof.turnId, requestId: proof.requestId });
+      }
+    }
+    return { threads: clone([...restored.values()]), cursor: state.cursor, queuedCount: state.outbox.length, conflicts: clone(Object.values(state.conflicts)), oversizedConversationIds, siblingRequests };
   }
-  async function initializeInside(localThreads, { signal } = {}) {
-    await captureInside(localThreads, { detectDeletes: false, initial: true });
+  async function initializeInside(localThreads, { signal, readPersistedThreads } = {}) {
+    await captureInside(localThreads, { detectDeletes: false, initial: true, readPersistedThreads });
     let deferred = null;
     try { await pullInside({ signal }); await flushInside({ signal }); }
     catch (error) { if (!error.retryable) throw error; deferred = { code: error.code, retryable: true }; diagnostic('history-sync-deferred', deferred); }

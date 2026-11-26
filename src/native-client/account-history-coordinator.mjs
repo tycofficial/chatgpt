@@ -1,6 +1,8 @@
 /** One account-owned controller chain for native history capture/apply/ack.
  * This module does not create UI, read credentials or start model execution.
  */
+import { preserveSiblingHistoryTurn } from './chat-history-sync.mjs';
+
 const clone = value => structuredClone(value);
 const scope = value => value && ['ownerId', 'accountId', 'namespace'].every(key => typeof value[key] === 'string' && value[key])
   ? JSON.stringify([value.ownerId, value.accountId, value.namespace]) : null;
@@ -143,14 +145,23 @@ export function createAccountHistoryCoordinator({
   async function appliedSnapshot(snapshot) {
     assertCurrent();
     const oversized = new Set(snapshot.oversizedConversationIds);
-    const changes = appServer.applyHistorySnapshot(snapshot.threads, { projectThread: thread => {
+    const conflicts = new Set((snapshot.conflicts ?? []).map(conflict => conflict.id));
+    const siblingRequests = new Map((snapshot.siblingRequests ?? []).map(request => [request.id, request]));
+    const project = thread => {
       if (oversized.has(thread.id)) return null;
       try { return projectThread(thread); }
       catch (error) {
         if (error?.code === 'SYNC_DOCUMENT_TOO_LARGE') return null;
         throw error;
       }
-    } });
+    };
+    const needsCheckpointProtection = snapshot.threads.some(thread =>
+      !conflicts.has(thread.id) && !appServer.running?.has(thread.id) && (siblingRequests.has(thread.id) ||
+        thread.turns.at(-1)?.adapterMetadata?.interruption === 'cloud-history-restored-without-execution-checkpoint'));
+    const changes = appServer.applyHistorySnapshot(snapshot.threads, { projectThread: project,
+      preservePersistedThread: needsCheckpointProtection ? (thread, persisted) => !conflicts.has(thread.id) &&
+        preserveSiblingHistoryTurn(project(thread), persisted, ownerId, siblingRequests.get(thread.id)) : null,
+    });
     // Clone ONCE before awaiting capture; acknowledge exactly this S1 even if
     // native persist(S2) arrives while the durable store is awaiting commit.
     const S1 = currentThreads();
@@ -179,7 +190,9 @@ export function createAccountHistoryCoordinator({
     engine?.dispose(); engine = createSync(); restartNeeded = false;
     if (!engine || typeof engine.initialize !== 'function') throw coordinatorError('SYNC_INVALID_ENGINE');
     const initial = currentThreads();
-    const snapshot = await engine.initialize(initial, { signal }); assertCurrent();
+    const snapshot = await engine.initialize(initial, { signal,
+      readPersistedThreads: typeof appServer.readPersistedThreads === 'function' ? () => appServer.readPersistedThreads() : undefined,
+    }); assertCurrent();
     await reconcile(snapshot); assertCurrent();
     ready = true; schedulePoll();
     return { ok: true, ...status() };
