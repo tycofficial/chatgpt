@@ -4,6 +4,7 @@ import {fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
 import crypto from 'node:crypto';
 import { sharedNativeAssets } from './shared-native-assets.mjs';
+import { checkPackagedSiteAccountOrigin, requestedSiteAccountOrigin } from './site-account-origin.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const directory=path.join(root,'native-client');
 const source=path.join(root,'src/native-client');
@@ -29,15 +30,13 @@ for(const helper of provenance.helpers){
  helperInputs.push(original);
 }
 const releaseHash=crypto.createHash('sha256').update(helperInputs.join('\n')).update(builderBytes).update(planInput).update(provenance.deploymentBase);
-if (provenance.siteAccountOrigin !== undefined) {
- const url = new URL(provenance.siteAccountOrigin);
- if (url.protocol !== 'https:' || url.origin !== provenance.siteAccountOrigin) throw Error('Invalid packaged site account origin');
- const siteAccount=await fs.readFile(path.join(directory,'site-account.mjs'),'utf8');
- if (!siteAccount.includes('export const SITE_ACCOUNT_SERVICE = '+JSON.stringify(url.origin)+';')) {
-  throw Error('The configured account origin differs from the browser module');
- }
- releaseHash.update('\0site-account-origin:').update(url.origin);
-}
+const siteAccountOrigin = checkPackagedSiteAccountOrigin({
+ canonicalModule: await fs.readFile(path.join(source,'site-account.mjs'),'utf8'),
+ publishedModule: await fs.readFile(path.join(directory,'site-account.mjs'),'utf8'),
+ recordedOrigin: provenance.siteAccountOrigin,
+ expectedOrigin: requestedSiteAccountOrigin(process.env.CHATGPT_SITE_API_ORIGIN),
+});
+if (provenance.siteAccountOrigin !== undefined) releaseHash.update('\0site-account-origin:').update(siteAccountOrigin);
 if (provenance.preservedRegistrationEntry) {
  if (!/^\.\/entry-library\.mjs\?v=[a-f0-9]{16}$/.test(provenance.preservedRegistrationEntry)) throw Error('Invalid retained module entry');
  releaseHash.update('\0preserved-registration:').update(provenance.preservedRegistrationEntry);

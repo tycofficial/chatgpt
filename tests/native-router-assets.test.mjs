@@ -6,6 +6,7 @@ import vm from 'node:vm';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { localizeRouterAssets } from '../src/native-client/startup-compatibility.mjs';
+import { checkPackagedSiteAccountOrigin, requestedSiteAccountOrigin, retainedSiteAccountOrigin } from '../scripts/site-account-origin.mjs';
 
 test('browser preloads and dynamic navigation resolve inside the Pages project for every archived route', () => {
   const context = { window: {} };
@@ -470,6 +471,52 @@ test('startup tracks completed resources once and estimates the time only after 
   assert.equal(f.gauge.value, '100');
 });
 
+test('account origin retention preserves the verified deployment until an explicit rollback', async () => {
+  const original = 'https://original-account.fixture.test', ingress = 'https://verified-ingress.fixture.test';
+  const moduleAt = origin => 'export const SITE_ACCOUNT_SERVICE = ' + JSON.stringify(origin) + ';';
+  const preceding = { siteAccountOrigin: ingress };
+  let priorReads = 0;
+  const readPreviousModule = async () => { priorReads++; return moduleAt(ingress); };
+
+  const retained = await retainedSiteAccountOrigin(requestedSiteAccountOrigin(undefined), preceding, readPreviousModule);
+  assert.equal(retained, ingress);
+  assert.equal(priorReads, 1);
+  assert.equal(checkPackagedSiteAccountOrigin({
+    publishedModule: moduleAt(retained), canonicalModule: moduleAt(original), recordedOrigin: retained,
+    expectedOrigin: requestedSiteAccountOrigin(ingress + '/'),
+  }), ingress);
+
+  const rollback = await retainedSiteAccountOrigin(requestedSiteAccountOrigin(original), preceding, readPreviousModule);
+  assert.equal(rollback, original);
+  assert.equal(priorReads, 1, 'An explicit rollback does not depend on the prior account module');
+  assert.equal(checkPackagedSiteAccountOrigin({
+    publishedModule: moduleAt(rollback), canonicalModule: moduleAt(original), recordedOrigin: rollback, expectedOrigin: original,
+  }), original);
+  assert.equal(await retainedSiteAccountOrigin(undefined, null, readPreviousModule), undefined);
+  assert.equal(await retainedSiteAccountOrigin(undefined, {}, readPreviousModule), undefined);
+  assert.equal(priorReads, 1);
+});
+
+test('account origin retention rejects a mismatched prior package and the checker rejects unintended origin', async () => {
+  const original = 'https://original-account.fixture.test', ingress = 'https://verified-ingress.fixture.test';
+  const moduleAt = origin => 'export const SITE_ACCOUNT_SERVICE = ' + JSON.stringify(origin) + ';';
+  await assert.rejects(retainedSiteAccountOrigin(undefined, { siteAccountOrigin: ingress }, async () => moduleAt(original)),
+    /differs from the browser module/);
+  await assert.rejects(retainedSiteAccountOrigin(undefined, { siteAccountOrigin: ingress + '/' }, async () => moduleAt(ingress)),
+    /is not canonical/);
+  await assert.rejects(retainedSiteAccountOrigin(undefined, { siteAccountOrigin: 'http://verified-ingress.fixture.test' }, async () => moduleAt(ingress)),
+    /must be an HTTPS origin/);
+  assert.throws(() => checkPackagedSiteAccountOrigin({
+    publishedModule: moduleAt(original), canonicalModule: moduleAt(original), expectedOrigin: ingress,
+  }), /requested CHATGPT_SITE_API_ORIGIN/);
+  assert.throws(() => checkPackagedSiteAccountOrigin({
+    publishedModule: moduleAt(ingress), canonicalModule: moduleAt(original),
+  }), /differs from the browser module/);
+  assert.throws(() => checkPackagedSiteAccountOrigin({
+    publishedModule: moduleAt(ingress + '/'), canonicalModule: moduleAt(original), recordedOrigin: ingress,
+  }), /site account module origin is not canonical/);
+});
+
 test('only a trusted HTTPS origin can be selected as the packaged account service', () => {
   const builder = fileURLToPath(new URL('../scripts/build-native-client.mjs', import.meta.url));
   for (const origin of ['http://fixture.example', 'https://user:secret@fixture.example',
@@ -480,9 +527,10 @@ test('only a trusted HTTPS origin can be selected as the packaged account servic
     assert.equal(run.status, 1);
     assert.match(run.stderr, /CHATGPT_SITE_API_ORIGIN must be an HTTPS origin/);
   }
-  const packaged = JSON.parse(fs.readFileSync(new URL('../native-client/adapter-provenance.json', import.meta.url), 'utf8'));
-  if (packaged.siteAccountOrigin) {
-    const account = fs.readFileSync(new URL('../native-client/site-account.mjs', import.meta.url), 'utf8');
-    assert.ok(account.includes('export const SITE_ACCOUNT_SERVICE = ' + JSON.stringify(packaged.siteAccountOrigin) + ';'));
-  }
+  const read = path => fs.readFileSync(new URL(path, import.meta.url), 'utf8');
+  const packaged = JSON.parse(read('../native-client/adapter-provenance.json'));
+  assert.doesNotThrow(() => checkPackagedSiteAccountOrigin({
+    canonicalModule: read('../src/native-client/site-account.mjs'), publishedModule: read('../native-client/site-account.mjs'),
+    recordedOrigin: packaged.siteAccountOrigin,
+  }));
 });

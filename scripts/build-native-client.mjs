@@ -4,21 +4,13 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import {fileURLToPath} from 'node:url';
 import { sharedNativeAssets } from './shared-native-assets.mjs';
+import { requestedSiteAccountOrigin, retainedSiteAccountOrigin, siteAccountOriginDeclaration } from './site-account-origin.mjs';
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const referenceInput=path.join(root,'.test-output/original-client-prototype');
 const input=path.join(root,'src/native-client');
 const output=path.join(root,'native-client');
 const servicesOnly = process.argv.includes('--services-only');
-const requestedAccountOrigin = process.env.CHATGPT_SITE_API_ORIGIN?.trim();
-let siteAccountOrigin;
-if (requestedAccountOrigin) {
- let url;
- try { url = new URL(requestedAccountOrigin); } catch {}
- if (!url || url.protocol !== 'https:' || ![url.origin, url.origin + '/'].includes(requestedAccountOrigin)) {
-  throw Error('CHATGPT_SITE_API_ORIGIN must be an HTTPS origin without credentials, a path or a query.');
- }
- siteAccountOrigin = url.origin;
-}
+const requestedAccountOrigin = requestedSiteAccountOrigin(process.env.CHATGPT_SITE_API_ORIGIN);
 const sha256 = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const helpers=['boot-adapter.mjs','startup-compatibility.mjs','image-input-compression.mjs','service-boundary.mjs','provider-routing.mjs','local-native-read-aloud.mjs','local-web-search.mjs','preferred-host-transport.mjs','synthetic-bootstrap.mjs','public-auth-envelope.mjs','local-identity.mjs','local-token-identity.mjs','site-account.mjs','chat-history-sync.mjs','account-history-coordinator.mjs','native-cloud-sync-feedback.mjs','local-model-selection-policy.mjs','local-configuration.mjs','local-user-preferences.mjs','local-personalization-service.mjs','local-personalization-context.mjs','local-host-settings.mjs','local-work-policy.mjs','local-codex-adapter.mjs','local-dot-adapter.mjs','local-map-provider.mjs','local-maps-service.mjs','local-discovery.mjs','public-plugin-catalog.mjs','local-pubsub.mjs','model-catalog-adapter.mjs','local-app-server.mjs','classic-chat-adapter.mjs','portable-conversation-share.mjs','classic-response-branches.mjs','classic-input-messages.mjs','agent-turn-runner.mjs','site-ultra-orchestrator.mjs','browser-tool-executor.mjs','local-document-extraction.mjs','document-text-worker.mjs','local-ooxml-container.mjs','local-office-xml.mjs','local-xlsx-extraction.mjs','local-pptx-extraction.mjs','local-files-service.mjs','local-library-service.mjs','local-library-publisher.mjs','published-resource-rehydration.mjs','native-library-refresh.mjs','native-publication-references.mjs','native-workspace-references.mjs','native-file-reference-composition.mjs','local-native-upload.mjs','local-native-download.mjs','local-workspace-download-source.mjs','local-workspace-download-service.mjs','owned-download-transport.mjs','local-input-preparation.mjs','local-pricing.mjs','entry-library.mjs'];
 helpers.push('native-pricing-trials.mjs', 'site-signout.mjs', 'native-site-login.mjs', 'site-paths.mjs', 'prepared-input-store.mjs', 'site-inference-transport.mjs', 'local-dot-browser-voice.mjs');
@@ -66,6 +58,12 @@ if (servicesOnly && (prior.deploymentBase !== deploymentBase || prior.sourceBuil
   !/^\.\/entry-library\.mjs\?v=[a-f0-9]{16}$/.test(priorPlan.registrationEntry))) {
   throw Error('The existing page and module entry must belong to this deployment');
 }
+const siteAccountOrigin = await retainedSiteAccountOrigin(requestedAccountOrigin, prior, async () => {
+ const helper = prior.helpers?.find(entry => entry.file === 'site-account.mjs');
+ const deployed = await fs.readFile(path.join(output, 'site-account.mjs'));
+ if (helper?.publishedSha256 !== sha256(deployed)) throw Error('The previous site account module changed without packaging');
+ return deployed.toString('utf8');
+});
 const originalOnSite = url => deploymentBase + 'original-client/public/chatgpt.com' + url;
 const builderBytes=await fs.readFile(fileURLToPath(import.meta.url));
 const sharedAssets=await Promise.all(sharedNativeAssets.map(async asset=>({...asset,bytes:await fs.readFile(path.join(root,asset.inputFile??asset.file))})));
@@ -120,8 +118,7 @@ for(const [name,original]of raw){
  }
  let text=original;
  if(name==='site-account.mjs' && siteAccountOrigin){
-  const declaration = /^export const SITE_ACCOUNT_SERVICE = '[^'\r\n]+';/m.exec(original)?.[0];
-  if (!declaration) throw Error('Missing canonical site account origin');
+  const { declaration } = siteAccountOriginDeclaration(original);
   text=replace(text,declaration,'export const SITE_ACCOUNT_SERVICE = '+JSON.stringify(siteAccountOrigin)+';');
  }
  if(name==='boot-adapter.mjs'){
