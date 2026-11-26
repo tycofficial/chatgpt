@@ -293,6 +293,7 @@ const importMap = JSON.stringify({imports:{
 }});
 const entryScript = ownModule('native-client/bootstrap.mjs');
 const errorMessage = '页面未能完成加载。请检查网络连接后重试。';
+const delayedMessage = '页面加载时间较长。可以继续等待，或选择重新加载。';
 const stylesheetURL = deploymentBase + cssAsset;
 const startupProgressStyle = `<style id="site-load-progress-style">
 #site-load-progress{position:fixed;z-index:2147483647;top:50%;left:50%;transform:translate(-50%,-50%);width:220px;max-width:70vw;pointer-events:none;font:14px/1.45 system-ui;color:#5d478c}
@@ -303,7 +304,7 @@ const startupProgressStyle = `<style id="site-load-progress-style">
 </style>`;
 const startupGuard = assets => `<script>(function(entries){
  var notice,progress,progressStyle,renderObserver,resolveStyles,drawPending=false,watcher,timer;
- var stylesLoaded=false,stylesFailed=false,finished=false,failed=false,waitingForRender=false;
+ var stylesLoaded=false,stylesFailed=false,finished=false,failed=false,delayed=false,waitingForRender=false;
  var resources=new Map(entries),seen=new Set(),timed=new Set();
  var total=entries.reduce(function(a,entry){return a+entry[1]},0),received=0,networkWeight=0,networkStart=Infinity,networkEnd=0;
  var lastProgress=performance.now();
@@ -316,11 +317,13 @@ const startupGuard = assets => `<script>(function(entries){
  function showFailure(){
   notice=notice||document.getElementById('site-load-error');
   if(!notice||!document.body)return;
+  var message=notice.querySelector('p');
+  if(message)message.textContent=failed?${JSON.stringify(errorMessage)}:${JSON.stringify(delayedMessage)};
   if(!notice.parentNode)document.body.appendChild(notice);
   notice.hidden=false;
  }
  function updateProgress(){
-  if(!progress||finished||failed)return;
+  if(!progress||finished||failed||delayed)return;
   var portion=Math.floor(100*received/Math.max(1,total));
   var percent=String(Math.min(99,portion));
   var gauge=progress.querySelector('[role=progressbar]');
@@ -336,16 +339,21 @@ const startupGuard = assets => `<script>(function(entries){
   }
   progress.querySelector('[data-time]').textContent=detail;
  }
+ function stopWaiting(){
+  clearTimeout(timer);
+  clearInterval(watcher);
+ }
  function restartTimeout(){
   clearTimeout(timer);
   timer=setTimeout(function(){
-   var sheet=document.getElementById('site-main-style');
-   if(sheet&&!stylesLoaded){sheet.disabled=true;state.failStyles()}
-   else state.fail();
+   delayed=true;
+   stopWaiting();
+   hideProgress();
+   showFailure();
   },60000);
  }
  function resourceReady(value){
-  if(finished||failed)return;
+  if(finished||failed||delayed)return;
   var url;
   try{url=new URL(value,location.href)}catch(error){return}
   if(url.origin!==location.origin)return;
@@ -376,6 +384,7 @@ const startupGuard = assets => `<script>(function(entries){
   updateProgress();
  }
  function waitForVisibleContent(selector,accept){
+  if(failed||finished)return;
   waitingForRender=true;
   collect();
   function check(){
@@ -387,11 +396,14 @@ const startupGuard = assets => `<script>(function(entries){
     return accept(node);
    });
    if(visible)state.ready();
+   else if(delayed&&notice&&!notice.parentNode)showFailure();
   }
   function schedule(){
    if(failed||finished)return;
-   if(progressStyle&&!progressStyle.isConnected&&document.head)document.head.appendChild(progressStyle);
-   if(progress&&!progress.isConnected&&document.body)document.body.appendChild(progress);
+   if(!delayed){
+    if(progressStyle&&!progressStyle.isConnected&&document.head)document.head.appendChild(progressStyle);
+    if(progress&&!progress.isConnected&&document.body)document.body.appendChild(progress);
+   }
    if(!drawPending){drawPending=true;requestAnimationFrame(check)}
   }
   renderObserver=new MutationObserver(schedule);
@@ -427,7 +439,8 @@ const startupGuard = assets => `<script>(function(entries){
    notice=node;
    progress=document.getElementById('site-load-progress');
    progressStyle=document.getElementById('site-load-progress-style');
-   if(failed&&!finished){hideProgress();showFailure();return}
+   if(finished)return;
+   if(failed||delayed){hideProgress();showFailure();return}
    collect();
    watcher=setInterval(collect,750);
   },
@@ -445,20 +458,18 @@ const startupGuard = assets => `<script>(function(entries){
    });
   },
   fail:function(){
-   if(finished)return;
+   if(finished||failed)return;
    failed=true;
    if(renderObserver)renderObserver.disconnect();
-   clearTimeout(timer);
-   clearInterval(watcher);
+   stopWaiting();
    hideProgress();
    showFailure();
   },
   ready:function(){
-   if(finished)return;
+   if(finished||failed)return;
    finished=true;
    if(renderObserver)renderObserver.disconnect();
-   clearTimeout(timer);
-   clearInterval(watcher);
+   stopWaiting();
    if(progress) {
     var gauge=progress.querySelector('[role=progressbar]');
     gauge.setAttribute('aria-valuenow','100');
@@ -478,7 +489,7 @@ const startupGuard = assets => `<script>(function(entries){
  };
  restartTimeout();
  document.addEventListener('DOMContentLoaded',function(){
-  if(failed&&!finished)showFailure();
+  if((failed||delayed)&&!finished)showFailure();
  },{once:true});
 })(${JSON.stringify(assets)})</script>`;
 const startupBody = `<body>

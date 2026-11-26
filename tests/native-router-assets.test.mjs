@@ -100,15 +100,26 @@ test('the packaged entry mounts a client root on the static Pages document', () 
 
 function startupFixture({ stylesheet, requestFrame = callback => callback() } = {}) {
   const html = fs.readFileSync(new URL('../index.html', import.meta.url), 'utf8');
-  const guard = html.match(/<script>([\s\S]*?)<\/script>/)[1];
-  const notice = { hidden: true };
+  const packagedGuard = html.match(/<script>([\s\S]*?)<\/script>/)[1];
+  const weights = JSON.parse(packagedGuard.slice(packagedGuard.lastIndexOf('})(') + 3, -1));
+  const builder = fs.readFileSync(new URL('../scripts/build-native-client.mjs', import.meta.url), 'utf8');
+  const declaration = builder.slice(builder.indexOf('const startupGuard ='), builder.indexOf('const startupBody ='));
+  const messages = builder.match(/^const (?:errorMessage|delayedMessage) = [^\r\n]+$/gm).join('\n');
+  // Exercise the builder's exact guard without regenerating the saved client.
+  const guard = vm.runInNewContext(messages + '\n' + declaration + '\nstartupGuard(weights)', { weights }).slice(8, -9);
+  const message = {};
+  const notice = { hidden: true, querySelector: () => message };
   const connectedNode = () => ({ get isConnected() { return this.parentNode != null; } });
   const progress = connectedNode(), progressStyle = connectedNode();
   const percent = {}, time = {}, gauge = { value: null, setAttribute(_key, value) { this.value = value; }, style: { setProperty() {} } };
   progress.querySelector = key => key === '[role=progressbar]' ? gauge : key === '[data-percent]' ? percent : time;
   const resources = [...html.matchAll(/<link rel="modulepreload" href="([^"]+)"/g)].map(match => match[1]);
+  let noticeAppends = 0;
   const body = {
-    appendChild(node) { node.parentNode = body; },
+    appendChild(node) {
+      if (node === notice) noticeAppends++;
+      node.parentNode = body;
+    },
     removeChild(node) { node.parentNode = null; },
   };
   const head = { appendChild(node) { node.parentNode = head; } };
@@ -145,9 +156,11 @@ function startupFixture({ stylesheet, requestFrame = callback => callback() } = 
     location: { origin: 'https://fixture.test', href: 'https://fixture.test/chatgpt/c/abc?keep=1#turn', replace: value => { replaced = new URL(value); } },
   });
   return {
-    notice, progress, progressStyle, timeout, resources, gauge, time, state: window.__TYC_PAGE_START__,
+    notice, message, progress, progressStyle, timeout, resources, gauge, time, state: window.__TYC_PAGE_START__,
     recordTiming(...samples) { entries.push(...samples); observeTiming?.(); },
     triggerTimeout: () => callback?.(), replacement: () => replaced,
+    active: () => ({ timeout: !!callback, progressPolling: !!observeTiming, renderObserver: !!onMutation }),
+    noticeAppends: () => noticeAppends,
     mutate(nextComposer) {
       composer = nextComposer && { tagName: 'TEXTAREA', closest: () => null, ...nextComposer };
       onMutation?.();
@@ -155,35 +168,103 @@ function startupFixture({ stylesheet, requestFrame = callback => callback() } = 
   };
 }
 
-test('a stalled module exposes a retry without showing a waiting screen or navigating automatically', () => {
-  const fixture = startupFixture({ stylesheet: { sheet: {} } });
-  fixture.state.loadStyles({});
-  assert.equal(fixture.notice.hidden, true);
-  assert.ok(fixture.progress.parentNode);
-  assert.ok(fixture.timeout < 90000);
-  fixture.triggerTimeout();
-  assert.equal(fixture.notice.hidden, false);
-  assert.equal(fixture.progress.parentNode, null);
-  assert.equal(fixture.replacement(), undefined);
-  fixture.state.retry();
-  const target = fixture.replacement();
-  assert.equal(target.pathname, '/chatgpt/c/abc');
-  assert.equal(target.searchParams.get('keep'), '1');
-  assert.ok(target.searchParams.has('__tyc_retry'));
-  assert.equal(target.hash, '#turn');
-  fixture.state.ready();
-  assert.equal(fixture.notice.parentNode, null);
+test('an idle module watchdog allows retry or clears the notice when the late composer is usable', () => {
+  const composer = { getClientRects: () => [{}], visibility: 'visible' };
+  for (const alreadyWatching of [false, true]) {
+    const fixture = startupFixture({ stylesheet: { sheet: {} } });
+    const watch = () => {
+      fixture.state.attach(fixture.notice);
+      fixture.state.waitForComposer();
+    };
+    fixture.state.loadStyles({});
+    if (alreadyWatching) watch();
+    assert.equal(fixture.notice.hidden, true);
+    assert.ok(fixture.progress.parentNode);
+    assert.ok(fixture.timeout < 90000);
+    fixture.triggerTimeout();
+    if (!alreadyWatching) watch();
+    assert.equal(fixture.notice.hidden, false);
+    assert.match(fixture.message.textContent, /继续等待/);
+    assert.equal(fixture.progress.parentNode, null);
+    assert.equal(fixture.replacement(), undefined);
+    assert.deepEqual(fixture.active(), { timeout: false, progressPolling: false, renderObserver: true });
+
+    fixture.state.loadedResource(fixture.resources[0]);
+    fixture.notice.parentNode = null;
+    fixture.mutate({ ...composer, readOnly: true });
+    assert.ok(fixture.notice.parentNode);
+    assert.equal(fixture.progress.parentNode, null);
+    assert.equal(fixture.active().timeout, false);
+
+    fixture.state.retry();
+    const target = fixture.replacement();
+    assert.equal(target.pathname, '/chatgpt/c/abc');
+    assert.equal(target.searchParams.get('keep'), '1');
+    assert.ok(target.searchParams.has('__tyc_retry'));
+    assert.equal(target.hash, '#turn');
+
+    fixture.notice.parentNode = null;
+    const noticeAppends = fixture.noticeAppends();
+    fixture.mutate(composer);
+    assert.equal(fixture.gauge.value, '100');
+    assert.equal(fixture.notice.parentNode, null);
+    assert.equal(fixture.noticeAppends(), noticeAppends);
+    assert.equal(fixture.progress.parentNode, null);
+    assert.deepEqual(fixture.active(), { timeout: false, progressPolling: false, renderObserver: false });
+  }
 });
 
-test('a stalled stylesheet releases the startup wait and exposes retry', async () => {
-  const stylesheet = { media: 'print' };
+test('an idle stylesheet keeps waiting and initializes when the requested CSS arrives', async () => {
+  const stylesheet = { media: 'print', disabled: false };
   const stalled = startupFixture({ stylesheet });
-  const pending = stalled.state.waitForStyles();
+  stalled.state.attach(stalled.notice);
+  let state = 'pending';
+  const pending = stalled.state.waitForStyles().then(value => { state = value; return value; });
   stalled.triggerTimeout();
-  assert.equal(await pending, false);
-  assert.equal(stylesheet.disabled, true);
+  await Promise.resolve();
+  assert.equal(state, 'pending');
+  assert.equal(stylesheet.disabled, false);
   assert.equal(stalled.notice.hidden, false);
   assert.equal(stalled.progress.parentNode, null);
+
+  stalled.state.loadStyles(stylesheet);
+  assert.equal(await pending, true);
+  assert.equal(stylesheet.media, 'all');
+  stalled.state.waitForComposer();
+  stalled.mutate({ getClientRects: () => [{}], visibility: 'visible' });
+  assert.equal(stalled.gauge.value, '100');
+  assert.equal(stalled.notice.parentNode, null);
+  assert.deepEqual(stalled.active(), { timeout: false, progressPolling: false, renderObserver: false });
+});
+
+test('a definitive stylesheet error stops startup even after an idle notice', async () => {
+  const stylesheet = { media: 'print', disabled: false };
+  const stalled = startupFixture({ stylesheet });
+  stalled.state.attach(stalled.notice);
+  const pending = stalled.state.waitForStyles();
+  stalled.triggerTimeout();
+  stalled.state.failStyles();
+  assert.equal(await pending, false);
+  stalled.state.loadStyles(stylesheet);
+  assert.equal(stylesheet.media, 'print');
+  assert.equal(stalled.notice.hidden, false);
+  assert.match(stalled.message.textContent, /未能完成加载/);
+  assert.equal(stalled.progress.parentNode, null);
+});
+
+test('a definitive script error stays visible even if a composer-shaped element arrives', () => {
+  const fixture = startupFixture();
+  fixture.state.attach(fixture.notice);
+  fixture.state.waitForComposer();
+  fixture.state.fail();
+  fixture.state.waitForComposer();
+  fixture.mutate({ getClientRects: () => [{}], visibility: 'visible' });
+  fixture.state.ready();
+  assert.equal(fixture.notice.hidden, false);
+  assert.match(fixture.message.textContent, /未能完成加载/);
+  assert.ok(fixture.notice.parentNode);
+  assert.notEqual(fixture.gauge.value, '100');
+  assert.deepEqual(fixture.active(), { timeout: false, progressPolling: false, renderObserver: false });
 });
 
 test('the progress stays visible until the stylesheet and application are ready', async () => {
